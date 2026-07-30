@@ -16,7 +16,6 @@ fn conn(id: &str, conn_type: &str) -> Connection {
         port: "22".to_string(),
         user: "root".to_string(),
         password_help_url: None,
-        has_stored_credential: None,
         parent_id: None,
         redirect_drives: None,
         shell: None,

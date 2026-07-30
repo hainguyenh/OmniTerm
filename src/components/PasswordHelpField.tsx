@@ -19,7 +19,7 @@ export default function PasswordHelpField(props: PasswordHelpFieldProps) {
         className={props.inputClass}
       />
       <p className="text-[11px] text-theme-dim leading-snug">
-        Limited Connections opens this page before the OS client asks for your password. The password
+        The connection provider opens this page before the OS client asks for your password. The password
         itself is never read or stored by OmniTerm.
       </p>
     </div>

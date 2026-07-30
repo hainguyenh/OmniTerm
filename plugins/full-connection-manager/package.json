@@ -2,7 +2,7 @@
   "name": "@omniterm/full-connection-manager",
   "version": "0.1.0",
   "private": true,
-  "description": "Full OmniTerm remote connection suite with OS-vault credentials.",
+  "description": "Full OmniTerm remote connection suite with metadata-only profiles.",
   "type": "commonjs",
   "main": "dist/index.js",
   "omnitermPlugin": {
@@ -11,9 +11,8 @@
     "displayName": "Full Remote Suite",
     "permissions": [
       "connections",
-      "renderer",
-      "credentials",
-      "workspace"
+      "workspace",
+      "openExternal"
     ]
   },
   "scripts": {

@@ -1,32 +1,21 @@
 //! Tests for the host side of the plugin sidecar protocol.
 //!
-//! The focus is `handle_reverse_call`'s failure contract and plugin-scoped credential parameters.
+//! The focus is `handle_reverse_call`'s failure contract and URL validation.
 
 use super::*;
 use serde_json::json;
 
-#[test]
-fn credential_methods_require_a_plugin_scope() {
-    for method in ["credentials.get", "credentials.set", "credentials.delete"] {
-        let out = handle_reverse_call(method, Some(&json!({ "key": "k", "value": "hunter2" })));
-        let err = out.expect_err(&format!("{method} must not resolve"));
-        assert!(
-            err.contains("pluginId"),
-            "{method} error should say why: {err}"
-        );
-    }
-}
 
 #[test]
 fn an_unknown_method_errors_instead_of_returning_null() {
-    // The catch-all used to be `Ok(Value::Null)`, which is what let `credentials.set` lie. Any future
+    // Unknown capabilities must fail loudly rather than fake success. Any future
     // capability added to host-api.cjs but not here must fail loudly rather than fake success.
     let err = handle_reverse_call("host.somethingNew", None).expect_err("unknown must not resolve");
     assert!(err.contains("host.somethingNew"), "error should name the method: {err}");
 }
 
 /// `writeClipboard` is declared in the contract but not implemented by this host. It must be in the
-/// erroring set, not silently succeeding — the same trap as `credentials.set`.
+/// erroring set, not silently succeeding.
 #[test]
 fn unimplemented_contract_methods_error() {
     assert!(handle_reverse_call("host.writeClipboard", Some(&json!({ "text": "x" }))).is_err());
@@ -66,7 +55,7 @@ fn open_external_requires_a_url_parameter() {
 /// present is the whole difference between the plugin learning it failed and the plugin being lied to.
 #[test]
 fn a_refusal_serializes_as_a_json_rpc_error_not_a_result() {
-    let outcome = handle_reverse_call("credentials.set", Some(&json!({ "key": "k" })));
+    let outcome = handle_reverse_call("host.unknown", None);
     let reply = match outcome {
         Ok(result) => json!({ "jsonrpc": "2.0", "id": 7, "result": result }),
         Err(message) => json!({
@@ -79,7 +68,7 @@ fn a_refusal_serializes_as_a_json_rpc_error_not_a_result() {
     assert!(reply.get("result").is_none(), "a refusal must carry no result member");
     let error = reply.get("error").expect("refusal must carry an error member");
     assert_eq!(error["code"], -32601);
-    assert!(error["message"].as_str().unwrap().contains("pluginId"));
+    assert!(error["message"].as_str().unwrap().contains("host.unknown"));
 }
 
 /// The startup crash: `node \\?\D:\...\plugin-host.cjs` dies with `EISDIR: lstat 'D:'` before running a

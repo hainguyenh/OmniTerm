@@ -39,6 +39,30 @@ describe('Limited Connections launchers', () => {
     expect(store.load(personal).connections).toEqual([ssh()])
   })
 
+  it('keeps only allowlisted metadata fields in launcher files', () => {
+    const unsafe = {
+      ...ssh(),
+      password: 'must-not-persist',
+      passwd: 'must-not-persist-either',
+      token: 'must-not-persist-token',
+    } as Connection
+    store.save(personal, {
+      connections: [unsafe],
+      folders: [{ id: 'f', name: 'Folder', password: 'folder-secret' } as never],
+    })
+
+    const loaded = store.load(personal)
+    expect(loaded.connections[0]).toEqual(ssh())
+    expect(loaded.folders[0]).toEqual({ id: 'f', name: 'Folder' })
+    const batch = fs.readFileSync(store.resolveLaunch(personal, 'ssh-prod-1')!.path, 'utf8')
+    const marker = batch.split(/\r?\n/).find((line) => line.startsWith(':: OMNITERM_CONNECTION_V1 '))!
+    const decoded = Buffer.from(marker.slice(':: OMNITERM_CONNECTION_V1 '.length), 'base64').toString('utf8')
+    expect(decoded).not.toContain('must-not-persist')
+    expect(decoded).not.toContain('password')
+    expect(decoded).not.toContain('passwd')
+    expect(decoded).not.toContain('token')
+  })
+
   it('writes a direct mstsc launcher using public and prompt modes without a password', () => {
     const connection = ssh({
       id: 'rdp-prod-1',

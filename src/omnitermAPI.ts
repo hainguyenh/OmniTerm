@@ -111,8 +111,6 @@ function createTauriAPI(): any {
     },
 
     connect: {
-      saveCredential: (id: string, username: string) =>
-        invoke<boolean>('prompt_save_connection_credential', { connectionId: id, username }),
       // Streaming lives in tauriSessions.ts: the ready/data/error/closed callbacks are held in a
       // local map and handed to the backend as IPC channels when the session starts.
       local: (sessionId: string, connId: string, overrideShell?: string) =>

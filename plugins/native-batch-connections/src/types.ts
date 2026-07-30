@@ -6,14 +6,12 @@ export type Connection = {
   port: string
   user: string
   passwordHelpUrl?: string
-  hasStoredCredential?: boolean
   parentId?: string
   redirectDrives?: boolean
 }
 
 export type Folder = { id: string; name: string; parentId?: string }
 export type ConnectionTree = { connections: Connection[]; folders: Folder[] }
-export type ResolvedConnection = Connection & { password?: string }
 export type ConnectionScope =
   | { kind: 'personal' }
   | { kind: 'workspace'; workspaceId: string; workspacePath: string }
@@ -34,10 +32,10 @@ export interface ConnectionProvider {
   }
   load(): ConnectionTree | Promise<ConnectionTree>
   save(tree: ConnectionTree): void | Promise<void>
-  resolve(id: string): ResolvedConnection | null | Promise<ResolvedConnection | null>
+  resolve(id: string): Connection | null | Promise<Connection | null>
   loadScoped?(scope: ConnectionScope): ConnectionTree | Promise<ConnectionTree>
   saveScoped?(scope: ConnectionScope, tree: ConnectionTree): void | Promise<void>
-  resolveScoped?(scope: ConnectionScope, id: string): ResolvedConnection | null | Promise<ResolvedConnection | null>
+  resolveScoped?(scope: ConnectionScope, id: string): Connection | null | Promise<Connection | null>
   resolveLaunch?(scope: ConnectionScope, id: string): ConnectionLaunchSpec | null | Promise<ConnectionLaunchSpec | null>
 }
 

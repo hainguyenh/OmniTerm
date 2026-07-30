@@ -1,7 +1,7 @@
 /**
  * @omniterm/contract — the stable boundary between the terminal HOST and its optional plugins.
  *
- * The host (this app) ships with none of the connection-manager / vault / auth code. A plugin is a
+ * The host (this app) ships with none of the connection-manager or auth-provider code. A plugin is a
  * Node module loaded by the host's main process at startup that calls `activate(host)` and registers
  * providers against the `HostAPI` below. If no plugin is present the app is just a terminal.
  *
@@ -18,12 +18,8 @@ export type LocalShell = 'wsl' | 'powershell' | 'cmd' | 'default' | 'zsh' | 'bas
 export type SessionStatus = 'connecting' | 'connected' | 'closed' | 'error'
 
 /**
- * A connection the user can open. It carries no secret, anywhere, ever — the host never stores,
- * derives, or transports a credential, so there is no field here for one and no code path that could
- * populate it. A password is typed by the user at the server's own prompt, inside the terminal.
- *
- * A plugin may still offer stored credentials as an advanced feature; that is what
- * `ResolvedConnection` below is for, and it exists only in the main process.
+ * A connection the user can open. It carries metadata only. Passwords are entered directly into the
+ * native SSH/RDP prompt and are never represented by this contract.
  */
 export type Connection = {
   id: string
@@ -34,8 +30,6 @@ export type Connection = {
   user: string
   /** Optional HTTPS page opened by a password-free provider immediately before connecting. */
   passwordHelpUrl?: string
-  /** Renderer-safe indicator only; the credential itself remains main-process/OS-vault scoped. */
-  hasStoredCredential?: boolean
   parentId?: string
   redirectDrives?: boolean   // RDP only: share local drives with the remote session
   shell?: LocalShell         // LOCAL only: which local shell to spawn
@@ -45,15 +39,6 @@ export type Connection = {
   localKeepOpen?: boolean    // LOCAL only: keep the pane open after the command finishes
 }
 
-/**
- * A connection plus a secret a plugin resolved for it at connect time.
- *
- * Deliberately a separate type rather than an optional field on `Connection`: the host passes
- * `Connection` to the renderer, and a type that cannot hold a password cannot leak one by being
- * forwarded to the wrong side. Only `ConnectionProvider.resolve()` returns this, only in the main
- * process, and the value must never be serialized back to a webview.
- */
-export type ResolvedConnection = Connection & { password?: string }
 
 /** A folder node in the connection tree. */
 export type Folder = {
@@ -179,7 +164,7 @@ export interface WorkspaceProvider {
 
 export const PLUGIN_API_VERSION = 2
 
-export type ConnectionCredentialPolicy = 'os-vault' | 'prompt-every-time'
+export type ConnectionCredentialPolicy = 'prompt-every-time'
 
 export interface ConnectionProviderCapabilities {
   protocols: Array<'SSH' | 'RDP'>
@@ -208,7 +193,6 @@ export type PluginPermission =
   | 'connections'
   | 'auth'
   | 'renderer'
-  | 'credentials'
   | 'openExternal'
   | 'clipboard'
   | 'workspace'
@@ -234,32 +218,23 @@ export interface PluginDescriptor {
   activeInvokeHandler: boolean
 }
 
-/**
- * Owns the saved connection tree. All methods run in the main process (plugins load there), so
- * `resolve()` may return a secret — it never crosses to the renderer. `load()`, by contrast, returns
- * the renderer-facing tree, and its `Connection` type has nowhere to put a secret by construction.
- */
+/** Owns the saved connection tree. All returned connections contain metadata only. */
 export interface ConnectionProvider {
   /** Describes the generic Tauri UI the host should expose for this provider. */
   capabilities?(): ConnectionProviderCapabilities | Promise<ConnectionProviderCapabilities>
-  /** Renderer-safe tree. `Connection` carries no credential field, so this cannot leak one. */
+  /** Metadata-only connection tree. */
   load(): ConnectionTree | Promise<ConnectionTree>
   /** Persist a tree edited by the user. */
   save(tree: ConnectionTree): void | Promise<void>
-  /**
-   * Resolve the FULL connection (including any secret) for a saved id, at connect time, in the main
-   * process. Return null if the id is unknown. This is where credential conveniences live: a plugin
-   * may, e.g., open a password URL via HostServices and return the connection without a password so
-   * the user types it into the session instead of storing it.
-   */
-  resolve(connId: string): ResolvedConnection | null | Promise<ResolvedConnection | null>
+  /** Resolve a saved connection at connect time. */
+  resolve(connId: string): Connection | null | Promise<Connection | null>
   /** API v2 scoped variants. Legacy methods above continue to represent the Personal scope. */
   loadScoped?(scope: ConnectionScope): ConnectionTree | Promise<ConnectionTree>
   saveScoped?(scope: ConnectionScope, tree: ConnectionTree): void | Promise<void>
   resolveScoped?(
     scope: ConnectionScope,
     connId: string,
-  ): ResolvedConnection | null | Promise<ResolvedConnection | null>
+  ): Connection | null | Promise<Connection | null>
   resolveLaunch?(
     scope: ConnectionScope,
     connId: string,
@@ -274,36 +249,11 @@ export interface AuthProvider {
   gate(): boolean | Promise<boolean>
 }
 
-/**
- * Secret storage scoped to one plugin.
- *
- * **The host does not implement this.** OmniTerm never holds a password, in any form, anywhere — so
- * the store it hands a plugin refuses every write and reports `isAvailable() === false`. The interface
- * exists so a plugin that genuinely needs persistence can supply its own implementation and keep the
- * rest of this contract; the security of whatever it writes is then that plugin's responsibility.
- *
- * Prefer designing around it: `credentialMode: 'none'` (the user types the password into the session)
- * and `'url'` (open where it is kept so the user copies it) need no storage at all.
- *
- * An earlier revision of this comment promised values "encrypted by Electron `safeStorage` (DPAPI on
- * Windows, Keychain on macOS)". That was never true of the Tauri build, and a plugin that trusted it
- * deleted the password it thought it had stored. Treat a resolving `set()` as the only evidence of a
- * write, and check `isAvailable()` first.
- */
-export interface CredentialStore {
-  /** False in the stock host. Check before offering the user any "remember my password" affordance. */
-  isAvailable(): boolean
-  get(key: string): Promise<string | undefined>
-  set(key: string, value: string): Promise<void>
-  delete(key: string): Promise<void>
-}
 
 /** Host-provided capabilities a plugin may use. */
 export interface HostServices {
   /** A private, plugin-owned directory under the app's userData for the plugin to store files. */
   storageDir: string
-  /** OS-user-bound storage for passwords and other secrets. */
-  credentials: CredentialStore
   log(message: string): void
   openExternal(url: string): Promise<void>
   writeClipboard(text: string): Promise<void>

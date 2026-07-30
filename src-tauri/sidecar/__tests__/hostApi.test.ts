@@ -3,8 +3,7 @@
  *
  * Two things are pinned here. First, that the manifest's `permissions` array is actually enforced: it
  * used to be parsed into the descriptor and never read, so every plugin held every capability and the
- * field was decoration. Second, that credential calls are explicitly forwarded to the native
- * Windows Credential Manager implementation instead of being silently discarded.
+ * field was decoration.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs'
@@ -94,13 +93,6 @@ describe('permission enforcement', () => {
     await expect(hostFor(['clipboard']).services.writeClipboard('x')).resolves.toBeUndefined()
   })
 
-  it('every credential method requires "credentials"', async () => {
-    const denied = hostFor([])
-    expect(() => denied.services.credentials.isAvailable()).toThrow(/credentials/)
-    await expect(denied.services.credentials.get('k')).rejects.toThrow(/credentials/)
-    await expect(denied.services.credentials.set('k', 'v')).rejects.toThrow(/credentials/)
-    await expect(denied.services.credentials.delete('k')).rejects.toThrow(/credentials/)
-  })
 
   it('declared permissions cannot be widened by the plugin at runtime', () => {
     const host = hostFor(['connections'])
@@ -115,47 +107,9 @@ describe('permission enforcement', () => {
   })
 
   it('requirePermission names the plugin, the permission, and where to add it', () => {
-    expect(() => requirePermission('@a/b', [], 'credentials', 'x()')).toThrow(/@a\/b/)
-    expect(() => requirePermission('@a/b', [], 'credentials', 'x()')).toThrow(/credentials/)
-    expect(() => requirePermission('@a/b', [], 'credentials', 'x()')).toThrow(/omnitermPlugin\.permissions/)
-  })
-})
-
-describe('the stock credential store', () => {
-  it('reports availability only on Windows', () => {
-    expect(hostFor(['credentials']).services.credentials.isAvailable()).toBe(process.platform === 'win32')
-  })
-
-  it('forwards set() to the native credential vault', async () => {
-    const creds = hostFor(['credentials']).services.credentials
-    await expect(creds.set('connection:a', 'hunter2')).resolves.toBeUndefined()
-  })
-
-  it('keeps delete() idempotent at the API boundary', async () => {
-    const creds = hostFor(['credentials']).services.credentials
-    await expect(creds.delete('connection:a')).resolves.toBeUndefined()
-    await expect(creds.delete('connection:a')).resolves.toBeUndefined()
-  })
-
-  it('scopes every vault request to the calling plugin', async () => {
-    const protocol = fakeProtocol()
-    const host = new HostAPIImpl(
-      { id: '@test/p', version: '1.0.0', permissions: ['credentials'] },
-      appDataDir,
-      protocol,
-      registry(),
-    )
-    await host.services.credentials.set('connection:a', 'hunter2')
-    await host.services.credentials.get('connection:a')
-    await host.services.credentials.delete('connection:a')
-    expect(protocol.calls).toHaveLength(3)
-    expect(protocol.calls.every(({ params }) =>
-      (params as { pluginId: string }).pluginId === '@test/p')).toBe(true)
-    expect(protocol.calls.map(({ method }) => method)).toEqual([
-      'credentials.set',
-      'credentials.get',
-      'credentials.delete',
-    ])
+    expect(() => requirePermission('@a/b', [], 'openExternal', 'x()')).toThrow(/@a\/b/)
+    expect(() => requirePermission('@a/b', [], 'openExternal', 'x()')).toThrow(/openExternal/)
+    expect(() => requirePermission('@a/b', [], 'openExternal', 'x()')).toThrow(/omnitermPlugin\.permissions/)
   })
 })
 

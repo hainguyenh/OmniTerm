@@ -152,13 +152,13 @@ describe("ConnectionForm", () => {
     });
   });
 
-  it("keeps OS-vault choices for the Full provider without rendering a password input", () => {
+  it("never renders password persistence controls for the Full provider", () => {
     const { container } = render(
       <ConnectionForm
         folders={[]}
         capabilities={{
           protocols: ['SSH', 'RDP'],
-          credentialPolicy: 'os-vault',
+          credentialPolicy: 'prompt-every-time',
           scopes: ['personal', 'workspace'],
           sftp: false,
           importExport: true,
@@ -168,7 +168,8 @@ describe("ConnectionForm", () => {
       />,
     );
     expect(container.querySelector('input[type="password"]')).toBeNull();
-    expect(screen.getByText("Save in Windows Credential Manager")).toBeInTheDocument();
+    expect(screen.queryByText("Save in Windows Credential Manager")).not.toBeInTheDocument();
+    expect(screen.queryByText("Credentials")).not.toBeInTheDocument();
   });
 
   it("saves a new SSH connection with no credential on it", () => {

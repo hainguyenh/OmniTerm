@@ -14,7 +14,6 @@ const KNOWN_PERMISSIONS = Object.freeze([
   'connections',
   'auth',
   'renderer',
-  'credentials',
   'openExternal',
   'clipboard',
   'workspace',
@@ -83,38 +82,6 @@ class HostServicesImpl {
       fs.mkdirSync(this.storageDir, { recursive: true })
     }
 
-    const gate = (permission, what) => requirePermission(pluginId, permissions, permission, what)
-
-    /**
-     * The host stores no secret. This is the stock `CredentialStore`, and it is deliberately a
-     * refusal rather than an implementation — OmniTerm never holds a password in any form, so there
-     * is nothing behind these methods and `isAvailable()` says so.
-     *
-     * It previously claimed `isAvailable: () => true` and forwarded to a `credentials.*` RPC the Rust
-     * side never implemented. The host answered `null`, the call resolved, and the plugin deleted a
-     * migrated password it believed was safely stored. `set` now rejects, so a caller cannot mistake
-     * "not stored" for "stored".
-     *
-     * A plugin that genuinely needs persistence supplies its own store; see docs/PLUGINS.md.
-     */
-    this.credentials = {
-      isAvailable: () => {
-        gate('credentials', 'services.credentials.isAvailable()')
-        return process.platform === 'win32'
-      },
-      get: async (key) => {
-        gate('credentials', 'services.credentials.get()')
-        return await this.protocol.callRemote('credentials.get', { pluginId, key })
-      },
-      set: async (key, value) => {
-        gate('credentials', 'services.credentials.set()')
-        await this.protocol.callRemote('credentials.set', { pluginId, key, value })
-      },
-      delete: async (key) => {
-        gate('credentials', 'services.credentials.delete()')
-        await this.protocol.callRemote('credentials.delete', { pluginId, key })
-      },
-    }
   }
 
   log(message) {

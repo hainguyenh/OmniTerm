@@ -1,55 +1,42 @@
 /**
- * @omniterm/full-connection-manager — full remote connection provider.
+ * @omniterm/full-connection-manager — workspace-aware SSH/RDP connection provider.
  *
- * Activated by the host's main-process plugin loader. Registers:
- *   • a ConnectionProvider backed by the encrypted ConnectionStore (saved tree + credential
- *     resolution, including the 'none' / 'url' conveniences);
- *   • an invoke handler exposing plugin-specific RPC (`setCredential`, `pendingMigrations`) reachable
- *     from the renderer via `window.omnitermAPI.plugin.invoke(...)`. Everything reachable there must
- *     be renderer-safe by construction: the host returns an invoke result to the webview verbatim, so
- *     a method that returns a secret leaks it. `exportAll` did exactly that and is gone;
- *   • no AuthProvider by default (the host stays login-free); a deployment can opt into one.
+ * Connection profiles contain metadata only. Authentication always happens inside the native SSH or
+ * RDP client prompt; this plugin has no credential service, password field, or renderer invoke handler.
  */
 
-import { ConnectionStore, stripMetaKeepingSecret } from './store'
+import { ConnectionStore } from './store'
 import path from 'node:path'
-import type { ConnectionProvider, ConnectionScope, HostAPI, PluginModule, ResolvedConnection } from './types'
+import type { Connection, ConnectionProvider, ConnectionScope, HostAPI, PluginModule } from './types'
 
 export const name = '@omniterm/full-connection-manager'
 
 export async function activate(host: HostAPI): Promise<void> {
-  const store = new ConnectionStore(host.services.storageDir, host.services.credentials)
-  await store.initialize()
+  const store = new ConnectionStore(host.services.storageDir)
   const scopedStores = new Map<string, ConnectionStore>()
   const storeFor = (scope: ConnectionScope) => {
     if (scope.kind === 'personal') return store
     const key = path.resolve(scope.workspacePath)
     let scoped = scopedStores.get(key)
     if (!scoped) {
-      scoped = new ConnectionStore(
-        path.join(key, '.omniterm', 'full-connection-manager'),
-        host.services.credentials,
-      )
+      scoped = new ConnectionStore(path.join(key, '.omniterm', 'full-connection-manager'))
       scopedStores.set(key, scoped)
     }
     return scoped
   }
-  const resolveFrom = async (target: ConnectionStore, id: string): Promise<ResolvedConnection | null> => {
-    const c = await target.resolveRaw(id)
-    if (!c) return null
-    const plain = stripMetaKeepingSecret(c)
-    if (c.credentialMode === 'url' && c.passwordUrl) {
-      try { await host.services.openExternal(c.passwordUrl) } catch { /* non-fatal */ }
-      return { ...plain, password: undefined }
+  const resolveFrom = async (target: ConnectionStore, id: string): Promise<Connection | null> => {
+    const connection = target.resolveRaw(id)
+    if (!connection) return null
+    if (connection.passwordHelpUrl) {
+      try { await host.services.openExternal(connection.passwordHelpUrl) } catch { /* non-fatal */ }
     }
-    if (c.credentialMode === 'none') return { ...plain, password: undefined }
-    return plain
+    return connection
   }
 
   const provider: ConnectionProvider = {
     capabilities: () => ({
       protocols: ['SSH', 'RDP'],
-      credentialPolicy: 'os-vault',
+      credentialPolicy: 'prompt-every-time',
       scopes: ['personal', 'workspace'],
       sftp: false,
       importExport: true,
@@ -63,39 +50,10 @@ export async function activate(host: HostAPI): Promise<void> {
   }
 
   host.registerConnectionProvider(provider)
-
-  // Reachable from the renderer, so every branch must return something that carries no secret.
-  host.registerInvokeHandler((method, ...args) => {
-    switch (method) {
-      case 'setCredential': {
-        const [id, cfg] = args as [string, { mode?: 'store' | 'none' | 'url'; password?: string; passwordUrl?: string }]
-        return store.setCredential(id, cfg ?? {})
-      }
-      // Ids and names of connections whose legacy password could not be migrated — no secret.
-      case 'pendingMigrations':
-        return store.pendingMigrations()
-      case 'confirmStoredCredential': {
-        const [id] = args as [string]
-        return (async () => {
-          for (const candidate of [store, ...scopedStores.values()]) {
-            const result = await candidate.confirmStoredCredential(id)
-            if (result.ok || !result.error?.startsWith('Unknown connection')) return result
-          }
-          return { ok: false, error: `Unknown connection "${id}".` }
-        })()
-      }
-      default:
-        throw new Error(`full-connection-manager: unknown invoke method "${method}"`)
-    }
-  })
-
   host.services.log('full-connection-manager activated')
 }
 
-/** The reference plugin owns no background handles; retained as an explicit lifecycle example. */
-export function deactivate(): void {
-  // No background handles in the reference plugin.
-}
+export function deactivate(): void {}
 
 const plugin: PluginModule = { name, activate, deactivate }
 export default plugin

@@ -1,102 +1,137 @@
+# OmniTerm
 
-# ⚡ OmniTerm
+An offline, multi-window SSH/RDP/local terminal and connection manager.
 
-**A multi-window terminal hub for Windows and macOS**
+Built with Tauri (Rust) + React. OmniTerm uses a native PTY backend for per-session
+performance, stores zero credentials, supports detachable multi-window panes, and
+offers an optional plugin system for connection metadata, workspace content, and
+app-open auth gates.
 
-*Local, SSH and RDP sessions — docked, grouped, and under control.*
-
+For installation, prerequisites, building, and development workflows, see
+[GUIDELINE.md](GUIDELINE.md).
 
 ---
 
-## 🧭 Overview
+## Purpose
 
-OmniTerm is a desktop app built with **Tauri (Rust) + React** for running and organizing multiple
-terminal-style sessions side by side, instead of juggling a pile of loose windows.
+Terminal managers commonly either hardcode saved credential storage or embed a full
+browser engine for a single pane. OmniTerm takes a different approach:
 
-It is deliberately thin at the core. Saved connections, credential policy, workspace contents and
-authentication are all things a plugin can take over, so a deployment can change them without forking
-the app — see **[docs/PLUGINS.md](docs/PLUGINS.md)**.
+- **Zero credential storage** -- No password field, vault module, save-password API,
+  or credential RPC. SSH and RDP authentication happens in-band at session start
+  and is never written to disk.
+- **Native PTY backend** -- Rust `portable-pty` / ConPTY with xterm.js rendering.
+  No Electron, no browser-engine-per-pane. Only a Tauri webview for the UI shell.
+- **Multi-window panes** -- Detach a terminal into its own OS window, re-attach it
+  later. The PTY stays owned by Rust; output routing switches internally per-pane.
+- **Plugin system** -- Unsandboxed Node.js sidecar. Plugins provide connection metadata,
+  workspace content, and app-open auth gates. Install only trusted packages.
 
-## ✨ Basic Features
+---
 
-- 🖥️ **Local terminal** sessions powered by `xterm.js`
-- 🧩 **Multi-window docking** — group and arrange sessions in one layout, or detach a pane into its own window
-- 🗂️ **Connection manager** — a tree of saved local / SSH / RDP connections
-- 📁 **Workspaces** — pin project folders, browse their scripts, and keep connections alongside the project
-- 📂 File browser + a light text viewer for any file in a workspace — read-only for everything except
-  the executable scripts, which are also editable. Binaries, archives and key material are not opened,
-  and the size cap is yours to set (default 1 MB)
-- ⌨️ Command palette for quick actions
-- 🎨 Theme customization
-- 🔌 **Plug-and-play plugins** — drop one in to replace how connections, credentials or workspaces work
+## Terminal Engine
 
-## 🔒 No stored passwords
-
-OmniTerm never saves a password, in any form, anywhere — not in a settings file, not in the connection
-tree, not in a generated `.rdp` file, not on a command line, and not in a log. The `Connection` type has
-no field for one, so this is enforced by construction rather than by discipline. A connection either
-prompts you per session, or points at where you keep the password so you can copy it from your own vault.
-
-A plugin that wants to store secrets must bring its own storage, and owns the consequences. See the
-credential section of [docs/PLUGINS.md](docs/PLUGINS.md).
-
-## 🧱 Tech Stack
-
-| Layer | Tech |
+| Capability | Detail |
 |---|---|
-| Shell | Tauri 2 (Rust) |
-| UI | React + TypeScript |
-| Terminal rendering | xterm.js |
-| Plugin host | Node.js sidecar, JSON-RPC over stdio |
+| Local shells | ConPTY (Windows), portable-pty (macOS/Linux); xterm.js frontend |
+| Shell detection | PowerShell, pwsh 7, CMD, WSL, bash, zsh, sh, default login shell |
+| SSH sessions | Metadata profiles; `ssh.exe` runs in-pane with native auth prompt |
+| RDP sessions | Metadata profiles; temp `.rdp` files launched via native client |
+| Quick shells | CLI trigger `--open-shell` for ad-hoc panes |
+| Session metrics | Host CPU, RAM, disk usage, and live uptime chips per pane (SSH) |
+| Busy/idle | Process-tree probe via `sysinfo` detects active child processes |
 
-## 🚀 Getting Started
+### Connection Types
 
-```bash
-corepack pnpm install
-pnpm create:app             # check your toolchain and print the build sequence
+| Type | Profiles |
+|---|---|
+| LOCAL | PowerShell, pwsh 7, CMD, WSL, bash, zsh, sh, default login shell |
+| SSH | Host, port, username, optional shell, cwd, command, args, keepOpen |
+| RDP | Host, port, username, optional redirectDrives, resolution settings |
 
-pnpm tauri:dev:basic        # plugin-free app
-pnpm tauri:dev:full         # app + Full Remote Suite
-pnpm tauri:dev:limited      # app + Limited Connections
-pnpm tauri:build            # build the installer
+## Multi-Window
 
-corepack pnpm lint          # eslint (zero warnings tolerated)
-corepack pnpm lint:tauri    # clippy with -D warnings
-corepack pnpm test          # vitest suite
-corepack pnpm test:tauri    # Rust suite
-```
+| Capability | Detail |
+|---|---|
+| Detach | Pop a pane into its own `term-*` system window; PTY stays in Rust |
+| Re-attach | Fold detached window back into main tab; scrollback replayed up to 256KB |
+| Layouts | 1, 2, 3, 4, 6, 8-pane grids with drag-to-resize for 2/3 modes |
+| Hotkeys | `Ctrl+1` ... `Ctrl+8` for respective layout modes |
 
-> Tests and lint run under `corepack pnpm`; the Tauri builds run under plain `pnpm`. The two are not
-> interchangeable here.
+## UI
 
-## 🔌 Plugins
+| Component | Detail |
+|---|---|
+| Workspace panel | Pin folders; filtered tree of scripts, files, and workspace connections |
+| File viewer/editor | Syntax highlighting; editable `.ps1`/`.sh`/`.bat`/`.cmd` with `Ctrl+S`; Markdown + Mermaid preview |
+| Command palette | `Ctrl+K`; favorites, recent, fuzzy-search, instant connect |
+| Themes | Dark/light toggle; 16-color terminal + 6-color UI palette; JSON import/export, theme remix editor |
+| Font & zoom | Monospace family, font size, CSS-level zoom |
 
-```bash
-pnpm create:plugin my-plugin      # scaffold
-pnpm build:plugin ./my-plugin     # compile, and check the host could load it
-pnpm run:plugin ./my-plugin       # load it in the real plugin host, print what the app would see
-pnpm install:plugin ./my-plugin   # install it, after telling you what it wants
-```
+## Security
 
-Nontechnical users can open **Settings → Plugins → Install ZIP** in any build, including Basic, and
-choose a plugin package produced by the build wizard. OmniTerm validates the archive, shows the
-requested permissions in a native confirmation, and provides **Remove plugin** for user-installed
-packages.
+| Property | Detail |
+|---|---|
+| Password-free | No password field, vault, save API, or credential RPC in source |
+| Scrubbers | Legacy `password`/`hasPassword` keys wiped at read time (app + plugins) |
+| Logless release | `release_max_level_off` in Rust; zero log output in release builds |
+| CSP | Strict Content-Security-Policy; self and named schemes only |
+| Theme validation | Theme id restricted to alphanum + `-_.` to prevent traversal |
+| Single instance | `tauri-plugin-single-instance` routes second launch to first window |
+| Temp cleanup | Stale `.rdp` files deleted on app startup |
 
-`run:plugin` is the inner loop: it runs the actual sidecar, so `status: loaded` there means the app will
-load it too — no build, no restart. Add `--invoke <method> '[args]'` to call into your plugin.
+## Keyboard Shortcuts
 
-Full authoring guide, permission table and credential policy: **[docs/PLUGINS.md](docs/PLUGINS.md)**.
-The API itself is documented in [`contract/index.ts`](contract/index.ts). The two optional providers
-live in [`plugins/full-connection-manager`](plugins/full-connection-manager) and
-[`plugins/native-batch-connections`](plugins/native-batch-connections) (Limited Connections).
+| Keys | Action |
+|---|---|
+| `Ctrl+K` | Command palette |
+| `Ctrl+N` | New session |
+| `Ctrl+,` | Settings |
+| `Ctrl+/` | Toggle dark/light theme |
+| `Ctrl+B` | Toggle sidebar |
+| `Ctrl+=` / `Ctrl+-` | Zoom in/out |
+| `Ctrl+1` ... `Ctrl+8` | Layout modes (1..8 panes) |
+| `Ctrl+L` | Lock screen |
+| `Escape` | Close modal/palette |
 
-For a guided installer or plugin build, double-click
-[`scripts/Build-OmniTerm.cmd`](scripts/Build-OmniTerm.cmd). It offers Basic App, Plugin Package, and
-App with Plugin builds without editing tracked configuration. App builds can produce an installer,
-an install-free portable ZIP, or both. Portable builds still use the normal Windows user-profile
-locations for settings and application data.
+## Tech Stack
 
-## 📌 Status
+| Layer | Technology |
+|---|---|
+| Desktop shell | Tauri 2 (Rust) |
+| UI | React 18 + TypeScript + Tailwind CSS + Lucide icons |
+| Terminal rendering | xterm.js 5.5 + addon-fit |
+| PTY transport | portable-pty v0.8 (Rust) |
+| Plugin host | Node.js 24 sidecar, JSON-RPC over stdio |
+| Rust crates | serde, tokio, sysinfo, dashmap, zeroize, opener, rfd |
+| Installer | Tauri NSIS bundle (Windows) |
+| License | LGPL-3.0-or-later |
+| Min OS | Windows 10+ (WSL2 for Linux shells), macOS 12+ |
 
-Early stage, actively evolving. Feedback and ideas welcome.
+## Plugins
+
+OmniTerm plugins are unsigned Node.js packages loaded by a sidecar process.
+Three optional provider types exist:
+
+- **ConnectionProvider** -- Connection metadata tree and connection profiles
+- **WorkspaceProvider** -- Workspace scripts, file scanning, and path management
+- **AuthProvider** -- Optional app-open gate before revealing the workspace
+
+Bundled providers:
+- `plugins/full-connection-manager` -- workspace-aware SSH/RDP profiles with credential scrubbing
+- `plugins/native-batch-connections` -- batch-launched SSH/RDP profiles via native client flows
+
+Plugins are **unsandboxed** (access to `fs`, `net`, and `child_process`). Install only
+trusted packages. Manage plugins via **Settings > Plugins** or CLI commands in [GUIDELINE.md](GUIDELINE.md).
+
+## Integration
+
+OmniTerm does not embed [markdown-explorer](https://github.com/the-long-ride/markdown-explorer).
+It uses the markdown-explorer submodule at `plugins/markdown-explorer` to power Markdown
+and Mermaid preview inside the file viewer. See the markdown-explorer [GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+
+## Status
+
+Early stage. API contract version 2. Active development.
+
+Contributions welcome under LGPL-3.0.

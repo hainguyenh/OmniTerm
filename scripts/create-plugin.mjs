@@ -6,7 +6,7 @@
  *
  * Produces a directory that the host will actually load: a manifest the sidecar's `describePlugin`
  * accepts, a `main` that matches where tsc emits, and a local copy of the contract types so the plugin
- * builds standalone (the same reason each plugins/*/src/types.ts exists — a plugin is a drop-in package, not a
+ * builds standalone (the same reason each bundled plugin has its own src/types.ts — a plugin is a drop-in package, not a
  * workspace member).
  *
  * The template asks for NO permissions. Adding one is a deliberate act, and the host refuses any
@@ -81,9 +81,6 @@ const indexTs = `/**
  * commented out because the template declares none — uncomment a registration and add its permission
  * together, or the host will throw and tell you which one is missing.
  *
- * Credentials: OmniTerm stores no password and never will. \`host.services.credentials.isAvailable()\`
- * is false and \`set()\` rejects. Design around it (prompt per session, or point the user at a vault),
- * or supply your own storage — see docs/PLUGINS.md.
  */
 
 import type { HostAPI, PluginModule } from './types'
@@ -130,12 +127,6 @@ Then restart OmniTerm and look under Plugins.
 manifest does not declare and names the missing permission in the error, so add them one at a time as
 you need them.
 
-## Credentials
-
-OmniTerm holds no password, in any form. \`host.services.credentials.isAvailable()\` returns false and
-\`set()\` rejects. If this plugin needs a secret, either prompt for it per session, point the user at
-where it is kept, or supply your own \`CredentialStore\` — in which case protecting what you write is
-this plugin's responsibility. See \`docs/PLUGINS.md\`.
 `
 
 mkdirSync(path.join(target, 'src'), { recursive: true })
@@ -158,4 +149,4 @@ console.log(`✓ Created ${rel}
     pnpm build:plugin ${rel}
     pnpm install:plugin ${rel}
 
-  Then restart OmniTerm. See docs/PLUGINS.md for the API and the credential policy.`)
+  Then restart OmniTerm. See docs/PLUGINS.md for the API.`)

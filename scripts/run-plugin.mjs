@@ -13,9 +13,8 @@
  * Passing a directory loads it *in addition to* whatever is installed, so a plugin can be checked
  * before `pnpm install:plugin` puts it anywhere permanent. Nothing is copied and nothing is installed.
  *
- * Reverse calls are answered exactly as src-tauri/src/plugin_host_api.rs answers them — in particular
- * `credentials.*` is refused, so a plugin that depends on host storage fails here for the same reason it
- * would fail in the app. `openExternal` is reported rather than performed: this is a test harness, and a
+ * Reverse calls are answered exactly as src-tauri/src/plugin_host_api.rs answers them. `openExternal`
+ * is reported rather than performed: this is a test harness, and a
  * plugin under test should not be able to open a browser tab.
  */
 
@@ -35,7 +34,7 @@ function parseArgs(argv) {
     if (argv[i] === '--invoke') {
       out.invoke = argv[i + 1]
       if (!out.invoke) die('--invoke needs a method name.')
-      // Optional JSON array of arguments, e.g. --invoke setCredential '["id",{"mode":"none"}]'
+      // Optional JSON array of arguments, e.g. --invoke refresh '["workspace-1"]'
       const maybeJson = argv[i + 2]
       if (maybeJson !== undefined && !maybeJson.startsWith('--')) {
         try {
@@ -64,10 +63,6 @@ function parseArgs(argv) {
  */
 function answerReverseCall(method, params) {
   switch (method) {
-    case 'credentials.get':
-    case 'credentials.set':
-    case 'credentials.delete':
-      return { error: 'OmniTerm provides no credential storage; a plugin must supply its own' }
     case 'host.log':
       console.log(`  [plugin log] ${params?.message ?? ''}`)
       return { result: true }

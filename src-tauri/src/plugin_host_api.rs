@@ -60,33 +60,8 @@ pub fn disabled_descriptor(reason: String) -> Value {
 }
 
 /// Dispatch a reverse call, returning `Err` for anything this build does not implement.
-///
-/// The failure contract is the point. Answering `null` is worse than failing, because the caller acts
-/// on the lie: `credentials.set` used to fall through to a silent `Ok(Value::Null)`, so the reference
-/// plugin recorded `hasStoredSecret = true` and then deleted the only copy of a migrated password. An
-/// unimplemented capability now rejects, and the plugin can fall back to prompting the user.
 pub fn handle_reverse_call(method: &str, params: Option<&Value>) -> Result<Value, String> {
     match method {
-        "credentials.get" => {
-            let plugin_id = string_param(params, "pluginId")?;
-            let key = string_param(params, "key")?;
-            Ok(crate::credential_vault::get(plugin_id, key)?
-                .map(Value::String)
-                .unwrap_or(Value::Null))
-        }
-        "credentials.set" => {
-            let plugin_id = string_param(params, "pluginId")?;
-            let key = string_param(params, "key")?;
-            let value = string_param(params, "value")?;
-            crate::credential_vault::set(plugin_id, key, value)?;
-            Ok(Value::Bool(true))
-        }
-        "credentials.delete" => {
-            let plugin_id = string_param(params, "pluginId")?;
-            let key = string_param(params, "key")?;
-            crate::credential_vault::delete(plugin_id, key)?;
-            Ok(Value::Bool(true))
-        }
         "host.openExternal" => {
             let url = params
                 .and_then(|p| p.get("url"))
@@ -108,11 +83,4 @@ pub fn handle_reverse_call(method: &str, params: Option<&Value>) -> Result<Value
         }
         _ => Err(format!("unknown host method \"{method}\"")),
     }
-}
-
-fn string_param<'a>(params: Option<&'a Value>, key: &str) -> Result<&'a str, String> {
-    params
-        .and_then(|value| value.get(key))
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("missing string parameter \"{key}\""))
 }

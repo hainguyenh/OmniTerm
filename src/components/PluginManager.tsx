@@ -10,7 +10,7 @@ interface PluginManagerProps {
 
 function pluginFeatureSummary(plugin: PluginDescriptor): string[] {
   if (plugin.id === '@omniterm/full-connection-manager') {
-    return ['Integrated SSH', 'Native RDP', 'Windows Credential Manager', 'Workspace connections']
+    return ['Integrated SSH', 'Native RDP', 'Workspace connections', 'Passwords never stored']
   }
   if (plugin.id === '@omniterm/native-batch-connections') {
     return ['Windows OpenSSH', 'Native mstsc', 'BAT launchers', 'Passwords never stored']
@@ -157,7 +157,7 @@ export default function PluginManager({
       return
     }
     const confirmed = await showConfirm(
-      `Use “${plugin.name}” for workspace connections? Only metadata is visible to the UI; passwords are never migrated between providers.`,
+      `Use “${plugin.name}” for workspace connections? Only metadata is copied between providers; passwords are always entered in the native client prompt.`,
       { title: 'Switch connection provider', confirmLabel: 'Use provider', tone: 'info' },
     )
     if (!confirmed) return
@@ -171,7 +171,7 @@ export default function PluginManager({
       setCapabilities(await window.omnitermAPI.plugin.connectionCapabilities())
       if (previous && previous.id !== plugin.id && previousTree?.connections?.length) {
         const migrate = await showConfirm(
-          `Copy ${previousTree.connections.length} connection profile(s) to “${plugin.name}”? Only metadata is copied; every saved password stays with the old provider.`,
+          `Copy ${previousTree.connections.length} connection profile(s) to “${plugin.name}”? Only metadata is copied; no password data exists to migrate.`,
           {
             title: 'Migrate connection metadata',
             confirmLabel: 'Copy metadata',

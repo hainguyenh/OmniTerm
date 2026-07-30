@@ -29,7 +29,7 @@ interface ConnectionAdvancedProps {
   onParentIdChange: (value: string) => void
   /** What the select calls "no folder" — the workspace's own name, not a generic "Root". */
   rootLabel: string
-  /** Only the password-free provider offers a help link; the OS-vault one has its own controls. */
+  /** Whether this provider supports opening an optional HTTPS password-help page. */
   showPasswordHelp: boolean
   passwordHelpUrl: string
   onPasswordHelpUrlChange: (value: string) => void

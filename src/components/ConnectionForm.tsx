@@ -83,8 +83,6 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
   const [localCommand, setLocalCommand] = useState(initial?.localCommand ?? '')
   const [localKeepOpen, setLocalKeepOpen] = useState(initial?.localKeepOpen ?? true)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
-  const [credentialMode, setCredentialMode] = useState<'prompt' | 'store'>(initial?.hasStoredCredential ? 'store' : 'prompt')
-  const [credentialError, setCredentialError] = useState('')
 
   const handleResetTrust = async () => {
     await window.omnitermAPI.connect.rdpResetTrust(host, port)
@@ -135,19 +133,6 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
     }
 
     await onSave(savedConn)
-    if (type !== 'LOCAL' && capabilities?.credentialPolicy === 'os-vault') {
-      if (credentialMode === 'store' && !initial?.hasStoredCredential) {
-        try {
-          const stored = await window.omnitermAPI.connect.saveCredential(savedConn.id, savedConn.user)
-          if (!stored) return
-        } catch (error) {
-          setCredentialError(error instanceof Error ? error.message : String(error))
-          return
-        }
-      } else if (credentialMode === 'prompt') {
-        await window.omnitermAPI.plugin.invoke('setCredential', savedConn.id, { mode: 'none' })
-      }
-    }
     onClose()
   }
 
@@ -366,27 +351,6 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
             </div>
           )}
 
-          {type !== 'LOCAL' && capabilities?.credentialPolicy === 'os-vault' && (
-            <div className="rounded-xl border border-theme-border bg-theme-bg/50 px-3 py-2">
-              <div className="text-xs font-semibold text-theme-fg">Credentials</div>
-              <div className="mt-1 flex gap-2 text-xs">
-                <label className="flex items-center gap-1.5">
-                  <input type="radio" name="credentialMode" checked={credentialMode === 'prompt'}
-                    onChange={() => setCredentialMode('prompt')} />
-                  Ask every time
-                </label>
-                <label className="flex items-center gap-1.5">
-                  <input type="radio" name="credentialMode" checked={credentialMode === 'store'}
-                    onChange={() => setCredentialMode('store')} />
-                  Save in Windows Credential Manager
-                </label>
-              </div>
-              <p className="text-[11px] text-theme-dim leading-snug mt-1">
-                The password is entered in a native Windows dialog and never exposed to this form.
-              </p>
-              {credentialError && <p role="alert" className="mt-1 text-[11px] text-theme-error">{credentialError}</p>}
-            </div>
-          )}
 
           <ConnectionAdvanced
             defaultOpen={advancedPreset}

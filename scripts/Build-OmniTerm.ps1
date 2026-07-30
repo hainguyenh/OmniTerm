@@ -39,7 +39,7 @@ function Remove-BuildTree([string]$Target, [string]$AllowedRoot) {
 }
 
 function Select-Plugin {
-  Write-Host '    1. Full Remote Suite'
+  Write-Host '    1. Full Remote Suite (metadata only; never stores passwords)'
   Write-Host '    2. Limited Connections (OS launch scripts; never stores passwords)'
   do { $choice = Read-Host '  Select plugin [1-2]' } until ($choice -in @('1', '2'))
   if ($choice -eq '1') {
