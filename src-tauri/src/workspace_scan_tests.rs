@@ -236,9 +236,10 @@ fn scripts_serialize_with_the_field_names_the_renderer_reads() {
         kind: "bat".to_string(),
         shell: Some("cmd".to_string()),
         editable: Some(true),
+        viewable: Some(true),
     };
     let value = serde_json::to_value(&script).unwrap();
-    for key in ["id", "name", "path", "kind", "shell", "editable"] {
+    for key in ["id", "name", "path", "kind", "shell", "editable", "viewable"] {
         assert!(value.get(key).is_some(), "{key} must be serialized");
     }
 }
@@ -254,10 +255,58 @@ fn entries_serialize_with_the_field_names_the_renderer_reads() {
         kind: "dir".to_string(),
         shell: None,
         editable: None,
+        viewable: None,
     };
     let value = serde_json::to_value(&entry).unwrap();
     for key in ["id", "name", "path", "isDir", "kind"] {
         assert!(value.get(key).is_some(), "{key} must be serialized");
     }
     assert_eq!(value["isDir"], serde_json::json!(true));
+}
+
+/// The viewer decides whether to load a file's contents from `viewable`, so the scan has to set it on
+/// every file — and must keep refusing the kinds the viewer will not open.
+#[test]
+fn entries_flag_which_files_the_viewer_will_open() {
+    let dir = tempfile::Builder::new()
+        .prefix("omniterm-viewable")
+        .tempdir()
+        .expect("temp dir");
+    let root = dir.path();
+    for name in ["notes.txt", "deploy.bat", "host.rdp", "payload.exe", "id.pem", "Dockerfile"] {
+        std::fs::File::create(root.join(name)).unwrap();
+    }
+    std::fs::create_dir(root.join("sub")).unwrap();
+
+    let by_name: std::collections::HashMap<_, _> = scan_entries(root)
+        .into_iter()
+        .map(|e| (e.name.clone(), e))
+        .collect();
+
+    // Text of any kind opens, including the extensionless and the non-editable.
+    for name in ["notes.txt", "deploy.bat", "host.rdp", "Dockerfile"] {
+        assert_eq!(by_name[name].viewable, Some(true), "{name} should be viewable");
+    }
+    // An executable and key material do not.
+    for name in ["payload.exe", "id.pem"] {
+        assert_eq!(by_name[name].viewable, Some(false), "{name} must not be viewable");
+    }
+    // A directory has no contents to view — absent, not `false`.
+    assert_eq!(by_name["sub"].viewable, None);
+}
+
+/// The scan's `viewable` flag must stay in step with what `read_script` will actually allow, or the
+/// panel would offer to open a file the backend then refuses.
+#[test]
+fn scan_entries_excluding_marks_user_excluded_extensions_unviewable() {
+    let (_d, root) = tree();
+    touch(&root.join("notes.txt"));
+    touch(&root.join("deploy.bat"));
+
+    let excluded = vec!["txt".to_string()];
+    let entries = scan_entries_excluding(&root, &excluded);
+    let by_name: std::collections::HashMap<_, _> =
+        entries.into_iter().map(|e| (e.name.clone(), e)).collect();
+    assert_eq!(by_name["notes.txt"].viewable, Some(false));
+    assert_eq!(by_name["deploy.bat"].viewable, Some(true), "unaffected extensions stay viewable");
 }

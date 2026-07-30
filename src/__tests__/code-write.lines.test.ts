@@ -25,11 +25,17 @@ const BASELINE_OVERRIDES: Record<string, number> = {
   // 582 → 535: the embedded personal-connections section went away with Sidebar.tsx. 535 → 518: the
   // option row and the connection leaf became WorkspaceTreeToolbar / WorkspaceConnectionRow. 518 →
   // 505: the search row became WorkspaceSearchBar, and the flat view reuses `viewOf`'s file list.
-  "src/components/WorkspacePanel.tsx": 505,
+  // 505 → 518: the per-workspace filter now persists to localStorage (load + save effect). 518 → 537:
+  // "Reveal in tree" wiring (useTreeReveal hook call, fileRow's highlight/ref, the prop and its doc).
+  "src/components/WorkspacePanel.tsx": 537,
   // A command registry: it grows by one line per command and one per module, and there is nothing to
-  // split out of it. 373 → 375 for `workspace_scan` + `scan_workspace_entries`.
-  "src-tauri/src/lib.rs": 375,
+  // split out of it. 373 → 375 for `workspace_scan` + `scan_workspace_entries`. 375 → 376 for
+  // `safepath::system_excluded_view_exts`.
+  "src-tauri/src/lib.rs": 376,
   "src-tauri/src/plugin_host.rs": 426,
+  // Test file for the containment/viewer gates; grew with the "Excluded file types" setting's
+  // coverage (user-excluded extensions on top of the fixed deny-list).
+  "src-tauri/src/safepath_tests.rs": 384,
   // No override for src-tauri/src/workspace.rs: the workspace-connection commands went to
   // workspace_connections.rs and the scan to workspace_scan.rs, so it is well under the limit again.
 };

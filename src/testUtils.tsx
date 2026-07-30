@@ -178,6 +178,7 @@ const defaults: Api = {
   settings: {
     get: async () => defaultSettings,
     save: async () => {},
+    systemExcludedViewExts: async () => [],
   },
   updates: {
     check: async () => defaultUpdateState,

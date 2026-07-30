@@ -3,6 +3,7 @@ import ActivityBar, { type ActivityView } from './ActivityBar'
 import FileBrowser from './FileBrowser'
 import WorkspacePanel, { type WorkspaceConnectionTarget } from './WorkspacePanel'
 import ScriptViewer from './ScriptViewer'
+import GeneralSettings from './GeneralSettings'
 import TerminalView from './TerminalView'
 import RDPView from './RDPView'
 import ConnectingOverlay from './ConnectingOverlay'
@@ -13,7 +14,7 @@ import DialogHost from './DialogHost'
 import PluginManager from './PluginManager'
 import { useDialog } from '../hooks/useDialog'
 import MetricsChips from './SessionMetricsChips'
-import { Terminal, Monitor, Unplug, RotateCw, Loader2, X, Maximize2, Minimize2, ExternalLink, FileText, Square, Columns2, LayoutGrid, Trash2, ArrowLeft, ArrowRight, XCircle, PanelLeft } from 'lucide-react'
+import { Terminal, Monitor, Unplug, RotateCw, Loader2, X, Maximize2, Minimize2, ExternalLink, Square, Columns2, LayoutGrid, Trash2, ArrowLeft, ArrowRight, XCircle, PanelLeft } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { appLogo } from '../assets/appLogo'
 import { AppTheme, LayoutMode } from '../themes'
@@ -520,6 +521,18 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     setActiveView(view)
     localStorage.setItem('cc.activeView', String(view))
   }, [])
+  // "Reveal in tree" (see SessionTabs' Locate icon): a one-shot request to WorkspacePanel, keyed by an
+  // incrementing nonce rather than a fresh object identity, so revealing the same file twice in a row
+  // still fires (object equality alone would not change and the effect would not re-run).
+  const [revealRequest, setRevealRequest] = useState<{ workspaceId: string; path: string; nonce: number } | null>(null)
+  const revealNonce = useRef(0)
+  const revealInWorkspace = useCallback((tabId: string) => {
+    const editor = editorTabs[tabId]
+    if (!editor) return
+    handleViewChange('workspace')
+    revealNonce.current += 1
+    setRevealRequest({ workspaceId: editor.workspaceId, path: editor.script.id, nonce: revealNonce.current })
+  }, [editorTabs, handleViewChange])
   // Export modal state removed
   // About modal
   // settingsOpen is controlled externally via TitleBar → App → MainLayout prop
@@ -1094,6 +1107,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                 openConnectionForm(target)
               }}
               connectionsRevision={wsConnectionsRevision}
+              revealRequest={revealRequest}
             />
           ) : activeView === 'files' && activeSshId && activeSshName ? (
             <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
@@ -1134,6 +1148,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
               onNewSession={() => window.dispatchEvent(new Event('omniterm:new-session'))}
               onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+              onReveal={revealInWorkspace}
             />
           )}
           </div>
@@ -1499,43 +1514,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                   showConfirm={showConfirm}
                 />
 
-                {/* General Settings */}
-                <div className="px-4 py-2.5 border-t border-theme-border">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] uppercase font-bold tracking-widest text-theme-dim">General</p>
-                    {/* Development only. A release or portable build writes no log (see
-                        src-tauri/src/app_utils.rs), so this would open an empty folder at best. */}
-                    {import.meta.env.DEV && (
-                      <button type="button"
-                        onClick={() => { setAboutOpen(false); window.omnitermAPI.app.revealLog() }}
-                        className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-theme-fg hover:text-theme-warning bg-theme-bg border border-theme-border rounded transition-colors"
-                        title="Open application log">
-                        <FileText className="w-3 h-3 text-theme-warning" />Open log
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] text-theme-fg uppercase font-bold tracking-widest ml-0.5">Default Terminal</label>
-                    <div className="relative">
-                      <select
-                        value={pickShell(shellOptions, appSettings.defaultShell)}
-                        onChange={(e) => {
-                          const next = { ...appSettings, defaultShell: e.target.value }
-                          setAppSettings(next)
-                          window.omnitermAPI.settings.save(next)
-                        }}
-                        className="w-full bg-theme-bg border border-theme-border rounded-lg py-2 pl-3 pr-8 text-xs text-white appearance-none focus:outline-none focus:border-theme-accent transition-colors cursor-pointer"
-                      >
-                        {shellOptions.map(opt => (
-                          <option key={opt.id} value={opt.id}>{opt.label}</option>
-                        ))}
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-theme-dim">
-                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <GeneralSettings
+                  appSettings={appSettings}
+                  setAppSettings={setAppSettings}
+                  shellOptions={shellOptions}
+                  onCloseSettings={() => setAboutOpen(false)}
+                />
 
                 {/* Branding */}
                 <div className="flex flex-col items-center gap-2 px-4 pb-1 pt-2.5 border-t border-theme-border">

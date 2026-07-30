@@ -168,6 +168,7 @@ pub fn run() {
             workspace::run_script,
             workspace::read_script,
             workspace::write_script,
+            safepath::system_excluded_view_exts,
             workspace_connections::load_workspace_connections,
             workspace_connections::save_workspace_connections,
             workspace_connections::delete_workspace_connection,

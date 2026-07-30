@@ -41,6 +41,10 @@ interface AppSettings {
   split2Style?: 'columns' | 'rows'
   /** Where the draggable pane boundaries sit, as fractions (2- and 3-pane layouts). */
   splitRatios?: { main: number; cross: number }
+  /** Max size (MB) the built-in viewer/editor will open or save; the backend clamps the range. */
+  maxOpenFileMb?: number
+  /** Extensions the user chose to hide from the viewer, on top of the fixed system deny-list. */
+  excludedViewableExts?: string[]
 }
 
 interface SessionMetrics {
@@ -218,6 +222,7 @@ interface Window {
     settings: {
       get: () => Promise<AppSettings>
       save: (s: Partial<AppSettings>) => Promise<void>
+      systemExcludedViewExts: () => Promise<string[]>
     }
     // Workspace view: pinned project folders + a folder script scan; open/run as ephemeral panes.
     workspace: {

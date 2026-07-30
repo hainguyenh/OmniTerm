@@ -269,6 +269,10 @@ function createTauriAPI(): any {
       get: () => invoke<any>('get_settings'),
       // A partial object is a partial write — the backend merges it into what is stored.
       save: (settings: any) => invoke('save_settings', { settings }),
+      // The fixed half of the viewer's deny-list (safepath::VIEW_DENY_EXTS) — shown locked in
+      // GeneralSettings.tsx alongside the user's own `excludedViewableExts`, so the setting can never
+      // claim to unhide something the app itself refuses to open.
+      systemExcludedViewExts: () => invoke<string[]>('system_excluded_view_exts'),
     },
 
     workspace: {

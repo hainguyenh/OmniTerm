@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildScriptTree, buildWorkspaceTree, filterTreeByQuery } from '../scriptTree'
+import { buildScriptTree, buildWorkspaceTree, entryNode, filterTreeByQuery } from '../scriptTree'
 import type { Connection, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
 
 const s = (id: string, kind = 'sh'): WorkspaceScript => ({
@@ -119,5 +119,46 @@ describe('filterTreeByQuery', () => {
 
   it('drops branches with no match at all', () => {
     expect(filterTreeByQuery(tree(), 'nothing-here')).toEqual([])
+  })
+})
+
+describe('entryNode / openable', () => {
+  /** A file the scan marked viewable gets an `openable` record even though it is not runnable. */
+  it('marks a viewable non-script file openable but not runnable', () => {
+    const node = entryNode({ ...file('notes.txt', 'txt'), viewable: true })
+    expect(node.script).toBeUndefined()
+    expect(node.openable?.path).toBe('/root/notes.txt')
+    // The flag travels on the record the viewer receives, so ScriptViewer can key its body off it.
+    expect(node.openable?.viewable).toBe(true)
+    expect(node.openable?.editable).toBe(false)
+  })
+
+  it('leaves a denied kind neither openable nor runnable', () => {
+    const node = entryNode({ ...file('payload.exe', 'exe'), viewable: false })
+    expect(node.script).toBeUndefined()
+    expect(node.openable).toBeUndefined()
+  })
+
+  it('keeps a script both openable and runnable', () => {
+    const node = entryNode({ ...file('deploy.bat', 'bat'), viewable: true })
+    expect(node.script?.id).toBe('deploy.bat')
+    expect(node.openable?.editable).toBe(true)
+  })
+
+  /**
+   * A provider predating `viewable` reports nothing at all. Its scripts must stay openable, and its
+   * plain files must stay closed — i.e. exactly the previous behaviour.
+   */
+  it('falls back to "runnable means viewable" when the flag is absent', () => {
+    expect(entryNode(file('deploy.bat', 'bat')).openable).toBeDefined()
+    expect(entryNode(file('notes.txt', 'txt')).openable).toBeUndefined()
+  })
+
+  /** The regression this constructor exists to prevent — both views must agree. */
+  it('gives the tree view the same openable records the flat view builds', () => {
+    const entries = [dir('sub'), { ...file('sub/notes.txt', 'txt'), viewable: true }]
+    const fromTree = buildWorkspaceTree(entries)[0].children[0]
+    const fromFlat = entryNode(entries[1])
+    expect(fromTree.openable).toEqual(fromFlat.openable)
   })
 })

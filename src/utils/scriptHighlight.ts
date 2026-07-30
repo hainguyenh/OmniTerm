@@ -89,8 +89,21 @@ function refineText(text: string, kind: string): Token[] {
   return out
 }
 
+/**
+ * Kinds this tokenizer actually knows. Everything else renders as plain text.
+ *
+ * The viewer opens any text file now, and the rules below are written for shell syntax — applied to
+ * prose they actively mislead: the apostrophe in "don't" opens a string that colors the rest of the
+ * line, and `$5` in a README reads as a variable. Guessing wrong is worse than not coloring, so an
+ * unknown kind gets one plain token per line and stays legible.
+ */
+const HIGHLIGHTED_KINDS = new Set(['bat', 'cmd', 'ps1', 'sh'])
+
 /** Tokenize a single line into colored segments. */
 export function highlightLine(line: string, kind: string): Token[] {
+  if (!HIGHLIGHTED_KINDS.has(kind)) {
+    return line ? [{ text: line, type: 'text' }] : []
+  }
   if ((kind === 'bat' || kind === 'cmd') && isBatchComment(line.trimStart())) {
     return [{ text: line, type: 'comment' }]
   }

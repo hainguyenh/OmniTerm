@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play } from 'lucide-react'
+import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { activityDot, tabClasses, tabPlacement, tabTitle, PLACEMENT_STRIPE, type TabFlags } from '../tabVisuals'
 import { paneIdentity, withAlpha } from '../paneIdentity'
@@ -48,12 +48,18 @@ interface SessionTabsProps {
   onContextMenu: (e: React.MouseEvent, tabId: string) => void
   onNewSession: () => void
   onPickShell: (rect: DOMRect) => void
+  /**
+   * Reveal this editor tab's file in the Workspace tree (expand its folders, scroll to it, flash a
+   * highlight). Only ever called for a file tab that is also the focused pane's tab — see the
+   * `editor && placement === 'focused'` gate below.
+   */
+  onReveal: (tabId: string) => void
 }
 
 const SessionTabs: React.FC<SessionTabsProps> = ({
   tabs, panes, layoutMode, focusedPane, statuses, activity,
   isEditor, isPreview, isEphemeral, connType,
-  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell,
+  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, onReveal,
 }) => (
   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
     {tabs.map(tab => {
@@ -126,6 +132,18 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
             >
               {paneIdx + 1}
             </span>
+          )}
+          {/* Only for the file tab currently shown in the focused pane — the tab the user is looking
+              at right now — and only for a file, never a terminal/RDP session (no folder to reveal). */}
+          {editor && placement === 'focused' && (
+            <button
+              onClick={e => { e.stopPropagation(); onReveal(tab.id) }}
+              className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
+                hover:text-theme-accent hover:bg-theme-popup transition-colors"
+              title="Reveal in workspace tree"
+            >
+              <Locate className="w-3 h-3" />
+            </button>
           )}
           <button
             onClick={e => { e.stopPropagation(); onClose(tab.id) }}

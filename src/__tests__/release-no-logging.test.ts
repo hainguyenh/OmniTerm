@@ -147,9 +147,18 @@ describe("packaged builds emit no diagnostics", () => {
     }
   });
 
+  // Lives in GeneralSettings.tsx since the settings panel's General block moved out of MainLayout.
   it("hides the Open log control unless this is a dev build", () => {
-    expect(readRepoFile("src", "components", "MainLayout.tsx")).toMatch(
+    expect(readRepoFile("src", "components", "GeneralSettings.tsx")).toMatch(
       /import\.meta\.env\.DEV && \(\s*\n\s*<button[\s\S]{0,400}revealLog\(\)/,
     );
+  });
+
+  /// Belt and braces: wherever the control moves next, it must not appear ungated anywhere else.
+  it("names revealLog in exactly one component", () => {
+    const owners = ["MainLayout.tsx", "GeneralSettings.tsx"].filter((file) =>
+      readRepoFile("src", "components", file).includes("revealLog"),
+    );
+    expect(owners).toEqual(["GeneralSettings.tsx"]);
   });
 });

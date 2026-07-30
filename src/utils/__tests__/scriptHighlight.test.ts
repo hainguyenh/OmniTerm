@@ -49,3 +49,26 @@ describe('scriptHighlight', () => {
     expect(lines[1]).toEqual([{ text: '# c', type: 'comment' }])
   })
 })
+
+describe('unknown kinds', () => {
+  /**
+   * The viewer opens every text file now, and these rules are written for shell syntax. Applied to
+   * prose they mislead: the apostrophe in "don't" would open a string that colors the rest of the
+   * line. An unknown kind therefore gets one plain token and stays legible.
+   */
+  it('does not tokenize prose as shell syntax', () => {
+    const line = "Don't set $5 aside — # not a comment"
+    expect(highlightLine(line, 'txt')).toEqual([{ text: line, type: 'text' }])
+    expect(highlightLine(line, 'md')).toEqual([{ text: line, type: 'text' }])
+    expect(highlightLine(line, 'json')).toEqual([{ text: line, type: 'text' }])
+  })
+
+  it('still tokenizes the kinds it was written for', () => {
+    expect(highlightLine('# comment', 'sh')).toEqual([{ text: '# comment', type: 'comment' }])
+    expect(highlightLine('REM off', 'bat')[0].type).toBe('comment')
+  })
+
+  it('returns no tokens for a blank line', () => {
+    expect(highlightLine('', 'txt')).toEqual([])
+  })
+})

@@ -8,6 +8,7 @@
 //!
 //! Ports electron/services/workspaceScan.ts.
 
+use crate::safepath;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -50,6 +51,10 @@ pub struct WorkspaceScript {
     pub shell: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editable: Option<bool>,
+    /// Whether the viewer will show this file's contents as text. Wider than `editable`: a `.txt`,
+    /// a `.json` or a `.rdp` is viewable but not saveable. `None` for directories.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewable: Option<bool>,
 }
 
 /// One thing found inside a workspace: a directory, a runnable script, or any other file.
@@ -73,6 +78,9 @@ pub struct WorkspaceEntry {
     pub shell: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub editable: Option<bool>,
+    /// Whether the viewer will show this file's contents as text — see `WorkspaceScript::viewable`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewable: Option<bool>,
 }
 
 /// The kinds `classify` can produce — i.e. the entries that are runnable.
@@ -91,6 +99,7 @@ impl WorkspaceEntry {
             kind: self.kind.clone(),
             shell: self.shell.clone(),
             editable: self.editable,
+            viewable: self.viewable,
         })
     }
 }
@@ -117,7 +126,12 @@ fn classify(ext: &str) -> Option<(&'static str, Option<&'static str>, bool)> {
 /// A filter over `scan_entries`, so the two views of a workspace can never disagree about what is in
 /// it. Still capped at `MAX_SCRIPTS` — its callers page nothing.
 pub fn scan_dir(root: &Path) -> Vec<WorkspaceScript> {
-    scan_entries(root)
+    scan_dir_excluding(root, &[])
+}
+
+/// Same as `scan_dir`, additionally marking the user's own excluded extensions as not viewable.
+pub fn scan_dir_excluding(root: &Path, excluded: &[String]) -> Vec<WorkspaceScript> {
+    scan_entries_excluding(root, excluded)
         .iter()
         .filter_map(WorkspaceEntry::as_script)
         .take(MAX_SCRIPTS)
@@ -127,8 +141,16 @@ pub fn scan_dir(root: &Path) -> Vec<WorkspaceScript> {
 /// Shallow, bounded scan of everything in a workspace: every directory (including ones with no
 /// scripts in them) and every file. Sorted by `id`, so parents always precede their children.
 pub fn scan_entries(root: &Path) -> Vec<WorkspaceEntry> {
+    scan_entries_excluding(root, &[])
+}
+
+/// Same as `scan_entries`, additionally marking the user's own excluded extensions as not viewable —
+/// `excluded` is the "Excluded file types" setting (GeneralSettings.tsx), layered on top of the fixed
+/// `VIEW_DENY_EXTS` gate so the scan's `viewable` flag stays in step with what `read_script` will
+/// actually allow.
+pub fn scan_entries_excluding(root: &Path, excluded: &[String]) -> Vec<WorkspaceEntry> {
     let mut found: Vec<WorkspaceEntry> = Vec::new();
-    walk(root, root, 0, &mut found);
+    walk(root, root, 0, &mut found, excluded);
     found.sort_by(|a, b| a.id.cmp(&b.id));
     found
 }
@@ -143,7 +165,7 @@ fn rel_id(root: &Path, path: &Path) -> String {
         .join("/")
 }
 
-fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<WorkspaceEntry>) {
+fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<WorkspaceEntry>, excluded: &[String]) {
     if depth > MAX_DEPTH || found.len() >= MAX_ENTRIES {
         return;
     }
@@ -174,8 +196,9 @@ fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<WorkspaceEntry>) 
                 kind: "dir".to_string(),
                 shell: None,
                 editable: None,
+                viewable: None,
             });
-            walk(root, &path, depth + 1, found);
+            walk(root, &path, depth + 1, found, excluded);
         } else if file_type.is_file() {
             let ext = path
                 .extension()
@@ -190,6 +213,11 @@ fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<WorkspaceEntry>) 
                 None if ext.is_empty() => ("file".to_string(), None, None),
                 None => (ext.to_lowercase(), None, None),
             };
+            // Decided from the extension, not the file's bytes: the scan walks up to 2000 entries and
+            // must not open any of them. `read_viewable` still sniffs the content when the user
+            // actually opens the file, so a binary wearing a text extension is caught there — this
+            // flag only decides whether the viewer offers to try.
+            let viewable = safepath::is_viewable_kind_excluding(&ext, excluded);
             found.push(WorkspaceEntry {
                 id: rel_id(root, &path),
                 name,
@@ -198,6 +226,7 @@ fn walk(root: &Path, dir: &Path, depth: usize, found: &mut Vec<WorkspaceEntry>) 
                 kind,
                 shell,
                 editable,
+                viewable: Some(viewable),
             });
         }
     }

@@ -5,17 +5,100 @@
 //! crafted/compromised webview request cannot read or write files outside the workspace the user
 //! actually pinned. Symlinks are resolved before the containment check so a link planted inside the
 //! workspace cannot point out of it.
+//!
+//! Three gates live here, and they are deliberately different widths:
+//!
+//!   * **run** (`LAUNCHABLE_EXTS`) — an allow-list. Executing the wrong file is the worst outcome.
+//!   * **write** (`EDITABLE_EXTS`) — an allow-list. This app edits the scripts it manages, nothing else.
+//!   * **view** (`VIEW_DENY_EXTS` + `sniff_text`) — a deny-list, because reading text is the harmless
+//!     one and an allow-list would mean a code change for every format a user happens to keep in a
+//!     project folder.
+//!
+//! Containment applies to all three. Widening the view gate must never widen the other two.
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-/// Extensions the built-in provider will read/write as text. Everything else is launch-only —
+#[cfg(test)]
+#[path = "safepath_tests.rs"]
+mod tests;
+
+/// Extensions the built-in provider will *write*. Everything else is read-only in the viewer —
 /// notably `.rdp`, which is scanned and launchable but never editable.
+///
+/// Viewing is governed by `VIEW_DENY_EXTS` instead: the viewer opens any file that is plausibly text,
+/// while saving stays limited to the executable scripts this app is actually a manager for.
 pub const EDITABLE_EXTS: [&str; 4] = ["bat", "cmd", "ps1", "sh"];
 
-/// Max bytes the built-in editor will load or save. Scripts are small; this stops a giant-file read
-/// from being turned into a memory-exhaustion lever.
-pub const MAX_SCRIPT_BYTES: u64 = 1024 * 1024;
+/// Extensions the viewer refuses outright, checked before the file is opened.
+///
+/// A deny-list rather than an allow-list, so an unlisted text format (`.hcl`, `.nix`, a bare
+/// `Dockerfile`) just works instead of needing a code change. `sniff_text` is the real backstop for
+/// anything binary that slips through; this list is what makes the common cases fail *fast*, with a
+/// specific message, without reading a 700 MB ISO off disk first.
+///
+/// Three groups, each here for its own reason:
+///   * **Executables and containers** — nothing legible inside, and `.exe`/`.dll` is exactly what a
+///     reviewer expects a file viewer to refuse.
+///   * **Media, fonts, documents, databases** — binary containers whose text is not the file.
+///   * **Key material** — `.pem`/`.key`/`.ppk` are plain text, so neither the extension groups above
+///     nor `sniff_text` would stop them. Rendering a private key inside the app is not something this
+///     viewer needs to do, and a viewer that does it is a finding waiting to be written up.
+///
+/// `.svg` and `.json` are deliberately absent — both are text their author edits by hand.
+///
+/// A slice rather than a sized array: the list grows whenever a format turns out to be worth refusing,
+/// and a hardcoded length is just a second thing to update.
+pub const VIEW_DENY_EXTS: &[&str] = &[
+    // Executables, libraries, intermediate build output
+    "exe", "msi", "msix", "appx", "dll", "so", "dylib", "com", "scr", "sys", "bin", "obj", "o", "a",
+    "lib", "pdb", "wasm", "class", "pyc", "pyo", "node", "elf",
+    // Archives and packages
+    "zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "7z", "rar", "iso", "jar", "cab", "deb", "rpm",
+    "dmg", "pkg", "whl", "nupkg", "pack",
+    // Images, audio, video, fonts
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "avif", "mp3", "wav", "flac",
+    "ogg", "mp4", "m4a", "avi", "mkv", "mov", "webm", "ttf", "otf", "woff", "woff2", "eot",
+    // Binary document and database containers
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "db", "sqlite",
+    "sqlite3", "mdb", "accdb",
+    // Key material — text, so only this list keeps it out of the viewer
+    "pem", "key", "crt", "cer", "pfx", "p12", "ppk", "asc", "gpg", "jks", "keystore",
+];
+
+/// Default cap on what the viewer/editor will open or save, when the user has set no preference.
+///
+/// 1 MiB covers every script and config file this app exists to manage, and keeps a giant-file read
+/// from being turned into a memory-exhaustion lever. The user can raise it — see `clamp_max_bytes`.
+pub const DEFAULT_MAX_VIEW_BYTES: u64 = 1024 * 1024;
+
+/// Hard ceiling on the configured cap, whatever the settings file says.
+///
+/// The bytes are read into memory and then rendered as syntax-highlighted spans in a webview, so the
+/// real cost of a large file is several times its size. 25 MiB is generous for a log and still short
+/// of wedging the renderer; a settings file claiming 4 GiB gets clamped here rather than at the
+/// allocation.
+pub const MAX_VIEW_BYTES_CEILING: u64 = 25 * 1024 * 1024;
+
+/// The fixed, non-editable half of the viewer's deny-list, for the Settings UI: it shows these
+/// locked (with a lock icon) alongside the user's own additions, so "why can't I view a `.exe`" has an
+/// answer without the user needing to guess whether it's their setting or the app's.
+#[tauri::command]
+pub fn system_excluded_view_exts() -> Vec<String> {
+    VIEW_DENY_EXTS.iter().map(|s| s.to_string()).collect()
+}
+
+/// Coerce a configured byte cap into the supported range.
+///
+/// Applied at the point of use rather than at save time: settings are a partial-merge JSON blob that
+/// an older build, a hand edit, or a future field could put anything into, and the read path is the
+/// one place that cannot be bypassed.
+pub fn clamp_max_bytes(configured: Option<u64>) -> u64 {
+    configured
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_MAX_VIEW_BYTES)
+        .min(MAX_VIEW_BYTES_CEILING)
+}
 
 /// Resolve symlinks and `..` into an absolute path, *without* Windows' `\\?\` verbatim prefix.
 ///
@@ -38,27 +121,38 @@ fn is_inside(root: &Path, candidate: &Path) -> bool {
 /// Desktop client rather than run as a script.
 pub const LAUNCHABLE_EXTS: [&str; 5] = ["bat", "cmd", "ps1", "sh", "rdp"];
 
-fn contained(
-    root: &str,
-    script_path: &str,
-    allowed_exts: &[&str],
-    ext_error: &str,
-) -> Result<PathBuf, String> {
+/// Resolve `script_path` and assert it is a strict descendant of `root`, with no extension check.
+///
+/// The containment half of `contained`, split out because the viewer's gate is a deny-list while the
+/// run/edit gates are allow-lists. Both halves must keep running in both directions: containment is
+/// what stops a crafted webview request from reaching outside the pinned workspace at all.
+fn contained_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
     let real_root = canonical(Path::new(root))?;
     let real = canonical(Path::new(script_path))?;
 
     if !is_inside(&real_root, &real) {
         return Err("script is outside its workspace".to_string());
     }
+    Ok(real)
+}
 
-    let ext = real
-        .extension()
+/// Lowercased extension of an already-resolved path, or `""` for an extensionless name.
+fn ext_of(path: &Path) -> String {
+    path.extension()
         .map(|e| e.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    if !allowed_exts.contains(&ext.as_str()) {
+        .unwrap_or_default()
+}
+
+fn contained(
+    root: &str,
+    script_path: &str,
+    allowed_exts: &[&str],
+    ext_error: &str,
+) -> Result<PathBuf, String> {
+    let real = contained_path(root, script_path)?;
+    if !allowed_exts.contains(&ext_of(&real).as_str()) {
         return Err(ext_error.to_string());
     }
-
     Ok(real)
 }
 
@@ -116,220 +210,131 @@ pub fn safe_subdir(root: &str, sub_path: &str) -> Result<PathBuf, String> {
     Ok(real)
 }
 
-/// Read an in-workspace script as UTF-8, bounded by `MAX_SCRIPT_BYTES`.
-pub fn read_editable(root: &str, script_path: &str) -> Result<String, String> {
-    let real = safe_editable_path(root, script_path)?;
-    let size = fs::metadata(&real).map_err(|e| e.to_string())?.len();
-    if size > MAX_SCRIPT_BYTES {
-        return Err("file too large to edit".to_string());
-    }
-    fs::read_to_string(&real).map_err(|e| e.to_string())
+/// True if `kind_or_ext` is something the viewer will attempt to read.
+///
+/// Takes the scan's `kind` rather than a path so `workspace_scan` can flag each entry without a second
+/// filesystem round-trip. The scan's kind *is* the lowercased extension for every non-script file, and
+/// the script kinds (`bat`/`ps1`/`sh`/`rdp`) are none of them denied — except that `.rdp` is
+/// deliberately viewable now: it is an INI-style text file, and showing the user which host a
+/// double-click would connect to is the entire point of a viewer.
+pub fn is_viewable_kind(kind_or_ext: &str) -> bool {
+    is_viewable_kind_excluding(kind_or_ext, &[])
 }
 
-/// Write an in-workspace script, bounded by `MAX_SCRIPT_BYTES`.
-pub fn write_editable(root: &str, script_path: &str, content: &str) -> Result<(), String> {
-    if content.len() as u64 > MAX_SCRIPT_BYTES {
-        return Err("content too large to save".to_string());
+/// Same check, additionally denying anything in `excluded` — the user's own "Excluded file types"
+/// setting (GeneralSettings.tsx), layered on top of the fixed `VIEW_DENY_EXTS` list rather than
+/// replacing it: a user can narrow what the viewer opens, never widen it past the built-in gate.
+pub fn is_viewable_kind_excluding(kind_or_ext: &str, excluded: &[String]) -> bool {
+    let ext = kind_or_ext.to_lowercase();
+    !VIEW_DENY_EXTS.contains(&ext.as_str())
+        && !excluded.iter().any(|e| e.eq_ignore_ascii_case(&ext))
+}
+
+/// Resolve `script_path` and assert it lives inside `root` and is not a kind the viewer refuses.
+pub fn safe_viewable_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
+    safe_viewable_path_excluding(root, script_path, &[])
+}
+
+/// Same as `safe_viewable_path`, additionally denying the user's own excluded extensions.
+pub fn safe_viewable_path_excluding(
+    root: &str,
+    script_path: &str,
+    excluded: &[String],
+) -> Result<PathBuf, String> {
+    let real = contained_path(root, script_path)?;
+    if !is_viewable_kind_excluding(&ext_of(&real), excluded) {
+        return Err("this file type cannot be viewed as text".to_string());
+    }
+    Ok(real)
+}
+
+/// Render a byte count the way the size-limit message needs to read.
+fn human_bytes(bytes: u64) -> String {
+    const MIB: u64 = 1024 * 1024;
+    const KIB: u64 = 1024;
+    if bytes >= MIB {
+        // One decimal, so a 2.3 MB file does not report as "2 MB" against a "2 MB" limit.
+        format!("{:.1} MB", bytes as f64 / MIB as f64)
+    } else if bytes >= KIB {
+        format!("{} KB", bytes / KIB)
+    } else {
+        format!("{bytes} bytes")
+    }
+}
+
+/// How many leading bytes `sniff_text` inspects for a NUL.
+///
+/// Bounded rather than whole-file so the check costs the same for a 20 MB log as for a 200-byte
+/// script. Every binary format that matters puts a NUL in its header — this is a backstop for
+/// something `VIEW_DENY_EXTS` did not name, not a classifier.
+const SNIFF_BYTES: usize = 8 * 1024;
+
+/// Decode bytes as text, refusing anything that reads as binary.
+///
+/// Two distinct rejections, because they are two distinct user-facing situations:
+///   * a NUL byte early on means the file is binary despite its extension (a `.txt` that is really a
+///     database, a stray `.log` that is a core dump);
+///   * invalid UTF-8 means it is text in some other encoding — legacy code pages are common on
+///     Windows — which is worth saying plainly instead of rendering as replacement characters.
+///
+/// No BOM stripping. A UTF-8 BOM is how `powershell.exe` recognizes an encoded script, and the editor
+/// writes back exactly what it was handed, so removing one here would silently change what the shell
+/// reads on the next run.
+fn sniff_text(bytes: Vec<u8>) -> Result<String, String> {
+    if bytes[..bytes.len().min(SNIFF_BYTES)].contains(&0) {
+        return Err("this looks like a binary file, not text".to_string());
+    }
+    String::from_utf8(bytes)
+        .map_err(|_| "this file is not valid UTF-8 text".to_string())
+}
+
+/// Read an in-workspace file as text for the viewer, bounded by `max_bytes`.
+///
+/// Wider than the edit path on purpose: any file that is not denied by kind and not binary can be
+/// *read*, while `write_editable` still only accepts an executable script. The size check runs against
+/// the metadata before the bytes are pulled into memory.
+pub fn read_viewable(root: &str, script_path: &str, max_bytes: u64) -> Result<String, String> {
+    read_viewable_excluding(root, script_path, max_bytes, &[])
+}
+
+/// Same as `read_viewable`, additionally denying the user's own excluded extensions.
+pub fn read_viewable_excluding(
+    root: &str,
+    script_path: &str,
+    max_bytes: u64,
+    excluded: &[String],
+) -> Result<String, String> {
+    let real = safe_viewable_path_excluding(root, script_path, excluded)?;
+    let size = fs::metadata(&real).map_err(|e| e.to_string())?.len();
+    if size > max_bytes {
+        return Err(format!(
+            "This file is {} and the viewer limit is {}. Raise \"Max file size to open\" in Settings to view it.",
+            human_bytes(size),
+            human_bytes(max_bytes)
+        ));
+    }
+    sniff_text(fs::read(&real).map_err(|e| e.to_string())?)
+}
+
+/// Write an in-workspace script, bounded by `max_bytes`.
+///
+/// Shares the caller's cap with `read_viewable` deliberately: two independent limits meant a file the
+/// viewer had opened could be one the editor then refused to save, and the user only discovered it
+/// after typing.
+pub fn write_editable(
+    root: &str,
+    script_path: &str,
+    content: &str,
+    max_bytes: u64,
+) -> Result<(), String> {
+    if content.len() as u64 > max_bytes {
+        return Err(format!(
+            "This content is {} and the save limit is {}.",
+            human_bytes(content.len() as u64),
+            human_bytes(max_bytes)
+        ));
     }
     let real = safe_editable_path(root, script_path)?;
     fs::write(&real, content).map_err(|e| e.to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs::File;
-    use std::io::Write as _;
-
-    /// A workspace root with `deploy.bat`, `notes.txt`, `sub/` and a sibling `outside/secret.bat`
-    /// that the workspace must never reach.
-    struct Fixture {
-        _dir: tempfile::TempDir,
-        root: PathBuf,
-        outside: PathBuf,
-    }
-
-    fn fixture() -> Fixture {
-        let dir = tempfile::Builder::new()
-            .prefix("omniterm-safepath")
-            .tempdir()
-            .expect("temp dir");
-        let base = dunce::canonicalize(dir.path()).expect("canonical base");
-        let root = base.join("workspace");
-        let outside = base.join("outside");
-        fs::create_dir_all(root.join("sub")).unwrap();
-        fs::create_dir_all(&outside).unwrap();
-        File::create(root.join("deploy.bat"))
-            .unwrap()
-            .write_all(b"echo hi")
-            .unwrap();
-        File::create(root.join("notes.txt")).unwrap();
-        File::create(root.join("host.rdp")).unwrap();
-        File::create(outside.join("secret.bat"))
-            .unwrap()
-            .write_all(b"secret")
-            .unwrap();
-        Fixture {
-            _dir: dir,
-            root,
-            outside,
-        }
-    }
-
-    fn root_str(f: &Fixture) -> String {
-        f.root.to_string_lossy().into_owned()
-    }
-
-    #[test]
-    fn accepts_an_editable_script_inside_the_workspace() {
-        let f = fixture();
-        let path = f.root.join("deploy.bat");
-        let resolved =
-            safe_editable_path(&root_str(&f), &path.to_string_lossy()).expect("should accept");
-        assert_eq!(resolved, dunce::canonicalize(&path).unwrap());
-    }
-
-    /// The resolved path is spliced into a `cmd /c` command line by `workspace::run_script`, so a
-    /// `\\?\` verbatim prefix here surfaced to the user as "is not recognized as an internal or
-    /// external command". Guard both the run and the subdir (pane cwd) paths.
-    #[test]
-    fn resolved_paths_carry_no_verbatim_prefix() {
-        let f = fixture();
-        let script = f.root.join("deploy.bat");
-        for resolved in [
-            safe_runnable_path(&root_str(&f), &script.to_string_lossy()).unwrap(),
-            safe_subdir(&root_str(&f), "sub").unwrap(),
-        ] {
-            assert!(
-                !resolved.to_string_lossy().starts_with(r"\\?\"),
-                "got a verbatim path: {}",
-                resolved.display()
-            );
-        }
-    }
-
-    /// The core regression: `read_script`/`write_script` took a raw path and ignored the workspace,
-    /// so the webview could read or overwrite any file on disk.
-    #[test]
-    fn rejects_a_script_outside_the_workspace() {
-        let f = fixture();
-        let escape = f.outside.join("secret.bat");
-        let err = safe_editable_path(&root_str(&f), &escape.to_string_lossy())
-            .expect_err("must reject a path outside the workspace");
-        assert!(err.contains("outside its workspace"), "got {err}");
-    }
-
-    #[test]
-    fn rejects_traversal_back_out_of_the_workspace() {
-        let f = fixture();
-        let traversal = f.root.join("..").join("outside").join("secret.bat");
-        let err = safe_editable_path(&root_str(&f), &traversal.to_string_lossy())
-            .expect_err("must reject traversal");
-        assert!(err.contains("outside its workspace"), "got {err}");
-    }
-
-    #[test]
-    fn rejects_the_workspace_root_itself() {
-        let f = fixture();
-        assert!(safe_editable_path(&root_str(&f), &root_str(&f)).is_err());
-    }
-
-    #[test]
-    fn rejects_non_editable_extensions() {
-        let f = fixture();
-        for name in ["notes.txt", "host.rdp"] {
-            let path = f.root.join(name);
-            let err = safe_editable_path(&root_str(&f), &path.to_string_lossy())
-                .expect_err("must reject a non-editable extension");
-            assert!(err.contains("only executable scripts"), "{name}: got {err}");
-        }
-    }
-
-    #[test]
-    fn extension_check_is_case_insensitive() {
-        let f = fixture();
-        let upper = f.root.join("Deploy.BAT");
-        File::create(&upper).unwrap();
-        assert!(safe_editable_path(&root_str(&f), &upper.to_string_lossy()).is_ok());
-    }
-
-    #[test]
-    fn read_and_write_round_trip_inside_the_workspace() {
-        let f = fixture();
-        let path = f.root.join("deploy.bat");
-        let p = path.to_string_lossy().into_owned();
-        assert_eq!(read_editable(&root_str(&f), &p).unwrap(), "echo hi");
-        write_editable(&root_str(&f), &p, "echo bye").unwrap();
-        assert_eq!(read_editable(&root_str(&f), &p).unwrap(), "echo bye");
-    }
-
-    #[test]
-    fn write_refuses_to_touch_a_file_outside_the_workspace() {
-        let f = fixture();
-        let escape = f.outside.join("secret.bat");
-        assert!(write_editable(&root_str(&f), &escape.to_string_lossy(), "pwned").is_err());
-        // The file must be byte-for-byte untouched, not merely "the call returned Err".
-        assert_eq!(fs::read_to_string(&escape).unwrap(), "secret");
-    }
-
-    #[test]
-    fn write_rejects_oversized_content_before_resolving_the_path() {
-        let f = fixture();
-        let path = f.root.join("deploy.bat");
-        let huge = "x".repeat(MAX_SCRIPT_BYTES as usize + 1);
-        assert!(write_editable(&root_str(&f), &path.to_string_lossy(), &huge).is_err());
-        assert_eq!(fs::read_to_string(&path).unwrap(), "echo hi");
-    }
-
-    /// `.rdp` is launchable but not editable — the two allowlists must stay distinct.
-    #[test]
-    fn rdp_is_runnable_but_not_editable() {
-        let f = fixture();
-        let rdp = f.root.join("host.rdp");
-        let p = rdp.to_string_lossy().into_owned();
-        assert!(safe_runnable_path(&root_str(&f), &p).is_ok());
-        assert!(safe_editable_path(&root_str(&f), &p).is_err());
-    }
-
-    #[test]
-    fn run_refuses_a_script_outside_the_workspace() {
-        let f = fixture();
-        let escape = f.outside.join("secret.bat");
-        assert!(safe_runnable_path(&root_str(&f), &escape.to_string_lossy()).is_err());
-    }
-
-    #[test]
-    fn run_refuses_an_arbitrary_executable_inside_the_workspace() {
-        let f = fixture();
-        let exe = f.root.join("payload.exe");
-        File::create(&exe).unwrap();
-        let err = safe_runnable_path(&root_str(&f), &exe.to_string_lossy())
-            .expect_err("must reject a non-script extension");
-        assert!(err.contains("only scanned scripts"), "got {err}");
-    }
-
-    #[test]
-    fn accepts_a_subdirectory_of_the_workspace() {
-        let f = fixture();
-        let resolved = safe_subdir(&root_str(&f), "sub").expect("should accept");
-        assert_eq!(resolved, dunce::canonicalize(f.root.join("sub")).unwrap());
-    }
-
-    #[test]
-    fn rejects_subdir_traversal_and_absolute_paths() {
-        let f = fixture();
-        let absolute = f.outside.to_string_lossy().into_owned();
-        for hostile in ["../outside", "sub/../../outside", &absolute] {
-            let err = safe_subdir(&root_str(&f), hostile)
-                .expect_err("must reject escaping subPath");
-            assert!(err.contains("outside its workspace"), "{hostile}: got {err}");
-        }
-    }
-
-    #[test]
-    fn rejects_a_subdir_that_is_a_file() {
-        let f = fixture();
-        let err = safe_subdir(&root_str(&f), "deploy.bat").expect_err("must reject a file");
-        assert!(err.contains("not a directory"), "got {err}");
-    }
-}

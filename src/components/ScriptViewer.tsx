@@ -1,17 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Pencil, Eye, Save, X, Loader2, AlertTriangle, FileLock2 } from 'lucide-react'
+import { Play, Pencil, Eye, Save, X, Loader2, AlertTriangle, FileLock2, BookOpen, Code2, Copy, Check } from 'lucide-react'
 import type { WorkspaceScript } from '@omniterm/contract'
 import { fileKindMeta } from '../utils/fileKind'
 import { highlightLines, type Token, type TokenType } from '../utils/scriptHighlight'
+import MarkdownPreview from './MarkdownPreview'
 
 /**
  * A light, docked viewer/editor for a workspace item. Fills its container (the right-side dock in
  * MainLayout) rather than floating as a modal. Dependency-free: a tiny tokenizer colors both the
  * read view and the editor (a transparent textarea over a synced highlighted <pre>) — no Monaco.
  *
- * Editable executable scripts open read-only (default) with syntax coloring; the pencil flips to a
- * colored edit mode and Ctrl+S saves. Non-editable items (.rdp) can still be opened, but show a
- * "content not available" placeholder with a launch action instead of file contents.
+ * **Viewing and editing are separate rights.** Anything the scan marked `viewable` — any text file,
+ * not just a script — opens read-only with syntax coloring. `editable` is the narrower one: only an
+ * executable script gets the pencil, the colored edit mode and Ctrl+S. A file that is neither (an
+ * `.exe`, an archive, a `.pem`) keeps the "content not available" placeholder with a launch action.
+ *
+ * The backend is the authority on both, and it re-checks on every read and write — a file can also
+ * turn out to be unreadable only once opened (binary content behind a text extension, or larger than
+ * the configured size cap), which arrives as an error in the banner rather than as a flag.
  */
 interface ScriptViewerProps {
   workspaceId: string
@@ -31,6 +37,19 @@ const TOKEN_COLOR: Record<TokenType, string | undefined> = {
   number: '#b5cea8',
   text: undefined,
 }
+
+/**
+ * Kinds the host will actually launch — the renderer half of `LAUNCHABLE_EXTS` in safepath.rs.
+ *
+ * Needed once the viewer started opening *every* text file: a `Run` button on a `notes.txt` offers an
+ * action the backend refuses with "only scanned scripts can be run", so the button is hidden rather
+ * than left to fail. `.cmd` is absent because the scan reports it as kind `bat`.
+ */
+const RUNNABLE_KINDS = new Set(['bat', 'ps1', 'sh', 'rdp'])
+
+/** Kinds `MarkdownPreview` knows how to render — real Markdown syntax, not the wider "Markdown" family
+ *  `fileKindMeta` groups for icon purposes (which also covers `.rst`/`.adoc`, different syntaxes). */
+const MARKDOWN_KINDS = new Set(['md', 'markdown', 'mdx'])
 
 /** Shared box model for the view + edit code surfaces so the highlight overlay lines up 1:1. */
 const CODE_CLS = 'm-0 p-4 font-mono text-[13px] leading-relaxed whitespace-pre'
@@ -57,18 +76,28 @@ function renderCode(lines: Token[][]): React.ReactNode {
 const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClose, onRun, onDirtyChange }) => {
   const meta = fileKindMeta(script.kind)
   const editable = !!script.editable
+  // An editable file is always viewable; `?? editable` keeps a provider that predates `viewable`
+  // working exactly as it did rather than showing the placeholder for its scripts.
+  const viewable = script.viewable ?? editable
 
   const [content, setContent] = useState('')
   const [original, setOriginal] = useState('')
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
-  const [loading, setLoading] = useState(editable)
+  const [mode, setMode] = useState<'view' | 'edit' | 'preview'>('view')
+  const isMarkdown = MARKDOWN_KINDS.has(script.kind)
+  const [loading, setLoading] = useState(viewable)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Kept apart from `error`: a failed *read* means there is no content to show, so it belongs in the
+  // body where the file would have been. A failed *save* leaves the user's text on screen and must not
+  // replace it, so it stays in the banner above.
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [pathCopied, setPathCopied] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
 
   const dirty = content !== original
+  const runnable = RUNNABLE_KINDS.has(script.kind)
   const runLabel = script.kind === 'rdp' ? 'Launch' : 'Run'
 
   // Report unsaved-changes state to the owning tab (via a ref so we only fire on change).
@@ -87,15 +116,21 @@ const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClos
   useEffect(() => { setMode('view') }, [script.path])
 
   useEffect(() => {
-    if (!editable) return
+    if (!viewable) return
     let cancelled = false
     setLoading(true)
+    // Clear the previous file's state up front: switching tabs must not leave the old error, or the
+    // old text, on screen while the new file loads.
+    setLoadError(null)
+    setError(null)
+    setContent('')
+    setOriginal('')
     window.omnitermAPI.workspace.readScript(workspaceId, script.path)
       .then((text) => { if (!cancelled) { setContent(text); setOriginal(text) } })
-      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) })
+      .catch((e) => { if (!cancelled) setLoadError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [editable, workspaceId, script.path])
+  }, [viewable, workspaceId, script.path])
 
   const save = useCallback(async () => {
     if (!dirty || saving) return
@@ -125,6 +160,16 @@ const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClos
 
   const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose())
   const enterEdit = () => { setMode('edit'); setTimeout(() => textareaRef.current?.focus(), 0) }
+  const onPreviewFallback = useCallback(() => {
+    setMode('view')
+    setError('Preview took too long to render (likely an invalid diagram) — showing the raw file instead.')
+  }, [])
+  const copyPath = useCallback(() => {
+    void navigator.clipboard.writeText(script.path).then(() => {
+      setPathCopied(true)
+      setTimeout(() => setPathCopied(false), 1500)
+    })
+  }, [script.path])
 
   const lines = useMemo(() => highlightLines(content, script.kind), [content, script.kind])
   const Icon = meta.icon
@@ -144,8 +189,16 @@ const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClos
         </span>
 
         <div className="flex items-center gap-1 flex-shrink-0 ml-1">
-          <HeaderBtn title={runLabel} onClick={onRun}><Play className="w-4 h-4" /></HeaderBtn>
-          {editable && (mode === 'view'
+          {runnable && <HeaderBtn title={runLabel} onClick={onRun}><Play className="w-4 h-4" /></HeaderBtn>}
+          {isMarkdown && !loadError && (mode === 'preview'
+            ? <HeaderBtn title="View raw" onClick={() => setMode('view')}><Code2 className="w-4 h-4" /></HeaderBtn>
+            : <HeaderBtn title="Preview" onClick={() => setMode('preview')}><BookOpen className="w-4 h-4" /></HeaderBtn>)}
+          <HeaderBtn title={pathCopied ? 'Copied!' : 'Copy path'} onClick={copyPath} accent={pathCopied}>
+            {pathCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </HeaderBtn>
+          {/* Edit is offered only for a script whose text actually loaded — there is nothing to edit
+              behind a read that failed on size or binary content. */}
+          {editable && !loadError && (mode === 'view'
             ? <HeaderBtn title="Edit" onClick={enterEdit}><Pencil className="w-4 h-4" /></HeaderBtn>
             : <HeaderBtn title="View" onClick={() => setMode('view')}><Eye className="w-4 h-4" /></HeaderBtn>)}
           {editable && mode === 'edit' && (
@@ -167,25 +220,31 @@ const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClos
 
       {/* Body */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        {!editable ? (
+        {!viewable || loadError ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 px-6 text-center">
             <FileLock2 className="w-10 h-10" style={{ color: meta.color }} />
             <div className="text-sm text-[var(--theme-fg)]">Content not available to view</div>
-            <div className="text-xs text-[var(--theme-dim)] max-w-xs">
-              {meta.label} files aren’t readable as text. Use {runLabel} to open it.
+            <div className="text-xs text-[var(--theme-dim)] max-w-sm">
+              {/* The backend's own reason when it has one — it names the size limit and the setting
+                  that raises it, which a generic message could not. */}
+              {loadError ?? `${meta.label} files aren’t shown as text.`}
             </div>
-            <button
-              type="button"
-              onClick={onRun}
-              className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-[var(--theme-border)] text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]"
-            >
-              <Play className="w-3.5 h-3.5" /> {runLabel}
-            </button>
+            {runnable && (
+              <button
+                type="button"
+                onClick={onRun}
+                className="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-[var(--theme-border)] text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]"
+              >
+                <Play className="w-3.5 h-3.5" /> {runLabel}
+              </button>
+            )}
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center h-full text-[var(--theme-dim)]">
             <Loader2 className="w-5 h-5 animate-spin" />
           </div>
+        ) : mode === 'preview' ? (
+          <MarkdownPreview content={content} onFallback={onPreviewFallback} />
         ) : mode === 'edit' ? (
           // Colorful editing: a transparent textarea over a synced, highlighted <pre>.
           <div className="relative w-full h-full overflow-hidden">

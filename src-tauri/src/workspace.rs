@@ -9,7 +9,7 @@ use crate::openshell::OpenShellRequest;
 use crate::rdp_launch;
 use crate::safepath;
 use crate::workspace_launch::{default_shell, script_run_request};
-use crate::workspace_scan::{scan_dir, scan_entries, WorkspaceEntry, WorkspaceScript};
+use crate::workspace_scan::{WorkspaceEntry, WorkspaceScript};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -120,7 +120,10 @@ pub async fn scan_scripts(
     if !path.is_dir() {
         return Err("Workspace path is invalid".to_string());
     }
-    Ok(scan_dir(path))
+    Ok(crate::workspace_scan::scan_dir_excluding(
+        path,
+        &excluded_viewable_exts(&app),
+    ))
 }
 
 /// Everything in a workspace — folders included — for the Workspace panel's tree.
@@ -134,7 +137,10 @@ pub async fn scan_workspace_entries(
     if !path.is_dir() {
         return Err("Workspace path is invalid".to_string());
     }
-    Ok(scan_entries(path))
+    Ok(crate::workspace_scan::scan_entries_excluding(
+        path,
+        &excluded_viewable_exts(&app),
+    ))
 }
 
 /// Run a script, or open a plain terminal in the workspace (or a scanned subfolder).
@@ -192,6 +198,40 @@ pub async fn run_script(
     Ok(true)
 }
 
+/// The configured viewer/editor size cap, in bytes.
+///
+/// Read per call rather than cached: changing the setting has to take effect on the next file the user
+/// opens, without a restart, and this is a single small JSON read on a user-initiated action.
+///
+/// `saturating_mul` because the value comes from a JSON file the user can hand-edit — a large MB figure
+/// must clamp to the ceiling, not wrap around to a tiny cap.
+fn max_open_bytes(app: &AppHandle) -> u64 {
+    let configured = crate::settings::read_settings(app)
+        .get("maxOpenFileMb")
+        .and_then(serde_json::Value::as_u64)
+        .map(|mb| mb.saturating_mul(1024 * 1024));
+    safepath::clamp_max_bytes(configured)
+}
+
+/// The user's own "Excluded file types" setting, read fresh per call for the same reason as
+/// `max_open_bytes`: it must take effect on the next scan/read without a restart.
+fn excluded_viewable_exts(app: &AppHandle) -> Vec<String> {
+    crate::settings::read_settings(app)
+        .get("excludedViewableExts")
+        .and_then(serde_json::Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_lowercase))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Read any in-workspace file the viewer is willing to show as text.
+///
+/// Deliberately wider than `write_script`: the viewer opens anything that is not a denied kind and not
+/// binary (see `safepath::VIEW_DENY_EXTS`), while saving stays limited to executable scripts. Named
+/// `read_script` still because it is the renderer-facing command name in the provider contract.
 #[tauri::command]
 pub async fn read_script(
     app: AppHandle,
@@ -199,7 +239,12 @@ pub async fn read_script(
     path: String,
 ) -> Result<String, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
-    safepath::read_editable(&workspace.path, &path)
+    safepath::read_viewable_excluding(
+        &workspace.path,
+        &path,
+        max_open_bytes(&app),
+        &excluded_viewable_exts(&app),
+    )
 }
 
 #[tauri::command]
@@ -210,7 +255,7 @@ pub async fn write_script(
     content: String,
 ) -> Result<(), String> {
     let workspace = find_workspace(&app, &workspace_id)?;
-    safepath::write_editable(&workspace.path, &path, &content)
+    safepath::write_editable(&workspace.path, &path, &content, max_open_bytes(&app))
 }
 
 // Workspace-scoped connection profiles live in workspace_connections.rs — this file was already over

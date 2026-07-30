@@ -17,8 +17,14 @@ export interface WorkspaceTreeNode {
   isDir: boolean
   /** Present on file nodes. */
   entry?: WorkspaceEntry
-  /** Present on runnable file nodes only — the record `workspace.run` / the editor expects. */
+  /** Present on runnable file nodes only — the record `workspace.run` expects. */
   script?: WorkspaceScript
+  /**
+   * Present on file nodes the viewer can open as text — a superset of `script`, since a `.txt` or a
+   * `.json` is readable but not runnable. Kept separate so the Run action stays tied to `script`:
+   * clicking a plain file must open it without offering to execute it.
+   */
+  openable?: WorkspaceScript
   /** Present on connection nodes only. */
   connection?: Connection
   children: WorkspaceTreeNode[]
@@ -41,9 +47,8 @@ function sortNodes(nodes: WorkspaceTreeNode[]): void {
   for (const n of nodes) if (n.isDir) sortNodes(n.children)
 }
 
-/** The runnable view of an entry, or undefined when it is a folder or a plain file. */
-export function entryScript(entry: WorkspaceEntry): WorkspaceScript | undefined {
-  if (!isScriptEntry(entry)) return undefined
+/** The `WorkspaceScript` record shape both the run path and the viewer speak in. */
+function asScript(entry: WorkspaceEntry): WorkspaceScript {
   return {
     id: entry.id,
     name: entry.name,
@@ -51,6 +56,47 @@ export function entryScript(entry: WorkspaceEntry): WorkspaceScript | undefined 
     kind: entry.kind,
     shell: entry.shell,
     editable: entry.editable ?? false,
+    // Passed through rather than recomputed: the backend scan owns the deny-list, and the viewer
+    // reads this off the record it is handed.
+    viewable: entry.viewable,
+  }
+}
+
+/** The runnable view of an entry, or undefined when it is a folder or a plain file. */
+export function entryScript(entry: WorkspaceEntry): WorkspaceScript | undefined {
+  return isScriptEntry(entry) ? asScript(entry) : undefined
+}
+
+/**
+ * The viewer's view of an entry, or undefined when there is nothing to show as text.
+ *
+ * Wider than `entryScript`: any file the scan marked `viewable` can be opened read-only. Falls back to
+ * "runnable means viewable" when the flag is absent, so a plugin provider that predates the field
+ * behaves exactly as it did before.
+ */
+export function entryOpenable(entry: WorkspaceEntry): WorkspaceScript | undefined {
+  if (entry.isDir) return undefined
+  const viewable = entry.viewable ?? isScriptEntry(entry)
+  return viewable ? asScript(entry) : undefined
+}
+
+/**
+ * The tree leaf for one scanned file.
+ *
+ * Exported because the panel's *flat* view builds its rows without going through
+ * `buildWorkspaceTree`, and it hand-rolled this object — so `openable` landed in the tree view and
+ * silently not in the flat one, where clicking a plain file then did nothing. One constructor, both
+ * callers, and the next field added here cannot go missing from one of them.
+ */
+export function entryNode(entry: WorkspaceEntry): WorkspaceTreeNode {
+  return {
+    name: entry.name,
+    path: entry.id,
+    isDir: false,
+    entry,
+    script: entryScript(entry),
+    openable: entryOpenable(entry),
+    children: [],
   }
 }
 
@@ -98,15 +144,7 @@ export function buildWorkspaceTree(
   for (const entry of entries) {
     if (entry.isDir) continue
     const parent = ensureDir(parentOf(entry.id))
-    const leaf: WorkspaceTreeNode = {
-      name: entry.name,
-      path: entry.id,
-      isDir: false,
-      entry,
-      script: entryScript(entry),
-      children: [],
-    }
-    ;(parent ? parent.children : roots).push(leaf)
+    ;(parent ? parent.children : roots).push(entryNode(entry))
   }
 
   for (const connection of connections) {

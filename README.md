@@ -23,7 +23,9 @@ the app — see **[docs/PLUGINS.md](docs/PLUGINS.md)**.
 - 🧩 **Multi-window docking** — group and arrange sessions in one layout, or detach a pane into its own window
 - 🗂️ **Connection manager** — a tree of saved local / SSH / RDP connections
 - 📁 **Workspaces** — pin project folders, browse their scripts, and keep connections alongside the project
-- 📂 File browser + script viewer alongside your sessions
+- 📂 File browser + a light text viewer for any file in a workspace — read-only for everything except
+  the executable scripts, which are also editable. Binaries, archives and key material are not opened,
+  and the size cap is yours to set (default 1 MB)
 - ⌨️ Command palette for quick actions
 - 🎨 Theme customization
 - 🔌 **Plug-and-play plugins** — drop one in to replace how connections, credentials or workspaces work

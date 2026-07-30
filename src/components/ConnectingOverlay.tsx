@@ -14,9 +14,16 @@ interface ConnectingOverlayProps {
  * not a hard color-key) so they read cleanly against the pane behind them.
  */
 const ConnectingOverlay: React.FC<ConnectingOverlayProps> = ({ dark, label = 'Connecting…' }) => (
-  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[var(--theme-bg)] select-none">
-    <img src={dark ? loadingCatDark : loadingCatLight} alt="" className="w-[806px] max-w-[85%] h-auto" />
-    <span className="text-xs font-medium text-[var(--theme-fg)] opacity-60">{label}</span>
+  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[var(--theme-bg)] select-none p-4">
+    {/* vmin-based sizing (matching WaitingPane's boring-cat art) so this scales with the pane instead
+        of the viewport: a fixed px width overflowed a narrow split pane long before the old
+        `max-w-[85%]` ever kicked in, and left the art oddly large/small at other window sizes. */}
+    <img
+      src={dark ? loadingCatDark : loadingCatLight}
+      alt=""
+      className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] h-auto"
+    />
+    <span className="text-xs font-medium text-[var(--theme-fg)] opacity-60 text-center">{label}</span>
   </div>
 )
 

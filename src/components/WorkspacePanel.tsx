@@ -4,13 +4,14 @@ import {
 } from 'lucide-react'
 import type { Connection, Folder as ConnectionFolder, Workspace, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
 import {
-  buildWorkspaceTree, entryScript, filterTreeByQuery, type WorkspaceTreeNode,
+  buildWorkspaceTree, entryNode, filterTreeByQuery, type WorkspaceTreeNode,
 } from '../utils/scriptTree'
 import {
   DEFAULT_TREE_FILTER, applyFilter, dirsHoldingConnections, type TreeFilter,
 } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import { diag } from '../diag'
+import { useTreeReveal, type RevealRequest } from '../hooks/useTreeReveal'
 import WorkspaceFilterMenu from './WorkspaceFilterMenu'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
@@ -66,6 +67,12 @@ interface WorkspacePanelProps {
    * connection did not appear until the workspace was collapsed and re-expanded.
    */
   connectionsRevision?: number
+  /**
+   * Bumped by the host (via `nonce`) to expand this file's folders, scroll it into view, and flash a
+   * highlight — the target of the active editor tab's "Reveal in tree" button. `path` is workspace-
+   * relative (a `WorkspaceScript.id`), matching `WorkspaceTreeNode.path`.
+   */
+  revealRequest?: RevealRequest | null
 }
 
 /** Everything the connection form needs to know about where a connection is being saved. */
@@ -86,6 +93,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   onAddWorkspaceConnection,
   hasConnectionProvider = false,
   connectionsRevision,
+  revealRequest,
 }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -98,8 +106,21 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   const [wsConnections, setWsConnections] = useState<Record<string, Connection[]>>({})
   const [query, setQuery] = useState('')
   // Per workspace: in "selected" mode the filter holds workspace-relative file paths, so one shared
-  // filter would leak one project's selection into the next.
-  const [filters, setFilters] = useState<Record<string, TreeFilter>>({})
+  // filter would leak one project's selection into the next. Persisted to localStorage (matching
+  // MainLayout's cc.* UI-state keys) so a chosen filter survives a reload instead of resetting to
+  // "scripts only" every time the app opens.
+  const [filters, setFilters] = useState<Record<string, TreeFilter>>(() => {
+    try {
+      const saved = localStorage.getItem('cc.workspaceFilters')
+      return saved ? JSON.parse(saved) as Record<string, TreeFilter> : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify(filters))
+  }, [filters])
   // Which workspace's filter popover is open, and the trigger rect it hangs from.
   const [filterMenu, setFilterMenu] = useState<{ workspaceId: string; anchor: DOMRect } | null>(null)
 
@@ -270,6 +291,13 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     })
   }, [collectDirKeys, viewOf, collapsedDirs])
 
+  // "Reveal in tree" (the active editor tab's Locate icon, see SessionTabs): expand the target's
+  // ancestor folders, widen the filter if it would otherwise hide the file, scroll it into view, and
+  // flash a highlight.
+  const { isHighlighted, registerRow } = useTreeReveal({
+    revealRequest, entries, scan, filterOf, setExpandedId, setFlatView, setCollapsedDirs, setFilters,
+  })
+
   /** Where a connection created from `parentPath` in `ws` should be saved. */
   const targetFor = useCallback((ws: Workspace, parentPath: string): WorkspaceConnectionTarget => ({
     workspaceId: ws.id,
@@ -294,22 +322,30 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     )
   }
 
-  /** A single file row (shared by tree + flat views). `label` differs (name vs full path). */
+  /**
+   * A single file row (tree + flat views); `label` differs (name vs full path). `openable` (a click
+   * opens any viewable file) is wider than `script` (the Run icon); neither = dim and inert.
+   */
   const fileRow = (wsId: string, node: WorkspaceTreeNode, label: string, depth: number) => {
-    const entry = node.entry
-    const meta = fileKindMeta(entry?.kind ?? '')
+    const meta = fileKindMeta(node.entry?.kind ?? '')
     const Icon = meta.icon
-    const script = node.script
+    const { script, openable } = node
+    const verb = openable?.editable ? 'View / edit' : openable ? 'View' : ''
+    const title = verb ? `${verb} ${node.name}` : `${node.name} (${meta.label})`
+    const highlighted = isHighlighted(wsId, node.path)
     return (
       <div
         key={node.path}
-        className="group flex items-center gap-2 pr-1 py-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+        ref={registerRow(wsId, node.path)}
+        className={`group flex items-center gap-2 pr-1 py-1 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
+          highlighted ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]' : ''
+        }`}
         style={{ paddingLeft: 8 + depth * 12 }}
-        onClick={() => { if (script) onOpenScript(wsId, script) }}
-        title={script?.editable ? `View / edit ${node.name}` : `${node.name} (${meta.label})`}
+        onClick={() => { if (openable) onOpenScript(wsId, openable) }}
+        title={title}
       >
         <Icon className="w-4 h-4 flex-shrink-0" style={{ color: meta.color }} />
-        <span className={`flex-1 truncate text-xs ${script ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
+        <span className={`flex-1 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
         {script && (
           <button
             type="button"
@@ -390,12 +426,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       const files = viewOf(ws.id).files
         .filter((e) => !needle || e.id.toLowerCase().includes(needle))
         .sort((a, b) => a.id.localeCompare(b.id))
-      return files.map((e) => fileRow(
-        ws.id,
-        { name: e.name, path: e.id, isDir: false, entry: e, script: entryScript(e), children: [] },
-        e.id,
-        1,
-      ))
+      // `entryNode`, not an inline object: an added node field must not reach only the tree view.
+      return files.map((e) => fileRow(ws.id, entryNode(e), e.id, 1))
     }
     return tree.map((node) => renderNode(ws, node, 1, ''))
   }

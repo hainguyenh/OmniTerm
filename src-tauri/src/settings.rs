@@ -49,6 +49,14 @@ pub fn defaults() -> Value {
         "smartColors": true,
         "checkUpdatesOnStartup": true,
         "skippedVersion": null,
+        // Cap on what the built-in viewer/editor will open or save, in whole MB. 1 MB covers every
+        // script and config file this app manages; a user who wants to read a large log raises it.
+        // `safepath::clamp_max_bytes` enforces the supported range at the point of use, so a
+        // hand-edited or legacy value here cannot turn into an unbounded read.
+        "maxOpenFileMb": 1,
+        // Extensions the user has chosen to hide from the viewer, on top of the fixed
+        // `safepath::VIEW_DENY_EXTS` gate (which this list can never widen — see GeneralSettings.tsx).
+        "excludedViewableExts": [],
         "shortcuts": default_shortcuts(),
         "workspaces": [],
     })

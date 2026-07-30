@@ -93,8 +93,14 @@ export interface WorkspaceScript {
   kind: 'bat' | 'ps1' | 'sh' | 'rdp' | string
   /** Suggested shell to run the script under; the host falls back to a sensible default. */
   shell?: 'wsl' | 'powershell' | 'cmd'
-  /** Whether the item's contents can be viewed/edited as text (executable scripts yes; .rdp no). */
+  /** Whether the item's contents can be *saved* by the built-in editor (executable scripts only). */
   editable?: boolean
+  /**
+   * Whether the built-in viewer will show the contents as text. Wider than `editable`: a `.txt`, a
+   * `.json` or a `.rdp` is viewable but read-only. Absent is treated as not viewable, so a provider
+   * that predates this field keeps its previous behaviour.
+   */
+  viewable?: boolean
 }
 
 /**
@@ -119,6 +125,11 @@ export interface WorkspaceEntry {
   shell?: 'wsl' | 'powershell' | 'cmd'
   /** Only runnable text files set this; a plain file leaves it absent. */
   editable?: boolean
+  /**
+   * Whether the built-in viewer will show this file as text — see `WorkspaceScript.viewable`. Set on
+   * every file the scan reports; absent for a directory, which has no contents to show.
+   */
+  viewable?: boolean
 }
 
 /** An action a provider offers for a script (defaults to a single "Run"); lets plugins expand
@@ -148,8 +159,9 @@ export interface WorkspaceProvider {
   /** Optional: actions offered per script. Absent = the host offers a single default "Run". */
   runActions?(script: WorkspaceScript): WorkspaceRunAction[] | Promise<WorkspaceRunAction[]>
   /**
-   * Optional: read a script's text for the built-in viewer/editor. Only called for `editable`
-   * items. Absent = the host treats items as non-editable (view/edit UI is hidden).
+   * Optional: read a file's text for the built-in viewer/editor. Called for any item the provider
+   * marked `viewable` (or, for a provider predating that field, any `editable` item). Absent = the
+   * host treats items as unreadable and the view/edit UI is hidden.
    */
   readScript?(workspaceId: string, scriptPath: string): string | Promise<string>
   /** Optional: persist an edited script. Absent = the viewer is read-only. */
