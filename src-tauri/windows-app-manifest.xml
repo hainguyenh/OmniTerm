@@ -1,0 +1,19 @@
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <!-- Same contents as tauri-build's default manifest. It lives here, and is embedded by build.rs
+       rather than by tauri-build, only so that the `cargo test` harness gets it too; see
+       `embed_windows_app_manifest` in build.rs for why that matters. Keep the Common-Controls v6
+       dependency: `rfd`'s message dialogs import comctl32's `TaskDialogIndirect`, which the 5.82
+       comctl32 in System32 does not export, so a binary without this manifest cannot even start. -->
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32"
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        processorArchitecture="*"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+      />
+    </dependentAssembly>
+  </dependency>
+</assembly>

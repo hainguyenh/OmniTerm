@@ -1,0 +1,440 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --theme-bg: #1a1b26;
+  --theme-sidebar-bg: #16161e;
+  --theme-popup-bg: #24283b;
+  --theme-border: #414868;
+  --theme-fg: #a9b1d6;
+  --theme-dim: #565f89;
+  --theme-accent: #7aa2f7;
+  --theme-hover-bg: rgba(255, 255, 255, 0.08);
+  --theme-selection-fg: #ffffff;
+  --theme-warning: #e0af68;
+  --theme-error: #f7768e;
+  --theme-success: #9ece6a;
+}
+
+/* ── Global layout ───────────────────────────────────────────────── */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--theme-bg);
+  color: var(--theme-fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+
+/* ── Utility: hide scrollbars while keeping scroll functionality ── */
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--theme-border);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--theme-accent);
+  }
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--theme-border) transparent;
+  }
+}
+
+/* ── Hide the xterm terminal scrollbar (mouse-wheel / keyboard scroll still work) ── */
+.xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+.xterm-viewport {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ── Dynamic layout overrides driven by active theme variables ────────────────── */
+:root {
+  --theme-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --theme-font-serif: Georgia, serif;
+  --theme-font-mono: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace;
+  
+  --theme-rounded-sm: 0.25rem;
+  --theme-rounded-md: 0.5rem;
+  --theme-rounded-lg: 0.75rem;
+  --theme-rounded-xl: 1rem;
+  
+  --theme-padding-sm: 0.5rem;
+  --theme-padding-md: 0.75rem;
+  --theme-padding-lg: 1rem;
+  --theme-padding-xl: 1.5rem;
+  
+  --theme-margin-sm: 0.5rem;
+  --theme-margin-md: 0.75rem;
+  --theme-margin-lg: 1rem;
+  --theme-margin-xl: 1.5rem;
+  --theme-card-bg: #1a1b26;
+  --theme-dim: #565f89;
+  --theme-selection: #33467c;
+}
+
+/* Force global font-family override */
+html,
+body,
+#root,
+button,
+input,
+select,
+textarea,
+kbd,
+span,
+div,
+p,
+a {
+  font-family: var(--theme-font-family, var(--theme-font-sans));
+}
+
+.font-mono,
+.xterm,
+.xterm * {
+  font-family: var(--theme-font-mono) !important;
+}
+
+/* Dynamic border-radius overrides */
+.rounded-sm {
+  border-radius: var(--theme-rounded-sm) !important;
+}
+.rounded-md {
+  border-radius: var(--theme-rounded-md) !important;
+}
+.rounded-lg {
+  border-radius: var(--theme-rounded-lg) !important;
+}
+.rounded-xl {
+  border-radius: var(--theme-rounded-xl) !important;
+}
+.rounded-2xl {
+  border-radius: calc(var(--theme-rounded-lg) * 1.5) !important;
+}
+.rounded-3xl {
+  border-radius: calc(var(--theme-rounded-xl) * 1.5) !important;
+}
+
+/* Dynamic padding overrides */
+.p-2, .p-2\.5 {
+  padding: var(--theme-padding-sm) !important;
+}
+.p-3, .p-3\.5 {
+  padding: calc((var(--theme-padding-sm) + var(--theme-padding-md)) / 2) !important;
+}
+.p-4 {
+  padding: var(--theme-padding-md) !important;
+}
+.p-5 {
+  padding: calc((var(--theme-padding-md) + var(--theme-padding-lg)) / 2) !important;
+}
+.p-6 {
+  padding: var(--theme-padding-lg) !important;
+}
+.p-8 {
+  padding: var(--theme-padding-xl) !important;
+}
+
+/* Dynamic margin overrides */
+.m-2 {
+  margin: var(--theme-margin-sm) !important;
+}
+.m-4 {
+  margin: var(--theme-margin-md) !important;
+}
+.m-6 {
+  margin: var(--theme-margin-lg) !important;
+}
+.m-8 {
+  margin: var(--theme-margin-xl) !important;
+}
+
+/* Dynamic gap overrides */
+.gap-2 {
+  gap: var(--theme-padding-sm) !important;
+}
+.gap-4 {
+  gap: var(--theme-padding-md) !important;
+}
+.gap-6 {
+  gap: var(--theme-padding-lg) !important;
+}
+
+/* Dynamic container backgrounds */
+.bg-theme-card {
+  background-color: var(--theme-card-bg) !important;
+}
+
+/* Ensure status bar at bottom matches sidebar background dynamic variable */
+.bg-\[\#1f2335\] {
+  background-color: var(--theme-sidebar-bg) !important;
+}
+
+/* Fix input field readability in light themes (prevent white-on-white text) */
+input, select, textarea {
+  color: var(--theme-fg) !important;
+  background-color: var(--theme-bg) !important;
+  border-color: var(--theme-border) !important;
+}
+/* Dim AND italic: a placeholder is an example, not a value. Without the slant, a greyed-out
+   "192.168.1.1" reads as a host that is already filled in. */
+input::placeholder, select::placeholder, textarea::placeholder {
+  color: var(--theme-dim) !important;
+  font-style: italic;
+}
+
+/* Script editor overlay: keep the textarea's text + background transparent so the
+   syntax-highlighted <pre> underneath shows through. Overrides the readability rule
+   above (which is !important), while the caret stays visible via caret-color. */
+textarea.code-editor-textarea {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  background-color: transparent !important;
+  caret-color: var(--theme-fg) !important;
+}
+
+
+/* ── Custom dialog (DialogHost) — fully driven by theme CSS variables ─────── */
+:root {
+  --dialog-tone-info:    var(--theme-accent);
+  --dialog-tone-warning: #e0af68;
+  --dialog-tone-error:   #f7768e;
+  --dialog-tone-success: #9ece6a;
+  --dialog-z: 9999;
+}
+
+.nc-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--dialog-z);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  animation: nc-dialog-fade-in 0.15s ease;
+}
+
+.nc-dialog-panel {
+  position: relative;
+  width: 100%;
+  max-width: 22rem;
+  background: var(--theme-popup-bg);
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-rounded-xl, 1rem);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: nc-dialog-slide-up 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nc-dialog-accent-bar {
+  height: 3px;
+  width: 100%;
+}
+
+.nc-dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1rem 1.25rem 0.5rem;
+}
+
+.nc-dialog-icon {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+}
+
+.nc-dialog-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--theme-selection-fg, #fff);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.nc-dialog-body {
+  font-size: 0.8125rem;
+  color: var(--theme-fg);
+  padding: 0.25rem 1.25rem 0.875rem;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.nc-dialog-footer {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0 1rem 1rem;
+}
+
+/* Shared button base */
+.nc-dialog-btn-primary,
+.nc-dialog-btn-cancel,
+.nc-dialog-btn-destructive {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--theme-rounded-lg, 0.75rem);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.12s ease, transform 0.1s ease, box-shadow 0.12s ease;
+  border: 1px solid transparent;
+  outline: none;
+  white-space: nowrap;
+}
+
+.nc-dialog-btn-primary:hover,
+.nc-dialog-btn-cancel:hover,
+.nc-dialog-btn-destructive:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.nc-dialog-btn-primary:focus-visible,
+.nc-dialog-btn-cancel:focus-visible,
+.nc-dialog-btn-destructive:focus-visible {
+  box-shadow: 0 0 0 2px var(--theme-accent);
+}
+
+.nc-dialog-btn-primary:active,
+.nc-dialog-btn-cancel:active,
+.nc-dialog-btn-destructive:active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+/* OK / primary */
+.nc-dialog-btn-primary {
+  background: var(--theme-accent);
+  color: var(--theme-accent-fg, #1a1b26);
+  border-color: transparent;
+}
+
+/* Cancel (safe / secondary) */
+.nc-dialog-btn-cancel {
+  background: transparent;
+  color: var(--theme-fg);
+  border-color: var(--theme-border);
+}
+
+.nc-dialog-btn-cancel:hover {
+  border-color: var(--theme-accent);
+  color: var(--theme-selection-fg, #fff);
+}
+
+/* Destructive / confirm */
+.nc-dialog-btn-destructive {
+  background: var(--dialog-tone-error);
+  color: #1a1b26;
+  border-color: transparent;
+}
+
+/* ── Animations ───────────────────────────────────────────────────────────── */
+@keyframes nc-dialog-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes nc-dialog-slide-up {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+/* ── Markdown preview (ScriptViewer's Preview mode) ──────────────────────────
+   No typography plugin is installed, so this is the manual equivalent — theme-aware, and scoped to
+   `.markdown-preview` so it never leaks into the rest of the app. */
+.markdown-preview {
+  color: var(--theme-fg);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3,
+.markdown-preview h4, .markdown-preview h5, .markdown-preview h6 {
+  font-weight: 700;
+  margin: 1.2em 0 0.5em;
+  line-height: 1.3;
+}
+.markdown-preview h1 { font-size: 1.6em; border-bottom: 1px solid var(--theme-border); padding-bottom: 0.3em; }
+.markdown-preview h2 { font-size: 1.35em; border-bottom: 1px solid var(--theme-border); padding-bottom: 0.25em; }
+.markdown-preview h3 { font-size: 1.15em; }
+.markdown-preview p, .markdown-preview ul, .markdown-preview ol, .markdown-preview blockquote,
+.markdown-preview table, .markdown-preview pre {
+  margin: 0.6em 0;
+}
+.markdown-preview ul, .markdown-preview ol { padding-left: 1.6em; }
+.markdown-preview a { color: var(--theme-accent); text-decoration: underline; }
+.markdown-preview blockquote {
+  border-left: 3px solid var(--theme-border);
+  padding: 0.1em 1em;
+  color: var(--theme-dim, var(--theme-fg));
+  opacity: 0.85;
+}
+.markdown-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--theme-hover-bg, rgba(127, 127, 127, 0.15));
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+.markdown-preview pre {
+  background: var(--theme-hover-bg, rgba(127, 127, 127, 0.1));
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+}
+.markdown-preview pre code { background: none; padding: 0; }
+.markdown-preview table { border-collapse: collapse; width: 100%; overflow-x: auto; display: block; }
+.markdown-preview th, .markdown-preview td {
+  border: 1px solid var(--theme-border);
+  padding: 0.35em 0.7em;
+  text-align: left;
+}
+.markdown-preview hr { border: none; border-top: 1px solid var(--theme-border); margin: 1.5em 0; }
+.markdown-preview img { max-width: 100%; height: auto; }
+
+/* Mermaid diagrams: the SVG mermaid emits carries its own width/height attributes, which overflow a
+   narrow docked viewer on resize unless constrained back down to the container. */
+.markdown-mermaid { display: flex; justify-content: center; margin: 0.8em 0; }
+.markdown-mermaid svg { max-width: 100%; height: auto; }
+.markdown-mermaid-loading {
+  padding: 1em;
+  text-align: center;
+  color: var(--theme-dim, var(--theme-fg));
+  opacity: 0.7;
+  font-size: 12px;
+}
+.markdown-mermaid-fallback {
+  background: var(--theme-hover-bg, rgba(127, 127, 127, 0.1));
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  padding: 0.8em 1em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}

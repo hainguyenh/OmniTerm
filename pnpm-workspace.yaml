@@ -1,0 +1,13 @@
+# Workspace settings (consumed by pnpm v10/v11)
+# https://pnpm.io/settings
+
+# Workspace packages. The host lives at the repo root; `contract` holds the shared plugin
+# API/types; the two optional providers live under `plugins/`.
+packages:
+  - contract
+  - plugins/*
+
+auto-install-peers: true
+strict-peer-dependencies: false
+side-effects-cache: true
+node-linker: hoisted

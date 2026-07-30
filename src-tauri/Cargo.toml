@@ -1,0 +1,81 @@
+[package]
+name = "omniterm"
+version = "0.1.0"
+description = "OmniTerm: a multi-window terminal hub"
+authors = ["OmniTerm Contributors"]
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "app_lib"
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+# Embeds the Windows app manifest into the test harness too, which tauri-build alone will not do.
+# See build.rs. Already in the tree as a tauri-build dependency, so this adds nothing to the lockfile.
+embed-resource = "3"
+
+[dev-dependencies]
+tempfile = "3"
+tauri = { version = "2", features = ["test"] }
+
+[dependencies]
+# Tauri core + plugins
+#
+# The `devtools` feature is deliberately absent: it only exists to enable the inspector in a RELEASE
+# build, and a packaged OmniTerm reports nothing about itself — no log, no console, no inspector. A
+# debug build still gets devtools, which Tauri wires up from `debug_assertions` on its own.
+#
+# `protocol-asset` compiles in the `asset:` URI scheme handler. It is what serves the user's uploaded
+# pane art (custom_art.rs) to the webview: `convertFileSrc()` in the frontend mints an
+# `http://asset.localhost/<path>` URL, and without this feature that scheme is never registered, so
+# every custom-art <img> fails to load. The paths it will serve are still confined by
+# `app.security.assetProtocol.scope` in tauri.conf.json — the feature only makes the handler exist.
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-log = "2"
+tauri-plugin-os = "2"
+tauri-plugin-single-instance = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# PTY
+portable-pty = "0.8"
+dashmap = "6"
+# Process tree, for the busy/idle indicator (see src/proc_activity.rs). Only the process list is
+# needed, so the default features (disks, networks, components) stay off.
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+dunce = "1"
+opener = "0.7"
+rfd = "0.15"
+# `release_max_level_off` compiles every `log::*!` call site in this crate (and in the plugins) down to
+# nothing when built without debug assertions. A release or portable build therefore cannot emit a
+# record at all — this is a compile-time guarantee, not a runtime filter that a stray
+# `tauri_plugin_log` registration or an env var could switch back on. See lib.rs's setup hook.
+log = { version = "0.4", features = ["release_max_level_off"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Windows-specific (for future RDP Phase 3, and for pty.rs's job-object cleanup).
+#
+# Credential Manager features are deliberately absent. `Win32_Security` stays because job-object
+# cleanup requires SECURITY_ATTRIBUTES.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }

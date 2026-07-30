@@ -1,0 +1,45 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.pnpm-store/
+src-tauri/target
+dist
+dist-ssr
+# Plugin build output (generated)
+plugins/*/dist
+plugins/*/node_modules
+artifacts/
+.omniterm-build/
+*.local
+*.tsbuildinfo
+
+# Editor directories and files
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+**/.engram
+docs/superpowers/
+.impeccable/
+.opencode/
+
+# Generated from assets/OmniTerm-Logo-Original.png by scripts/generate-app-assets.mjs
+src/generated/
+src-tauri/icons/*
+!src-tauri/icons/.gitkeep
+
+# Patch files
+*.patch
+*.diff
+coverage-js/

@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Tauri Desktop App",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm run tauri:dev",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "TAURI_GLOBAL_RUNTIME_DIR": "${env:LOCALAPPDATA}/OmniTerm/tauri-runtime"
+      },
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "name": "Debug Renderer (browser only)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/src",
+      "preLaunchTask": "dev",
+      "timeout": 60000
+    }
+  ]
+}
