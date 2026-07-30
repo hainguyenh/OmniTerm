@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Scoped to what src/tauriAPI.ts actually calls. Every plugin command granted here is reachable from any script running in the webview, so unused permissions are removed rather than left enabled. Notably absent: shell:allow-execute and shell:allow-open (nothing in the frontend uses the shell plugin — opening a link goes through the allowlisted open_external command, and running a shell goes through the PTY commands, which validate the shell against a closed set). dialog:allow-save is absent because every save dialog is opened from Rust, so the chosen path is never round-tripped through the webview. core:webview:allow-create-webview-window is also absent: detached terminal windows are built in Rust (terminal_window.rs), so the webview still cannot spawn one — 'term-*' only grants the windows Rust creates the same command surface as 'main'.",
+  "windows": [
+    "main",
+    "term-*"
+  ],
+  "permissions": [
+    "core:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "dialog:allow-open",
+    "os:allow-platform",
+    "os:allow-arch",
+    "os:allow-os-type"
+  ]
+}

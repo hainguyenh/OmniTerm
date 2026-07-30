@@ -1,0 +1,26 @@
+{
+  "name": "@omniterm/full-connection-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Full OmniTerm remote connection suite with OS-vault credentials.",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "omnitermPlugin": {
+    "apiVersion": 2,
+    "hostVersion": ">=0.1.0 <1.0.0",
+    "displayName": "Full Remote Suite",
+    "permissions": [
+      "connections",
+      "renderer",
+      "credentials",
+      "workspace"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^5.2.2"
+  }
+}

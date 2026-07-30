@@ -1,0 +1,11 @@
+{
+  "name": "@omniterm/contract",
+  "version": "0.0.0",
+  "description": "Shared types and plugin API contract between the OmniTerm host and its plugins.",
+  "private": true,
+  "type": "module",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  }
+}
