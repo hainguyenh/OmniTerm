@@ -21,14 +21,15 @@
     "build:tauri:nsis": "tauri build --bundles nsis",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:tauri": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
-    "test": "vitest run",
+    "test": "node scripts/check-no-password-persistence.mjs && vitest run",
     "test:tauri": "cargo test --manifest-path src-tauri/Cargo.toml",
     "preview": "vite preview",
     "create:app": "powershell -ExecutionPolicy Bypass -File scripts/Build-OmniTerm.ps1",
     "create:plugin": "node scripts/create-plugin.mjs",
     "build:plugin": "node scripts/build-plugin.mjs",
     "run:plugin": "node scripts/run-plugin.mjs",
-    "install:plugin": "node scripts/install-plugin.mjs"
+    "install:plugin": "node scripts/install-plugin.mjs",
+    "test:security": "node scripts/check-no-password-persistence.mjs"
   },
   "dependencies": {
     "@omniterm/contract": "workspace:*",

@@ -27,7 +27,6 @@ pub mod workspace_launch;
 pub mod plugin_host;
 pub mod plugin_host_api;
 pub mod plugin_management;
-pub mod credential_vault;
 pub mod rdp_embed;
 #[cfg(windows)]
 pub mod win_job;
@@ -195,7 +194,6 @@ pub fn run() {
             plugin_set_enabled,
             plugin_select_connection_provider,
             connection_provider_capabilities,
-            prompt_save_connection_credential,
             plugin_invoke,
             plugin_auth_gate,
             check_updates,
@@ -275,74 +273,6 @@ async fn connection_provider_capabilities(
     host: State<'_, PluginHost>,
 ) -> Result<Option<serde_json::Value>, String> {
     host.connection_capabilities().await
-}
-
-#[tauri::command]
-async fn prompt_save_connection_credential(
-    host: State<'_, PluginHost>,
-    connection_id: String,
-    username: String,
-) -> Result<bool, String> {
-    if connection_id.is_empty()
-        || connection_id.len() > 200
-        || connection_id
-            .chars()
-            .any(|value| value.is_control() || matches!(value, '/' | '\\'))
-    {
-        return Err("Invalid connection id.".to_string());
-    }
-    let selected = host
-        .list_plugins()
-        .await?
-        .into_iter()
-        .find(|plugin| {
-            plugin
-                .get("selectedConnectionProvider")
-                .and_then(|value| value.as_bool())
-                == Some(true)
-        })
-        .ok_or_else(|| "No active connection provider.".to_string())?;
-    let plugin_id = selected
-        .get("id")
-        .and_then(|value| value.as_str())
-        .ok_or_else(|| "The active provider has no id.".to_string())?;
-    let may_store = selected
-        .get("permissions")
-        .and_then(|value| value.as_array())
-        .is_some_and(|permissions| {
-            permissions
-                .iter()
-                .any(|value| value.as_str() == Some("credentials"))
-        });
-    if !may_store {
-        return Err(
-            "The active connection provider does not permit credential storage.".to_string(),
-        );
-    }
-    let stored = credential_vault::prompt_and_set(
-        plugin_id,
-        &format!("connection:{connection_id}"),
-        &username,
-    )?;
-    if !stored {
-        return Ok(false);
-    }
-    let confirmation = host
-        .invoke(
-            "confirmStoredCredential".to_string(),
-            vec![serde_json::Value::String(connection_id)],
-        )
-        .await?;
-    if confirmation.get("ok").and_then(|value| value.as_bool()) != Some(true) {
-        return Err(
-            confirmation
-                .get("error")
-                .and_then(|value| value.as_str())
-                .unwrap_or("The provider could not attach the saved credential.")
-                .to_string(),
-        );
-    }
-    Ok(true)
 }
 
 #[tauri::command]

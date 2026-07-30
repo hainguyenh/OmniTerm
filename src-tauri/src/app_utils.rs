@@ -49,9 +49,8 @@ pub fn is_allowed_external(url: &str) -> bool {
 /// True if `url` may be handed to the OS on a *plugin's* behalf.
 ///
 /// Deliberately not `is_allowed_external`: that one is pinned to the release page on `github.com`, so
-/// reusing it would refuse the one thing a plugin legitimately needs this for — opening the vault page
-/// where a password lives (`credentialMode: 'url'`), so the user copies it instead of OmniTerm storing
-/// it. The host cannot know which vault a deployment uses, so the host is not the allowlist.
+/// reusing it would refuse a plugin-provided HTTPS help page. The host cannot know which approved
+/// documentation or company vault a deployment uses, so the host is not the allowlist.
 ///
 /// What it still refuses is the part that made the unguarded version arbitrary program execution: any
 /// scheme other than https (no `file:`, no custom protocol handler, no bare Windows path), and any

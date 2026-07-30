@@ -2,9 +2,9 @@
 //!
 //! **This module stores no credential of any kind.** `Connection` has no password field, so there is
 //! nothing for `save_connections` to write and nothing for `load_connections` to hand the webview.
-//! A password is typed by the user at the server's own prompt, inside the terminal; storing one is a
-//! connection-manager *plugin* concern, and the plugin keeps it in OS-bound credential storage, never
-//! in this file. `scrub_stored_secrets` below cleans up installs written by an earlier build that did.
+//! A password is typed by the user at the server's own prompt, inside the terminal. Neither the host
+//! nor the bundled plugins expose password-storage APIs. `scrub_stored_secrets` below removes values
+//! left by an earlier build that did persist them.
 
 use crate::tree_validate::{self, MAX_IMPORT_FILE_BYTES};
 use serde::{Deserialize, Serialize};
@@ -36,14 +36,8 @@ pub struct Connection {
         rename = "passwordHelpUrl"
     )]
     pub password_help_url: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        rename = "hasStoredCredential"
-    )]
-    pub has_stored_credential: Option<bool>,
-    // No `password` / `has_password`: see the module note. Serde ignores unknown keys, so a file
-    // written by an older build still loads — and `scrub_stored_secrets` rewrites it without them.
+    // No password field: a file written by an older build still loads, serde drops unknown legacy
+    // keys, and `scrub_stored_secrets` rewrites the file without them.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "parentId")]
     pub parent_id: Option<String>,
     #[serde(

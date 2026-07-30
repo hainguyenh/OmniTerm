@@ -96,9 +96,9 @@ fn platform_is_reported_using_node_names() {
     assert_eq!(p, "linux");
 }
 
-/// The plugin opener is intentionally wider than `is_allowed_external`: a plugin's whole reason for
-/// opening a link is to send the user to the vault holding their password, and the host cannot know
-/// which vault a deployment uses. So arbitrary hosts are allowed and the scheme is not.
+/// The plugin opener is intentionally wider than `is_allowed_external`: a provider may open an
+/// HTTPS authentication-help page before the native client prompts. Arbitrary HTTPS hosts are
+/// allowed, while executable and local-file schemes remain blocked.
 #[test]
 fn plugin_urls_allow_any_https_host() {
     for url in [

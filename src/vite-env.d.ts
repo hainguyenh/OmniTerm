@@ -63,7 +63,7 @@ interface PluginDescriptor {
   version: string
   apiVersion: number
   hostVersion: string
-  permissions: Array<'connections' | 'auth' | 'renderer' | 'credentials' | 'openExternal' | 'clipboard' | 'workspace'>
+  permissions: Array<'connections' | 'auth' | 'renderer' | 'openExternal' | 'clipboard' | 'workspace'>
   source: 'bundled' | 'user'
   enabled: boolean
   status: 'disabled' | 'loaded' | 'error' | 'incompatible'
@@ -76,7 +76,7 @@ interface PluginDescriptor {
 
 interface ConnectionProviderCapabilities {
   protocols: Array<'SSH' | 'RDP'>
-  credentialPolicy: 'os-vault' | 'prompt-every-time'
+  credentialPolicy: 'prompt-every-time'
   scopes: Array<'personal' | 'workspace'>
   sftp: boolean
   importExport: boolean
@@ -137,7 +137,6 @@ interface Window {
       onRDPError: (id: string, cb: (err: string) => void) => () => void
       onRDPClosed: (id: string, cb: () => void) => () => void
       ssh: (id: string) => void
-      saveCredential: (id: string, username: string) => Promise<boolean>
       sshDisconnect: (id: string) => void
       sshInput: (id: string, data: string) => void
       sshResize: (id: string, size: { cols: number, rows: number }) => void

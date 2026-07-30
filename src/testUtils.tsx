@@ -100,7 +100,6 @@ const defaults: Api = {
     deleteConnection: async () => {},
   },
   connect: {
-    saveCredential: async () => false,
     rdp: async () => ({ ok: true }),
     rdpDisconnect: () => {},
     rdpSetBounds: () => {},

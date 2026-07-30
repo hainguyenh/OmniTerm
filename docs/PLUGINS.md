@@ -1,269 +1,156 @@
 # Writing an OmniTerm plugin
 
-OmniTerm's core is deliberately thin. Saved connections, credential policy, workspace contents and
-authentication are all things a plugin can own, so a deployment can replace them without forking the
-app. This document is how.
+OmniTerm plugins are CommonJS Node packages loaded by a sidecar process. They may provide saved
+connection metadata, workspace data, an app-open authentication gate, renderer extensions, or safe
+host services declared through permissions.
 
-    pnpm create:plugin my-plugin      # scaffold
-    pnpm build:plugin ./my-plugin     # compile, and check the host could load it
-    pnpm run:plugin ./my-plugin       # load it in the real plugin host and print what the app would see
-    pnpm install:plugin ./my-plugin   # copy it where OmniTerm looks, after telling you what it wants
+```bash
+pnpm create:plugin my-plugin
+pnpm build:plugin ./my-plugin
+pnpm run:plugin ./my-plugin
+pnpm install:plugin ./my-plugin
+```
 
-Alternatively, build a plugin ZIP with the wizard and use **Settings → Plugins → Install ZIP**. The
-native flow validates the API version, permissions, entry point, archive size, and every extracted
-path before copying it. User-installed packages can be removed from the same panel.
+## Password rule
 
-Iterate with `build:plugin` + `run:plugin`, and install once it reports `status: loaded` — the app is the
-slowest way to find out that a `main` path is wrong. See [Testing and debugging](#testing-and-debugging).
+The host and bundled plugins do not store passwords.
 
----
+- `Connection` contains metadata only and has no password/secret field.
+- The only connection credential policy is `prompt-every-time`.
+- There is no credential service, credential permission, save-password command, or credential RPC.
+- SSH authentication is typed directly into `ssh.exe` through the terminal.
+- RDP authentication is handled by the native Remote Desktop client.
+- Generated `.rdp` files contain host, port, username, and non-secret options only.
+- `passwordHelpUrl` may contain an HTTPS help-page URL; it never contains the password itself.
 
-## Credentials: OmniTerm stores no password
+Do not add password values to plugin storage or invoke results. Invoke results are returned to the
+webview and therefore must be safe to render.
 
-This is the project's first rule, and it constrains everything below.
+## Runtime and trust
 
-**The host never holds a password, in any form, anywhere.** Not in a settings file, not in the
-connection tree, not in a `.rdp` file, not on a command line, not in a log, not in an OS vault on your
-behalf. The `Connection` type has no field for one, so most of this is enforced by construction rather
-than by discipline.
+A plugin runs as the current user in a Node.js sidecar and is **not sandboxed**. It can use Node APIs
+such as `fs`, `net`, and `child_process`. Install only trusted plugins. Permission declarations gate
+OmniTerm host APIs, but they cannot restrict arbitrary Node code.
 
-Concretely, for a plugin author:
+Plugins are discovered under the app's plugin directory:
 
-| | |
-|---|---|
-| `host.services.credentials.isAvailable()` | returns **`false`** |
-| `.get(key)` | resolves `undefined` |
-| `.set(key, value)` | **rejects** |
-| `.delete(key)` | resolves (a no-op — nothing is stored, so nothing needs removing) |
+```text
+Windows  %APPDATA%\com.omniterm.app\plugins\
+macOS    ~/Library/Application Support/com.omniterm.app/plugins/
+Linux    ${XDG_CONFIG_HOME:-~/.config}/com.omniterm.app/plugins/
+```
 
-`set` rejects rather than resolving, and that distinction matters more than it looks. An earlier build
-answered these calls with `null`, so `set` resolved successfully while storing nothing. The reference
-plugin took that as proof of a write, marked the connection as having a stored secret, and deleted the
-plaintext it had just migrated — destroying the user's password. If you write a `CredentialStore`,
-**treat only a verified read-back as evidence of a write**, never a resolved `set`.
-
-### Design around it
-
-Two patterns need no storage, and the reference plugin implements both:
-
-- **`credentialMode: 'none'`** — the connection is saved without a secret and the user types the
-  password into the session. Nothing to store, nothing to leak.
-- **`credentialMode: 'url'`** — the connection records *where* the password lives. On connect, the
-  plugin opens that URL so the user copies it from their own vault. OmniTerm never sees the value.
-
-### If you really need storage
-
-Supply your own `CredentialStore` implementation and pass it to your own code — the interface is in the
-contract precisely so this is possible. Then it is yours: **protecting what you write is your plugin's
-responsibility**, and you should assume a reviewer will ask how. Note that "encrypted with a key
-compiled into the plugin" is obfuscation, not protection — anyone with your plugin has the key.
-
-### Never return a secret to the UI
-
-The host passes an invoke result **to the webview verbatim**. Any method reachable from
-`registerInvokeHandler` must be renderable-safe by construction. The reference plugin used to expose an
-`exportAll` that returned every connection with its password; it is gone. `ConnectionProvider.resolve`
-is the *only* place a secret may appear, because it runs in the sidecar and its result goes to the
-connection transport, not to the UI.
-
----
-
-## How plugins run
-
-A plugin is a CommonJS Node package. It runs in the **plugin host sidecar** — a separate `node` process
-that Rust spawns and talks to over line-delimited JSON-RPC on stdin/stdout. It does **not** run in the
-webview, and it does **not** run in the Rust process.
-
-Practical consequences:
-
-- You have the full Node API: `fs`, `net`, `child_process`. **A plugin runs as the user, with their
-  files and their network.** There is no sandbox. This is why both installation paths show what the
-  package requests before copying it.
-- Node.js must be on `PATH` at runtime. If it isn't, the Plugins panel says so rather than showing an
-  empty list.
-- Anything you `require` at module top level runs at discovery time, before `activate`.
-
-### Discovery
-
-At startup the sidecar loads every immediate subdirectory of:
-
-    Windows   %APPDATA%\com.omniterm.app\plugins\
-    macOS     ~/Library/Application Support/com.omniterm.app/plugins/
-    Linux     ${XDG_CONFIG_HOME:-~/.config}/com.omniterm.app/plugins/
-
-A directory qualifies if its `package.json` has an `omnitermPlugin` key. `pnpm install:plugin` just
-copies a directory there — you can equally drop one in by hand.
-
-Development builds are explicit: `pnpm tauri:dev:basic`, `pnpm tauri:dev:full`, or
-`pnpm tauri:dev:limited`. Basic starts no sidecar when no user plugin is installed. Packaged builds
-discover user plugins plus at most the plugin intentionally bundled by the build wizard.
-
-The Settings installer does not accept a path from webview JavaScript. Rust opens the OS picker,
-validates the chosen ZIP, and shows a second native permission confirmation. Plugin code is copied
-only after that confirmation and is never loaded as a side effect of a renderer-supplied path.
-
----
-
-## The manifest
+## Manifest
 
 ```json
 {
-  "name": "@acme/my-plugin",
+  "name": "example-plugin",
   "version": "0.1.0",
   "type": "commonjs",
   "main": "dist/index.js",
   "omnitermPlugin": {
     "apiVersion": 2,
     "hostVersion": ">=0.1.0 <1.0.0",
-    "displayName": "My Plugin",
-    "permissions": ["connections"]
+    "displayName": "Example Plugin",
+    "permissions": ["connections", "openExternal"]
   }
 }
 ```
 
-- **`main`** must exist after your build. If it doesn't, the plugin loads with
-  `status: "error"` and `Main file not found`. `pnpm build:plugin` checks this for you, because the
-  alternative is discovering it at app startup.
-- **`apiVersion`** must equal the host's (currently `2`) or the plugin is marked `incompatible` and
-  **not loaded**. This is checked *before* `require`, since requiring a module runs its top level.
-- **`permissions`** is enforced, not documentation — see below.
+Supported permissions:
 
-## Permissions
+| Permission | Host capability |
+|---|---|
+| `connections` | Register a connection provider |
+| `auth` | Register an app-open authentication provider |
+| `renderer` | Register renderer-facing plugin behavior |
+| `openExternal` | Open validated HTTPS URLs |
+| `clipboard` | Write text to the clipboard |
+| `workspace` | Provide or use workspace-scoped behavior |
 
-Every host capability is gated on the manifest. Call one you did not declare and the host throws,
-naming both the capability and the permission to add. The scaffold declares **none** on purpose: add
-them one at a time as you hit the errors, so what you ship is what you actually use.
+There is deliberately no `credentials` permission.
 
-| Permission | Unlocks | What the user is agreeing to |
-|---|---|---|
-| `connections` | `registerConnectionProvider` | Owns the saved connection list: read, change, add. |
-| `auth` | `registerAuthProvider` | Gates the whole app. A broken one can lock the user out. |
-| `renderer` | `registerInvokeHandler` | Callable from the UI; its return value goes to the UI verbatim. |
-| `workspace` | `registerWorkspaceProvider` | Supplies workspaces and workspace-scoped connections. |
-| `credentials` | `services.credentials.*` | Asks for secret storage. The host provides none, so these fail. |
-| `openExternal` | `services.openExternal` | Opens https URLs in the user's browser. |
-| `clipboard` | `services.writeClipboard` | Writes to the clipboard. |
-
-An unrecognised permission makes the plugin `incompatible` rather than being ignored — a manifest that
-reads as though something is being checked, when nothing is, is worse than a missing entry.
-
-`services.storageDir` (a private directory for your own files) and `services.log` need no permission.
-
-`storageDir` is `<appData>/com.omniterm.app/plugin-storage/<your-name>` — deliberately *outside* the
-`plugins/` tree, so reinstalling or upgrading your plugin does not delete its data. Installing replaces
-the install directory wholesale; keep nothing you want to survive inside it.
-
-### openExternal is https-only
-
-The host refuses anything but `https://`, and refuses an authority containing `@`. So no `file:`, no
-custom protocol handlers, no bare Windows paths, and no
-`https://vault.example@evil.test/` — which reads as `vault.example` to a human and resolves to
-`evil.test`. Any https host is allowed, because the host cannot know which vault a deployment uses.
-
----
-
-## Writing `activate`
+## Minimal connection provider
 
 ```ts
-import type { HostAPI, PluginModule } from './types'
-
-export const name = '@acme/my-plugin'
+import type { HostAPI, PluginModule } from '@omniterm/contract'
 
 export async function activate(host: HostAPI): Promise<void> {
   host.registerConnectionProvider({
-    // Renderer-facing. `Connection` has no credential field, so this cannot leak one.
+    capabilities: () => ({
+      protocols: ['SSH', 'RDP'],
+      credentialPolicy: 'prompt-every-time',
+      scopes: ['personal'],
+      sftp: false,
+      importExport: true,
+    }),
     load: () => ({ folders: [], connections: [] }),
-    save: (tree) => { /* persist it */ },
-    // Sidecar-only. The ONE place a secret may appear.
-    resolve: async (id) => null,
+    save: async (tree) => {
+      // Persist metadata only. Never add password or secret fields.
+      host.services.log(`saved ${tree.connections.length} profiles`)
+    },
+    resolve: async () => null,
   })
 }
 
-/** Release timers, watchers and handles. Called when the user disables the plugin. */
-export function deactivate(): void {}
-
-const plugin: PluginModule = { name, activate, deactivate }
+const plugin: PluginModule = { name: 'example-plugin', activate }
 export default plugin
 ```
 
-The interfaces — `HostAPI`, `HostServices`, `ConnectionProvider`, `AuthProvider`,
-`WorkspaceProvider`, `CredentialStore`, `PluginDescriptor`, `PluginPermission` — are defined and
-documented in [`contract/index.ts`](../contract/index.ts). Read that file; it is the API reference.
+`resolve` and `resolveScoped` return metadata-only `Connection` values. The host starts the native
+transport, which asks the user to authenticate.
 
-The scaffold copies these types into your plugin as `src/types.ts` rather than importing
-`@omniterm/contract`, so your plugin builds standalone as a drop-in package. Keep them in sync with the
-contract; the host validates structurally at the `activate(host)` boundary.
+## Host services
 
-### Providers
+```ts
+interface HostServices {
+  storageDir: string
+  log(message: string): void
+  openExternal(url: string): Promise<void>
+  writeClipboard(text: string): Promise<void>
+}
+```
 
-- **`ConnectionProvider`** — owns the connection tree. When one is registered, it takes over
-  `load`/`save`, and `resolve` is consulted at connect time for any id the host cannot answer itself.
-- **`AuthProvider`** — optional app-open gate. The host awaits `gate()` before revealing the workspace;
-  `true` means authorized. Absent (the default) means no auth, straight to the terminal.
-- **`WorkspaceProvider`** — supplies the workspace list and workspace-scoped connections.
-- **`registerInvokeHandler`** — plugin-specific RPC reachable from the UI via
-  `window.omnitermAPI.plugin.invoke(method, ...args)`. Renderer-safe returns only.
+- `storageDir` is for plugin configuration and metadata, not credentials.
+- `openExternal` accepts HTTPS URLs without embedded username/password components.
+- `writeClipboard` requires the `clipboard` permission.
+- Release builds suppress plugin logs; never log sensitive user input regardless.
 
-### RDP and other external clients
+## Connection metadata
 
-RDP belongs to a plugin, not to the host. A plugin owning the connection tree can spawn whatever client
-it likes from the sidecar — `mstsc`, `freerdp`, `vncviewer` — with whatever credential policy that
-deployment wants. The host keeps only a credential-free `mstsc` launch as the no-plugin fallback.
+A connection may contain:
 
-The client opens as its own top-level window; OmniTerm does not currently dock an external window into a
-pane. If that is built, it will be a **generic** primitive (reparent any pid's window into a pane rect),
-not an RDP-specific host command — see the note at the top of `src-tauri/src/rdp_embed.rs`.
+```ts
+{
+  id: string
+  name: string
+  type: 'SSH' | 'RDP' | 'LOCAL'
+  host: string
+  port: string
+  user: string
+  passwordHelpUrl?: string
+  parentId?: string
+  redirectDrives?: boolean
+  shell?: string
+  localArgs?: string
+  localCwd?: string
+  localCommand?: string
+  localKeepOpen?: boolean
+}
+```
 
----
+`passwordHelpUrl`, when used, must be a plain HTTPS URL to documentation or a user-managed sign-in
+page. Embedded URL credentials are rejected.
 
 ## Testing and debugging
 
-`pnpm run:plugin <dir>` loads your plugin in the **real** sidecar and prints what the app would see —
-without building or launching the app:
-
-```
-$ pnpm run:plugin ./my-plugin
-  [plugin log] my-plugin activated
-
-✓ @acme/my-plugin@0.1.0  [bundled]  status: loaded
-    permissions: connections, renderer
-    registered:  connections, invoke
-
-plugin.available: true
-```
-
-The directory is loaded *in addition to* whatever is installed, so nothing is copied anywhere and you can
-check a plugin before installing it. Exit status is non-zero if any plugin would not load, so it works in
-a pre-commit hook or CI. Add `--invoke <method> '[args]'` to call your `registerInvokeHandler` surface:
-
 ```bash
-pnpm run:plugin ./my-plugin --invoke listTree
-pnpm run:plugin ./my-plugin --invoke setCredential '["conn-1",{"mode":"none"}]'
+pnpm build:plugin ./my-plugin
+pnpm run:plugin ./my-plugin
+pnpm test:security
 ```
 
-Reverse calls are answered exactly as the host answers them — `credentials.*` is **refused**, so a plugin
-depending on host storage fails here for the same reason it would fail in the app. `openExternal` is
-printed rather than performed: a plugin under test should not be able to open a browser tab.
+The security guard fails if shipped source reintroduces known password persistence entry points. Add
+plugin-level tests that serialize stored metadata and assert password-shaped input fields are removed.
 
-You can also drive the sidecar by hand; it is line-delimited JSON-RPC on stdio:
-
-```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"plugin.list","params":{}}' \
-  | node src-tauri/sidecar/plugin-host.cjs "$APPDATA/com.omniterm.app"
-```
-
-The response lists every discovered plugin with its `status`, `permissions`, and `error` — the same data
-the Plugins panel renders. `status: "loaded"` with your providers marked active means it worked.
-
-The `appDataDir` argument must be **absolute**, and on Windows it must not carry the `\\?\` verbatim
-prefix. Node reads `\\?\` as the whole path root and then `lstat`s the drive letter, so
-`node \\?\D:\…\plugin-host.cjs` dies with `EISDIR: lstat 'D:'` before running a line of the sidecar —
-which is why the host normalizes every path it hands to Node (`node_arg_path` in `plugin_host_api.rs`).
-
-The sidecar writes diagnostics to stderr, which the host inherits, so `pnpm tauri:dev` shows them in the
-terminal. `host.services.log(msg)` reaches the host log in dev builds (release builds keep no log).
-
-The Full provider in [`plugins/full-connection-manager`](../plugins/full-connection-manager) demonstrates
-Windows Credential Manager-backed metadata. The Limited Connections provider in
-[`plugins/native-batch-connections`](../plugins/native-batch-connections) demonstrates a
-`prompt-every-time` provider with generated, credential-free launchers.
+The complete API is defined by [`../contract/index.ts`](../contract/index.ts).

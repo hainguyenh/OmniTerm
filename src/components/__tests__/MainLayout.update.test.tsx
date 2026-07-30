@@ -119,11 +119,7 @@ describe("MainLayout update UI", () => {
     });
   });
 
-  /**
-   * The update check used to sit behind an "Advanced" tab, paired with the encrypted vault backup on
-   * the theory that both need something the base app lacks. Only the backup does (a plugin holding
-   * credentials); checking for updates is plain app settings, so it is visible with no tab to find.
-   */
+  /** The update check is plain app settings, so it is visible with no tab to find. */
   it("shows the update check without any tab to open", () => {
     renderLayout({}, {});
 
@@ -132,11 +128,7 @@ describe("MainLayout update UI", () => {
     expect(screen.queryByRole("button", { name: /^Advanced$/ })).toBeNull();
   });
 
-  /**
-   * P1: the encrypted vault backup existed to carry stored credentials off the machine. The app
-   * stores none, so the export is gone — and stays gone even with a credentials-permissioned plugin
-   * loaded, which is exactly the condition that used to reveal it.
-   */
+  /** The removed encrypted-backup control stays absent even when a connection plugin is loaded. */
   it("never offers an encrypted credential backup, plugin or not", async () => {
     const { unmount } = renderLayout({}, {});
     expect(screen.queryByRole("button", { name: /export encrypted backup/i })).toBeNull();
@@ -150,7 +142,7 @@ describe("MainLayout update UI", () => {
           version: "1.0.0",
           apiVersion: 1,
           hostVersion: ">=1.0.0 <2.0.0",
-          permissions: ["connections", "credentials"],
+          permissions: ["connections", "openExternal"],
           source: "bundled",
           enabled: true,
           status: "loaded",
@@ -195,7 +187,7 @@ describe("MainLayout update UI", () => {
       version: "1.0.0",
       apiVersion: 1,
       hostVersion: ">=1.0.0 <2.0.0",
-      permissions: ["connections", "credentials"],
+      permissions: ["connections", "openExternal"],
       source: "bundled",
       enabled: true,
       status: "loaded",

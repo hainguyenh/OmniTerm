@@ -45,9 +45,6 @@ sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# The core never persists a credential itself. The optional Full plugin may request the generic
-# Windows Credential Manager service below; the Limited provider never declares that permission.
-
 # Utilities
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
@@ -64,15 +61,12 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Windows-specific (for future RDP Phase 3, and for pty.rs's job-object cleanup).
 #
-# `Win32_Security_Credentials` is deliberately absent: it was enabled but unused, and leaving the
-# Credential Manager API reachable invites storing a secret, which this app does not do. Its parent
-# `Win32_Security` stays — CreateJobObjectW takes a SECURITY_ATTRIBUTES pointer, so dropping it takes
-# win_job.rs's orphan cleanup down with it.
+# Credential Manager features are deliberately absent. `Win32_Security` stays because job-object
+# cleanup requires SECURITY_ATTRIBUTES.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_Security",
-    "Win32_Security_Credentials",
     "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_JobObjects",

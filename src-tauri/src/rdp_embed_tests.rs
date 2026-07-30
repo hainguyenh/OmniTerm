@@ -14,7 +14,6 @@ fn rdp_conn() -> Connection {
         port: "3389".to_string(),
         user: "admin".to_string(),
         password_help_url: None,
-        has_stored_credential: None,
         parent_id: None,
         redirect_drives: Some(true),
         shell: None,

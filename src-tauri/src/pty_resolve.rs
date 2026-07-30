@@ -155,26 +155,7 @@ pub async fn prepare_ssh_session<R: Runtime>(
     } else {
         format!("{}@{}", conn.user, conn.host)
     };
-    let ssh = format!("ssh.exe -o BatchMode=no -p {port} -- \"{destination}\"");
-    let command = if conn.has_stored_credential == Some(true) {
-        let executable = std::env::current_exe()
-            .map_err(|error| format!("Could not locate OmniTerm's credential helper: {error}"))?;
-        let executable = executable.to_string_lossy();
-        if executable
-            .chars()
-            .any(|value| matches!(value, '&' | '|' | '<' | '>' | '^' | '%' | '!' | '\r' | '\n'))
-        {
-            return Err("OmniTerm's path cannot be used safely as an SSH credential helper.".to_string());
-        }
-        format!(
-            "set \"SSH_ASKPASS={executable}\" && set \"SSH_ASKPASS_REQUIRE=force\" && \
-             set \"DISPLAY=omniterm\" && set \"OMNITERM_ASKPASS=1\" && \
-             set \"OMNITERM_ASKPASS_PLUGIN=@omniterm/full-connection-manager\" && \
-             set \"OMNITERM_ASKPASS_KEY=connection:{conn_id}\" && {ssh}"
-        )
-    } else {
-        ssh
-    };
+    let command = format!("ssh.exe -o BatchMode=no -p {port} -- \"{destination}\"");
     app.state::<crate::adhoc::AdhocRegistry>().insert_named(
         conn_id,
         OpenShellRequest {
@@ -214,7 +195,6 @@ pub async fn resolve_connection_by_id<R: Runtime>(
             port: String::new(),
             user: String::new(),
             password_help_url: None,
-            has_stored_credential: None,
             parent_id: None,
             redirect_drives: None,
             shell: Some(req.shell.as_str().to_string()),
@@ -269,13 +249,11 @@ async fn lookup_saved<R: Runtime>(
         }
     }
 
-    // Finally the selected plugin's Personal tree. Last because a plugin's `resolve` may have side effects
-    // (the reference plugin opens a vault page for `credentialMode: 'url'`), so it should not run for
+    // Finally the selected plugin's Personal tree. Last because a plugin's `resolve` may open the
+    // optional password-help page, so it should not run for
     // an id the host could already answer.
     //
-    // Only the credential-free fields are taken. A plugin's `resolve` legitimately returns a password
-    // — that is the whole point of it running in the sidecar — but `Connection` has no field for one,
-    // so deserializing here drops it rather than carrying it into the launch path by accident.
+    // Plugin connections are metadata-only and authentication remains in the native client prompt.
     let resolved = host.resolve_connection(conn_id.to_string()).await.ok()??;
     serde_json::from_value(resolved).ok()
 }

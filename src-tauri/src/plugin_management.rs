@@ -17,11 +17,10 @@ use uuid::Uuid;
 
 const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_FILES: usize = 2_000;
-const KNOWN_PERMISSIONS: [&str; 7] = [
+const KNOWN_PERMISSIONS: [&str; 6] = [
     "connections",
     "auth",
     "renderer",
-    "credentials",
     "openExternal",
     "clipboard",
     "workspace",
@@ -327,6 +326,8 @@ mod tests {
 
         let bad = br#"{"name":"x","omnitermPlugin":{"apiVersion":2,"permissions":["root"]}}"#;
         assert!(parse_manifest(bad).unwrap_err().contains("unknown permission"));
+        let removed_credentials = br#"{"name":"x","omnitermPlugin":{"apiVersion":2,"permissions":["credentials"]}}"#;
+        assert!(parse_manifest(removed_credentials).unwrap_err().contains("unknown permission"));
         let traversal = br#"{"name":"..","omnitermPlugin":{"apiVersion":2}}"#;
         assert!(parse_manifest(traversal).unwrap_err().contains("unsafe"));
     }
