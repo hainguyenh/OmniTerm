@@ -9,6 +9,7 @@ fn defaults_expose_every_field_the_renderer_reads() {
     let d = defaults();
     assert_eq!(d["themeId"], json!("tokyo-night"));
     assert_eq!(d["fontSize"], json!(14));
+    assert_eq!(d["zoomFactor"], json!(1.0));
     assert_eq!(d["smartColors"], json!(true));
     assert_eq!(d["checkUpdatesOnStartup"], json!(true));
     assert_eq!(d["skippedVersion"], json!(null));
@@ -32,12 +33,14 @@ fn default_shortcuts_cover_the_full_binding_set() {
         "lock",
         "zoomIn",
         "zoomOut",
+        "zoomReset",
         "newSession",
         "newFolder",
         "openSettings",
         "toggleThemeMode",
         "layout1",
         "layout2",
+        "layout3",
         "layout4",
         "layout6",
         "layout8",

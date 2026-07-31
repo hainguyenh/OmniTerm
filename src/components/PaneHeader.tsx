@@ -5,6 +5,8 @@ import { STATUS_DOT } from '../tabVisuals'
 import { paneIdentity, withAlpha } from '../paneIdentity'
 import { detachTitle, type DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
+import AppearanceMenu from './AppearanceMenu'
+import type { AppTheme } from '../themes'
 
 /**
  * The mini header on top of every pane in split view: the pane's identity (shape + number in its own
@@ -41,12 +43,21 @@ interface PaneHeaderProps {
   onTogglePicker: () => void
   onAssign: (tabId: string) => void
   onClear: () => void
+  /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
+  appearance?: {
+    themes: AppTheme[]
+    themeId: string
+    fontSize: number
+    darkMode: boolean
+    onThemeApply: (themeId: string) => void
+    onFontSizeChange: (delta: number) => void
+  }
 }
 
 const PaneHeader: React.FC<PaneHeaderProps> = ({
   paneIndex, conn, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear,
+  onAssign, onClear, appearance,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -76,17 +87,29 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
             {conn.type === 'RDP'
               ? <Monitor className="w-3 h-3 flex-shrink-0" />
               : <Terminal className="w-3 h-3 flex-shrink-0" />}
-            <span className="truncate font-medium">{conn.name}</span>
+            <span className="truncate font-medium min-w-0 flex-1">{conn.name}</span>
             {sessionId && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[statuses[sessionId] ?? 'connecting']}`} />}
           </>
         ) : (
-          <span className="truncate">Empty pane</span>
+          <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span className="ml-auto flex items-center gap-0.5 flex-shrink-0">
+        <span className="ml-auto flex items-center gap-0.5 flex-shrink-0" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+          {appearance && (
+            <AppearanceMenu
+              themes={appearance.themes}
+              themeId={appearance.themeId}
+              fontSize={appearance.fontSize}
+              darkMode={appearance.darkMode}
+              scopeLabel={`Pane ${paneIndex + 1}`}
+              buttonTitle={`Appearance — theme & font size (Pane ${paneIndex + 1})`}
+              onThemeApply={appearance.onThemeApply}
+              onFontSizeChange={appearance.onFontSizeChange}
+              compact
+            />
+          )}
           {detach && (
             <button
               type="button"
-              onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onToggleDetach() }}
               className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
               title={detachTitle(detach, 'pane')}
@@ -97,7 +120,6 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
           )}
           <button
             type="button"
-            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); onTogglePicker() }}
             className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
             title="Choose session for this pane"

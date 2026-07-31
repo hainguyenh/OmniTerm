@@ -29,6 +29,12 @@ interface TerminalViewProps {
   smartColors?: boolean
   fontFamilyMono?: string
   /**
+   * Reports a font-size change made inside the terminal (Ctrl+wheel) as an absolute size, so the
+   * owner can persist the override and keep its own display in sync. Without this the wheel would
+   * mutate only this xterm instance and the change would be lost on the next remount.
+   */
+  onFontSizeChange?: (size: number) => void
+  /**
    * 'connect' (default) starts a fresh SSH/PTY session. 'attach' binds to an already-running
    * session owned by the main process (used when a session is popped out into a detached window
    * or folded back into the main window): it replays the buffered output and subscribes to live
@@ -44,7 +50,7 @@ const toXtermTheme = (t: TerminalTheme): ITheme => {
   return selectionForeground ? { ...rest, selectionForeground } : rest
 }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, fontSize, smartColors, fontFamilyMono, mode = 'connect', shortcuts }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', shortcuts }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
@@ -66,6 +72,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   const onExitRef = useRef(onExit)
   onExitRef.current = onExit
+
+  const onFontSizeChangeRef = useRef(onFontSizeChange)
+  onFontSizeChangeRef.current = onFontSizeChange
 
   // Apply theme changes dynamically without recreating the terminal.
   useEffect(() => {
@@ -204,13 +213,19 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
 
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey) {
+      if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
+        // Stop this from also reaching the app-level Ctrl+wheel zoom handler (App.tsx) — over a
+        // terminal, Ctrl+wheel changes only its font size, never the app chrome's zoom too.
+        e.stopPropagation()
         const currentSize = term.options.fontSize ?? 14
-        const newSize = e.deltaY > 0 ? Math.max(6, currentSize - 1) : Math.min(100, currentSize + 1)
+        // Same 8–48 range as the app's font controls; the new size is reported up so the owner can
+        // persist the override (the change stays visible in the footer/title bar, and survives remounts).
+        const newSize = e.deltaY > 0 ? Math.max(8, currentSize - 1) : Math.min(48, currentSize + 1)
         if (newSize !== currentSize) {
           term.options.fontSize = newSize
           try { fitAddon.fit() } catch (e) { /* ignore */ }
+          onFontSizeChangeRef.current?.(newSize)
         }
       }
     }
@@ -223,12 +238,14 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       const s = shortcuts || {
         zoomIn: 'Ctrl+=',
         zoomOut: 'Ctrl+-',
+        zoomReset: 'Ctrl+0',
         newSession: 'Ctrl+N',
         newFolder: 'Ctrl+Shift+N',
         openSettings: 'Ctrl+,',
         toggleThemeMode: 'Ctrl+/',
         layout1: 'Ctrl+1',
         layout2: 'Ctrl+2',
+        layout3: 'Ctrl+3',
         layout4: 'Ctrl+4',
         layout6: 'Ctrl+6',
         layout8: 'Ctrl+8',

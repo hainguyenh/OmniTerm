@@ -1,8 +1,15 @@
-use tauri::Window;
+use tauri::{WebviewWindow, Window};
 
 #[tauri::command]
 pub async fn minimize_window(window: Window) -> Result<(), String> {
     window.minimize().map_err(|e| e.to_string())
+}
+
+/// Real WebView zoom (WebView2/WebKit), not a CSS `zoom` on `<body>` — it reflows the layout and
+/// stays anchored, instead of scaling from the top-left and clipping against `h-screen`/`w-screen`.
+#[tauri::command]
+pub async fn set_webview_zoom(window: WebviewWindow, factor: f64) -> Result<(), String> {
+    window.set_zoom(factor).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

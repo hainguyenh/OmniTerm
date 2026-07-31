@@ -158,11 +158,13 @@ pub fn run() {
             window_control::toggle_maximize,
             window_control::close_window,
             window_control::is_maximized,
+            window_control::set_webview_zoom,
             // Workspace
             workspace::list_workspaces,
             workspace::add_workspace,
             workspace::remove_workspace,
             workspace::scan_scripts,
+            workspace::scan_workspace_folders,
             workspace::scan_workspace_entries,
             workspace::run_script,
             workspace::read_script,

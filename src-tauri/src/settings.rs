@@ -16,7 +16,7 @@
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]
@@ -28,12 +28,14 @@ pub fn default_shortcuts() -> Value {
         "lock": "Ctrl+L",
         "zoomIn": "Ctrl+=",
         "zoomOut": "Ctrl+-",
+        "zoomReset": "Ctrl+0",
         "newSession": "Ctrl+N",
         "newFolder": "Ctrl+Shift+N",
         "openSettings": "Ctrl+,",
         "toggleThemeMode": "Ctrl+/",
         "layout1": "Ctrl+1",
         "layout2": "Ctrl+2",
+        "layout3": "Ctrl+3",
         "layout4": "Ctrl+4",
         "layout6": "Ctrl+6",
         "layout8": "Ctrl+8",
@@ -46,6 +48,7 @@ pub fn defaults() -> Value {
     json!({
         "themeId": "tokyo-night",
         "fontSize": 14,
+        "zoomFactor": 1.0,
         "smartColors": true,
         "checkUpdatesOnStartup": true,
         "skippedVersion": null,
@@ -124,5 +127,10 @@ pub async fn save_settings(app: AppHandle, settings: Value) -> Result<(), String
     }
     let contents = serde_json::to_string_pretty(&merged)
         .map_err(|e| format!("Failed to serialize settings: {e}"))?;
-    fs::write(&path, contents).map_err(|e| format!("Failed to write settings file: {e}"))
+    fs::write(&path, contents).map_err(|e| format!("Failed to write settings file: {e}"))?;
+    // Broadcast so every window (main + popped-out terminals) re-reads. The detached window saves
+    // the connection's appearance from its own copy of the settings; without this broadcast the
+    // main window would only converge on re-attach.
+    let _ = app.emit("settings:changed", &merged);
+    Ok(())
 }

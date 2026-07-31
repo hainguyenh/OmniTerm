@@ -85,26 +85,32 @@ fn results_are_sorted_by_id() {
 }
 
 #[test]
-fn skips_ignored_and_dot_directories() {
+fn skips_ignored_directories_but_reports_hidden_files() {
     let (_d, root) = tree();
     touch(&root.join("keep.bat"));
     touch(&root.join("node_modules").join("bad.bat"));
     touch(&root.join(".git").join("hook.sh"));
     touch(&root.join("dist").join("out.bat"));
     touch(&root.join("Node_Modules").join("case.bat"));
+    // Hidden *files* are real project files (`All files` shows them); only the ignored noise dirs
+    // (which includes `.git`) are skipped.
+    touch(&root.join(".env"));
+    touch(&root.join("scripts").join(".deploy.sh"));
 
     let ids: Vec<_> = scan_dir(&root).into_iter().map(|s| s.id).collect();
-    assert_eq!(ids, vec!["keep.bat"]);
+    assert_eq!(ids, vec!["keep.bat", "scripts/.deploy.sh"]);
 }
 
+/// The old depth cap silently hid anything deeper than three folders. There is no depth limit now —
+/// the tree is paged instead, which bounds cost without ever hiding files.
 #[test]
-fn stops_descending_past_the_depth_limit() {
+fn scans_past_the_old_depth_limit() {
     let (_d, root) = tree();
-    touch(&root.join("a").join("b").join("c").join("deep.bat"));
-    touch(&root.join("a").join("b").join("c").join("d").join("too-deep.bat"));
+    touch(&root.join("a").join("b").join("c").join("d").join("deep.bat"));
+    touch(&root.join("a").join("b").join("c").join("deep.sh"));
 
     let ids: Vec<_> = scan_dir(&root).into_iter().map(|s| s.id).collect();
-    assert_eq!(ids, vec!["a/b/c/deep.bat"]);
+    assert_eq!(ids, vec!["a/b/c/d/deep.bat", "a/b/c/deep.sh"]);
 }
 
 #[test]
@@ -178,37 +184,173 @@ fn non_script_files_are_reported_with_their_extension_as_kind() {
 }
 
 #[test]
-fn the_entry_scan_still_skips_ignored_and_dot_directories() {
+fn the_entry_scan_reports_hidden_entries_and_deep_folders() {
     let (_d, root) = tree();
     touch(&root.join("keep.txt"));
     touch(&root.join("node_modules").join("bad.txt"));
     touch(&root.join(".git").join("hook.sh"));
+    touch(&root.join(".env"));
+    touch(&root.join(".vscode").join("settings.json"));
+    touch(&root.join("a").join("b").join("c").join("d").join("deep.txt"));
 
     let ids: Vec<_> = scan_entries(&root).into_iter().map(|e| e.id).collect();
-    assert_eq!(ids, vec!["keep.txt"]);
-}
-
-#[test]
-fn the_entry_scan_respects_the_depth_limit() {
-    let (_d, root) = tree();
-    touch(&root.join("a").join("b").join("c").join("deep.txt"));
-    touch(&root.join("a").join("b").join("c").join("d").join("too-deep.txt"));
-
-    let ids: Vec<_> = scan_entries(&root).into_iter().map(|e| e.id).collect();
-    // `a/b/c/d` is itself at the limit, so it is listed; nothing inside it is.
     assert_eq!(
         ids,
-        vec!["a", "a/b", "a/b/c", "a/b/c/d", "a/b/c/deep.txt"]
+        vec![
+            ".env",
+            ".vscode",
+            ".vscode/settings.json",
+            "a",
+            "a/b",
+            "a/b/c",
+            "a/b/c/d",
+            "a/b/c/d/deep.txt",
+            "keep.txt",
+        ]
     );
 }
 
+// ── Folder skeleton ──────────────────────────────────────────────────────────
+
+/// The panel shows every folder before any file, so `scan_folders` has to report the whole
+/// skeleton — nested, hidden, and ignored directories included in exactly the way the full walk
+/// would report them.
 #[test]
-fn the_entry_scan_is_bounded() {
+fn the_folder_skeleton_reports_every_directory() {
     let (_d, root) = tree();
-    for i in 0..MAX_ENTRIES + 25 {
+    touch(&root.join("tools").join("go.sh"));
+    touch(&root.join("a").join("b").join("deep.txt"));
+    touch(&root.join(".vscode").join("settings.json"));
+    touch(&root.join("node_modules").join("bad.txt"));
+    touch(&root.join("keep.txt"));
+
+    let ids: Vec<_> = scan_folders(&root).into_iter().map(|e| e.id).collect();
+    assert_eq!(ids, vec![".vscode", "a", "a/b", "tools"]);
+    assert!(scan_folders(&root).iter().all(|e| e.is_dir && e.kind == "dir"));
+}
+
+// ── Per-folder paging ────────────────────────────────────────────────────────
+
+/// The tree's "Show more" lives on one folder at a time, so the page lists that folder's direct
+/// files only — subdirectories belong to the skeleton and are never descended into.
+#[test]
+fn folder_pages_cover_that_folders_files_only() {
+    let (_d, root) = tree();
+    touch(&root.join("b.txt"));
+    touch(&root.join("a.txt"));
+    touch(&root.join("sub").join("nested.txt"));
+    fs::create_dir_all(root.join("empty")).unwrap();
+
+    let page = scan_folder_files_excluding(&root, "", &[], 0, DEFAULT_PAGE_SIZE).unwrap();
+    assert_eq!(
+        page.entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+        vec!["a.txt", "b.txt"]
+    );
+    assert_eq!(page.total, 2);
+    assert!(!page.has_more);
+}
+
+#[test]
+fn folder_pages_are_sorted_and_bounded() {
+    let (_d, root) = tree();
+    fs::create_dir_all(root.join("src")).unwrap();
+    for i in 0..DEFAULT_PAGE_SIZE + 25 {
+        touch(&root.join("src").join(format!("f{i:05}.txt")));
+    }
+
+    let first = scan_folder_files_excluding(&root, "src", &[], 0, DEFAULT_PAGE_SIZE).unwrap();
+    assert_eq!(first.entries.len(), DEFAULT_PAGE_SIZE);
+    assert_eq!(first.total, DEFAULT_PAGE_SIZE + 25);
+    assert!(first.has_more);
+    // Sorted by id — parents first, and a stable walk means the same offset names the same files.
+    assert!(first.entries.windows(2).all(|w| w[0].id < w[1].id));
+
+    let second = scan_folder_files_excluding(&root, "src", &[], DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE)
+        .unwrap();
+    assert_eq!(second.entries.len(), 25);
+    assert!(!second.has_more);
+
+    let all: Vec<_> = first.entries.iter().chain(&second.entries).map(|e| e.id.as_str()).collect();
+    assert_eq!(all.len(), DEFAULT_PAGE_SIZE + 25);
+    assert_eq!(scan_folder_files_excluding(&root, "src", &[], 0, DEFAULT_PAGE_SIZE).unwrap(), first);
+}
+
+/// A folder's page must agree with the full walk about every file it lists — the same kinds, shells
+/// and `viewable` flags — and must carry the user's excluded extensions too.
+#[test]
+fn folder_pages_agree_with_the_full_walk() {
+    let (_d, root) = tree();
+    touch(&root.join("scripts").join("deploy.bat"));
+    touch(&root.join("scripts").join("notes.txt"));
+    touch(&root.join("scripts").join("payload.exe"));
+    touch(&root.join("scripts").join("sub").join("deep.ps1"));
+
+    // The page lists a folder's *direct* files only (subdirectories belong to the skeleton), so the
+    // walk's comparison set is the direct children of `scripts/` too — not `scripts/sub/deep.ps1`.
+    let full: Vec<_> = scan_entries_excluding(&root, &[])
+        .into_iter()
+        .filter(|e| e.id.starts_with("scripts/") && !e.is_dir && !e.id["scripts/".len()..].contains('/'))
+        .collect();
+    let page = scan_folder_files_excluding(&root, "scripts", &[], 0, DEFAULT_PAGE_SIZE).unwrap();
+    assert_eq!(page.entries, full, "the folder page must match the full walk's entries");
+    assert_eq!(page.entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec![
+        "scripts/deploy.bat",
+        "scripts/notes.txt",
+        "scripts/payload.exe",
+    ]);
+
+    let excluded = vec!["txt".to_string()];
+    let page = scan_folder_files_excluding(&root, "scripts", &excluded, 0, DEFAULT_PAGE_SIZE).unwrap();
+    let by_id = |id: &str| page.entries.iter().find(|e| e.id == id).unwrap();
+    assert_eq!(by_id("scripts/notes.txt").viewable, Some(false));
+    assert_eq!(by_id("scripts/deploy.bat").viewable, Some(true));
+}
+
+/// A hostile folder path must not escape the workspace, and a missing one is a clean error.
+#[test]
+fn folder_pages_reject_paths_outside_the_workspace() {
+    let (_d, root) = tree();
+    touch(&root.join("keep.txt"));
+    for bad in ["..", "../outside", "C:\\Windows", "/etc"] {
+        assert!(scan_folder_files_excluding(&root, bad, &[], 0, DEFAULT_PAGE_SIZE).is_err(), "{bad}");
+    }
+    assert!(scan_folder_files_excluding(&root, "does-not-exist", &[], 0, DEFAULT_PAGE_SIZE).is_err());
+}
+
+// ── Paging (whole-scan, kept for back-compat) ────────────────────────────────
+
+#[test]
+fn pages_the_entry_list_in_chunks() {
+    let (_d, root) = tree();
+    for i in 0..DEFAULT_PAGE_SIZE + 25 {
         touch(&root.join(format!("f{i:05}.txt")));
     }
-    assert_eq!(scan_entries(&root).len(), MAX_ENTRIES);
+
+    let first = scan_entries_page_excluding(&root, &[], 0, DEFAULT_PAGE_SIZE);
+    assert_eq!(first.entries.len(), DEFAULT_PAGE_SIZE);
+    assert_eq!(first.total, DEFAULT_PAGE_SIZE + 25);
+    assert!(first.has_more);
+
+    let second = scan_entries_page_excluding(&root, &[], DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE);
+    assert_eq!(second.entries.len(), 25);
+    assert_eq!(second.total, DEFAULT_PAGE_SIZE + 25);
+    assert!(!second.has_more);
+
+    // The pages partition the whole scan: nothing is lost or repeated.
+    let all: Vec<_> = first.entries.iter().chain(&second.entries).map(|e| e.id.as_str()).collect();
+    assert_eq!(all.len(), DEFAULT_PAGE_SIZE + 25);
+    // And the same offset names the same entries on every call — the walk is sorted, so a rescan
+    // returns the identical page. Without that, "Show more" would chase a moving list.
+    assert_eq!(scan_entries_page_excluding(&root, &[], 0, DEFAULT_PAGE_SIZE), first);
+}
+
+#[test]
+fn an_offset_past_the_end_pages_to_empty() {
+    let (_d, root) = tree();
+    touch(&root.join("notes.txt"));
+
+    let page = scan_entries_page_excluding(&root, &[], 5, DEFAULT_PAGE_SIZE);
+    assert!(page.entries.is_empty() && !page.has_more && page.total == 1);
 }
 
 /// `scan_dir` is now a filter over `scan_entries`; the two must agree about the runnables.

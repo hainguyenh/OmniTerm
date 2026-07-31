@@ -29,6 +29,32 @@ const scriptOf = (entry: ReturnType<typeof file>) => ({
   shell: entry.shell, editable: entry.editable ?? false,
 })
 
+/** A scan page — by default the whole list with nothing left to load. */
+const page = (entries: unknown[], hasMore = false, total?: number) => ({
+  entries, total: total ?? entries.length, hasMore,
+})
+
+/** Pre-set the panel's per-workspace filter, in the persisted `cc.workspaceFilters` shape. */
+const filterAs = (mode: string) => ({ mode, kinds: [], paths: [], showEmptyDirs: false })
+
+/**
+ * A folder-aware scan mock: `dirs` is the skeleton (`scanFolders`), `files` are served per folder
+ * by `scanFolderEntries` — a file belongs to the folder holding its parent path; root files have
+ * none. Returns the `scanFolderEntries` spy for paging tests.
+ */
+const mockScan = (dirs: unknown[], files: { id: string }[], run = vi.fn(async () => true)) => {
+  const scanFolderEntries = vi.fn(async (_id: string, folder: string) => {
+    const prefix = folder === '' ? '' : `${folder}/`
+    const direct = files.filter((e) =>
+      e.id.startsWith(prefix) && !e.id.slice(prefix.length).includes('/'))
+    return page(direct)
+  })
+  mockOmnitermAPI({
+    workspace: { list: async () => [WS], scanFolders: async () => dirs, scanFolderEntries, run },
+  })
+  return scanFolderEntries
+}
+
 describe('WorkspacePanel', () => {
   beforeEach(() => localStorage.clear())
 
@@ -40,15 +66,16 @@ describe('WorkspacePanel', () => {
 
   it('scans on expand and runs a script via the run icon', async () => {
     const run = vi.fn(async () => true)
-    const scanEntries = vi.fn(async () => [BAT])
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanEntries, run } })
+    const scanFolderEntries = vi.fn(async () => page([BAT]))
+    mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run } })
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('my-project'))
     await waitFor(() => expect(screen.getByText('deploy.bat')).toBeInTheDocument())
-    expect(scanEntries).toHaveBeenCalledWith('ws#1')
+    // The skeleton and the root folder's first page arrive together on expand.
+    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', '', 0, 2000)
 
     fireEvent.click(screen.getByTitle('Run'))
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', script: scriptOf(BAT) })
@@ -61,7 +88,7 @@ describe('WorkspacePanel', () => {
   it('hands the run to the host when it supplies a handler', async () => {
     const run = vi.fn(async () => true)
     const onRunScript = vi.fn()
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanEntries: async () => [BAT], run } })
+    mockScan([], [BAT])
 
     render(<WorkspacePanel onOpenScript={vi.fn()} onRunScript={onRunScript} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
@@ -76,7 +103,7 @@ describe('WorkspacePanel', () => {
   it('clicking a script opens it in the dock (onOpenScript) and does not run it', async () => {
     const run = vi.fn(async () => true)
     const onOpenScript = vi.fn()
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanEntries: async () => [BAT], run } })
+    mockScan([], [BAT])
 
     render(<WorkspacePanel onOpenScript={onOpenScript} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
@@ -90,7 +117,7 @@ describe('WorkspacePanel', () => {
 
   it('opens a plain terminal (no script) via the row action', async () => {
     const run = vi.fn(async () => true)
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanEntries: async () => [], run } })
+    mockScan([], [], run)
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
@@ -101,13 +128,7 @@ describe('WorkspacePanel', () => {
 
   it('opens a terminal rooted in a subfolder via the folder row action (passes subPath)', async () => {
     const run = vi.fn(async () => true)
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanEntries: async () => [dir('scripts'), dir('scripts/deploy'), file('scripts/deploy/go.sh', 'sh', 'wsl')],
-        run,
-      },
-    })
+    mockScan([dir('scripts'), dir('scripts/deploy')], [file('scripts/deploy/go.sh', 'sh', 'wsl')], run)
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
@@ -120,21 +141,92 @@ describe('WorkspacePanel', () => {
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', subPath: 'scripts' })
   })
 
-  it('collapses and expands every folder via the tree toggle-all action', async () => {
+  /** Folders start collapsed; a folder's files arrive when it is expanded. */
+  it('shows every folder up front, and a folder only reveals its files once expanded', async () => {
+    mockScan([dir('scripts'), dir('tools')], [file('scripts/go.sh', 'sh', 'wsl'), file('tools/deploy.ps1', 'ps1', 'powershell')])
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+
+    // The whole skeleton is visible at once — no file is.
+    await waitFor(() => expect(screen.getByText('scripts')).toBeInTheDocument())
+    expect(screen.getByText('tools')).toBeInTheDocument()
+    expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
+    expect(screen.queryByText('deploy.ps1')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('tools'))
+    expect(await screen.findByText('deploy.ps1')).toBeInTheDocument()
+    expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Regression: in "All files" mode, expanding a folder that turns out to hold nothing (or nothing
+   * the filter admits) used to disappear the instant its page landed — pruned as "empty" one frame
+   * after the user clicked it open. An explicitly expanded folder must stay visible regardless.
+   */
+  it('never hides a folder the user just expanded, even once it loads empty', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
+    mockScan([dir('empty'), dir('full')], [file('full/a.txt', 'txt')])
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('empty')
+
+    fireEvent.click(screen.getByText('empty'))
+    // The click resolves `loadFolder` and the row must survive the re-render that follows.
+    await waitFor(() => expect(screen.getByText('full')).toBeInTheDocument())
+    expect(screen.getByText('empty')).toBeInTheDocument()
+  })
+
+  /**
+   * Regression: opening a workspace used to flash the whole folder skeleton (every dir kept while
+   * "unloaded"), then shrink to the folders that actually hold scripts once the drain landed. In
+   * the views that load every folder, an unloaded folder must not appear at all.
+   */
+  it('never flashes unloaded folders while the scripts view is draining', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(r => { release = r })
+    const scanFolderEntries = vi.fn(async (_id: string, folder: string) => {
+      if (folder === '') return page([])
+      await gate
+      if (folder === 'scripts') return page([file('scripts/go.sh', 'bat', 'cmd')])
+      return page([])
+    })
     mockOmnitermAPI({
       workspace: {
         list: async () => [WS],
-        scanEntries: async () => [dir('scripts'), file('scripts/go.sh', 'sh', 'wsl')],
+        scanFolders: async () => [dir('scripts'), dir('empty')],
+        scanFolderEntries,
         run: async () => true,
       },
     })
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+
+    // Skeleton arrived but the drain is still in flight: no folder may appear yet — `empty` holds
+    // no script and would only flash for a frame, and `scripts` is not loaded either.
+    await waitFor(() => expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', 'scripts', 0, 2000))
+    expect(screen.queryByText('scripts')).not.toBeInTheDocument()
+    expect(screen.queryByText('empty')).not.toBeInTheDocument()
+
+    release()
+    // Once the drain lands: the folder with a script appears, the empty one stays hidden.
+    await screen.findByText('scripts')
+    expect(screen.queryByText('empty')).not.toBeInTheDocument()
+  })
+
+  it('collapses and expands every folder via the tree toggle-all action', async () => {
+    mockScan([dir('scripts')], [file('scripts/go.sh', 'sh', 'wsl')])
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
     fireEvent.click(screen.getByText('my-project'))
-    await waitFor(() => expect(screen.getByText('go.sh')).toBeInTheDocument())
+    await screen.findByText('scripts')
 
-    // Collapse all → the file under 'scripts' disappears; expand all → it returns.
+    // Expand all → the folder opens and its file appears; collapse all hides it again.
+    fireEvent.click(screen.getByTitle('Expand all'))
+    expect(await screen.findByText('go.sh')).toBeInTheDocument()
     fireEvent.click(screen.getByTitle('Collapse all'))
     expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTitle('Expand all'))
@@ -144,7 +236,7 @@ describe('WorkspacePanel', () => {
   it('lets .rdp be opened in the dock too, with a Launch run action', async () => {
     const run = vi.fn(async () => true)
     const onOpenScript = vi.fn()
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanEntries: async () => [RDP], run } })
+    mockScan([], [RDP], run)
 
     render(<WorkspacePanel onOpenScript={onOpenScript} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
@@ -164,9 +256,7 @@ describe('WorkspacePanel', () => {
 
   /** A folder with nothing runnable in it is noise by default, but the filter can ask for it. */
   it('hides a folder that holds no scripts until empty folders are asked for', async () => {
-    mockOmnitermAPI({
-      workspace: { list: async () => [WS], scanEntries: async () => [dir('empty'), BAT], run: async () => true },
-    })
+    mockScan([dir('empty')], [BAT])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
@@ -178,13 +268,7 @@ describe('WorkspacePanel', () => {
   })
 
   it('hides non-script files until the filter is opened up to all files', async () => {
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanEntries: async () => [BAT, file('notes.txt', 'txt')],
-        run: async () => true,
-      },
-    })
+    mockScan([], [BAT, file('notes.txt', 'txt')])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
@@ -208,21 +292,106 @@ describe('WorkspacePanel', () => {
     expect(screen.getByText('1 file')).toBeInTheDocument()
   })
 
-  /** One tick on a folder has to speak for everything under it, or the tree is unusable. */
-  it('ticks a whole subtree from its folder, and reports the partial state', async () => {
+  // ── Paging: per folder, and only for the whole-tree filters ────────────────
+
+  /** The scripts view promises the whole workspace: everything is loaded, and no "Show more" row
+   *  may appear — paging rows exist only for "All files" and "Selected types". */
+  it('loads every file in the scripts view, with no "Show more" row', async () => {
+    const scanFolderEntries = vi.fn()
+      .mockResolvedValueOnce(page([BAT], true, 2))
+      .mockResolvedValueOnce(page([file('more.ps1', 'ps1', 'powershell')]))
+    mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run: async () => true } })
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+
+    // The second page is fetched on its own — no click asked for it.
+    await waitFor(() => expect(scanFolderEntries).toHaveBeenLastCalledWith('ws#1', '', 1, 2000))
+    expect(await screen.findByText('more.ps1')).toBeInTheDocument()
+    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
+  })
+
+  /** The old scan silently stopped at 2000 entries; a root-folder "Show more" is how the rest arrive. */
+  it('grows the root one page at a time via "Show more" under "All files"', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
+    const scanFolderEntries = vi.fn()
+      .mockResolvedValueOnce(page([BAT], true, 2))
+      .mockResolvedValueOnce(page([file('notes.txt', 'txt')]))
+    mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run: async () => true } })
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('deploy.bat')
+
+    // hasMore → the row appears at the bottom of the workspace and counts down from the scan's total.
+    expect(screen.getByText('Show more (1 remaining)')).toBeInTheDocument()
+    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', '', 0, 2000)
+
+    // The next page is fetched from where the first one ended.
+    fireEvent.click(screen.getByText('Show more (1 remaining)'))
+    await waitFor(() => expect(scanFolderEntries).toHaveBeenLastCalledWith('ws#1', '', 1, 2000))
+    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
+    expect(screen.getByText('notes.txt')).toBeInTheDocument()
+  })
+
+  /** "Show more" lives on the folder that has more files, not on the workspace as a whole. */
+  it('pages an expanded folder on its own "Show more" row', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
+    const scanFolderEntries = vi.fn()
+      .mockImplementationOnce(async () => page([BAT]))                       // root
+      .mockImplementationOnce(async () => page([file('tools/a.txt', 'txt'), file('tools/b.txt', 'txt')], true, 3)) // tools p1
+      .mockImplementationOnce(async () => page([file('tools/c.txt', 'txt')])) // tools p2
     mockOmnitermAPI({
       workspace: {
         list: async () => [WS],
-        scanEntries: async () => [
-          dir('tools'),
-          file('tools/go.sh', 'sh', 'wsl'),
-          file('tools/notes.txt', 'txt'),
-        ],
+        scanFolders: async () => [dir('tools')],
+        scanFolderEntries,
         run: async () => true,
       },
     })
+
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('deploy.bat')
+
+    // The folder is collapsed, so no paging row anywhere yet.
+    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('tools'))
+    expect(await screen.findByText('Show more (1 remaining)')).toBeInTheDocument()
+    expect(screen.getByText('a.txt')).toBeInTheDocument()
+    expect(screen.getByText('b.txt')).toBeInTheDocument()
+    expect(screen.queryByText('c.txt')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Show more (1 remaining)'))
+    expect(await screen.findByText('c.txt')).toBeInTheDocument()
+    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
+    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', 'tools', 0, 2000)
+    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', 'tools', 2, 2000)
+  })
+
+  /** The scan reports dot-files now; only "All files" shows them. */
+  it('keeps hidden files out of the default view and shows them under "All files"', async () => {
+    mockScan([dir('.vscode')], [BAT, file('.env', 'env'), file('.vscode/settings.json', 'json')])
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('deploy.bat')
+    expect(screen.queryByText('.env')).not.toBeInTheDocument()
+    expect(screen.queryByText('.vscode')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('All files'))
+    expect(screen.getByText('.env')).toBeInTheDocument()
+    // The hidden folder is part of the tree once "All files" admits it.
+    expect(screen.getByText('.vscode')).toBeInTheDocument()
+  })
+
+  /** One tick on a folder has to speak for everything under it, or the tree is unusable. */
+  it('ticks a whole subtree from its folder, and reports the partial state', async () => {
+    mockScan([dir('tools')], [file('tools/go.sh', 'sh', 'wsl'), file('tools/notes.txt', 'txt')])
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('tools')
+    fireEvent.click(screen.getByText('tools'))
     await screen.findByText('go.sh')
 
     fireEvent.click(screen.getByLabelText('Filter workspace contents'))
@@ -245,13 +414,7 @@ describe('WorkspacePanel', () => {
 
   /** A type covers files added after the pick, which is what a path selection cannot do. */
   it('filters by type, and names a single chosen type in the option row', async () => {
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanEntries: async () => [BAT, RDP, file('notes.txt', 'txt')],
-        run: async () => true,
-      },
-    })
+    mockScan([], [BAT, RDP, file('notes.txt', 'txt')])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
@@ -272,9 +435,7 @@ describe('WorkspacePanel', () => {
 
   /** The dialog overlaps the tree it filters, so it has to be movable off it. */
   it('lets the filter dialog be dragged by its title bar', async () => {
-    mockOmnitermAPI({
-      workspace: { list: async () => [WS], scanEntries: async () => [BAT], run: async () => true },
-    })
+    mockScan([], [BAT])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
@@ -297,7 +458,8 @@ describe('WorkspacePanel', () => {
     mockOmnitermAPI({
       workspace: {
         list: async () => [WS, WS2],
-        scanEntries: async () => [BAT, file('notes.txt', 'txt')],
+        scanFolders: async () => [],
+        scanFolderEntries: async () => page([BAT, file('notes.txt', 'txt')]),
         run: async () => true,
       },
     })
@@ -321,7 +483,9 @@ describe('WorkspacePanel', () => {
     mockOmnitermAPI({
       workspace: {
         list: async () => [WS],
-        scanEntries: async () => [dir('tools'), file('tools/go.sh', 'sh', 'wsl'), BAT],
+        scanFolders: async () => [dir('tools')],
+        scanFolderEntries: async (_id: string, folder: string) =>
+          page(folder === 'tools' ? [file('tools/go.sh', 'sh', 'wsl')] : [BAT]),
         loadConnections: async () => [CONN],
         run: async () => true,
       },
@@ -329,6 +493,9 @@ describe('WorkspacePanel', () => {
     render(<WorkspacePanel hasConnectionProvider onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
+    // The file lives in a collapsed folder, so open it before searching it.
+    fireEvent.click(screen.getByText('tools'))
+    await screen.findByText('go.sh')
 
     // Search is one icon on the header line until it is asked for; opening it swaps in the input.
     fireEvent.click(screen.getByLabelText('Search workspace'))
@@ -350,7 +517,7 @@ describe('WorkspacePanel', () => {
     const loadConnections = vi.fn(async () => [ROOT_CONN, NESTED_CONN])
     const onConnect = vi.fn()
     mockOmnitermAPI({
-      workspace: { list: async () => [WS], scanEntries: async () => [dir('infra')], loadConnections, run: async () => true },
+      workspace: { list: async () => [WS], scanFolders: async () => [dir('infra')], scanFolderEntries: async () => page([]), loadConnections, run: async () => true },
     })
 
     render(<WorkspacePanel hasConnectionProvider onOpenScript={vi.fn()} onConnectWorkspaceConnection={onConnect} />)
@@ -358,7 +525,9 @@ describe('WorkspacePanel', () => {
     await waitFor(() => expect(screen.getByText('Staging RDP')).toBeInTheDocument())
     expect(loadConnections).toHaveBeenCalledWith('ws#1')
 
-    // The nested one renders inside the 'infra' folder, not as a sibling of it.
+    // The nested one renders inside the 'infra' folder, not as a sibling of it — once expanded.
+    expect(screen.queryByText('prod-web')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('infra'))
     const infraRow = screen.getByText('infra').parentElement as HTMLElement
     const infraBlock = infraRow.parentElement as HTMLElement
     expect(within(infraBlock).getByText('prod-web')).toBeInTheDocument()
@@ -369,13 +538,7 @@ describe('WorkspacePanel', () => {
 
   it('adds a connection in the folder whose Cable button was clicked', async () => {
     const onAdd = vi.fn()
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanEntries: async () => [dir('tools'), file('tools/deploy.ps1', 'ps1', 'powershell')],
-        run: async () => true,
-      },
-    })
+    mockScan([dir('tools')], [file('tools/deploy.ps1', 'ps1', 'powershell')])
     render(<WorkspacePanel hasConnectionProvider onOpenScript={vi.fn()} onAddWorkspaceConnection={onAdd} />)
     fireEvent.click(await screen.findByText('my-project'))
 
@@ -394,13 +557,7 @@ describe('WorkspacePanel', () => {
   })
 
   it('offers no connection UI without a provider', async () => {
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanEntries: async () => [dir('tools'), file('tools/deploy.ps1', 'ps1', 'powershell')],
-        run: async () => true,
-      },
-    })
+    mockScan([dir('tools')], [file('tools/deploy.ps1', 'ps1', 'powershell')])
     render(<WorkspacePanel onOpenScript={vi.fn()} onAddWorkspaceConnection={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('tools')

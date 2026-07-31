@@ -10,12 +10,14 @@ declare global {
 interface ShortcutBindings {
   zoomIn: string
   zoomOut: string
+  zoomReset: string
   newSession: string
   newFolder: string
   openSettings: string
   toggleThemeMode: string
   layout1: string
   layout2: string
+  layout3: string
   layout4: string
   layout6: string
   layout8: string
@@ -24,12 +26,24 @@ interface ShortcutBindings {
   closeTab: string
 }
 
+/**
+ * Per-terminal appearance overrides. Absent fields fall back to the app-wide default (or the
+ * connection's persisted overrides, for in-session divergences). `fontSize` clamps 8–48, `themeId`
+ * is any id from `themes.list`.
+ */
+interface TerminalAppearance {
+  fontSize?: number
+  themeId?: string
+}
+
 interface AppSettings {
   themeId: string
   fontSize: number
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
+  /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
+  perConn?: Record<string, TerminalAppearance>
   /** Any id from `shells.list` — validated against that list before use, never assumed. */
   defaultShell?: string
   lastKnownLatest?: string
@@ -45,6 +59,8 @@ interface AppSettings {
   maxOpenFileMb?: number
   /** Extensions the user chose to hide from the viewer, on top of the fixed system deny-list. */
   excludedViewableExts?: string[]
+  /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
+  zoomFactor?: number
 }
 
 interface SessionMetrics {
@@ -183,6 +199,8 @@ interface Window {
       focus: (sessionId: string) => void
       release: (sessionId: string) => void
       onReattached: (cb: (sessionId: string) => void) => () => void
+      /** The detached window closed an idle session outright (no fold-back) — the session is gone. */
+      onClosed: (cb: (sessionId: string) => void) => () => void
     }
     clipboard: {
       writeText: (text: string) => Promise<void>
@@ -221,6 +239,8 @@ interface Window {
     settings: {
       get: () => Promise<AppSettings>
       save: (s: Partial<AppSettings>) => Promise<void>
+      /** Broadcast by the backend after any window saves settings — keeps detached windows in sync. */
+      onChanged: (cb: (s: AppSettings) => void) => () => void
       systemExcludedViewExts: () => Promise<string[]>
     }
     // Workspace view: pinned project folders + a folder script scan; open/run as ephemeral panes.
@@ -229,7 +249,11 @@ interface Window {
       add: () => Promise<import('@omniterm/contract').Workspace | null>
       remove: (id: string) => Promise<void>
       scanScripts: (id: string) => Promise<import('@omniterm/contract').WorkspaceScript[]>
-      scanEntries: (id: string) => Promise<import('@omniterm/contract').WorkspaceEntry[]>
+      // The whole directory skeleton of a workspace — every folder, no files — shown up front.
+      scanFolders: (id: string) => Promise<import('@omniterm/contract').WorkspaceEntry[]>
+      // One page of the files directly under `folder` ('' = the workspace root); `total`/`hasMore`
+      // drive that folder's "Show more" row.
+      scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('@omniterm/contract').WorkspaceEntryPage>
       run: (payload: { workspaceId: string; script?: import('@omniterm/contract').WorkspaceScript; subPath?: string }) => Promise<boolean>
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>

@@ -46,12 +46,28 @@ export const DEFAULT_TREE_FILTER: TreeFilter = {
  * Every kind present in a scan, sorted — the checklist the "Selected types" mode offers.
  *
  * Derived from the scan rather than from a fixed table so the list is always exactly what this
- * workspace contains: offering `.rdp` in a project with no `.rdp` file in it is noise.
+ * workspace contains: offering `.rdp` in a project with no `.rdp` file in it is noise. Hidden files
+ * are skipped: they only ever appear in "All files" mode, so a kind only hidden files carry would be
+ * an option that selects nothing.
  */
 export function discoverKinds(entries: WorkspaceEntry[]): string[] {
   const kinds = new Set<string>()
-  for (const entry of entries) if (!entry.isDir) kinds.add(entry.kind || 'file')
+  for (const entry of entries) {
+    if (entry.isDir || isHiddenEntry(entry)) continue
+    kinds.add(entry.kind || 'file')
+  }
   return [...kinds].sort()
+}
+
+/**
+ * Is this a hidden entry — its name, or any folder on its path, starts with a dot?
+ *
+ * The scan reports hidden files and folders now (`.env`, `.vscode/`, …) so "All files" can really
+ * mean all files, but the other views keep the old behaviour: scripts/types/selections never show
+ * dot-files unless the user explicitly picks "All files".
+ */
+export function isHiddenEntry(entry: WorkspaceEntry): boolean {
+  return entry.name.startsWith('.') || entry.id.split('/').some(seg => seg.startsWith('.'))
 }
 
 /** Is this entry a runnable script (as opposed to a folder or a plain file)? */
@@ -94,14 +110,30 @@ function keepsFile(entry: WorkspaceEntry, filter: TreeFilter, chosen: Set<string
   return isScriptEntry(entry)
 }
 
+/** Every ancestor of `id`, by relative path (not including `id` itself). */
+function ancestorsOf(id: string): string[] {
+  const out: string[] = []
+  let dir = id.slice(0, Math.max(0, id.lastIndexOf('/')))
+  while (dir) {
+    out.push(dir)
+    dir = dir.slice(0, Math.max(0, dir.lastIndexOf('/')))
+  }
+  return out
+}
+
 /**
  * Narrow a scan to what the filter admits.
  *
  * With `showEmptyDirs` off, a directory survives only if a kept file lives somewhere beneath it, or
- * it is named in `keepDirs` — folders whose only contents were filtered away would otherwise read as
- * empty project folders. Connections are never filtered: they are not files, and hiding one would
- * hide the only way to reach it, which is why the panel passes the folders holding connections as
- * `keepDirs`.
+ * it (or a descendant of it) is named in `keepDirs`. Connections are never filtered: they are not
+ * files, and hiding one would hide the only way to reach it, which is why the panel passes the
+ * folders holding connections as `keepDirs`. The panel also passes every folder the user has
+ * explicitly expanded, and every folder whose files have not been loaded yet (folders are lazy, see
+ * useWorkspaceScan): their contents are *unknown* or intentionally visible, so pruning them would
+ * make an open or unopened folder look empty — and an open one would vanish out from under the user.
+ *
+ * `keepDirs` propagates to ancestors (a kept leaf folder must not lose its parent row and get
+ * re-synthesised as a placeholder), matching how `populated` already walks up from a kept file.
  */
 export function applyFilter(
   entries: WorkspaceEntry[],
@@ -109,21 +141,27 @@ export function applyFilter(
   keepDirs?: Set<string>,
 ): WorkspaceEntry[] {
   const chosen = filter.mode === 'selected' ? new Set(filter.paths) : new Set<string>()
-  const files = entries.filter(entry => !entry.isDir && keepsFile(entry, filter, chosen))
-  if (filter.showEmptyDirs) return [...entries.filter(entry => entry.isDir), ...files]
+  // Hidden entries exist only for "All files": the other modes behaved as if the scan never saw
+  // dot-files, and nothing in their semantics asks for them now.
+  const base = filter.mode === 'all' ? entries : entries.filter(e => !isHiddenEntry(e))
+  const files = base.filter(entry => !entry.isDir && keepsFile(entry, filter, chosen))
+  if (filter.showEmptyDirs) return [...base.filter(entry => entry.isDir), ...files]
 
   // Every ancestor directory of a kept file, by relative path.
   const populated = new Set<string>()
   for (const file of files) {
-    let dir = file.id.slice(0, Math.max(0, file.id.lastIndexOf('/')))
-    while (dir) {
-      if (populated.has(dir)) break
-      populated.add(dir)
-      dir = dir.slice(0, Math.max(0, dir.lastIndexOf('/')))
+    for (const dir of ancestorsOf(file.id)) populated.add(dir)
+  }
+  // Every ancestor of a `keepDirs` member, so a kept folder never loses its parent row.
+  const keptAncestors = new Set<string>()
+  if (keepDirs) {
+    for (const id of keepDirs) {
+      keptAncestors.add(id)
+      for (const dir of ancestorsOf(id)) keptAncestors.add(dir)
     }
   }
   return [
-    ...entries.filter(entry => entry.isDir && (populated.has(entry.id) || keepDirs?.has(entry.id))),
+    ...base.filter(entry => entry.isDir && (populated.has(entry.id) || keptAncestors.has(entry.id))),
     ...files,
   ]
 }

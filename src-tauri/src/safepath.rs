@@ -108,7 +108,7 @@ pub fn clamp_max_bytes(configured: Option<u64>) -> u64 {
 /// `\\?\D:\ws\stop.bat` as a literal relative name and answered "is not recognized as an internal or
 /// external command". `dunce` keeps the prefix only when the path genuinely needs it (>260 chars, or a
 /// name cmd could not address anyway), so containment comparisons stay exact.
-fn canonical(path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn canonical(path: &Path) -> Result<PathBuf, String> {
     dunce::canonicalize(path).map_err(|e| format!("cannot resolve {}: {}", path.display(), e))
 }
 

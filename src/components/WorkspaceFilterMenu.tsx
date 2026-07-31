@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { GripHorizontal, X } from 'lucide-react'
 import type { WorkspaceEntry } from '@omniterm/contract'
 import {
-  DEFAULT_TREE_FILTER, discoverKinds, isDefaultFilter, isScriptEntry, type TreeFilter,
+  DEFAULT_TREE_FILTER, discoverKinds, isDefaultFilter, isHiddenEntry, isScriptEntry, type TreeFilter,
 } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import WorkspaceFilterTree from './WorkspaceFilterTree'
@@ -12,8 +12,8 @@ import WorkspaceFilterTree from './WorkspaceFilterTree'
  *
  * A workspace folder holds far more than runnable scripts, so the tree defaults to scripts only and
  * this popover opens it up: every file, the types you pick, or a set of files ticked out of the
- * workspace's own tree. The backend scan already returned everything (see `scan_workspace_entries`),
- * so switching is a re-render, never a rescan.
+ * workspace's own tree. The scan is cached in the panel (see useWorkspaceScan), so switching is a
+ * re-render, never a rescan.
  *
  * Controlled and `position: fixed` rather than self-triggering and absolute: the sidebar is as narrow
  * as 180px and clips its overflow, so a popover anchored inside it was simply cut off — and the panel
@@ -64,7 +64,10 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   useEffect(() => { setDragged(null) }, [anchor])
 
   const kinds = useMemo(() => discoverKinds(entries), [entries])
-  const allFiles = useMemo(() => entries.filter(e => !e.isDir).map(e => e.id), [entries])
+  // Hidden files exist only in "All files" mode, so the tick-tree and "Check all" must not offer
+  // them — a ticked `.env` would select a file the tree cannot show.
+  const selectable = useMemo(() => entries.filter(e => !isHiddenEntry(e)), [entries])
+  const allFiles = useMemo(() => selectable.filter(e => !e.isDir).map(e => e.id), [selectable])
 
   const setMode = (mode: TreeFilter['mode']) => {
     // Entering a pick-your-own mode with nothing picked would blank the tree, so each starts from the
@@ -217,7 +220,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                 ? <p className="text-[10px] italic text-[var(--theme-dim)]">No files in this workspace.</p>
                 : (
                   <WorkspaceFilterTree
-                    entries={entries}
+                    entries={selectable}
                     paths={filter.paths}
                     onChange={(paths) => onChange({ ...filter, paths })}
                   />
