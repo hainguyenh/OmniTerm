@@ -83,10 +83,10 @@ jobs:
           workspaces: src-tauri
 
       - name: Run Rust tests
-        run: pnpm test:tauri
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
       - name: Clippy
-        run: pnpm lint:tauri
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
   resolve-release-version:
     runs-on: windows-latest
@@ -106,7 +106,7 @@ jobs:
         if: github.event_name == 'push'
         shell: bash
         run: |
-          git fetch --no-tags origin main
+          git fetch --no-tags origin master
           if git merge-base --is-ancestor HEAD FETCH_HEAD; then
             echo "✅ Tag commit is on main — proceeding."
           else

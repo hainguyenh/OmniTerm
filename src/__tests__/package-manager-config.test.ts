@@ -72,7 +72,7 @@ describe("release configuration", () => {
 
   it("gates the build on both the renderer and the Rust test suites", () => {
     expect(workflow).toMatch(/test-gate:[\s\S]*run:\s+pnpm test/);
-    expect(workflow).toMatch(/rust-test-gate:[\s\S]*run:\s+pnpm test:tauri/);
+    expect(workflow).toMatch(/rust-test-gate:[\s\S]*run:\s+cargo test/);
     expect(workflow).toMatch(
       /build-desktop-packages:[\s\S]*needs:\s*\[test-gate, rust-test-gate, resolve-release-version\]/,
     );

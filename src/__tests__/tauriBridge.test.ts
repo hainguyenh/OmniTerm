@@ -40,6 +40,7 @@ vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   readText: (...args: unknown[]) => readTextMock(...args),
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...args: unknown[]) => openMock(...args) }))
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: '' }) }))
 vi.mock('@tauri-apps/api/path', () => ({ homeDir: (...args: unknown[]) => homeDirMock(...args) }))
 
 const { __createTauriAPIForTests, initTauriBridge } = await import('../omnitermAPI')
