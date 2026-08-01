@@ -229,6 +229,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   const [shellMenu, setShellMenu] = useState<{ x: number, y: number } | null>(null)
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null)
   const skipCloseConfirmRef = useRef(false)
+  // Stable reference to closeTabs for the onClosed effect (which runs with [] deps and cannot
+  // capture the ever-changing closeTabs closure directly).
+  const closeTabsRef = useRef<(ids: string[], skip?: boolean) => void>(() => {})
   // Which pane's session-picker dropdown is open, and the pane currently being dragged
   // (for drop-target highlighting). While either is set, RDP windows are hidden via the
   // overlay so DOM chrome (the dropdown / drop targets) is not occluded by the native window.
@@ -341,14 +344,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       onSettingsReload?.(id)
     })
   }, [onSettingsReload])
-  // The detached window closed an idle session outright — same remount as a reattach, but there is
-  // nothing to fold back: the tab's own attach flow discovers the session is gone and reports it,
-  // so the tab stops showing a "Focus window" / "Attach back" placeholder for a window that no
-  // longer exists.
+  // The detached window closed an idle session outright — the session has already been reaped by
+  // the backend, so trying to re-attach would fail. Close the tab outright (skipConfirm, since
+  // there is nothing left to lose) and clear the poppedOut flag so no placeholder lingers.
   useEffect(() => {
     if (!window.omnitermAPI.terminalWindow) return
     return window.omnitermAPI.terminalWindow.onClosed((id) => {
       setPoppedOut(prev => (prev[id] ? { ...prev, [id]: false } : prev))
+      closeTabsRef.current([id], true)
     })
   }, [])
   const focusTerminal = (id: string) => {
@@ -975,6 +978,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       for (const e of releasing) window.omnitermAPI.shells.release(e.id)
     }
   }
+
+  closeTabsRef.current = closeTabs
 
   const closeTab = (sessionId: string) => {
     // A dirty editor tab prompts to discard first; a clean one (read or unmodified edit)

@@ -214,3 +214,17 @@ export function buildScriptTree(scripts: WorkspaceScript[]): WorkspaceTreeNode[]
     })),
   )
 }
+
+/** Collect every directory path in the tree, optionally limited to a maximum depth. */
+export function collectFilterDirPaths(nodes: WorkspaceTreeNode[], maxDepth?: number): string[] {
+  const paths: string[] = []
+  const walk = (node: WorkspaceTreeNode, depth: number) => {
+    if (!node.isDir) return
+    paths.push(node.path)
+    if (maxDepth === undefined || depth < maxDepth) {
+      node.children.forEach(c => walk(c, depth + 1))
+    }
+  }
+  nodes.forEach(n => walk(n, 0))
+  return paths
+}

@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { GripHorizontal, X } from 'lucide-react'
+import { GripHorizontal, X, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import type { WorkspaceEntry } from '@omniterm/contract'
 import {
   DEFAULT_TREE_FILTER, discoverKinds, isDefaultFilter, isHiddenEntry, isScriptEntry, type TreeFilter,
 } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import WorkspaceFilterTree from './WorkspaceFilterTree'
+import { buildWorkspaceTree, collectFilterDirPaths } from '../utils/scriptTree'
 
 /**
  * The Workspace tree's "what do I show" control.
@@ -68,6 +69,17 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   // them — a ticked `.env` would select a file the tree cannot show.
   const selectable = useMemo(() => entries.filter(e => !isHiddenEntry(e)), [entries])
   const allFiles = useMemo(() => selectable.filter(e => !e.isDir).map(e => e.id), [selectable])
+
+  // Collapse state for the "Selected files" tree, lifted here so the toolbar can drive it.
+  const [filterTreeCollapsed, setFilterTreeCollapsed] = useState<Set<string>>(new Set())
+  const filterTree = useMemo(() => buildWorkspaceTree(selectable), [selectable])
+  const filterTreeAllDirs = useMemo(() => collectFilterDirPaths(filterTree), [filterTree])
+  const toggleFilterTreeCollapse = (path: string) => setFilterTreeCollapsed(prev => {
+    const next = new Set(prev)
+    if (next.has(path)) next.delete(path)
+    else next.add(path)
+    return next
+  })
 
   const setMode = (mode: TreeFilter['mode']) => {
     // Entering a pick-your-own mode with nothing picked would blank the tree, so each starts from the
@@ -215,6 +227,57 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                 Uncheck all
               </button>
             </div>
+            {/* Expand / collapse controls for the file tree */}
+            <div className="mb-1 flex items-center gap-0.5">
+              <button
+                type="button"
+                title="Collapse all folders"
+                onClick={() => setFilterTreeCollapsed(new Set(filterTreeAllDirs))}
+                className={smallButton + ' inline-flex items-center gap-0.5'}
+              >
+                <ChevronsDownUp className="w-3 h-3" />
+                All
+              </button>
+              <button
+                type="button"
+                title="Expand all folders"
+                onClick={() => setFilterTreeCollapsed(new Set())}
+                className={smallButton + ' inline-flex items-center gap-0.5'}
+              >
+                <ChevronsUpDown className="w-3 h-3" />
+                All
+              </button>
+              <span className="text-[9px] text-[var(--theme-dim)] mx-0.5">│</span>
+              <button
+                type="button"
+                title="Expand only root folders (Level 1)"
+                onClick={() => {
+                  const level1 = new Set(collectFilterDirPaths(filterTree, 0))
+                  const allDirs = new Set(filterTreeAllDirs)
+                  // Collapse everything not in level 1
+                  const next = new Set<string>()
+                  for (const d of allDirs) if (!level1.has(d)) next.add(d)
+                  setFilterTreeCollapsed(next)
+                }}
+                className={smallButton}
+              >
+                Lv 1
+              </button>
+              <button
+                type="button"
+                title="Expand root + second-level folders (Level 2)"
+                onClick={() => {
+                  const level2 = new Set(collectFilterDirPaths(filterTree, 1))
+                  const allDirs = new Set(filterTreeAllDirs)
+                  const next = new Set<string>()
+                  for (const d of allDirs) if (!level2.has(d)) next.add(d)
+                  setFilterTreeCollapsed(next)
+                }}
+                className={smallButton}
+              >
+                Lv 2
+              </button>
+            </div>
             <div className="custom-scrollbar max-h-64 overflow-y-auto">
               {allFiles.length === 0
                 ? <p className="text-[10px] italic text-[var(--theme-dim)]">No files in this workspace.</p>
@@ -223,6 +286,8 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                     entries={selectable}
                     paths={filter.paths}
                     onChange={(paths) => onChange({ ...filter, paths })}
+                    collapsed={filterTreeCollapsed}
+                    onToggleCollapse={toggleFilterTreeCollapse}
                   />
                 )}
             </div>

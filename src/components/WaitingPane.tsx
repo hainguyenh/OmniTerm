@@ -26,15 +26,15 @@ interface WaitingPaneProps {
 const WaitingPane: React.FC<WaitingPaneProps> = ({
   dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, paneIndex,
 }) => (
-  <div className={`h-full w-full flex flex-col items-center justify-center text-[var(--theme-dim)] select-none ${
-    compact ? 'gap-3' : 'gap-5'
+  <div className={`h-full w-full flex flex-col items-center justify-center overflow-y-auto min-h-0 text-[var(--theme-dim)] select-none ${
+    compact ? 'gap-3 py-3' : 'gap-5 py-4'
   }`}>
     {/* The art is pre-cropped to its content (see make-cat-assets.py), so it just centres over the
         watermark — no per-asset offsets to keep in sync. The box is square so the watermark (a square
         glyph) fills it, and the cat is sized as a fraction of that box so it sits inside the glyph
         instead of spilling past it. */}
-    <div className={`relative aspect-square flex items-center justify-center ${
-      compact ? 'w-[26vmin] min-w-[130px] max-w-[220px]' : 'w-[40vmin] min-w-[200px] max-w-[360px]'
+    <div className={`relative aspect-square flex items-center justify-center flex-shrink ${
+      compact ? 'w-[26vmin] min-w-[60px] max-w-[220px]' : 'w-[40vmin] min-w-[100px] max-w-[360px]'
     }`}>
       <Terminal className="absolute inset-0 h-full w-full opacity-[0.07]" strokeWidth={1.25} />
       {/* Nudged off-centre: the glyph's prompt caret sits upper-left, so the cat reads better
@@ -43,7 +43,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         className="relative w-[68%] h-auto opacity-90 translate-x-[16%] translate-y-[28%]" />
     </div>
 
-    <div className="text-center px-3">
+    <div className="text-center px-3 flex-shrink-0">
       {paneIndex !== undefined && (() => {
         const identity = paneIdentity(paneIndex)
         const Shape = identity.icon
@@ -65,7 +65,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
       )}
     </div>
 
-    <div className={`flex items-center ${compact ? 'flex-col gap-2' : 'gap-2.5'}`}>
+    <div className={`flex items-center flex-shrink-0 ${compact ? 'flex-col gap-2' : 'gap-2.5'}`}>
       <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
         <button
           type="button"
