@@ -11,13 +11,16 @@ import {
 } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import { diag } from '../diag'
-import { useTreeReveal, type RevealRequest } from '../hooks/useTreeReveal'
+import { useTreeReveal } from '../hooks/useTreeReveal'
 import { useWorkspaceScan } from '../hooks/useWorkspaceScan'
 import WorkspaceFilterMenu from './WorkspaceFilterMenu'
 import WorkspaceShowMore from './WorkspaceShowMore'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceSearchBar from './WorkspaceSearchBar'
+import type { WorkspaceConnectionTarget, WorkspacePanelProps } from './workspacePanelTypes'
+
+export type { WorkspaceConnectionTarget } from './workspacePanelTypes'
 
 /**
  * The Workspace view — a left panel (Orca / Antigravity style) for pinning project folders, opening a
@@ -39,56 +42,6 @@ import WorkspaceSearchBar from './WorkspaceSearchBar'
  * Pure host UI: it renders whatever the active WorkspaceProvider returns over the `workspace:*` IPC
  * bridge, so a plugin can change the data without touching this component.
  */
-interface WorkspacePanelProps {
-  /** Open an item in the app's right-side dock. */
-  onOpenScript: (workspaceId: string, script: WorkspaceScript) => void
-  /**
-   * Launch an item. Optional: the host owns this so it can pair the run's pane with the file's editor
-   * when both are open. Without it the panel runs the script itself and the layout is left alone.
-   */
-  onRunScript?: (workspaceId: string, script: WorkspaceScript) => void
-  /**
-   * Report a failed launch. Optional so this panel still renders standalone (tests, embedding), but
-   * without it a refused run — a `.rdp` on a platform with no Remote Desktop client, a script that
-   * moved out of its workspace — is only visible in the console.
-   */
-  showAlert?: (message: string, opts?: { title?: string; tone?: 'info' | 'warning' | 'error' }) => Promise<void> | void
-  /** Connect to a workspace connection (opens a session in the dock). */
-  onConnectWorkspaceConnection?: (conn: Connection) => void
-  /** False in a plugin-free build: no provider, so no connection UI at all. */
-  hasConnectionProvider?: boolean
-  /**
-   * Open the connection form for a new connection in `target.parentPath` (`''` = workspace root).
-   * `folders` is the workspace's directory tree in the shape the form's Parent Folder select wants,
-   * and `rootLabel` is the workspace name it shows instead of a generic "Root".
-   */
-  onAddWorkspaceConnection?: (target: WorkspaceConnectionTarget) => void
-  /** Open the connection form to edit an existing workspace connection. */
-  onEditWorkspaceConnection?: (target: WorkspaceConnectionTarget, conn: Connection) => void
-  /**
-   * Bumped by the host once a workspace connection has been written, so the list reloads.
-   *
-   * The form that saves one lives in MainLayout, not here, so without a signal a new or edited
-   * connection did not appear until the workspace was collapsed and re-expanded.
-   */
-  connectionsRevision?: number
-  /**
-   * Bumped by the host (via `nonce`) to expand this file's folders, scroll it into view, and flash a
-   * highlight — the target of the active editor tab's "Reveal in tree" button. `path` is workspace-
-   * relative (a `WorkspaceScript.id`), matching `WorkspaceTreeNode.path`.
-   */
-  revealRequest?: RevealRequest | null
-}
-
-/** Everything the connection form needs to know about where a connection is being saved. */
-export interface WorkspaceConnectionTarget {
-  workspaceId: string
-  /** POSIX-relative folder path inside the workspace; `''` for the workspace root. */
-  parentPath: string
-  folders: ConnectionFolder[]
-  rootLabel: string
-}
-
 const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   onOpenScript,
   onRunScript,
