@@ -13,22 +13,20 @@ import ConnectionForm from './ConnectionForm'
 import DialogHost from './DialogHost'
 import PluginManager from './PluginManager'
 import { useDialog } from '../hooks/useDialog'
-import MetricsChips from './SessionMetricsChips'
-import { Terminal, Monitor, Unplug, RotateCw, Loader2, X, Maximize2, Minimize2, ExternalLink, Square, Columns2, LayoutGrid, Trash2, ArrowLeft, ArrowRight, XCircle, PanelLeft } from 'lucide-react'
+import SessionFooter from './SessionFooter'
+import { Terminal, RotateCw, X, Square, Columns2, LayoutGrid, Trash2, ArrowLeft, ArrowRight, XCircle, PanelLeft } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { appLogo } from '../assets/appLogo'
-import { AppTheme, LayoutMode } from '../themes'
+import { AppTheme, LayoutMode, TOKYO_NIGHT } from '../themes'
 import { CommandPalette } from './CommandPalette'
 import SessionTabs from './SessionTabs'
 import PaneHeader from './PaneHeader'
 import WaitingPane from './WaitingPane'
-import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
 import { paneIdentity } from '../paneIdentity'
 import { openNewSession } from '../newSession'
-import { loadShellOptions, pickShell, shellLabel, type ShellOption } from '../shellOptions'
+import { loadShellOptions, pickShell, type ShellOption } from '../shellOptions'
 import { paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
-import { detachTitle } from '../detachControl'
 import { useDetachControl } from '../hooks/useDetachControl'
 import { useSplitRatios } from '../hooks/useSplitRatios'
 import { useScriptRuns, editorTabId } from '../hooks/useScriptRuns'
@@ -45,13 +43,25 @@ export type { LocalShell, Connection, Folder, SessionStatus }
 interface MainLayoutProps {
   appSettings: AppSettings
   setAppSettings: (s: AppSettings) => void
-  currentTheme: AppTheme
+  /** App-wide default theme; `themes` lists everything per-terminal overrides resolve through. */
+  currentTheme?: AppTheme
+  themes?: AppTheme[]
   layoutMode: LayoutMode
   setLayoutMode: (m: LayoutMode) => void
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
   updateState: UpdateState | null
   setUpdateState: (s: UpdateState | null) => void
+  appVersion?: string // real installed version — updateState.current is always null (stubbed)
+  zoomFactor?: number
+  onZoomReset?: () => void
+  /** Resolves a tab's effective appearance; onActiveTerminalChange reports the focused tab (App-owned). */
+  resolveAppearance: (id: string, connId: string) => TerminalAppearance
+  onActiveTerminalChange?: (t: { id: string; connId: string } | null) => void
+  onFontSizeChange?: (delta: number, target?: { id: string; connId: string }) => void
+  /** Switch a tab's theme (or the focused/app default) — same shape as `onFontSizeChange`. */
+  onThemeApply?: (themeId: string, target?: { id: string; connId: string }) => void
+  onSettingsReload?: (tabId?: string) => void
 }
 const CtxItem: React.FC<{ label: string; icon: React.ReactNode; color: string; onClick: () => void }> = ({ label, icon, color, onClick }) => (
   <button
@@ -119,12 +129,14 @@ const MAX_PLANES = 8
 const shortcutLabels = {
   zoomIn: 'Zoom In',
   zoomOut: 'Zoom Out',
+  zoomReset: 'Reset Zoom',
   newSession: 'New Session',
   newFolder: 'New Folder',
   openSettings: 'Open Settings',
   toggleThemeMode: 'Toggle Light/Dark',
-  layout1: 'Grid 1 Layout',
-  layout2: 'Grid 2 Layout',
+  layout1: 'Single View Layout',
+  layout2: 'Split 2 Layout',
+  layout3: 'Split 3 Layout',
   layout4: 'Grid 4 Layout',
   layout6: 'Grid 6 Layout',
   layout8: 'Grid 8 Layout',
@@ -135,12 +147,14 @@ const shortcutLabels = {
 const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',
   zoomOut: 'Ctrl+-',
+  zoomReset: 'Ctrl+0',
   newSession: 'Ctrl+N',
   newFolder: 'Ctrl+Shift+N',
   openSettings: 'Ctrl+,',
   toggleThemeMode: 'Ctrl+/',
   layout1: 'Ctrl+1',
   layout2: 'Ctrl+2',
+  layout3: 'Ctrl+3',
   layout4: 'Ctrl+4',
   layout6: 'Ctrl+6',
   layout8: 'Ctrl+8',
@@ -154,16 +168,21 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   appSettings,
   setAppSettings,
   currentTheme,
+  themes,
   layoutMode,
   setLayoutMode,
   settingsOpen,
   setSettingsOpen,
   updateState,
-  setUpdateState,
+  setUpdateState, appVersion, zoomFactor, onZoomReset,
+  resolveAppearance,
+  onActiveTerminalChange,
+  onFontSizeChange,
+  onThemeApply,
+  onSettingsReload,
 }) => {
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false)
-  const [connectionCapabilities, setConnectionCapabilities] =
-    useState<ConnectionProviderCapabilities | null>(null)
+  const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null)
 
   // Fetch initial plugin state since PluginManager is only mounted in the settings modal
   useEffect(() => {
@@ -210,6 +229,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   const [shellMenu, setShellMenu] = useState<{ x: number, y: number } | null>(null)
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null)
   const skipCloseConfirmRef = useRef(false)
+  // Stable reference to closeTabs for the onClosed effect (which runs with [] deps and cannot
+  // capture the ever-changing closeTabs closure directly).
+  const closeTabsRef = useRef<(ids: string[], skip?: boolean) => void>(() => {})
   // Which pane's session-picker dropdown is open, and the pane currently being dragged
   // (for drop-target highlighting). While either is set, RDP windows are hidden via the
   // overlay so DOM chrome (the dropdown / drop targets) is not occluded by the native window.
@@ -290,14 +312,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   // Detach-to-window is real now (src-tauri/src/terminal_window.rs); this used to be a truthiness
   // check against a stub that always failed, which rendered a button that silently did nothing.
   const canDetachWindow = typeof window.omnitermAPI.terminalWindow?.detach === 'function'
+  const { dialogState, showAlert, showConfirm } = useDialog()
 
-  const updateFontSize = useCallback((delta: number) => {
-    const currentSize = appSettings.fontSize || 14
-    const nextSize = Math.max(8, Math.min(48, currentSize + delta))
-    const nextSettings = { ...appSettings, fontSize: nextSize }
-    setAppSettings(nextSettings)
-    window.omnitermAPI.settings.save(nextSettings)
-  }, [appSettings, setAppSettings])
+  // Report the focused terminal up to App so the TitleBar's theme/font controls target it.
+  const activeTab = activeTabs.find(t => t.id === activeTabId) ?? null
+  useEffect(() => {
+    onActiveTerminalChange?.(activeTab ? { id: activeTab.id, connId: activeTab.connId } : null)
+  }, [onActiveTerminalChange, activeTab?.id, activeTab?.connId])
 
   // Pop a SSH/local terminal out into its own OS window (session keeps running in main).
   const popOutTerminal = useCallback((id: string) => {
@@ -305,21 +326,32 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     const conn = connById(tab?.connId)
     if (!tab || !conn || conn.type === 'RDP') return
     void window.omnitermAPI.terminalWindow.detach({ sessionId: id, name: tab.name, connection: conn }).then(ok => {
-      if (!ok) return
+      if (!ok) return void showAlert('Could not open a new window for this terminal.', { title: 'Detach failed', tone: 'error' })
       setResumeMode(prev => ({ ...prev, [id]: true }))
       setPoppedOut(prev => ({ ...prev, [id]: true }))
     })
-  }, [activeTabs, connById])
+  }, [activeTabs, connById, showAlert])
   // Fold a popped-out window back in; main closes it and fires onReattached below.
   const reattachTerminal = useCallback((id: string) => {
     void window.omnitermAPI.terminalWindow.reattach(id)
   }, [])
   // Popped-out window closed and ownership returned here — clear poppedOut so the tab remounts
-  // (resumeMode keeps it attach, re-binding to the still-running session).
+  // (resumeMode keeps it attach). Its look may have changed while detached, so re-read settings.
   useEffect(() => {
     if (!window.omnitermAPI.terminalWindow) return
     return window.omnitermAPI.terminalWindow.onReattached((id) => {
       setPoppedOut(prev => (prev[id] ? { ...prev, [id]: false } : prev))
+      onSettingsReload?.(id)
+    })
+  }, [onSettingsReload])
+  // The detached window closed an idle session outright — the session has already been reaped by
+  // the backend, so trying to re-attach would fail. Close the tab outright (skipConfirm, since
+  // there is nothing left to lose) and clear the poppedOut flag so no placeholder lingers.
+  useEffect(() => {
+    if (!window.omnitermAPI.terminalWindow) return
+    return window.omnitermAPI.terminalWindow.onClosed((id) => {
+      setPoppedOut(prev => (prev[id] ? { ...prev, [id]: false } : prev))
+      closeTabsRef.current([id], true)
     })
   }, [])
   const focusTerminal = (id: string) => {
@@ -347,8 +379,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   }
 
   const [recordingAction, setRecordingAction] = useState<string | null>(null)
-
-  const { dialogState, showAlert, showConfirm } = useDialog()
 
   useEffect(() => {
     if (!recordingAction) return
@@ -949,6 +979,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     }
   }
 
+  closeTabsRef.current = closeTabs
+
   const closeTab = (sessionId: string) => {
     // A dirty editor tab prompts to discard first; a clean one (read or unmodified edit)
     // closes immediately with no confirm.
@@ -1048,8 +1080,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     return () => window.removeEventListener('omniterm:close-tab', handleCloseTabEvent)
   }, [panes, focusedPane, closeTab])
 
-  // One decision, three buttons: the footer (active tab), every pane header, and — over in
-  // DetachedTerminalWindow — the popped-out window's own title bar. See useDetachControl.ts.
+  // One decision, four buttons: the TitleBar (active tab, reported up to App), every pane header,
+  // and — over in DetachedTerminalWindow — the popped-out window's own title bar. See
+  // useDetachControl.ts.
   const detachControl = useDetachControl({
     tabs: activeTabs, connById, isEditorTab: (id) => !!editorTabs[id],
     statuses, rdpDetached: detached, poppedOut, canDetachWindow,
@@ -1057,22 +1090,36 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   })
 
   // ── Pane chrome (split view) ─────────────────────────────────────────────────
-  const renderPaneHeader = (paneIndex: number, conn: Connection | null) => (
-    <PaneHeader
-      paneIndex={paneIndex} conn={conn} focused={paneIndex === focusedPane}
-      sessionId={panes[paneIndex]} tabs={activeTabs} panes={panes} layoutMode={layoutMode}
-      statuses={statuses} connType={(connId) => connById(connId)?.type}
-      pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef}
-      detach={detachControl.stateOf(panes[paneIndex])}
-      onToggleDetach={() => detachControl.toggle(panes[paneIndex])}
-      onFocus={() => setFocusedPane(paneIndex)}
-      onDragStart={() => setDragPane(paneIndex)}
-      onDragEnd={() => setDragPane(null)}
-      onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))}
-      onAssign={(tabId) => assignToPane(paneIndex, tabId)}
-      onClear={() => clearPane(paneIndex)}
-    />
-  )
+  const renderPaneHeader = (paneIndex: number, conn: Connection | null) => {
+    // This pane's own look, independent of focus — same resolution TerminalView uses, keyed by tab.
+    const paneTab = activeTabs.find(t => t.id === panes[paneIndex])
+    const paneLook = paneTab ? resolveAppearance(paneTab.id, paneTab.connId) : null
+    const paneTheme = paneLook ? (themes?.find(t => t.id === (paneLook.themeId ?? appSettings.themeId)) ?? currentTheme ?? TOKYO_NIGHT) : null
+    return (
+      <PaneHeader
+        paneIndex={paneIndex} conn={conn} focused={paneIndex === focusedPane}
+        sessionId={panes[paneIndex]} tabs={activeTabs} panes={panes} layoutMode={layoutMode}
+        statuses={statuses} connType={(connId) => connById(connId)?.type}
+        pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef}
+        detach={detachControl.stateOf(panes[paneIndex])}
+        onToggleDetach={() => detachControl.toggle(panes[paneIndex])}
+        onFocus={() => setFocusedPane(paneIndex)}
+        onDragStart={() => setDragPane(paneIndex)}
+        onDragEnd={() => setDragPane(null)}
+        onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))}
+        onAssign={(tabId) => assignToPane(paneIndex, tabId)}
+        onClear={() => clearPane(paneIndex)}
+        appearance={paneTab && paneTheme ? {
+          themes: themes ?? [paneTheme],
+          themeId: paneTheme.id,
+          fontSize: paneLook!.fontSize ?? appSettings.fontSize ?? 14,
+          darkMode: appSettings.darkMode,
+          onThemeApply: (id) => onThemeApply?.(id, { id: paneTab.id, connId: paneTab.connId }),
+          onFontSizeChange: (delta) => onFontSizeChange?.(delta, { id: paneTab.id, connId: paneTab.connId }),
+        } : undefined}
+      />
+    )
+  }
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -1204,121 +1251,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
         </div>
 
-        {/* Active-session control bar — rendered as a FOOTER (order-last) so the
-            embedded RDP desktop filling the content area can never cover the controls. */}
-        {activeTabId && (() => {
-          const activeConnId = activeTabs.find(t => t.id === activeTabId)?.connId
-          const conn = connById(activeConnId)
-          if (!conn) return null
-          const status = statuses[activeTabId] ?? 'connecting'
-          // Latency source differs by type: RDP has its own TCP probe; SSH carries it in metrics.
-          const resolvedLatency = conn.type === 'RDP'
-            ? (latencies[activeTabId] ?? null)
-            : (metrics[activeTabId]?.latency ?? null)
-          return (
-            <div className="order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
-              {/* Which pane the footer is describing, in that pane's own shape + hue. */}
-              {layoutMode > 1 && (() => {
-                const identity = paneIdentity(focusedPane)
-                const Shape = identity.icon
-                return (
-                  <span className="flex items-center gap-1 flex-shrink-0" style={{ color: identity.color }}
-                    title={`Pane ${focusedPane + 1} · ${identity.label}`}>
-                    <Shape className="w-3.5 h-3.5" fill={identity.color} />
-                    <span className="text-[9px] font-bold">{focusedPane + 1}</span>
-                  </span>
-                )
-              })()}
-              {conn.type === 'RDP'
-                ? <Monitor className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
-                : <Terminal className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
-              }
-              <span className="text-xs font-medium text-[var(--theme-fg)] truncate min-w-0">{conn.name}</span>
-
-              {/* Status pill — sits right after the name, with the shell's activity when we know it */}
-              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0 rounded-full flex-shrink-0 ${STATUS_TEXT[status]} bg-theme-bg`}>
-                {status === 'connecting' ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
-                )}
-                {STATUS_LABEL[status]}
-                {(() => {
-                  const word = activityLabel({
-                    status,
-                    busy: conn.type === 'LOCAL' ? (activity[activeTabId] ?? false) : undefined,
-                  })
-                  return word ? <span className="font-normal text-theme-dim">· {word}</span> : null
-                })()}
-              </span>
-
-              {/* Live metrics: latency (SSH + RDP) + remote CPU/RAM/disk + uptime (SSH). */}
-              <MetricsChips
-                status={status}
-                latency={resolvedLatency}
-                metrics={metrics[activeTabId]}
-                connectedAt={connectedAt[activeTabId]}
-                compact={layoutMode > 1}
-              />
-
-              {layoutMode === 1 && (
-                <span className="text-[10px] text-theme-dim truncate min-w-0 ml-auto shrink">
-                  {conn.type === 'LOCAL'
-                    ? shellLabel(shellOptions, conn.shell)
-                    : `${conn.user}@${conn.host}:${conn.port}`}
-                </span>
-              )}
-
-              <div className={`flex items-center gap-1.5 ${layoutMode > 1 ? 'ml-auto' : ''}`}>
-                <div className="flex items-center gap-1 mr-1 rounded px-1 border border-theme-border/50 bg-black/10">
-                  <button type="button" onClick={() => updateFontSize(-1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Decrease font size">-</button>
-                  <span className="w-4 text-center font-mono text-[9px] text-theme-fg">{appSettings.fontSize || 14}</span>
-                  <button type="button" onClick={() => updateFontSize(1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Increase font size">+</button>
-                </div>
-                {/* Detach / attach for the active tab. The same control also sits on every pane
-                    header, so a background dock does not have to be activated first. */}
-                {(() => {
-                  const action = detachControl.stateOf(activeTabId)
-                  if (!action) return null
-                  // RDP's "detach" is native fullscreen, which reads as maximize, not as pop-out.
-                  const Icon = action === 'attach' ? Minimize2 : conn.type === 'RDP' ? Maximize2 : ExternalLink
-                  const title = conn.type === 'RDP' && action === 'detach'
-                    ? 'Fullscreen (pop out)'
-                    : detachTitle(action, 'footer')
-                  return (
-                    <button
-                      onClick={() => detachControl.toggle(activeTabId)}
-                      className="inline-flex items-center justify-center w-6 h-6 rounded border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent transition-colors"
-                      title={title}
-                      aria-label={title}
-                    >
-                      <Icon className="w-3 h-3" />
-                    </button>
-                  )
-                })()}
-                {status === 'closed' || status === 'error' ? (
-                  <button
-                    onClick={() => reconnectSession(activeTabId)}
-                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] transition-colors"
-                  >
-                    <RotateCw className="w-3 h-3" />
-                    Reconnect
-                  </button>
-                ) : (
-                  conn.type !== 'LOCAL' && (
-                    <button
-                      onClick={() => disconnectSession(activeTabId)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border border-theme-border text-theme-fg hover:border-[#f7768e] hover:text-theme-error transition-colors"
-                    >
-                      <Unplug className="w-3 h-3" />
-                      Disconnect
-                    </button>
-                  )
-                )}
-              </div>
-            </div>
-          )
-        })()}
+        <SessionFooter
+          activeTabId={activeTabId} activeTabs={activeTabs} connById={connById}
+          statuses={statuses} latencies={latencies} metrics={metrics} connectedAt={connectedAt}
+          activity={activity} layoutMode={layoutMode} focusedPane={focusedPane}
+          shellOptions={shellOptions} reconnectSession={reconnectSession}
+          disconnectSession={disconnectSession} zoomFactor={zoomFactor} onZoomReset={onZoomReset}
+        />
 
         {/* Session content. A small top gap keeps the embedded RDP desktop from butting up
             against (and visually obscuring) the Sessions header / tabs above it.
@@ -1397,6 +1336,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                   ? paneRect(paneIdx, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)
                   : { left: 0, top: 0, width: '100%', height: '100%' }
                 const editor = editorTabs[tab.id]
+                const tabLook = resolveAppearance(tab.id, tab.connId)
+                const tabTheme = themes?.find(t => t.id === (tabLook.themeId ?? appSettings.themeId)) ?? currentTheme ?? TOKYO_NIGHT
                 const sessionView = editor ? (
                   <ScriptViewer workspaceId={editor.workspaceId} script={editor.script}
                     onClose={() => closeTab(tab.id)}
@@ -1420,6 +1361,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                 ) : poppedOut[tab.id] ? (
                   <DetachedPlaceholder
                     name={tab.name}
+                    compact={layoutMode > 1}
                     onFocus={() => window.omnitermAPI.terminalWindow.focus(tab.id)}
                     onReattach={() => reattachTerminal(tab.id)}
                   />
@@ -1433,10 +1375,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                     // A run-to-completion pane has nothing left once its shell exits, so it takes its
                     // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
                     onExit={(code) => { if (closesOnExit(conn, code)) closeTabs([tab.id], true) }}
-                    theme={appSettings.darkMode ? currentTheme.terminal.dark : currentTheme.terminal.light}
-                    fontSize={appSettings.fontSize} smartColors={appSettings.smartColors}
-                    shortcuts={appSettings.shortcuts}
-                    fontFamilyMono={appSettings.darkMode ? currentTheme.ui.dark.fontFamilyMono : currentTheme.ui.light.fontFamilyMono}
+                    theme={appSettings.darkMode ? tabTheme.terminal.dark : tabTheme.terminal.light}
+                    fontSize={tabLook.fontSize ?? appSettings.fontSize} smartColors={appSettings.smartColors} shortcuts={appSettings.shortcuts}
+                    fontFamilyMono={appSettings.darkMode ? tabTheme.ui.dark.fontFamilyMono : tabTheme.ui.light.fontFamilyMono}
+                    // Ctrl+wheel in the terminal reports the new size so it persists and stays in sync.
+                    onFontSizeChange={(size) => onFontSizeChange?.(size - (tabLook.fontSize ?? appSettings.fontSize), { id: tab.id, connId: tab.connId })}
                   />
                 )
                 return (
@@ -1530,7 +1473,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                     <h2 className="text-sm font-bold text-[var(--theme-fg)] tracking-tight">OmniTerm</h2>
                   </div>
                   <span className="text-[10px] text-[#414868] bg-theme-bg px-2 py-0.5 rounded-full border border-theme-border">
-                    v{updateState?.current ?? '…'}
+                    v{appVersion ?? '…'}
                   </span>
                 </div>
 

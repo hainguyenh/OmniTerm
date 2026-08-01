@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { Minus, Square, X, Minimize2, Loader2 } from 'lucide-react'
 import TerminalView from './TerminalView'
+import AppearanceMenu from './AppearanceMenu'
 import type { Connection, SessionStatus } from './MainLayout'
-import type { AppTheme } from '../themes'
+import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
 
 interface DetachedTerminalWindowProps {
-  currentTheme: AppTheme
-  darkMode: boolean
-  fontSize: number
+  appSettings: AppSettings
+  setAppSettings: (s: AppSettings) => void
+  themes: AppTheme[]
   smartColors: boolean
 }
 
@@ -34,21 +35,75 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
  * The session id is not a prop: this window learns which session it owns from `bootstrap()`, which
  * resolves it from the caller's window label. That way a webview cannot ask about a window that is
  * not its own, and there is no session id sitting in a URL.
+ *
+ * This window keeps its OWN appearance (font size + theme): it resolves the connection's persisted
+ * overrides once it learns which session it owns, and its theme picker / font controls write those
+ * overrides back — so a terminal popped out keeps its look, and the main window picks the change up
+ * when it folds back in.
  */
-const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ currentTheme, darkMode, fontSize, smartColors }) => {
+const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSettings, setAppSettings, themes, smartColors }) => {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
+  // In-window appearance overrides, seeded from the connection's persisted defaults once the
+  // session is known. Written through `appSettings.perConn` so they survive a pop-out.
+  const [override, setOverride] = useState<TerminalAppearance | null>(null)
+
+  // Inherit the main window's zoom on open, and stay in sync if it changes while this is popped out
+  // (settings.onChanged already re-reads `appSettings` for the caller — see App.tsx).
+  useEffect(() => {
+    window.omnitermAPI.app.setZoomFactor?.(appSettings.zoomFactor ?? 1)
+  }, [appSettings.zoomFactor])
 
   useEffect(() => {
     window.omnitermAPI.terminalWindow.bootstrap().then((m) => {
-      if (m?.sessionId) setMeta(m as Meta)
-      else setMissing(true)
+      if (m?.sessionId) {
+        setMeta(m as Meta)
+        const connId = (m as Meta).connection?.id
+        setOverride(connId ? appSettings.perConn?.[connId] ?? {} : {})
+      } else {
+        setMissing(true)
+      }
     }).catch(() => setMissing(true))
   }, [])
 
-  const terminalTheme = darkMode ? currentTheme.terminal.dark : currentTheme.terminal.light
-  const fontFamilyMono = darkMode ? currentTheme.ui.dark.fontFamilyMono : currentTheme.ui.light.fontFamilyMono
+  // Effective look of THIS window: in-window overrides over the connection's persisted defaults,
+  // falling back to the app-wide settings. The chrome keeps the app-wide theme via CSS variables —
+  // same as split panes in the main window.
+  const connId = meta?.connection?.id
+  const effective: TerminalAppearance = {
+    ...(connId ? (appSettings.perConn?.[connId] ?? {}) : {}),
+    ...(override ?? {}),
+  }
+  const themeId = effective.themeId ?? appSettings.themeId
+  const fontSize = effective.fontSize ?? appSettings.fontSize ?? 14
+  const theme = themes.find(t => t.id === themeId) ?? themes[0]
+  const terminalTheme: TerminalTheme | undefined = theme
+    ? (appSettings.darkMode ? theme.terminal.dark : theme.terminal.light)
+    : undefined
+  const fontFamilyMono = theme
+    ? (appSettings.darkMode ? theme.ui.dark.fontFamilyMono : theme.ui.light.fontFamilyMono)
+    : undefined
+
+  const saveAppearance = (patch: TerminalAppearance) => {
+    const nextOverride = { ...effective, ...patch }
+    setOverride(nextOverride)
+    if (!connId) return
+    const nextSettings = {
+      ...appSettings,
+      perConn: { ...appSettings.perConn, [connId]: nextOverride },
+    }
+    setAppSettings(nextSettings)
+    window.omnitermAPI.settings.save(nextSettings)
+  }
+
+  const changeFontSize = (delta: number) => {
+    saveAppearance({ fontSize: Math.max(8, Math.min(48, fontSize + delta)) })
+  }
+
+  const applyTheme = (nextThemeId: string) => {
+    saveAppearance({ themeId: nextThemeId })
+  }
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]">
@@ -65,7 +120,19 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ current
           {status === 'connecting' ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
           {STATUS_LABEL[status]}
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Per-window appearance: this window's own theme + font size, saved to the connection. */}
+          <AppearanceMenu
+            themes={themes}
+            themeId={themeId}
+            fontSize={fontSize}
+            darkMode={appSettings.darkMode}
+            scopeLabel="this terminal"
+            buttonTitle="Appearance — theme & font size (this terminal)"
+            onThemeApply={applyTheme}
+            onFontSizeChange={changeFontSize}
+          />
+
           <button
             type="button"
             disabled={!meta}
@@ -105,6 +172,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ current
             fontSize={fontSize}
             smartColors={smartColors}
             fontFamilyMono={fontFamilyMono}
+            shortcuts={appSettings.shortcuts}
+            onFontSizeChange={(size) => saveAppearance({ fontSize: size })}
           />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-theme-dim">

@@ -29,12 +29,14 @@ const defaultSettings: AppSettings = {
   shortcuts: {
     zoomIn: "Ctrl+=",
     zoomOut: "Ctrl+-",
+    zoomReset: "Ctrl+0",
     newSession: "Ctrl+N",
     newFolder: "Ctrl+Shift+N",
     openSettings: "Ctrl+,",
     toggleThemeMode: "Ctrl+/",
     layout1: "Ctrl+1",
     layout2: "Ctrl+2",
+    layout3: "Ctrl+3",
     layout4: "Ctrl+4",
     layout6: "Ctrl+6",
     layout8: "Ctrl+8",
@@ -91,7 +93,8 @@ const defaults: Api = {
     add: async () => null,
     remove: async () => {},
     scanScripts: async () => [],
-    scanEntries: async () => [],
+    scanFolders: async () => [],
+    scanFolderEntries: async () => ({ entries: [], total: 0, hasMore: false }),
     run: async () => true,
     readScript: async () => '',
     writeScript: async () => {},
@@ -141,6 +144,7 @@ const defaults: Api = {
     focus: () => {},
     release: () => {},
     onReattached: noopSub,
+    onClosed: noopSub,
   },
   clipboard: {
     writeText: async () => {},
@@ -177,6 +181,7 @@ const defaults: Api = {
   settings: {
     get: async () => defaultSettings,
     save: async () => {},
+    onChanged: noopSub,
     systemExcludedViewExts: async () => [],
   },
   updates: {

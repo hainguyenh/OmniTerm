@@ -9,7 +9,7 @@ use crate::openshell::OpenShellRequest;
 use crate::rdp_launch;
 use crate::safepath;
 use crate::workspace_launch::{default_shell, script_run_request};
-use crate::workspace_scan::{WorkspaceEntry, WorkspaceScript};
+use crate::workspace_scan::{WorkspaceEntry, WorkspaceEntryPage, WorkspaceScript};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -126,9 +126,10 @@ pub async fn scan_scripts(
     ))
 }
 
-/// Everything in a workspace — folders included — for the Workspace panel's tree.
+/// Every folder in a workspace — the tree's *skeleton*. Not paged: folders are a small fraction of a
+/// workspace's entries, and the panel shows them all before any of their files.
 #[tauri::command]
-pub async fn scan_workspace_entries(
+pub async fn scan_workspace_folders(
     app: AppHandle,
     workspace_id: String,
 ) -> Result<Vec<WorkspaceEntry>, String> {
@@ -137,10 +138,36 @@ pub async fn scan_workspace_entries(
     if !path.is_dir() {
         return Err("Workspace path is invalid".to_string());
     }
-    Ok(crate::workspace_scan::scan_entries_excluding(
+    Ok(crate::workspace_scan::scan_folders(path))
+}
+
+/// One page of the files directly under one folder of a workspace, for the panel's folder-level
+/// "Show more". `folder` is the folder's POSIX-relative path (`''` = the workspace root); directory
+/// children are not included — the folder skeleton (`scan_workspace_folders`) owns them. Paging (not
+/// a hard scan cap) is what keeps a huge folder from shipping a giant payload, and it never hides
+/// files the "All files" filter promised to show.
+#[tauri::command]
+pub async fn scan_workspace_entries(
+    app: AppHandle,
+    workspace_id: String,
+    folder: String,
+    offset: Option<usize>,
+    limit: Option<usize>,
+) -> Result<WorkspaceEntryPage, String> {
+    let workspace = find_workspace(&app, &workspace_id)?;
+    let path = Path::new(&workspace.path);
+    if !path.is_dir() {
+        return Err("Workspace path is invalid".to_string());
+    }
+    crate::workspace_scan::scan_folder_files_excluding(
         path,
+        &folder,
         &excluded_viewable_exts(&app),
-    ))
+        offset.unwrap_or(0),
+        limit
+            .unwrap_or(crate::workspace_scan::DEFAULT_PAGE_SIZE)
+            .min(crate::workspace_scan::MAX_PAGE_SIZE),
+    )
 }
 
 /// Run a script, or open a plain terminal in the workspace (or a scanned subfolder).

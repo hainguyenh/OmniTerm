@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { WorkspaceEntry } from '@omniterm/contract'
 import { buildWorkspaceTree, type WorkspaceTreeNode } from '../utils/scriptTree'
@@ -11,6 +11,8 @@ import { fileKindMeta } from '../utils/fileKind'
  * It renders the real directory tree rather than a flat list because that is the shape the user
  * already has in their head, and because a folder tick has to be able to speak for everything under
  * it — picking 30 files one at a time is not a filter anyone uses twice.
+ *
+ * Collapse state is lifted to the parent so it can offer expand/collapse-all and level-based controls.
  */
 interface WorkspaceFilterTreeProps {
   /** The whole scan for this workspace. */
@@ -18,6 +20,10 @@ interface WorkspaceFilterTreeProps {
   /** Currently ticked entry ids. */
   paths: string[]
   onChange: (paths: string[]) => void
+  /** Folder paths that are currently collapsed (lifted state from parent). */
+  collapsed: Set<string>
+  /** Toggle collapse for a single folder path. */
+  onToggleCollapse: (path: string) => void
 }
 
 /** Every file id at or beneath `node`, so a folder's checkbox can speak for its whole subtree. */
@@ -26,9 +32,7 @@ function filesUnder(node: WorkspaceTreeNode): string[] {
   return node.children.flatMap(filesUnder)
 }
 
-const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, paths, onChange }) => {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-
+const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, paths, onChange, collapsed, onToggleCollapse }) => {
   // Passed without connections: those are never filtered, so they have no place in the tree the user
   // ticks files out of. No workspace-root row either — the panel already names the workspace.
   const tree = useMemo(() => buildWorkspaceTree(entries), [entries])
@@ -43,13 +47,6 @@ const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, path
     for (const id of ids) anyOff ? next.add(id) : next.delete(id)
     onChange([...next])
   }
-
-  const toggleCollapse = (path: string) => setCollapsed(prev => {
-    const next = new Set(prev)
-    if (next.has(path)) next.delete(path)
-    else next.add(path)
-    return next
-  })
 
   const renderNode = (node: WorkspaceTreeNode, depth: number): React.ReactNode => {
     if (node.connection) return null
@@ -81,7 +78,7 @@ const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, path
           <button
             type="button"
             title={isCollapsed ? `Expand ${node.name}` : `Collapse ${node.name}`}
-            onClick={() => toggleCollapse(node.path)}
+            onClick={() => onToggleCollapse(node.path)}
             className="flex-shrink-0 text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
           >
             {isCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -108,3 +105,4 @@ const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, path
 }
 
 export default WorkspaceFilterTree
+

@@ -122,6 +122,14 @@ describe('applyFilter', () => {
     )
     expect(ids(filtered)).toEqual(['docs', 'docs/notes.txt', 'infra'])
   })
+
+  // `keepDirs` must propagate to ancestors like `populated` already does — otherwise a kept leaf
+  // folder loses its parent row and gets re-synthesised as a placeholder by the tree builder.
+  it('keeps the ancestors of a `keepDirs` member that holds no matching file itself', () => {
+    const deep = [dir('a'), dir('a/b'), dir('a/b/c'), file('a/b/c/notes.txt', 'txt')]
+    const filtered = applyFilter(deep, DEFAULT_TREE_FILTER, new Set(['a/b/c']))
+    expect(ids(filtered)).toEqual(['a', 'a/b', 'a/b/c'])
+  })
 })
 
 describe('dirsHoldingConnections', () => {

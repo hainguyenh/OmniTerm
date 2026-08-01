@@ -271,10 +271,18 @@ describe('settings and plugins', () => {
     expect(lastInvoke()).toEqual(['open_external', { url: 'file:///etc/passwd' }])
   })
 
-  it('round-trips the zoom factor it was given', () => {
+  it('round-trips the zoom factor it was given, through the native webview zoom command', () => {
     expect(api.app.getZoomFactor()).toBe(1)
     api.app.setZoomFactor(1.25)
     expect(api.app.getZoomFactor()).toBe(1.25)
+    expect(lastInvoke()).toEqual(['set_webview_zoom', { factor: 1.25 }])
+  })
+
+  it('falls back to CSS zoom if the native call is refused', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('zoom disabled by policy'))
+    api.app.setZoomFactor(0.8)
+    await Promise.resolve().then(() => Promise.resolve())
+    expect(document.body.style.zoom).toBe('0.8')
   })
 
   it('uses the clipboard plugin directly', async () => {

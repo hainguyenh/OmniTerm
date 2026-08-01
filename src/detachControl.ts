@@ -3,9 +3,9 @@ import type { Connection, SessionStatus } from '@omniterm/contract'
 /**
  * Which way a detach/attach control points.
  *
- * The same button appears in three places — the session footer, every pane (dock) header, and the
- * title bar of a popped-out window — so the decision of what it does, and whether it should be there
- * at all, lives here rather than being re-derived at each call site.
+ * The same button appears in several places — every pane (dock) header and the title bar of a
+ * popped-out window — so the decision of what it does, and whether it should be there at all,
+ * lives here rather than being re-derived at each call site.
  */
 export type DetachAction = 'detach' | 'attach'
 

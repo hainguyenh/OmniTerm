@@ -17,12 +17,14 @@ const baseSettings: AppSettings = {
   shortcuts: {
     zoomIn: "Ctrl+=",
     zoomOut: "Ctrl+-",
+    zoomReset: "Ctrl+0",
     newSession: "Ctrl+N",
     newFolder: "Ctrl+Shift+N",
     openSettings: "Ctrl+,",
     toggleThemeMode: "Ctrl+/",
     layout1: "Ctrl+1",
     layout2: "Ctrl+2",
+    layout3: "Ctrl+3",
     layout4: "Ctrl+4",
     layout6: "Ctrl+6",
     layout8: "Ctrl+8",
@@ -58,6 +60,7 @@ function renderLayout(props = {}, overrides = {}) {
     setLayoutMode: vi.fn(),
     setSettingsOpen: vi.fn(),
     setUpdateState: vi.fn(),
+    resolveAppearance: vi.fn(() => ({})),
   };
   return {
     handlers,
@@ -88,11 +91,17 @@ describe("MainLayout", () => {
     renderLayout({}, {
       workspace: {
         list: async () => [WS],
-        scanEntries: async () => [
+        scanFolders: async () => [
           { id: "infra", name: "infra", path: "C:/proj/infra", isDir: true, kind: "dir" },
-          // A script inside it, so the folder survives the default "no empty folders" filter.
-          { id: "infra/up.sh", name: "up.sh", path: "C:/proj/infra/up.sh", isDir: false, kind: "sh", editable: true },
         ],
+        scanFolderEntries: async () => ({
+          entries: [
+            // A script inside it, so the folder survives the default "no empty folders" filter.
+            { id: "infra/up.sh", name: "up.sh", path: "C:/proj/infra/up.sh", isDir: false, kind: "sh", editable: true },
+          ],
+          total: 1,
+          hasMore: false,
+        }),
         loadConnections: async () => [],
       },
     });

@@ -197,8 +197,9 @@ export function filterTreeByQuery(
  * Build a directory tree from a flat script list, without a directory scan.
  *
  * Kept for callers that only have `WorkspaceScript` records (a plugin WorkspaceProvider that
- * implements `scanScripts` but not `scanEntries`): a script whose `id` is `a/b/run.sh` produces
- * folder nodes `a` and `a/b`, so only folders that contain a script can appear.
+ * implements `scanScripts` but not the folder scan `scanFolders`/`scanFolderEntries`): a script
+ * whose `id` is `a/b/run.sh` produces folder nodes `a` and `a/b`, so only folders that contain a
+ * script can appear.
  */
 export function buildScriptTree(scripts: WorkspaceScript[]): WorkspaceTreeNode[] {
   return buildWorkspaceTree(
@@ -212,4 +213,18 @@ export function buildScriptTree(scripts: WorkspaceScript[]): WorkspaceTreeNode[]
       editable: script.editable ?? false,
     })),
   )
+}
+
+/** Collect every directory path in the tree, optionally limited to a maximum depth. */
+export function collectFilterDirPaths(nodes: WorkspaceTreeNode[], maxDepth?: number): string[] {
+  const paths: string[] = []
+  const walk = (node: WorkspaceTreeNode, depth: number) => {
+    if (!node.isDir) return
+    paths.push(node.path)
+    if (maxDepth === undefined || depth < maxDepth) {
+      node.children.forEach(c => walk(c, depth + 1))
+    }
+  }
+  nodes.forEach(n => walk(n, 0))
+  return paths
 }

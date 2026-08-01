@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Minus, Square, Copy, X, Sun, Moon, Palette, Check, Settings } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Minus, Square, Copy, X, Sun, Moon, Settings } from 'lucide-react'
 import { appLogo } from '../assets/appLogo'
-import { diag } from '../diag'
+import AppearanceMenu from './AppearanceMenu'
 
 interface TitleBarProps {
   appSettings: AppSettings
@@ -10,6 +10,16 @@ interface TitleBarProps {
   onSettingsOpen: () => void
   setThemeRemixOpen: (open: boolean) => void
   updateState: UpdateState | null
+  appVersion?: string
+  /** App chrome zoom factor (1 = 100%), shown as a click-to-reset percentage. */
+  zoomFactor?: number
+  onZoomReset?: () => void
+  /** Shift the app-wide font size when there's no "apply to all" (e.g. the detached window). */
+  onFontSizeChange?: (delta: number) => void
+  /** Switch every open terminal's theme. */
+  onThemeApply?: (themeId: string) => void
+  /** Apply an absolute font size to every open terminal, clearing their per-terminal overrides. */
+  onApplyToAll?: (size: number) => void
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -19,18 +29,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onSettingsOpen,
   setThemeRemixOpen,
   updateState,
+  appVersion,
+  zoomFactor,
+  onZoomReset,
+  onFontSizeChange,
+  onThemeApply,
+  onApplyToAll,
 }) => {
   const [isMaximized, setIsMaximized] = useState(false)
-  const [themePickerOpen, setThemePickerOpen] = useState(false)
-  const [version, setVersion] = useState<string>('')
-  const themePickerRef = useRef<HTMLDivElement>(null)
-  const themePickerBtnRef = useRef<HTMLButtonElement>(null)
-
-  useEffect(() => {
-    window.omnitermAPI.updates.getVersion().then(setVersion).catch((err) => {
-      diag.error('Failed to get app version:', err)
-    })
-  }, [])
 
   useEffect(() => {
     window.omnitermAPI.windowControl.isMaximized().then(setIsMaximized)
@@ -39,28 +45,25 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     })
   }, [])
 
-  useEffect(() => {
-    if (!themePickerOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setThemePickerOpen(false) }
-    const onClick = (e: MouseEvent) => {
-      if (
-        themePickerRef.current && !themePickerRef.current.contains(e.target as Node) &&
-        themePickerBtnRef.current && !themePickerBtnRef.current.contains(e.target as Node)
-      ) setThemePickerOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    window.addEventListener('mousedown', onClick)
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onClick) }
-  }, [themePickerOpen])
-
   const handleMinimize = () => window.omnitermAPI.windowControl.minimize()
   const handleToggleMaximize = () => window.omnitermAPI.windowControl.toggleMaximize()
   const handleClose = () => window.omnitermAPI.windowControl.close()
 
   const isLightMode = !appSettings.darkMode
 
-  const applyTheme = (themeId: string) => {
-    const next = { ...appSettings, themeId }
+  // The TitleBar's appearance control is app-wide — it always shows and changes the default that
+  // every terminal without its own override uses (a pane's own picker in its header is what
+  // targets a single terminal). Ignore the focused terminal's effective values here so what the
+  // control displays always matches what "all terminals" will move to.
+  const themeId = appSettings.themeId
+  const fontSize = appSettings.fontSize ?? 14
+
+  const applyTheme = (nextThemeId: string) => {
+    if (onThemeApply) {
+      onThemeApply(nextThemeId)
+      return
+    }
+    const next = { ...appSettings, themeId: nextThemeId }
     setAppSettings(next)
     window.omnitermAPI.settings.save(next)
   }
@@ -71,9 +74,19 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     await window.omnitermAPI.settings.save(next)
   }
 
+  // Always applies to every open terminal (via `onApplyToAll`), not just the focused one — the
+  // per-terminal stepper lives on each pane's own header instead. Falls back to the app-wide
+  // default directly when the host (e.g. the detached window) has no "apply to all" concept.
   const updateFontSize = (delta: number) => {
-    const currentSize = appSettings.fontSize || 14
-    const nextSize = Math.max(8, Math.min(48, currentSize + delta))
+    const nextSize = Math.max(8, Math.min(48, fontSize + delta))
+    if (onApplyToAll) {
+      onApplyToAll(nextSize)
+      return
+    }
+    if (onFontSizeChange) {
+      onFontSizeChange(delta)
+      return
+    }
     const nextSettings = { ...appSettings, fontSize: nextSize }
     setAppSettings(nextSettings)
     window.omnitermAPI.settings.save(nextSettings)
@@ -94,8 +107,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       <div className="flex items-center gap-2 pl-3 select-none pointer-events-none">
         <img src={appLogo} alt="Logo" className="w-4 h-4 object-cover" />
         <span className="text-[11px] font-bold tracking-wide uppercase opacity-90">OmniTerm</span>
-        {version && (
-          <span className="text-[9px] opacity-50 font-medium">- v{version}</span>
+        {appVersion && (
+          <span className="text-[9px] opacity-50 font-medium">- v{appVersion}</span>
         )}
       </div>
 
@@ -117,77 +130,30 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           )}
         </button>
 
-        {/* Theme picker */}
-        <div className="relative flex-shrink-0">
+        {/* Zoom level — click to reset to 100% (same as Ctrl+0). */}
+        {typeof zoomFactor === 'number' && (
           <button
-            ref={themePickerBtnRef}
             type="button"
-            title="Appearance — theme & font size"
-            onClick={() => setThemePickerOpen(v => !v)}
-            className={`inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 ${
-              themePickerOpen
-                ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                : 'border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100'
-            }`}
+            onClick={onZoomReset}
+            title="Reset zoom to 100%"
+            className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
           >
-            <Palette className="w-3.5 h-3.5" />
+            {Math.round(zoomFactor * 100)}%
           </button>
-          {themePickerOpen && (
-            <div
-              ref={themePickerRef}
-              className="absolute right-0 top-full mt-1.5 z-[100] border rounded-xl shadow-2xl py-1 min-w-[200px]"
-              style={{
-                backgroundColor: 'var(--theme-popup-bg)',
-                borderColor: 'var(--theme-border)',
-                color: 'var(--theme-fg)',
-              }}
-            >
-              <div className="px-3 py-1.5 text-[10px] uppercase font-bold tracking-widest text-theme-dim">Theme</div>
-              <div className="max-h-60 overflow-y-auto no-scrollbar">
-                {themes.map(t => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => { applyTheme(t.id); setThemePickerOpen(false) }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-xs transition-colors hover:bg-white/5 ${
-                      appSettings.themeId === t.id ? 'text-[var(--theme-accent)] font-bold' : 'text-inherit opacity-85 hover:opacity-100'
-                    }`}
-                  >
-                    <span
-                      className="flex items-center justify-center gap-0.5 w-9 h-5 rounded border flex-shrink-0"
-                      style={{ background: appSettings.darkMode ? t.terminal.dark.background : t.terminal.light.background, borderColor: 'var(--theme-border)' }}
-                    >
-                      {[t.terminal.dark.red, t.terminal.dark.green, t.terminal.dark.blue].map((c: string, i: number) => (
-                        <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: c }} />
-                      ))}
-                    </span>
-                    <span className="flex-1 text-left truncate">{t.name}</span>
-                    {appSettings.themeId === t.id && <Check className="w-3 h-3 flex-shrink-0 text-[var(--theme-accent)]" />}
-                  </button>
-                ))}
-              </div>
+        )}
 
-              <div className="my-1 border-t border-theme-border" />
-              <div className="px-3 py-1.5 flex items-center justify-between">
-                <span className="text-[11px] text-theme-fg">Terminal Font Size</span>
-                <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
-                  <button type="button" onClick={() => updateFontSize(-1)} className="w-5 h-5 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Decrease font size">-</button>
-                  <span className="w-5 text-center font-mono text-[10px] text-theme-fg">{appSettings.fontSize || 14}</span>
-                  <button type="button" onClick={() => updateFontSize(1)} className="w-5 h-5 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Increase font size">+</button>
-                </div>
-              </div>
-
-              <div className="my-1 border-t border-theme-border" />
-              <button
-                type="button"
-                onClick={() => { setThemePickerOpen(false); setThemeRemixOpen(true) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-white/5 text-inherit"
-              >
-                <Palette className="w-3.5 h-3.5 text-[var(--theme-accent)]" />Theme Remix…
-              </button>
-            </div>
-          )}
-        </div>
+        {/* Theme + font size — applies to every open terminal. A pane's own header has the control
+            that targets just that one. */}
+        <AppearanceMenu
+          themes={themes}
+          themeId={themeId}
+          fontSize={fontSize}
+          darkMode={appSettings.darkMode}
+          scopeLabel="all terminals"
+          onThemeApply={applyTheme}
+          onFontSizeChange={updateFontSize}
+          onRemix={() => setThemeRemixOpen(true)}
+        />
 
         {/* Mode Toggle */}
         <button

@@ -31,6 +31,12 @@ pub const LABEL_PREFIX: &str = "term-";
 /// Event the main window listens on to reclaim a folded-back pane.
 const REATTACHED_EVENT: &str = "terminal-window-reattached";
 
+/// Event the main window listens on when a detached window closed an *idle* session outright —
+/// there is no fold-back, but the tab still needs to drop its stale `poppedOut` flag and pick up
+/// the session's real (now-gone) status instead of showing dead "Focus window" / "Attach back"
+/// buttons for a window that no longer exists.
+const CLOSED_EVENT: &str = "terminal-window-closed";
+
 const MAIN_WINDOW: &str = "main";
 
 pub struct DetachEntry {
@@ -276,6 +282,12 @@ fn on_window_destroyed<R: Runtime>(app: &AppHandle<R>, session_id: &str) {
         if let Some(pty) = app.try_state::<PtyManager>() {
             log::info!("[terminal-window] closing idle detached session {session_id}");
             pty::kill_session(&pty, session_id);
+        }
+        // The session's own status sink was parked (detached) and just got killed with it, so
+        // nothing else tells the main window this happened — without this, its tab is stuck
+        // showing the popped-out placeholder forever.
+        if let Some(main) = app.get_webview_window(MAIN_WINDOW) {
+            let _ = main.emit(CLOSED_EVENT, session_id);
         }
     }
 }

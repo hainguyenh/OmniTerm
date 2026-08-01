@@ -16,12 +16,14 @@ const baseSettings: AppSettings = {
   shortcuts: {
     zoomIn: "Ctrl+=",
     zoomOut: "Ctrl+-",
+    zoomReset: "Ctrl+0",
     newSession: "Ctrl+N",
     newFolder: "Ctrl+Shift+N",
     openSettings: "Ctrl+,",
     toggleThemeMode: "Ctrl+/",
     layout1: "Ctrl+1",
     layout2: "Ctrl+2",
+    layout3: "Ctrl+3",
     layout4: "Ctrl+4",
     layout6: "Ctrl+6",
     layout8: "Ctrl+8",
@@ -59,6 +61,7 @@ function renderLayout(props: any = {}, overrides: any = {}) {
     setLayoutMode: vi.fn(),
     setSettingsOpen: vi.fn(),
     setUpdateState: vi.fn(),
+    resolveAppearance: vi.fn(() => ({})),
   };
 
   return {

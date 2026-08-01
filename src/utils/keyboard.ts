@@ -15,7 +15,10 @@ export const matchShortcut = (event: KeyboardEvent | React.KeyboardEvent, shortc
 
   const eventKey = event.key.toLowerCase()
   if (keyPart === '+' || keyPart === '=') {
-    return eventKey === '+' || eventKey === '='
+    return eventKey === '+' || eventKey === '=' || event.code === 'NumpadAdd'
+  }
+  if (keyPart === '-') {
+    return eventKey === '-' || event.code === 'NumpadSubtract'
   }
   return eventKey === keyPart
 }

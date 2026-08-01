@@ -82,8 +82,9 @@ function createTauriAPI(): any {
     diag.warn('[omnitermAPI] Failed to get OS platform', e)
   }
 
-  // webFrame.setZoomFactor has no Tauri equivalent; CSS zoom on <body> is the closest match. Track
-  // the factor rather than re-parsing the style, which reports '' until it has been set once.
+  // Real WebView zoom (`set_webview_zoom` → `WebviewWindow::set_zoom`) reflows the layout and stays
+  // anchored, unlike a CSS `zoom` on <body>. Track the factor locally rather than re-reading it, and
+  // fall back to the CSS property only if the native call is refused (e.g. zoom disabled by policy).
   let zoomFactor = 1
 
   return {
@@ -211,6 +212,9 @@ function createTauriAPI(): any {
       },
       onReattached: (cb: (sessionId: string) => void) =>
         onEvent<string>('terminal-window-reattached', cb),
+      // The detached window closed an idle session outright (no fold-back) — the session is gone.
+      onClosed: (cb: (sessionId: string) => void) =>
+        onEvent<string>('terminal-window-closed', cb),
     },
 
     clipboard: {
@@ -241,7 +245,9 @@ function createTauriAPI(): any {
       openExternal: (url: string) => invoke<boolean>('open_external', { url }),
       setZoomFactor: (factor: number) => {
         zoomFactor = factor
-        document.body.style.zoom = String(factor)
+        invoke('set_webview_zoom', { factor }).catch(() => {
+          document.body.style.zoom = String(factor)
+        })
       },
       getZoomFactor: () => zoomFactor,
     },
@@ -267,6 +273,9 @@ function createTauriAPI(): any {
       get: () => invoke<any>('get_settings'),
       // A partial object is a partial write — the backend merges it into what is stored.
       save: (settings: any) => invoke('save_settings', { settings }),
+      // The backend broadcasts this after every successful save from ANY window, so a popped-out
+      // terminal and the main window keep their appearance state in sync while one is detached.
+      onChanged: (cb: (settings: any) => void) => onEvent<any>('settings:changed', cb),
       // The fixed half of the viewer's deny-list (safepath::VIEW_DENY_EXTS) — shown locked in
       // GeneralSettings.tsx alongside the user's own `excludedViewableExts`, so the setting can never
       // claim to unhide something the app itself refuses to open.
@@ -281,9 +290,14 @@ function createTauriAPI(): any {
       },
       remove: (id: string) => invoke('remove_workspace', { id }),
       scanScripts: (workspaceId: string) => invoke('scan_scripts', { workspaceId }),
-      // Everything in the folder — directories included — so the panel can render the real tree and
-      // filter it locally. `scanScripts` can only ever describe the runnables.
-      scanEntries: (workspaceId: string) => invoke('scan_workspace_entries', { workspaceId }),
+      // The whole folder skeleton — every directory, no files — so the panel can show all folders
+      // up front. Files are fetched per folder by `scanFolderEntries`, which keeps each payload
+      // bounded: `hasMore`/`total` drive that folder's "Show more" row.
+      scanFolders: (workspaceId: string) => invoke('scan_workspace_folders', { workspaceId }),
+      // One page of the files directly under `folder` ('' = the workspace root). Directory children
+      // are not included — the folder skeleton owns them.
+      scanFolderEntries: (workspaceId: string, folder = '', offset = 0, limit = 2000) =>
+        invoke('scan_workspace_entries', { workspaceId, folder, offset, limit }),
       // The backend builds the shell + command for the script's kind, checks the path is inside the
       // workspace, and registers the ad-hoc pane. Previously this file assembled the launch itself
       // and emitted `shell-open` directly, bypassing both.

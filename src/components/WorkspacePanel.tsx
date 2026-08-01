@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  FolderGit2, Folder, ChevronRight, ChevronDown, Terminal, Play, Trash2, Plus, Cable,
+  FolderGit2, Folder, ChevronRight, ChevronDown, Terminal, Play, Trash2, Plus, Cable, Loader2,
 } from 'lucide-react'
 import type { Connection, Folder as ConnectionFolder, Workspace, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
 import {
@@ -12,7 +12,9 @@ import {
 import { fileKindMeta } from '../utils/fileKind'
 import { diag } from '../diag'
 import { useTreeReveal, type RevealRequest } from '../hooks/useTreeReveal'
+import { useWorkspaceScan } from '../hooks/useWorkspaceScan'
 import WorkspaceFilterMenu from './WorkspaceFilterMenu'
+import WorkspaceShowMore from './WorkspaceShowMore'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceSearchBar from './WorkspaceSearchBar'
@@ -26,10 +28,13 @@ import WorkspaceSearchBar from './WorkspaceSearchBar'
  * as a leaf of the tree right next to the scripts it goes with, and the `Cable` button on any folder
  * row creates one there.
  *
- * The tree shows every folder plus, by default, only the runnable files; the filter menu opens that up
- * to every file, a chosen set of types, or a chosen set of files. Clicking a file opens it in the
- * right-side dock (via
- * `onOpenScript`); running is only ever triggered by the explicit run icon.
+ * The tree shows every folder up front (folders are collapsed until clicked) plus, by default, the
+ * runnable files; the filter menu opens that up to every file, a chosen set of types, or a chosen
+ * set of files. A folder's files load when it is expanded, and a folder with more than a page of
+ * files grows via its own "Show more" row — shown only by the two whole-tree filters ("All files",
+ * "Selected types"), because the scripts and selected-file views are loaded completely instead.
+ * Clicking a file opens it in the right-side dock (via `onOpenScript`); running is only ever
+ * triggered by the explicit run icon.
  *
  * Pure host UI: it renders whatever the active WorkspaceProvider returns over the `workspace:*` IPC
  * bridge, so a plugin can change the data without touching this component.
@@ -97,11 +102,17 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
 }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  // Everything the scan found: directories and files alike, filtered client-side.
-  const [entries, setEntries] = useState<Record<string, WorkspaceEntry[]>>({})
-  const [scanning, setScanning] = useState<string | null>(null)
+  // The panel's tree data: the folder skeleton (every directory, shown up front) plus each folder's
+  // files, loaded when the folder expands and grown by that folder's own "Show more" row — see
+  // useWorkspaceScan. `entriesOf` flattens it back to the scan's entry shape for the tree builder.
+  const {
+    folders, files, pageInfo, scanning, loadingMore, loadingAll, loadingFolders,
+    scan: scanEntries, loadFolder, loadMore, loadAll, entriesOf,
+  } = useWorkspaceScan()
   const [flatView, setFlatView] = useState(false)
-  const [collapsedDirs, setCollapsedDirs] = useState<Set<string>>(new Set())
+  // Folders are collapsed until clicked: the tree shows every folder up front, and a folder's files
+  // (and any "Show more" row they need) arrive when it is expanded.
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   // Workspace connections (loaded from .omniterm/connections.json).
   const [wsConnections, setWsConnections] = useState<Record<string, Connection[]>>({})
   const [query, setQuery] = useState('')
@@ -151,38 +162,46 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     void reloadConnections(expandedId)
   }, [connectionsRevision, expandedId, reloadConnections])
 
-  const scan = useCallback(async (id: string) => {
-    setScanning(id)
-    try {
-      const [found, conns] = await Promise.all([
-        window.omnitermAPI.workspace.scanEntries(id),
-        window.omnitermAPI.workspace.loadConnections(id),
-      ])
-      setEntries((prev) => ({ ...prev, [id]: found }))
-      setWsConnections((prev) => ({ ...prev, [id]: conns }))
-    } finally {
-      setScanning(null)
-    }
-  }, [])
+  /** First load of a workspace — no-op once its skeleton is in. */
+  const scanOnce = useCallback(async (id: string) => {
+    if (folders[id] !== undefined) return
+    await scanEntries(id)
+    await reloadConnections(id)
+  }, [folders, scanEntries, reloadConnections])
+
+  /** Forced re-scan — the toolbar's rescan button, and a fresh workspace. */
+  const rescan = useCallback(async (id: string) => {
+    await scanEntries(id)
+    await reloadConnections(id)
+  }, [scanEntries, reloadConnections])
 
   const toggle = useCallback((id: string) => {
     // The popover hangs off a row inside the workspace being collapsed, so it must not outlive it.
     setFilterMenu(null)
     setExpandedId((prev) => {
       const next = prev === id ? null : id
-      if (next && !entries[next]) void scan(next)
+      if (next && folders[next] === undefined) void scanOnce(next)
       return next
     })
-  }, [entries, scan])
+  }, [folders, scanOnce])
+
+  // Scripts and selected-file views promise the whole workspace, and the flat view lists every
+  // file: none of them may hide anything behind a folder's "Show more" row, so drain every folder
+  // completely. The two paged views ("All files", "Selected types") leave folders to page.
+  useEffect(() => {
+    if (expandedId === null || folders[expandedId] === undefined) return
+    const mode = filterOf(expandedId).mode
+    if (mode === 'scripts' || mode === 'selected' || flatView) void loadAll(expandedId)
+  }, [expandedId, folders, filterOf, flatView, loadAll])
 
   const addFolder = useCallback(async () => {
     const added = await window.omnitermAPI.workspace.add()
     if (added) {
       await refresh()
       setExpandedId(added.id)
-      void scan(added.id)
+      void scanOnce(added.id)
     }
-  }, [refresh, scan])
+  }, [refresh, scanOnce])
 
   const removeFolder = useCallback(async (id: string) => {
     await window.omnitermAPI.workspace.remove(id)
@@ -222,13 +241,19 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   }, [reportFailure])
 
   const toggleDir = useCallback((key: string) => {
-    setCollapsedDirs((prev) => {
+    const wasExpanded = expandedDirs.has(key)
+    setExpandedDirs((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next
     })
-  }, [])
+    // Expanding a folder is the moment its files are asked for — the tree only loads what is open.
+    if (!wasExpanded) {
+      const slash = key.indexOf(':')
+      void loadFolder(key.slice(0, slash), key.slice(slash + 1))
+    }
+  }, [expandedDirs, loadFolder])
 
   /** Collect the collapse keys of every folder node in a tree (depth-first). */
   const collectDirKeys = useCallback((wsId: string, nodes: WorkspaceTreeNode[]): string[] => {
@@ -250,9 +275,21 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     return (wsId: string) => {
       const cached = cache.get(wsId)
       if (cached) return cached
-      const all = entries[wsId] ?? []
+      const all = entriesOf(wsId)
       const conns = wsConnections[wsId] ?? []
-      const kept = applyFilter(all, filterOf(wsId), dirsHoldingConnections(conns.map((c) => c.parentId)))
+      // An unloaded folder's contents are unknown, so it stays visible — except while draining
+      // (scripts/selected/flat), where that would flash the whole skeleton before it shrinks. An
+      // explicitly expanded folder is always kept, so it never vanishes once its page lands.
+      const loaded = new Set(Object.keys(files[wsId] ?? {}))
+      const keep = dirsHoldingConnections(conns.map((c) => c.parentId))
+      const mode = filterOf(wsId).mode
+      if (mode === 'all' || mode === 'types') {
+        for (const e of all) if (e.isDir && !loaded.has(e.id)) keep.add(e.id)
+      }
+      for (const key of expandedDirs) {
+        if (key.startsWith(`${wsId}:`)) keep.add(key.slice(wsId.length + 1))
+      }
+      const kept = applyFilter(all, filterOf(wsId), keep)
       const view = {
         tree: filterTreeByQuery(buildWorkspaceTree(kept, conns), query),
         // Every directory the scan found — not just the visible ones, so the form can still target a
@@ -269,7 +306,9 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       cache.set(wsId, view)
       return view
     }
-  }, [entries, wsConnections, filterOf, query])
+    // `entriesOf` is identity-stable by design (it reads a ref), so the per-workspace cache must be
+    // invalidated by the raw state the tree is built from instead.
+  }, [entriesOf, folders, files, wsConnections, filterOf, query, expandedDirs])
 
   /**
    * Are all of this workspace's folders collapsed? `null` when the question does not apply — a flat
@@ -278,24 +317,32 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   const collapseStateOf = useCallback((wsId: string): boolean | null => {
     if (flatView) return null
     const keys = collectDirKeys(wsId, viewOf(wsId).tree)
-    return keys.length === 0 ? null : keys.every((k) => collapsedDirs.has(k))
-  }, [flatView, collectDirKeys, viewOf, collapsedDirs])
+    return keys.length === 0 ? null : keys.every((k) => !expandedDirs.has(k))
+  }, [flatView, collectDirKeys, viewOf, expandedDirs])
 
   const toggleCollapseAll = useCallback((wsId: string) => {
     const keys = collectDirKeys(wsId, viewOf(wsId).tree)
-    const allCollapsed = keys.every((k) => collapsedDirs.has(k))
-    setCollapsedDirs((prev) => {
+    const allCollapsed = keys.every((k) => !expandedDirs.has(k))
+    setExpandedDirs((prev) => {
       const next = new Set(prev)
-      for (const k of keys) allCollapsed ? next.delete(k) : next.add(k)
+      for (const k of keys) allCollapsed ? next.add(k) : next.delete(k)
       return next
     })
-  }, [collectDirKeys, viewOf, collapsedDirs])
+    // Expanding every folder at once must ask for every folder's files, or the rows would be empty.
+    if (allCollapsed) {
+      for (const k of keys) {
+        const slash = k.indexOf(':')
+        void loadFolder(k.slice(0, slash), k.slice(slash + 1))
+      }
+    }
+  }, [collectDirKeys, viewOf, expandedDirs, loadFolder])
 
   // "Reveal in tree" (the active editor tab's Locate icon, see SessionTabs): expand the target's
   // ancestor folders, widen the filter if it would otherwise hide the file, scroll it into view, and
   // flash a highlight.
   const { isHighlighted, registerRow } = useTreeReveal({
-    revealRequest, entries, scan, filterOf, setExpandedId, setFlatView, setCollapsedDirs, setFilters,
+    revealRequest, entriesOf, scan: scanOnce, loadFolder, filterOf, setExpandedId, setFlatView,
+    setExpandedDirs, setFilters,
   })
 
   /** Where a connection created from `parentPath` in `ws` should be saved. */
@@ -376,7 +423,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     )
     if (!node.isDir) return fileRow(ws.id, node, node.name, depth)
     const key = `${ws.id}:${node.path}`
-    const collapsed = collapsedDirs.has(key)
+    const expanded = expandedDirs.has(key)
+    const Chevron = expanded && loadingFolders.has(key) ? Loader2 : expanded ? ChevronDown : ChevronRight
     return (
       <div key={key}>
         <div
@@ -384,9 +432,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           style={{ paddingLeft: 8 + depth * 12 }}
           onClick={() => toggleDir(key)}
         >
-          {collapsed
-            ? <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />
-            : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />}
+          <Chevron className={`w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)] ${expanded && loadingFolders.has(key) ? 'animate-spin' : ''}`} />
           <Folder className="w-4 h-4 flex-shrink-0 text-[var(--theme-dim)]" />
           <span className="flex-1 truncate text-xs">{node.name}</span>
           <button
@@ -399,16 +445,43 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           </button>
           {addConnectionButton(ws, node.path)}
         </div>
-        {!collapsed && node.children.map((c) => renderNode(ws, c, depth + 1, node.path))}
+        {expanded && <>
+          {node.children.map((c) => renderNode(ws, c, depth + 1, node.path))}
+          {/* A folder with more files than the first page owns its own "Show more" row. */}
+          {showMoreRow(ws.id, node.path)}
+        </>}
       </div>
+    )
+  }
+
+  /**
+   * One folder's "Show more" row — the tree's only paging, and it belongs to the folder, not the
+   * workspace. Shown for the filters that browse the whole tree ("All files", "Selected types")
+   * only: scripts and file selections are fully loaded instead (see the `loadAll` effect), so a
+   * paging row there would claim something was missing when nothing is.
+   */
+  const showMoreRow = (wsId: string, folder: string) => {
+    const info = pageInfo[wsId]?.[folder]
+    if (!info?.hasMore) return null
+    const mode = filterOf(wsId).mode
+    if (mode !== 'all' && mode !== 'types') return null
+    return (
+      <WorkspaceShowMore
+        wsId={wsId}
+        total={info.total}
+        loaded={files[wsId]?.[folder]?.length ?? 0}
+        loading={loadingMore?.wsId === wsId && loadingMore?.folder === folder}
+        onLoadMore={() => loadMore(wsId, folder)}
+      />
     )
   }
 
   const renderTree = (ws: Workspace) => {
     const { tree } = viewOf(ws.id)
     if (tree.length === 0) {
-      if (scanning === ws.id) return null
-      const empty = (entries[ws.id] ?? []).length === 0 && (wsConnections[ws.id] ?? []).length === 0
+      // Draining (loadingAll) can transiently empty the tree between batches — not "nothing matches".
+      if (scanning === ws.id || loadingAll === ws.id) return null
+      const empty = entriesOf(ws.id).length === 0 && (wsConnections[ws.id] ?? []).length === 0
       return (
         <div className="px-2 py-1 text-xs text-[var(--theme-dim)] italic" style={{ paddingLeft: 20 }}>
           {query.trim()
@@ -422,14 +495,15 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     if (flatView) {
       // Flattened: every file the filter admitted in one list, labelled by its relative path. Folders
       // and connections stay out of it — a flat list of connections has no folder context left to show.
+      // No "Show more" row: the flat view drains every folder via `loadAll`, so it is complete.
       const needle = query.trim().toLowerCase()
       const files = viewOf(ws.id).files
         .filter((e) => !needle || e.id.toLowerCase().includes(needle))
         .sort((a, b) => a.id.localeCompare(b.id))
       // `entryNode`, not an inline object: an added node field must not reach only the tree view.
-      return files.map((e) => fileRow(ws.id, entryNode(e), e.id, 1))
+      return <>{files.map((e) => fileRow(ws.id, entryNode(e), e.id, 1))}</>
     }
-    return tree.map((node) => renderNode(ws, node, 1, ''))
+    return <>{tree.map((node) => renderNode(ws, node, 1, ''))}{showMoreRow(ws.id, '')}</>
   }
 
   return (
@@ -507,8 +581,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                     onToggleCollapseAll={() => toggleCollapseAll(ws.id)}
                     flatView={flatView}
                     onToggleFlatView={() => setFlatView((v) => !v)}
-                    scanning={scanning === ws.id}
-                    onRescan={() => void scan(ws.id)}
+                    scanning={scanning === ws.id || loadingAll === ws.id}
+                    onRescan={() => void rescan(ws.id)}
                   />
                   {renderTree(ws)}
                 </div>
@@ -524,7 +598,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         <WorkspaceFilterMenu
           filter={filterOf(filterMenu.workspaceId)}
           onChange={(next) => setFilters((prev) => ({ ...prev, [filterMenu.workspaceId]: next }))}
-          entries={entries[filterMenu.workspaceId] ?? []}
+          entries={entriesOf(filterMenu.workspaceId)}
           anchor={filterMenu.anchor}
           onClose={() => setFilterMenu(null)}
         />

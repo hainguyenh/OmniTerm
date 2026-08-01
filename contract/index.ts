@@ -117,6 +117,19 @@ export interface WorkspaceEntry {
   viewable?: boolean
 }
 
+/**
+ * One page of a folder's files, plus the totals that let that folder's "Show more" row count down.
+ * The host lists one folder at a time (directory listings only), so `total` and `hasMore` are exact —
+ * paging bounds the payload, it never hides files.
+ */
+export interface WorkspaceEntryPage {
+  entries: WorkspaceEntry[]
+  /** Every entry the workspace holds — directories included — not just this page. */
+  total: number
+  /** Whether more entries exist past this page. */
+  hasMore: boolean
+}
+
 /** An action a provider offers for a script (defaults to a single "Run"); lets plugins expand
  *  what "run" means (e.g. run with args, dry-run, run in a specific shell). */
 export interface WorkspaceRunAction {
