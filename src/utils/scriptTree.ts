@@ -30,9 +30,6 @@ export interface WorkspaceTreeNode {
   children: WorkspaceTreeNode[]
 }
 
-/** Back-compat alias: the flatten view and ScriptViewer still speak in "script tree" terms. */
-export type ScriptTreeNode = WorkspaceTreeNode
-
 /** Folders first, then connections, then files; each group in case-insensitive name order. */
 function rank(node: WorkspaceTreeNode): number {
   if (node.isDir) return 0
