@@ -26,6 +26,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality-gate:
+    name: Run full lint, test, LOC, and coverage gate
+    uses: ./.github/workflows/test-gate.yml
+    with:
+      git_ref: ${{ inputs.git_ref || github.ref }}
+
   test-gate:
     name: Run application test suite
     runs-on: windows-latest
@@ -199,7 +205,7 @@ jobs:
 
   build-desktop-packages:
     name: Build Tauri release package
-    needs: [test-gate, rust-test-gate, resolve-release-version]
+    needs: [quality-gate, test-gate, rust-test-gate, resolve-release-version]
     runs-on: windows-latest
 
     steps:

@@ -3,9 +3,15 @@ name: Test Gate
 on:
   push:
     branches: [master]
-    tags: [v*.*.*]
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      git_ref:
+        description: Git ref to validate when called by another workflow
+        required: false
+        type: string
+        default: ""
 
 concurrency:
   group: test-gate-${{ github.workflow }}-${{ github.ref }}
@@ -17,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -26,10 +34,12 @@ jobs:
       - run: pnpm tsc -b
 
   js-lint:
-    name: JS — Lint (ESLint)
+    name: JS — Lint (ESLint + LOC)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -43,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -56,19 +68,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm add -w -D @vitest/coverage-v8
-      - run: pnpm vitest run --coverage
+      - name: Generate JavaScript and TypeScript coverage
+        run: pnpm coverage:js
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-js
-          path: coverage/
+          path: coverage-js/
+          if-no-files-found: error
           retention-days: 7
 
   rust-lint:
@@ -76,6 +91,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -95,6 +112,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -110,11 +129,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
-      - uses: dtolnay/rust-toolchain@stable
+      # LLVM branch instrumentation is nightly-only. Lint and tests remain on stable above.
+      - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
@@ -122,12 +144,52 @@ jobs:
           workspaces: src-tauri
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - run: cargo llvm-cov --manifest-path src-tauri/Cargo.toml --lcov --output-path lcov.info
+      - name: Generate Rust four-condition coverage
+        run: |
+          mkdir -p coverage-rust
+          cargo llvm-cov --manifest-path src-tauri/Cargo.toml --branch --json --summary-only --output-path coverage-rust/coverage-summary.json
+          cargo llvm-cov report --manifest-path src-tauri/Cargo.toml --branch --lcov --output-path coverage-rust/lcov.info
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-rust
-          path: lcov.info
+          path: coverage-rust/
+          if-no-files-found: error
+          retention-days: 7
+
+  coverage-gate:
+    name: Coverage — 85% all conditions
+    needs: [js-coverage, rust-coverage]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-js
+          path: artifacts/coverage-js
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-rust
+          path: artifacts/coverage-rust
+      - name: Summarize and enforce language plus combined coverage
+        run: |
+          node scripts/check-coverage.mjs \
+            --js artifacts/coverage-js/coverage-summary.json \
+            --rust artifacts/coverage-rust/coverage-summary.json \
+            --threshold 85 \
+            --output coverage-final.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-final
+          path: coverage-final.json
+          if-no-files-found: error
           retention-days: 7
 
   security-check:
@@ -135,38 +197,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.git_ref || github.ref }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm test:security
-
-  release:
-    name: Release — Build + Draft Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm build:frontend
-      - run: pnpm build:tauri:nsis
-      - name: Upload installer
-        run: |
-          $tag = '${{ github.ref_name }}'
-          $nsis = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter '*.msi' -Recurse | Select-Object -First 1
-          $installer = Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter '*setup.exe' -Recurse | Select-Object -First 1
-          gh release create $tag --draft --title "OmniTerm $tag" --generate-notes (Get-Item $nsis.FullName), (Get-Item $installer.FullName)
-        env:
-          GH_TOKEN: ${{ github.token }}
