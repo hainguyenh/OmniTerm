@@ -373,7 +373,6 @@ function App() {
           setSettingsOpen={setSettingsOpen}
           updateState={updateState}
           setUpdateState={setUpdateState}
-          appVersion={appVersion}
           zoomFactor={appSettings.zoomFactor ?? 1}
           onZoomReset={resetZoom}
           resolveAppearance={appearanceOf}

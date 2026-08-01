@@ -15,40 +15,53 @@ export interface MainLayoutProps {
   setSettingsOpen: (open: boolean) => void
   updateState: UpdateState | null
   setUpdateState: (state: UpdateState | null) => void
+  themes?: AppTheme[]
+  zoomFactor?: number
+  onZoomReset?: () => void
+  resolveAppearance?: (id: string, connId: string) => TerminalAppearance
+  onActiveTerminalChange?: (terminal: { id: string; connId: string } | null) => void
+  onFontSizeChange?: (delta: number, terminal?: { id: string; connId: string }) => void
+  onThemeApply?: (themeId: string, terminal?: { id: string; connId: string }) => void
+  onSettingsReload?: (tabId?: string) => void
 }
 
 export const MAX_PLANES = 8
 export const shortcutLabels = {
   zoomIn: 'Zoom In',
   zoomOut: 'Zoom Out',
+  zoomReset: 'Reset Zoom',
   newSession: 'New Session',
   newFolder: 'New Folder',
   openSettings: 'Open Settings',
   toggleThemeMode: 'Toggle Light/Dark',
   layout1: 'Grid 1 Layout',
   layout2: 'Grid 2 Layout',
+  layout3: 'Grid 3 Layout',
   layout4: 'Grid 4 Layout',
   layout6: 'Grid 6 Layout',
   layout8: 'Grid 8 Layout',
   toggleSidebar: 'Toggle Sidebar',
-  commandPalette: 'Command Palette'
-}
+  commandPalette: 'Command Palette',
+  closeTab: 'Close Tab'
+} satisfies Record<keyof ShortcutBindings, string>
 export const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',
   zoomOut: 'Ctrl+-',
+  zoomReset: 'Ctrl+0',
   newSession: 'Ctrl+N',
   newFolder: 'Ctrl+Shift+N',
   openSettings: 'Ctrl+,',
   toggleThemeMode: 'Ctrl+/',
   layout1: 'Ctrl+1',
   layout2: 'Ctrl+2',
+  layout3: 'Ctrl+3',
   layout4: 'Ctrl+4',
   layout6: 'Ctrl+6',
   layout8: 'Ctrl+8',
   toggleSidebar: 'Ctrl+B',
   commandPalette: 'Ctrl+P',
   closeTab: 'Ctrl+W'
-}
+} satisfies ShortcutBindings
 
 export const CtxItem: React.FC<{ label: string; icon: React.ReactNode; color: string; onClick: () => void }> =
   ({ label, icon, color, onClick }) => (

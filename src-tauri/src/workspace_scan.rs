@@ -21,9 +21,16 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[path = "workspace_scan_paging.rs"]
+mod paging;
+pub use paging::{scan_entries_page_excluding, scan_folder_files_excluding};
+
 #[cfg(test)]
 #[path = "workspace_scan_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_scan_contract_tests.rs"]
+mod contract_tests;
 
 /// Directories never descended into — noise or huge, and never where user scripts live.
 /// Applies to both views: these are *skipped*, not paged, because nobody has ever wanted to browse
@@ -230,44 +237,6 @@ fn collect_folders(root: &Path, dir: &Path, found: &mut Vec<WorkspaceEntry>) {
     }
 }
 
-/// One page of the files directly under one folder — what the panel's folder-level "Show more" row
-/// asks for.
-///
-/// `folder` is the folder's POSIX-relative path inside the workspace (`""` = the workspace root),
-/// validated by `safepath::safe_subdir` so a hostile value cannot escape the workspace. Only the
-/// folder's own files are listed — subdirectories are owned by the skeleton (`scan_folders`), and
-/// the listing never descends, so an ignored directory below is simply never visited. The files are
-/// sorted by `id`, so the same `offset` names the same files on every call.
-pub fn scan_folder_files_excluding(
-    root: &Path,
-    folder: &str,
-    excluded: &[String],
-    offset: usize,
-    limit: usize,
-) -> Result<WorkspaceEntryPage, String> {
-    let root = scan_root(root);
-    let dir = safepath::safe_subdir(&root.to_string_lossy(), folder)?;
-    let mut files: Vec<WorkspaceEntry> = Vec::new();
-    if let Ok(read) = fs::read_dir(&dir) {
-        for entry in read.flatten() {
-            let Ok(file_type) = entry.file_type() else {
-                continue;
-            };
-            if file_type.is_file() {
-                files.push(file_entry(&root, &entry.path(), excluded));
-            }
-        }
-    }
-    files.sort_by(|a, b| a.id.cmp(&b.id));
-    let total = files.len();
-    let end = offset.saturating_add(limit).min(total);
-    Ok(WorkspaceEntryPage {
-        entries: files.get(offset..end).unwrap_or_default().to_vec(),
-        total,
-        has_more: end < total,
-    })
-}
-
 /// The entry for one file: kind from `classify`, extension as kind for everything else, and the
 /// viewer's `viewable` flag decided from the extension — shared by the full walk and the per-folder
 /// listing so the two views can never disagree about a file.
@@ -299,25 +268,6 @@ fn file_entry(root: &Path, path: &Path, excluded: &[String]) -> WorkspaceEntry {
         shell,
         editable,
         viewable: Some(safepath::is_viewable_kind_excluding(&ext, excluded)),
-    }
-}
-
-/// One page of `scan_entries_excluding`, kept for completeness (and its tests) now that the panel
-/// pages per folder instead: the walk is deterministic (each directory is read in sorted order), so
-/// the same `offset` names the same files on every call.
-pub fn scan_entries_page_excluding(
-    root: &Path,
-    excluded: &[String],
-    offset: usize,
-    limit: usize,
-) -> WorkspaceEntryPage {
-    let all = scan_entries_excluding(root, excluded);
-    let total = all.len();
-    let end = offset.saturating_add(limit).min(total);
-    WorkspaceEntryPage {
-        entries: all.get(offset..end).unwrap_or_default().to_vec(),
-        total,
-        has_more: end < total,
     }
 }
 

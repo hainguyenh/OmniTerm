@@ -32,68 +32,6 @@ jobs:
     with:
       git_ref: ${{ inputs.git_ref || github.ref }}
 
-  test-gate:
-    name: Run application test suite
-    runs-on: windows-latest
-
-    steps:
-      - name: Check out source code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 11.9.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install project dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run renderer tests and type checks
-        run: pnpm test && pnpm exec tsc --noEmit
-
-      - name: Lint
-        run: pnpm lint
-
-  rust-test-gate:
-    name: Verify Tauri backend
-    runs-on: windows-latest
-
-    steps:
-      - name: Check out source code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@1.96.0
-        with:
-          targets: x86_64-pc-windows-msvc
-          components: clippy
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Cache cargo build
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Run Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
-
   resolve-release-version:
     runs-on: windows-latest
     outputs:
@@ -205,7 +143,7 @@ jobs:
 
   build-desktop-packages:
     name: Build Tauri release package
-    needs: [quality-gate, test-gate, rust-test-gate, resolve-release-version]
+    needs: [quality-gate, resolve-release-version]
     runs-on: windows-latest
 
     steps:

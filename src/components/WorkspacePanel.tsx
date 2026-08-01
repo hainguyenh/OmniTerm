@@ -1,14 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  FolderGit2, Folder, ChevronRight, ChevronDown, Terminal, Play, Trash2, Plus, Cable, Loader2,
+  Folder, ChevronRight, ChevronDown, Terminal, Play, Plus, Cable, Loader2,
 } from 'lucide-react'
-import type { Connection, Folder as ConnectionFolder, Workspace, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
-import {
-  buildWorkspaceTree, entryNode, filterTreeByQuery, type WorkspaceTreeNode,
-} from '../utils/scriptTree'
-import {
-  DEFAULT_TREE_FILTER, applyFilter, dirsHoldingConnections, type TreeFilter,
-} from '../utils/workspaceFilter'
+import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
+import { entryNode, type WorkspaceTreeNode } from '../utils/scriptTree'
+import { DEFAULT_TREE_FILTER, type TreeFilter } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import { diag } from '../diag'
 import { useTreeReveal } from '../hooks/useTreeReveal'
@@ -18,6 +14,8 @@ import WorkspaceShowMore from './WorkspaceShowMore'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceSearchBar from './WorkspaceSearchBar'
+import WorkspaceRootRow from './WorkspaceRootRow'
+import { buildWorkspacePanelView, collectDirKeys } from './workspacePanelView'
 import type { WorkspaceConnectionTarget, WorkspacePanelProps } from './workspacePanelTypes'
 
 export type { WorkspaceConnectionTarget } from './workspacePanelTypes'
@@ -208,59 +206,24 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     }
   }, [expandedDirs, loadFolder])
 
-  /** Collect the collapse keys of every folder node in a tree (depth-first). */
-  const collectDirKeys = useCallback((wsId: string, nodes: WorkspaceTreeNode[]): string[] => {
-    const keys: string[] = []
-    const walk = (n: WorkspaceTreeNode) => {
-      if (!n.isDir) return
-      keys.push(`${wsId}:${n.path}`)
-      n.children.forEach(walk)
-    }
-    nodes.forEach(walk)
-    return keys
-  }, [])
-
   /** The filtered, searched tree for one workspace, plus the folder list the form needs. */
   const viewOf = useMemo(() => {
-    const cache = new Map<string, {
-      tree: WorkspaceTreeNode[]; folders: ConnectionFolder[]; files: WorkspaceEntry[]
-    }>()
+    const cache = new Map<string, ReturnType<typeof buildWorkspacePanelView>>()
     return (wsId: string) => {
       const cached = cache.get(wsId)
       if (cached) return cached
-      const all = entriesOf(wsId)
-      const conns = wsConnections[wsId] ?? []
-      // An unloaded folder's contents are unknown, so it stays visible — except while draining
-      // (scripts/selected/flat), where that would flash the whole skeleton before it shrinks. An
-      // explicitly expanded folder is always kept, so it never vanishes once its page lands.
-      const loaded = new Set(Object.keys(files[wsId] ?? {}))
-      const keep = dirsHoldingConnections(conns.map((c) => c.parentId))
-      const mode = filterOf(wsId).mode
-      if (mode === 'all' || mode === 'types') {
-        for (const e of all) if (e.isDir && !loaded.has(e.id)) keep.add(e.id)
-      }
-      for (const key of expandedDirs) {
-        if (key.startsWith(`${wsId}:`)) keep.add(key.slice(wsId.length + 1))
-      }
-      const kept = applyFilter(all, filterOf(wsId), keep)
-      const view = {
-        tree: filterTreeByQuery(buildWorkspaceTree(kept, conns), query),
-        // Every directory the scan found — not just the visible ones, so the form can still target a
-        // folder the current filter hides.
-        folders: all.filter((e) => e.isDir).map((e) => ({
-          id: e.id,
-          name: e.name,
-          parentId: e.id.includes('/') ? e.id.slice(0, e.id.lastIndexOf('/')) : undefined,
-        })),
-        // The files the filter admitted, before the search box narrows things further: what the flat
-        // view lists, and what the option row's label counts.
-        files: kept.filter((e) => !e.isDir),
-      }
+      const view = buildWorkspacePanelView({
+        workspaceId: wsId,
+        entries: entriesOf(wsId),
+        connections: wsConnections[wsId] ?? [],
+        filesByFolder: files[wsId] ?? {},
+        filter: filterOf(wsId),
+        query,
+        expandedDirs,
+      })
       cache.set(wsId, view)
       return view
     }
-    // `entriesOf` is identity-stable by design (it reads a ref), so the per-workspace cache must be
-    // invalidated by the raw state the tree is built from instead.
   }, [entriesOf, folders, files, wsConnections, filterOf, query, expandedDirs])
 
   /**
@@ -360,7 +323,6 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     )
   }
 
-  /** Recursively render a tree node (folder → children; file/connection → row). */
   const renderNode = (ws: Workspace, node: WorkspaceTreeNode, depth: number, parentPath: string): React.ReactNode => {
     if (node.connection) return (
       <WorkspaceConnectionRow
@@ -400,7 +362,6 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         </div>
         {expanded && <>
           {node.children.map((c) => renderNode(ws, c, depth + 1, node.path))}
-          {/* A folder with more files than the first page owns its own "Show more" row. */}
           {showMoreRow(ws.id, node.path)}
         </>}
       </div>
@@ -461,7 +422,6 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
 
   return (
     <div className="flex flex-col h-full text-[var(--theme-fg)] select-none">
-      {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--theme-border)]">
         <WorkspaceSearchBar query={query} onChange={setQuery} />
         <button
@@ -475,7 +435,6 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         </button>
       </div>
 
-      {/* ── Body ───────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto py-1">
         {workspaces.length === 0 && (
           <button
@@ -492,37 +451,15 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           const expanded = expandedId === ws.id
           return (
             <div key={ws.id} className="flex flex-col">
-              {/* Workspace row */}
-              <div
-                className="group flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
-                onClick={() => toggle(ws.id)}
-                title={ws.path}
-              >
-                {expanded
-                  ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />
-                  : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />}
-                <FolderGit2 className="w-4 h-4 flex-shrink-0 text-[var(--theme-accent)]" />
-                <span className="flex-1 truncate text-sm">{ws.name}</span>
-                <button
-                  type="button"
-                  title="Open terminal here"
-                  onClick={(e) => { e.stopPropagation(); openTerminal(ws.id) }}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition"
-                >
-                  <Terminal className="w-3.5 h-3.5" />
-                </button>
-                {addConnectionButton(ws, '')}
-                <button
-                  type="button"
-                  title="Remove from workspaces"
-                  onClick={(e) => { e.stopPropagation(); void removeFolder(ws.id) }}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-red-400 transition"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+              <WorkspaceRootRow
+                workspace={ws}
+                expanded={expanded}
+                connectionAction={addConnectionButton(ws, '')}
+                onToggle={() => toggle(ws.id)}
+                onOpenTerminal={() => openTerminal(ws.id)}
+                onRemove={() => { void removeFolder(ws.id) }}
+              />
 
-              {/* Contents: folders, connections, and whatever files the filter admits */}
               {expanded && (
                 <div className="ml-3 mr-1 mb-1">
                   <WorkspaceTreeToolbar
@@ -545,8 +482,6 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         })}
       </div>
 
-      {/* One popover for both triggers, mounted outside the scrolling body: it is wider than the
-          sidebar, which clips its overflow. */}
       {filterMenu && (
         <WorkspaceFilterMenu
           filter={filterOf(filterMenu.workspaceId)}

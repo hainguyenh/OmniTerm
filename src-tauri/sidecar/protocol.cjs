@@ -4,28 +4,27 @@
 const readline = require('readline')
 
 class JsonRpcProtocol {
-  constructor() {
+  constructor({ input = process.stdin, output = process.stdout, onParseError = null } = {}) {
     this.requestId = 1
     this.pendingRequests = new Map()
     this.requestHandler = null
     this.notificationHandler = null
+    this.output = output
+    this.onParseError = onParseError
 
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: false,
-    })
+    const rl = readline.createInterface({ input, output, terminal: false })
+    rl.on('line', (line) => this._handleLine(line))
+  }
 
-    rl.on('line', (line) => {
-      const trimmed = line.trim()
-      if (!trimmed) return
-      try {
-        const msg = JSON.parse(trimmed)
-        this._handleMessage(msg)
-      } catch (err) {
-        console.error('[protocol] Failed to parse line as JSON-RPC:', err, line)
-      }
-    })
+  _handleLine(line) {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    try {
+      void this._handleMessage(JSON.parse(trimmed))
+    } catch (error) {
+      if (this.onParseError) this.onParseError(error, line)
+      else console.error('[protocol] Failed to parse line as JSON-RPC:', error, line)
+    }
   }
 
   onNotification(handler) {
@@ -59,7 +58,7 @@ class JsonRpcProtocol {
   }
 
   _write(msg) {
-    process.stdout.write(JSON.stringify(msg) + '\n')
+    this.output.write(`${JSON.stringify(msg)}\n`)
   }
 
   async _handleMessage(msg) {
@@ -95,10 +94,8 @@ class JsonRpcProtocol {
     }
 
     // Incoming Notification handling
-    if (msg.method && msg.id === undefined) {
-      if (this.notificationHandler) {
-        this.notificationHandler(msg.method, msg.params)
-      }
+    if (msg.method && msg.id === undefined && this.notificationHandler) {
+      this.notificationHandler(msg.method, msg.params)
     }
   }
 }

@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadShellOptions, pickShell, shellLabel, staticShellOptions } from '../shellOptions'
 
 function setBridge(platform: string, list: () => Promise<Array<{ id: string; label: string }>>): void {
-  ;(window as any).omnitermAPI = { app: { platform }, shells: { list } }
+  const testWindow = window as unknown as { omnitermAPI: unknown }
+  testWindow.omnitermAPI = { app: { platform }, shells: { list } }
 }
 
 describe('shellOptions', () => {

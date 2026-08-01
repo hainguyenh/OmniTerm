@@ -70,12 +70,12 @@ describe("release configuration", () => {
     expect(workflow).toContain("name: OmniTerm-Tauri-Windows-nsis");
   });
 
-  it("gates the build on both the renderer and the Rust test suites", () => {
-    expect(workflow).toMatch(/test-gate:[\s\S]*run:\s+pnpm test/);
-    expect(workflow).toMatch(/rust-test-gate:[\s\S]*run:\s+cargo test/);
+  it("gates the build on the reusable renderer, Rust, lint, and coverage workflow", () => {
+    expect(workflow).toMatch(/quality-gate:[\s\S]*uses:\s+\.\/\.github\/workflows\/test-gate\.yml/);
     expect(workflow).toMatch(
-      /build-desktop-packages:[\s\S]*needs:\s*\[test-gate, rust-test-gate, resolve-release-version\]/,
+      /build-desktop-packages:[\s\S]*needs:\s*\[quality-gate, resolve-release-version\]/,
     );
+    expect(workflow).not.toMatch(/\n  (?:test-gate|rust-test-gate):/);
   });
 
   it("creates the release page only after the artifacts finish", () => {

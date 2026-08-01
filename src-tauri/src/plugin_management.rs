@@ -314,27 +314,5 @@ pub fn restart_app(app: AppHandle) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn manifest_requires_api_v2_and_known_permissions() {
-        let valid = br#"{"name":"@x/demo","version":"1.2.3","main":"dist/index.js","omnitermPlugin":{"apiVersion":2,"displayName":"Demo","permissions":["connections"]}}"#;
-        let parsed = parse_manifest(valid).unwrap();
-        assert_eq!(parsed.id, "@x/demo");
-        assert_eq!(safe_dir_name(&parsed.id), "@x_demo");
-
-        let bad = br#"{"name":"x","omnitermPlugin":{"apiVersion":2,"permissions":["root"]}}"#;
-        assert!(parse_manifest(bad).unwrap_err().contains("unknown permission"));
-        let removed_credentials = br#"{"name":"x","omnitermPlugin":{"apiVersion":2,"permissions":["credentials"]}}"#;
-        assert!(parse_manifest(removed_credentials).unwrap_err().contains("unknown permission"));
-        let traversal = br#"{"name":"..","omnitermPlugin":{"apiVersion":2}}"#;
-        assert!(parse_manifest(traversal).unwrap_err().contains("unsafe"));
-    }
-
-    #[test]
-    fn manifest_rejects_parent_main_path() {
-        let bad = br#"{"name":"x","main":"../evil.js","omnitermPlugin":{"apiVersion":2}}"#;
-        assert!(parse_manifest(bad).unwrap_err().contains("unsafe"));
-    }
-}
+#[path = "plugin_management_tests.rs"]
+mod tests;

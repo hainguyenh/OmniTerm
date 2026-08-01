@@ -25,7 +25,7 @@ import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, updateFontSize, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, updateFontSize, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader } = model
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -161,6 +161,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             const activeConnId = activeTabs.find(t => t.id === activeTabId)?.connId
             const conn = connById(activeConnId)
             if (!conn) return null
+            const activeTarget = { id: activeTabId, connId: conn.id }
+            const activeAppearance = resolveAppearance?.(activeTabId, conn.id) ?? {}
+            const activeFontSize = activeAppearance.fontSize ?? appSettings.fontSize ?? 14
             const status = statuses[activeTabId] ?? 'connecting'
             // Latency source differs by type: RDP has its own TCP probe; SSH carries it in metrics.
             const resolvedLatency = conn.type === 'RDP'
@@ -222,9 +225,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   
                 <div className={`flex items-center gap-1.5 ${layoutMode > 1 ? 'ml-auto' : ''}`}>
                   <div className="flex items-center gap-1 mr-1 rounded px-1 border border-theme-border/50 bg-black/10">
-                    <button type="button" onClick={() => updateFontSize(-1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Decrease font size">-</button>
-                    <span className="w-4 text-center font-mono text-[9px] text-theme-fg">{appSettings.fontSize || 14}</span>
-                    <button type="button" onClick={() => updateFontSize(1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Increase font size">+</button>
+                    <button type="button" onClick={() => onFontSizeChange ? onFontSizeChange(-1, activeTarget) : updateFontSize(-1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Decrease font size">-</button>
+                    <span className="w-4 text-center font-mono text-[9px] text-theme-fg">{activeFontSize}</span>
+                    <button type="button" onClick={() => onFontSizeChange ? onFontSizeChange(1, activeTarget) : updateFontSize(1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Increase font size">+</button>
                   </div>
                   {/* Detach / attach for the active tab. The same control also sits on every pane
                       header, so a background dock does not have to be activated first. */}
@@ -267,6 +270,16 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     )
                   )}
                 </div>
+                {typeof zoomFactor === 'number' && (
+                  <button
+                    type="button"
+                    onClick={onZoomReset}
+                    title="Reset zoom to 100%"
+                    className="flex-shrink-0 text-[10px] font-mono text-theme-dim hover:text-theme-accent transition-colors px-1"
+                  >
+                    {Math.round(zoomFactor * 100)}%
+                  </button>
+                )}
               </div>
             )
           })()}
@@ -339,6 +352,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 {/* Session views — one per open tab, positioned into its pane (or hidden). */}
                 {activeTabs.map(tab => {
                   const conn = connById(tab.connId)
+                  const appearance = resolveAppearance?.(tab.id, tab.connId) ?? {}
+                  const terminalTheme = themes.find(theme => theme.id === (appearance.themeId ?? appSettings.themeId)) ?? currentTheme
+                  const terminalFontSize = appearance.fontSize ?? appSettings.fontSize
+                  const terminalTarget = { id: tab.id, connId: tab.connId }
                   const paneIdx = panes.findIndex((p, i) => p === tab.id && i < layoutMode)
                   const visible = paneIdx !== -1
                   const split = visible && layoutMode > 1
@@ -384,10 +401,13 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       // A run-to-completion pane has nothing left once its shell exits, so it takes its
                       // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
                       onExit={(code) => { if (closesOnExit(conn, code)) closeTabs([tab.id], true) }}
-                      theme={appSettings.darkMode ? currentTheme.terminal.dark : currentTheme.terminal.light}
-                      fontSize={appSettings.fontSize} smartColors={appSettings.smartColors}
+                      theme={appSettings.darkMode ? terminalTheme.terminal.dark : terminalTheme.terminal.light}
+                      fontSize={terminalFontSize} smartColors={appSettings.smartColors}
+                      onFontSizeChange={onFontSizeChange
+                        ? (size) => onFontSizeChange(size - terminalFontSize, terminalTarget)
+                        : undefined}
                       shortcuts={appSettings.shortcuts}
-                      fontFamilyMono={appSettings.darkMode ? currentTheme.ui.dark.fontFamilyMono : currentTheme.ui.light.fontFamilyMono}
+                      fontFamilyMono={appSettings.darkMode ? terminalTheme.ui.dark.fontFamilyMono : terminalTheme.ui.light.fontFamilyMono}
                     />
                   )
                   return (

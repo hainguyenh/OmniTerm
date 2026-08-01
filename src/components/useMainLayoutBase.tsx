@@ -10,7 +10,12 @@ import { upsertWorkspaceConnection } from '../utils/workspaceConnections'
 import { diag } from '../diag'
 import { DEFAULT_SHORTCUTS, MAX_PLANES, type MainLayoutProps } from './mainLayoutShared'
 
-export function useMainLayoutBase({ appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState }: MainLayoutProps) {
+export function useMainLayoutBase({
+  appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
+  setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
+  onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
+  onSettingsReload,
+}: MainLayoutProps) {
   const handleConnectRef = useRef<(connection: Connection) => void>(() => undefined)
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
   const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
@@ -128,8 +133,9 @@ export function useMainLayoutBase({ appSettings, setAppSettings, currentTheme, l
           return;
       return window.omnitermAPI.terminalWindow.onReattached((id) => {
           setPoppedOut(prev => (prev[id] ? { ...prev, [id]: false } : prev));
+          onSettingsReload?.(id);
       });
-  }, []);
+  }, [onSettingsReload]);
   const focusTerminal = (id: string) => {
       window.dispatchEvent(new CustomEvent('omniterm:focus-terminal', { detail: { id } }));
   };
@@ -420,5 +426,5 @@ export function useMainLayoutBase({ appSettings, setAppSettings, currentTheme, l
           await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
       }
   };
-  return { appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, setConnFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef }
+  return { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, setConnFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef }
 }
