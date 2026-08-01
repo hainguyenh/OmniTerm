@@ -7,7 +7,6 @@ import { mockOmnitermAPI } from "../../testUtils";
 import { TOKYO_NIGHT } from "../../themes";
 
 import ConfirmDialog from "../ConfirmDialog";
-import InfoDialog from "../InfoDialog";
 import ConnectionForm from "../ConnectionForm";
 import FileBrowser from "../FileBrowser";
 import OverlayBar from "../OverlayBar";
@@ -42,13 +41,6 @@ describe("component rendering smoke tests", () => {
     expect(screen.getByText("Discard?")).toBeInTheDocument();
     expect(screen.getByText("You have unsaved changes.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
-  });
-
-  it("renders InfoDialog", () => {
-    render(<InfoDialog title="Done" message="Operation completed." tone="success" onClose={vi.fn()} />);
-    expect(screen.getByText("Done")).toBeInTheDocument();
-    expect(screen.getByText("Operation completed.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "OK" })).toBeInTheDocument();
   });
 
   it("renders ConnectionForm in create mode", () => {

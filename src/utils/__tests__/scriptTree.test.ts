@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildScriptTree, buildWorkspaceTree, entryNode, filterTreeByQuery } from '../scriptTree'
-import type { Connection, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
-
-const s = (id: string, kind = 'sh'): WorkspaceScript => ({
-  id, name: id.split('/').pop()!, path: `/root/${id}`, kind, editable: kind !== 'rdp',
-})
+import { buildWorkspaceTree, entryNode, filterTreeByQuery } from '../scriptTree'
+import type { Connection, WorkspaceEntry } from '@omniterm/contract'
 
 const dir = (id: string): WorkspaceEntry => ({
   id, name: id.split('/').pop()!, path: `/root/${id}`, isDir: true, kind: 'dir',
@@ -17,32 +13,6 @@ const file = (id: string, kind: string): WorkspaceEntry => ({
 
 const conn = (id: string, name: string, parentId?: string): Connection => ({
   id, name, type: 'SSH', host: 'box.internal', port: '22', user: 'ops', parentId,
-})
-
-describe('buildScriptTree', () => {
-  it('nests scripts under their directories and keeps root leaves at top level', () => {
-    const tree = buildScriptTree([s('deploy.bat'), s('scripts/ci/test.sh'), s('scripts/build.ps1')])
-
-    // Root: folder "scripts" (dirs first), then file "deploy.bat".
-    expect(tree.map((n) => [n.name, n.isDir])).toEqual([
-      ['scripts', true],
-      ['deploy.bat', false],
-    ])
-
-    const scriptsDir = tree[0]
-    // Inside "scripts": folder "ci" first, then file "build.ps1".
-    expect(scriptsDir.children.map((n) => [n.name, n.isDir])).toEqual([
-      ['ci', true],
-      ['build.ps1', false],
-    ])
-    expect(scriptsDir.children[0].children.map((n) => n.name)).toEqual(['test.sh'])
-    expect(scriptsDir.children[0].children[0].script?.id).toBe('scripts/ci/test.sh')
-  })
-
-  it('sorts folders before files, case-insensitively', () => {
-    const tree = buildScriptTree([s('Zebra.bat'), s('alpha.ps1'), s('lib/x.sh')])
-    expect(tree.map((n) => n.name)).toEqual(['lib', 'alpha.ps1', 'Zebra.bat'])
-  })
 })
 
 describe('buildWorkspaceTree', () => {

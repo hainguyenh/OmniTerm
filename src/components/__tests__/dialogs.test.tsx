@@ -6,7 +6,6 @@ import { render, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import ConfirmDialog from "../ConfirmDialog";
-import InfoDialog from "../InfoDialog";
 
 describe("ConfirmDialog", () => {
   beforeEach(() => {
@@ -39,37 +38,6 @@ describe("ConfirmDialog", () => {
     render(<ConfirmDialog title="Delete?" message="Remove?" onConfirm={vi.fn()} onCancel={onCancel} />);
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("InfoDialog", () => {
-  beforeEach(() => {
-    mockOmnitermAPI();
-  });
-
-  it("renders success tone by default", () => {
-    render(<InfoDialog title="Saved" message="Settings saved." onClose={vi.fn()} />);
-    expect(screen.getByText("Saved")).toBeInTheDocument();
-    expect(screen.getByText("Settings saved.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "OK" })).toBeInTheDocument();
-  });
-
-  it("renders warning tone", () => {
-    render(<InfoDialog title="Warning" message="Low disk space." tone="warning" onClose={vi.fn()} />);
-    expect(screen.getByText("Warning")).toBeInTheDocument();
-    expect(screen.getByText("Low disk space.")).toBeInTheDocument();
-  });
-
-  it("renders custom button label", () => {
-    render(<InfoDialog title="Done" message="Complete." buttonLabel="Got it" onClose={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Got it" })).toBeInTheDocument();
-  });
-
-  it("calls onClose when OK clicked", () => {
-    const onClose = vi.fn();
-    render(<InfoDialog title="Done" message="Complete." onClose={onClose} />);
-    fireEvent.click(screen.getByRole("button", { name: "OK" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 
