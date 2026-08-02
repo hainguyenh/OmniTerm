@@ -4,6 +4,7 @@ import { CommandPalette } from './CommandPalette'
 import DialogHost from './DialogHost'
 import GeneralSettings from './GeneralSettings'
 import PluginManager from './PluginManager'
+import CustomArtSettings from './CustomArtSettings'
 import UpdateSettings from './UpdateSettings'
 import { appLogo } from '../assets/appLogo'
 import { diag } from '../diag'
@@ -11,7 +12,7 @@ import { CtxItem, DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab } = model
+  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark } = model
   return (
     <>
           {aboutOpen && (
@@ -49,7 +50,15 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
                       shellOptions={shellOptions}
                       onCloseSettings={() => setAboutOpen(false)}
                     />
-    
+
+                    <CustomArtSettings
+                      idleArtUrlLight={idleArtUrlLight}
+                      idleArtUrlDark={idleArtUrlDark}
+                      loadingArtUrlLight={loadingArtUrlLight}
+                      loadingArtUrlDark={loadingArtUrlDark}
+                      onArtChanged={refreshCustomArt}
+                    />
+
                     {/* Branding */}
                     <div className="flex flex-col items-center gap-2 px-4 pb-1 pt-2.5 border-t border-theme-border">
                       <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg shadow-[#7aa2f7]/20">

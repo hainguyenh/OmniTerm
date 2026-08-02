@@ -116,7 +116,7 @@ fn parse_manifest(bytes: &[u8]) -> Result<PackageManifest, String> {
         .unwrap_or("dist/index.js")
         .replace('\\', "/");
     let main_path = Path::new(&main);
-    if main_path.is_absolute()
+    if main_path.has_root()
         || main_path
             .components()
             .any(|part| matches!(part, std::path::Component::ParentDir))

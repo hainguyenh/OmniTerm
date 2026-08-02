@@ -9,7 +9,7 @@
  * what is safe — the backend does, because the webview is the untrusted side.
  */
 
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
 import { writeText, readText } from '@tauri-apps/plugin-clipboard-manager'
@@ -47,7 +47,6 @@ function onEvent<T>(eventName: string, callback: (payload: T) => void): () => vo
     unlisten = null
   }
 }
-
 
 /** Window label prefix Rust mints for detached terminal windows (see terminal_window.rs). */
 const DETACHED_LABEL_PREFIX = 'term-'
@@ -141,9 +140,7 @@ function createTauriAPI(): any {
       },
       sshDisconnect: (id: string) => { void invoke('disconnect_session', { id }).catch(() => {}) },
       sshInput: (id: string, data: string) => { void invoke('send_session_input', { id, data }).catch(() => {}) },
-      sshResize: (id: string, size: { cols: number; rows: number }) => {
-        void invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {})
-      },
+      sshResize: (id: string, size: { cols: number; rows: number }) => { void invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}) },
       onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
       onSSHData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
       onSSHError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
@@ -156,9 +153,7 @@ function createTauriAPI(): any {
       rdp: (id: string) =>
         invoke<{ ok: boolean }>('connect_rdp', { id })
           .catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) })),
-      rdpDisconnect: (id: string) => {
-        void invoke('rdp_disconnect', { id }).catch((e) => diag.error('[omnitermAPI] rdpDisconnect failed', e))
-      },
+      rdpDisconnect: (id: string) => { void invoke('rdp_disconnect', { id }).catch((e) => diag.error('[omnitermAPI] rdpDisconnect failed', e)) },
       rdpInput: (_id: string, _d: string) => {},
       rdpResize: (_id: string, _s: { cols: number; rows: number }) => {},
       // No-ops, and honestly so: the client is a separate top-level window, not embedded in a pane.
@@ -231,8 +226,7 @@ function createTauriAPI(): any {
       rename: (_id: string, _from: string, _to: string) => Promise.resolve(),
       delete: (_id: string, _path: string) => Promise.resolve(),
       rmdirRecursive: (_id: string, _path: string) => Promise.resolve(),
-      download: (_id: string, _remotePath: string, _suggestedName: string) =>
-        Promise.resolve(false),
+      download: (_id: string, _remotePath: string, _suggestedName: string) => Promise.resolve(false),
       upload: (_id: string, _remoteDir: string) => Promise.resolve(0),
       onProgress: (_id: string, _cb: unknown) => (() => {}),
     },
@@ -267,6 +261,21 @@ function createTauriAPI(): any {
         const selected = await open({ directory: true, multiple: false, defaultPath })
         return typeof selected === 'string' ? selected : null
       },
+    },
+
+    customArt: {
+      // The backend opens a file picker, validates the image, and stores it in custom-art/.
+      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') =>
+        open({
+          multiple: false,
+          filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
+        }).then((path) =>
+          typeof path === 'string'
+            ? invoke<string>('upload_custom_art', { slot, path }).then(convertFileSrc)
+            : Promise.reject(new Error('cancelled')),
+        ),
+      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<string | null>('get_custom_art', { slot }).then(p => p ? convertFileSrc(p) : null),
+      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<void>('remove_custom_art', { slot }),
     },
 
     settings: {
@@ -307,10 +316,8 @@ function createTauriAPI(): any {
           script: payload.script ?? null,
           subPath: payload.subPath ?? null,
         }),
-      readScript: (workspaceId: string, path: string) =>
-        invoke<string>('read_script', { workspaceId, path }),
-      writeScript: (workspaceId: string, path: string, content: string) =>
-        invoke('write_script', { workspaceId, path, content }),
+      readScript: (workspaceId: string, path: string) => invoke<string>('read_script', { workspaceId, path }),
+      writeScript: (workspaceId: string, path: string, content: string) => invoke('write_script', { workspaceId, path, content }),
       // A read degrades to "this workspace has none", which is indistinguishable from the truth for a
       // workspace that has none. A *write* must not: swallowing it told the user their connection was
       // saved when the backend had refused it (bad path, over the size cap, unwritable folder).

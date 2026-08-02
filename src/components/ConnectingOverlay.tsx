@@ -1,28 +1,33 @@
 import React from 'react'
-import { loadingCatLight, loadingCatDark } from '../assets/loadingCat'
+import { DefaultLoadingArt } from '../assets/defaultArt'
 
 interface ConnectingOverlayProps {
-  /** Which asset to show — the light-mode art is a dark cat; dark mode uses a
-   *  color-inverted (pale) variant so it stays visible against a dark pane. */
+  /** Which asset to show — when dark is true, the default art adjusts its colors accordingly. */
   dark: boolean
   label?: string
+  /** User-uploaded custom art URL. When set, this image is shown instead of the default. */
+  customArtUrl?: string | null
 }
 
 /**
  * Shown over a pane while its session is connecting (SSH/LOCAL/RDP all reach 'connecting'
- * before 'connected'). Both variants have their background removed (alpha-decontaminated,
- * not a hard color-key) so they read cleanly against the pane behind them.
+ * before 'connected'). Displays either the user's custom art or a built-in SVG animation.
  */
-const ConnectingOverlay: React.FC<ConnectingOverlayProps> = ({ dark, label = 'Connecting…' }) => (
+const ConnectingOverlay: React.FC<ConnectingOverlayProps> = ({ dark, label = 'Connecting…', customArtUrl }) => (
   <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[var(--theme-bg)] select-none p-4">
-    {/* vmin-based sizing (matching WaitingPane's boring-cat art) so this scales with the pane instead
-        of the viewport: a fixed px width overflowed a narrow split pane long before the old
-        `max-w-[85%]` ever kicked in, and left the art oddly large/small at other window sizes. */}
-    <img
-      src={dark ? loadingCatDark : loadingCatLight}
-      alt=""
-      className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] h-auto"
-    />
+    {customArtUrl ? (
+      /* User-uploaded custom art */
+      <img
+        src={customArtUrl}
+        alt=""
+        className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] h-auto"
+      />
+    ) : (
+      /* License-free built-in default */
+      <div className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] flex items-center justify-center">
+        <DefaultLoadingArt dark={dark} />
+      </div>
+    )}
     <span className="text-xs font-medium text-[var(--theme-fg)] opacity-60 text-center">{label}</span>
   </div>
 )

@@ -236,6 +236,11 @@ interface Window {
       getHomeDir: () => Promise<string>
       pickDirectory: (defaultPath?: string) => Promise<string | null>
     }
+    customArt: {
+      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<string>
+      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<string | null>
+      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<void>
+    }
     settings: {
       get: () => Promise<AppSettings>
       save: (s: Partial<AppSettings>) => Promise<void>

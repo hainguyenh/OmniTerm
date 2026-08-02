@@ -1,6 +1,6 @@
 import React from 'react'
 import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
-import { boringCatLight, boringCatDark } from '../assets/boringCat'
+import { DefaultIdleArt } from '../assets/defaultArt'
 import { paneIdentity } from '../paneIdentity'
 
 /**
@@ -21,26 +21,34 @@ interface WaitingPaneProps {
   openSessionCount?: number
   /** Set inside a split pane: names the pane in its own shape + hue (see paneIdentity.ts). */
   paneIndex?: number
+  /** User-uploaded custom art URL. When set, this image is shown instead of the default. */
+  customArtUrl?: string | null
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
-  dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, paneIndex,
+  dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, paneIndex, customArtUrl,
 }) => (
   <div className={`h-full w-full flex flex-col items-center justify-center overflow-y-auto min-h-0 text-[var(--theme-dim)] select-none ${
     compact ? 'gap-3 py-3' : 'gap-5 py-4'
   }`}>
-    {/* The art is pre-cropped to its content (see make-cat-assets.py), so it just centres over the
-        watermark — no per-asset offsets to keep in sync. The box is square so the watermark (a square
-        glyph) fills it, and the cat is sized as a fraction of that box so it sits inside the glyph
-        instead of spilling past it. */}
+    {/* Art area: user-uploaded custom art, or the built-in default SVG. The box is square so the
+        art fills it proportionally. */}
     <div className={`relative aspect-square flex items-center justify-center flex-shrink ${
       compact ? 'w-[26vmin] min-w-[60px] max-w-[220px]' : 'w-[40vmin] min-w-[100px] max-w-[360px]'
     }`}>
-      <Terminal className="absolute inset-0 h-full w-full opacity-[0.07]" strokeWidth={1.25} />
-      {/* Nudged off-centre: the glyph's prompt caret sits upper-left, so the cat reads better
-          sitting toward the lower-right of it. */}
-      <img src={dark ? boringCatDark : boringCatLight} alt="waiting"
-        className="relative w-[68%] h-auto opacity-90 translate-x-[16%] translate-y-[28%]" />
+      {customArtUrl ? (
+        /* User-uploaded custom art */
+        <img src={customArtUrl} alt="waiting"
+          className="relative w-[85%] h-auto opacity-90 object-contain" />
+      ) : (
+        /* License-free built-in default: a terminal watermark icon with a subtle prompt animation */
+        <>
+          <Terminal className="absolute inset-0 h-full w-full opacity-[0.04]" strokeWidth={1.25} />
+          <div className="relative w-[75%] h-[75%]">
+            <DefaultIdleArt dark={dark} />
+          </div>
+        </>
+      )}
     </div>
 
     <div className="text-center px-3 flex-shrink-0">

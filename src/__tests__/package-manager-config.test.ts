@@ -75,7 +75,7 @@ describe("release configuration", () => {
     expect(workflow).toMatch(
       /build-desktop-packages:[\s\S]*needs:\s*\[quality-gate, resolve-release-version\]/,
     );
-    expect(workflow).not.toMatch(/\n  (?:test-gate|rust-test-gate):/);
+    expect(workflow).not.toMatch(/\n {2}(?:test-gate|rust-test-gate):/);
   });
 
   it("creates the release page only after the artifacts finish", () => {

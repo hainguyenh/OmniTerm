@@ -28,6 +28,7 @@ pub mod plugin_host;
 pub mod plugin_host_api;
 pub mod plugin_management;
 pub mod rdp_embed;
+pub mod custom_art;
 #[cfg(windows)]
 pub mod win_job;
 
@@ -147,6 +148,10 @@ pub fn run() {
             themes::save_theme,
             themes::delete_theme,
             themes::open_themes_folder,
+            // Custom art
+            custom_art::upload_custom_art,
+            custom_art::get_custom_art,
+            custom_art::remove_custom_art,
             // Connections
             connections::load_connections,
             connections::save_connections,

@@ -25,7 +25,7 @@ import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, updateFontSize, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, updateFontSize, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl } = model
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -298,6 +298,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 dark={!!appSettings.darkMode}
                 onNewSession={() => window.dispatchEvent(new Event('omniterm:new-session'))}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+                customArtUrl={idleArtUrl}
               />
             ) : (
               <>
@@ -337,6 +338,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             onNewSession={() => { setFocusedPane(i); window.dispatchEvent(new Event('omniterm:new-session')) }}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
                             onChooseSession={() => setPanePicker(i)}
+                            customArtUrl={idleArtUrl}
                           />
                         </div>
                       </div>
@@ -428,7 +430,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         {split && renderPaneHeader(paneIdx, conn ?? null)}
                         <div className={`flex-1 min-h-0 relative ${split ? 'rounded-b-lg overflow-hidden' : ''}`}>
                           {sessionView}
-                          {statuses[tab.id] === 'connecting' && !poppedOut[tab.id] && <ConnectingOverlay dark={appSettings.darkMode} />}
+                          {statuses[tab.id] === 'connecting' && !poppedOut[tab.id] && <ConnectingOverlay dark={appSettings.darkMode} customArtUrl={loadingArtUrl} />}
                         </div>
                       </div>
                     </div>

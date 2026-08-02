@@ -74,6 +74,11 @@ const defaults: Api = {
     load: async () => ({ folders: [], connections: [] }),
     save: async () => {},
   },
+  customArt: {
+    upload: async () => '',
+    get: async () => null,
+    remove: async () => {},
+  },
   plugin: {
     available: async () => false,
     list: async () => [],

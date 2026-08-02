@@ -3,7 +3,7 @@ name = "omniterm"
 version = "0.1.0"
 description = "OmniTerm: a multi-window terminal hub"
 authors = ["OmniTerm Contributors"]
-license = "LGPL-3.0-or-later"
+license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.77.2"
 
