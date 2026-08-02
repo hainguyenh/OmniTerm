@@ -4,6 +4,9 @@ mod settings;
 mod themes;
 mod window_control;
 
+#[cfg(test)]
+mod command_coverage_tests;
+
 // Public so the integration tests under tests/ can drive the real launch and command paths.
 pub mod adhoc;
 pub mod connections;
@@ -226,7 +229,7 @@ pub fn run() {
 /// `OmniTerm.exe --open-shell …` — so it goes through `parse_open_shell_args`, which allowlists the
 /// shell and caps every field. The first port emitted the raw argv array straight to the webview,
 /// which both broke the payload contract and let an arbitrary executable name through.
-fn handle_second_instance(app: &tauri::AppHandle, argv: &[String]) {
+fn handle_second_instance<R: tauri::Runtime>(app: &tauri::AppHandle<R>, argv: &[String]) {
     if let Some(req) = openshell::parse_open_shell_args(argv) {
         adhoc::open_adhoc_shell(app, req);
     } else if argv.iter().any(|a| a == "--open-shell") {
@@ -242,14 +245,14 @@ fn handle_second_instance(app: &tauri::AppHandle, argv: &[String]) {
 // ── Plugin Host Commands ──────────────────────────────────────────────
 
 #[tauri::command]
-async fn plugin_available(app: tauri::AppHandle, host: State<'_, PluginHost>) -> Result<bool, String> {
+async fn plugin_available<R: tauri::Runtime>(app: tauri::AppHandle<R>, host: State<'_, PluginHost>) -> Result<bool, String> {
     host.start(&app).await?;
     Ok(host.is_available().await)
 }
 
 #[tauri::command]
-async fn plugin_list(
-    app: tauri::AppHandle,
+async fn plugin_list<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     host: State<'_, PluginHost>,
 ) -> Result<Vec<serde_json::Value>, String> {
     // Setup starts the host in the background. Awaiting the same serialized start here prevents the

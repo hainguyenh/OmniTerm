@@ -15,6 +15,9 @@
 //! Which channels a session currently writes to can change — see session_output.rs.
 
 use crate::launcher;
+#[cfg(test)]
+#[path = "pty_tests.rs"]
+mod tests;
 use crate::pty_resolve::resolve_local_launch;
 use crate::session_output::{push_output, send_status, Output};
 use dashmap::DashMap;

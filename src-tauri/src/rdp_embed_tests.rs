@@ -97,3 +97,44 @@ fn the_temp_name_cannot_escape_its_directory() {
 fn the_sweep_prefix_matches_what_is_written() {
     assert!(temp_file_name("anything", 7).starts_with(TEMP_PREFIX));
 }
+
+#[test]
+fn session_manager_sequences_registers_and_removes_temp_files() {
+    let manager = RdpSessionManager::new();
+    assert_eq!(manager.next_seq(), 0);
+    assert_eq!(manager.next_seq(), 1);
+
+    let first = PathBuf::from("first.rdp");
+    let second = PathBuf::from("second.rdp");
+    manager.register("same".to_string(), first);
+    manager.register("same".to_string(), second.clone());
+    assert_eq!(manager.remove("same"), Some(second));
+    assert_eq!(manager.remove("same"), None);
+}
+
+#[test]
+fn temp_file_helpers_write_sweep_and_finish_only_omniterm_rdp_files() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    let handle = app.handle().clone();
+    let cache = handle.path().app_cache_dir().unwrap();
+    fs::create_dir_all(&cache).unwrap();
+
+    let stale = cache.join(temp_file_name("stale", 777_001));
+    let unrelated = cache.join("keep-coverage-file.rdp");
+    fs::write(&stale, "stale").unwrap();
+    fs::write(&unrelated, "keep").unwrap();
+    sweep_stale_temp_files(&handle);
+    assert!(!stale.exists());
+    assert!(unrelated.exists());
+
+    let written = create_temp_rdp_file(&handle, &rdp_conn(), 777_002).unwrap();
+    let content = fs::read_to_string(&written).unwrap();
+    assert!(content.contains("10.0.0.1:3389"));
+    finish_session(&handle, "coverage", Some(&written));
+    assert!(!written.exists());
+
+    finish_session(&handle, "coverage", None);
+    let _ = fs::remove_file(unrelated);
+}

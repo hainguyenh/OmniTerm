@@ -80,8 +80,8 @@ pub fn find_by_id<R: Runtime>(app: &AppHandle<R>, conn_id: &str) -> Option<Conne
 }
 
 #[tauri::command]
-pub async fn load_workspace_connections(
-    app: AppHandle,
+pub async fn load_workspace_connections<R: Runtime>(
+    app: AppHandle<R>,
     host: tauri::State<'_, crate::plugin_host::PluginHost>,
     workspace_id: String,
 ) -> Result<Vec<Connection>, String> {
@@ -100,8 +100,8 @@ pub async fn load_workspace_connections(
 }
 
 #[tauri::command]
-pub async fn save_workspace_connections(
-    app: AppHandle,
+pub async fn save_workspace_connections<R: Runtime>(
+    app: AppHandle<R>,
     host: tauri::State<'_, crate::plugin_host::PluginHost>,
     workspace_id: String,
     data: Vec<Connection>,
@@ -136,8 +136,8 @@ pub async fn save_workspace_connections(
 }
 
 #[tauri::command]
-pub async fn delete_workspace_connection(
-    app: AppHandle,
+pub async fn delete_workspace_connection<R: Runtime>(
+    app: AppHandle<R>,
     host: tauri::State<'_, crate::plugin_host::PluginHost>,
     workspace_id: String,
     connection_id: String,

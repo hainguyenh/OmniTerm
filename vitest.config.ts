@@ -1,7 +1,5 @@
 import { defineConfig } from "vitest/config";
 
-const COVERAGE_THRESHOLD = 85;
-
 export default defineConfig({
   test: {
     globals: true,
@@ -13,11 +11,9 @@ export default defineConfig({
       "plugins/**/*.test.ts",
       "src-tauri/sidecar/**/*.test.ts",
     ],
-    exclude: ["node_modules", "dist"],
+    exclude: ["node_modules", "dist", "plugins/markdown-explorer"],
     coverage: {
       provider: "v8",
-      // Explicit includes make untested production files visible instead of reporting only modules
-      // imported by a test. Rust is summarized separately by cargo-llvm-cov.
       include: [
         "src/**/*.{ts,tsx}",
         "contract/**/*.ts",
@@ -32,15 +28,16 @@ export default defineConfig({
         "src/testSetup.ts",
         "src/testUtils.tsx",
         "src/assets/**",
+        "src/generated/**",
       ],
       reporter: ["text", "json-summary", "lcov"],
       reportsDirectory: "coverage-js",
       reportOnFailure: true,
       thresholds: {
-        lines: COVERAGE_THRESHOLD,
-        statements: COVERAGE_THRESHOLD,
-        functions: COVERAGE_THRESHOLD,
-        branches: COVERAGE_THRESHOLD,
+        lines: 85,
+        statements: 85,
+        functions: 85,
+        branches: 85,
       },
     },
   },

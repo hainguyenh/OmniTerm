@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(test)]
 #[path = "custom_art_tests.rs"]
 mod tests;
 
-pub fn custom_art_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub fn custom_art_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -122,19 +122,19 @@ pub fn remove_custom_art_impl(dir: &Path, slot: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn upload_custom_art(app: AppHandle, slot: String, path: String) -> Result<String, String> {
+pub async fn upload_custom_art<R: Runtime>(app: AppHandle<R>, slot: String, path: String) -> Result<String, String> {
     let dir = custom_art_dir(&app)?;
     upload_custom_art_impl(&dir, &slot, Path::new(&path))
 }
 
 #[tauri::command]
-pub async fn get_custom_art(app: AppHandle, slot: String) -> Result<Option<String>, String> {
+pub async fn get_custom_art<R: Runtime>(app: AppHandle<R>, slot: String) -> Result<Option<String>, String> {
     let dir = custom_art_dir(&app)?;
     get_custom_art_impl(&dir, &slot)
 }
 
 #[tauri::command]
-pub async fn remove_custom_art(app: AppHandle, slot: String) -> Result<(), String> {
+pub async fn remove_custom_art<R: Runtime>(app: AppHandle<R>, slot: String) -> Result<(), String> {
     let dir = custom_art_dir(&app)?;
     remove_custom_art_impl(&dir, &slot)
 }

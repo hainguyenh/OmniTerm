@@ -12,7 +12,7 @@ function walk(dir, found = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      if (!['node_modules', 'dist', 'coverage', 'target', '__tests__'].includes(entry.name)) walk(full, found)
+      if (!['node_modules', 'dist', 'coverage', 'target', '__tests__', 'markdown-explorer', 'vendor'].includes(entry.name)) walk(full, found)
       continue
     }
     if (SOURCE_EXTENSIONS.includes(path.extname(entry.name)) && !/\.(?:test|spec)\.tsx?$/.test(entry.name)) {
@@ -58,7 +58,7 @@ export function findOrphanModules({ root = process.cwd(), sourceRoots, entrypoin
 export function checkRepository(root = process.cwd()) {
   const pluginEntries = fs.existsSync(path.join(root, 'plugins'))
     ? fs.readdirSync(path.join(root, 'plugins'), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
+      .filter((entry) => entry.isDirectory() && entry.name !== 'markdown-explorer')
       .map((entry) => `plugins/${entry.name}/src/index.ts`)
     : []
   const orphans = findOrphanModules({

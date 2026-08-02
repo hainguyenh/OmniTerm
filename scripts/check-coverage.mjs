@@ -78,35 +78,44 @@ export function evaluateCoverage(coverageByLanguage, threshold = 85) {
   return { ok: failures.length === 0, threshold, coverage: rows, failures }
 }
 
-export function renderMarkdown(result) {
+function coverageTable(rows, resultForRow, cellForMetric) {
   const header = '| Language | Lines | Statements/Regions | Functions | Branches | Result |'
   const separator = '|---|---:|---:|---:|---:|:---:|'
-  const rows = result.coverage.map((item) => {
-    const cells = COVERAGE_METRICS.map((key) => {
+  const body = rows.map((item) => {
+    const cells = COVERAGE_METRICS.map((key) => cellForMetric(item, key))
+    return `| ${item.language} | ${cells.join(' | ')} | ${resultForRow(item) ? 'PASS' : 'FAIL'} |`
+  })
+  return `${header}\n${separator}\n${body.join('\n')}`
+}
+
+export function renderMarkdown(result) {
+  const table = coverageTable(
+    result.coverage,
+    (item) => COVERAGE_METRICS.every((key) => item.metrics[key].pct + Number.EPSILON >= result.threshold),
+    (item, key) => {
       const metric = item.metrics[key]
       return `${metric.pct.toFixed(2)}% (${metric.covered}/${metric.total})`
-    })
-    const passed = COVERAGE_METRICS.every((key) => item.metrics[key].pct + Number.EPSILON >= result.threshold)
-    return `| ${item.language} | ${cells.join(' | ')} | ${passed ? 'PASS' : 'FAIL'} |`
-  })
+    },
+  )
   const failures = result.failures.length
     ? `\n\n### Coverage failures\n${result.failures.map((failure) => `- ${failure}`).join('\n')}`
     : '\n\nAll language and combined coverage conditions passed.'
-  return `## Coverage gate — ${result.threshold}% minimum\n\n${header}\n${separator}\n${rows.join('\n')}${failures}\n`
+  return `## Coverage gate — ${result.threshold}% minimum\n\n${table}${failures}\n`
 }
 
 function parseArgs(argv) {
   const options = { threshold: 85 }
+  const valueArgs = new Set(['--js', '--rust', '--threshold', '--output'])
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (arg === '--js') options.js = argv[++index]
-    else if (arg === '--rust') options.rust = argv[++index]
-    else if (arg === '--threshold') options.threshold = Number(argv[++index])
-    else if (arg === '--output') options.output = argv[++index]
-    else throw new Error(`Unknown argument: ${arg}`)
+    if (!valueArgs.has(arg)) throw new Error(`Unknown argument: ${arg}`)
+    const value = argv[++index]
+    if (!value) throw new Error(`Missing value for ${arg}`)
+    if (arg === '--threshold') options.threshold = Number(value)
+    else options[arg.slice(2).replaceAll('-', '_')] = value
   }
   if (!options.js || !options.rust) {
-    throw new Error('Usage: node scripts/check-coverage.mjs --js <coverage-summary.json> --rust <rust-coverage.json> [--threshold 85] [--output result.json]')
+    throw new Error('Usage: node scripts/check-coverage.mjs --js <json> --rust <json> [--threshold 85] [--output result.json]')
   }
   return options
 }
@@ -123,8 +132,8 @@ async function main() {
   ]
   const result = evaluateCoverage(coverage, options.threshold)
   const markdown = renderMarkdown(result)
-  process.stdout.write(markdown)
 
+  process.stdout.write(markdown)
   if (options.output) await writeFile(options.output, `${JSON.stringify(result, null, 2)}\n`)
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, markdown)
   if (!result.ok) process.exitCode = 1

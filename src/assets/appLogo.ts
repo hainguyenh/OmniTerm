@@ -1,3 +1,3 @@
-import appLogo from './OmniTerm-Logo.png'
+import appLogo from '../generated/OmniTerm-Logo.webp'
 
 export { appLogo }

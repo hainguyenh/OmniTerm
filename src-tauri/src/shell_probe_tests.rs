@@ -86,3 +86,14 @@ mod posix {
         );
     }
 }
+
+#[test]
+fn command_returns_only_supported_shell_identifiers_without_duplicates() {
+    let shells = tauri::async_runtime::block_on(list_available_shells());
+    let mut ids = std::collections::HashSet::new();
+    for shell in shells {
+        assert!(["powershell", "cmd", "wsl", "bash", "zsh"].contains(&shell.id.as_str()));
+        assert!(ids.insert(shell.id));
+        assert!(!shell.label.trim().is_empty());
+    }
+}

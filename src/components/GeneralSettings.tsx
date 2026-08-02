@@ -6,8 +6,7 @@ import { pickShell, type ShellOption } from '../shellOptions'
  * The "General" block of the settings panel: the default terminal, and the size cap the built-in file
  * viewer/editor works to.
  *
- * Extracted from MainLayout, which is over the per-file line limit and ratcheting down (see
- * src/__tests__/code-write.lines.test.ts). Follows the same shape as UpdateSettings: it owns no state,
+ * Extracted from MainLayout to keep responsibilities and file size bounded. Like UpdateSettings, it owns no state,
  * takes the settings object and its setter, and writes a *partial* patch through
  * `omnitermAPI.settings.save` — the backend merges, so a patch must never be the whole object rebuilt
  * from stale props.

@@ -133,3 +133,53 @@ fn quick_shell_refuses_a_shell_that_cannot_exist_here() {
     let foreign = if cfg!(target_os = "windows") { "bash" } else { "cmd" };
     assert!(quick_shell_request(Some(foreign)).is_err());
 }
+
+#[test]
+fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle().clone();
+
+    let queued_id = open_adhoc_shell(&handle, request());
+    assert!(queued_id.starts_with("adhoc-"));
+    assert!(app.state::<AdhocRegistry>().get(&queued_id).is_some());
+    flush_pending(&handle);
+    tauri::async_runtime::block_on(shells_ready(handle.clone())).unwrap();
+    flush_pending(&handle);
+
+    let payload = tauri::async_runtime::block_on(open_quick_shell(
+        handle.clone(),
+        Some(native_shell().to_string()),
+    ))
+    .unwrap();
+    let direct_id = payload["id"].as_str().unwrap().to_string();
+    assert_eq!(payload["type"], "LOCAL");
+    assert!(app.state::<AdhocRegistry>().get(&direct_id).is_some());
+
+    let named = "adhoc-named".to_string();
+    app.state::<AdhocRegistry>()
+        .insert_named(named.clone(), request());
+    assert!(app.state::<AdhocRegistry>().get(&named).is_some());
+
+    tauri::async_runtime::block_on(shells_release(handle.clone(), queued_id.clone())).unwrap();
+    tauri::async_runtime::block_on(shells_release(handle.clone(), direct_id.clone())).unwrap();
+    tauri::async_runtime::block_on(shells_release(handle, named.clone())).unwrap();
+    assert!(app.state::<AdhocRegistry>().get(&queued_id).is_none());
+    assert!(app.state::<AdhocRegistry>().get(&direct_id).is_none());
+    assert!(app.state::<AdhocRegistry>().get(&named).is_none());
+}
+
+#[test]
+fn quick_shell_command_rejects_unsupported_renderer_input() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    assert!(app.manage(AdhocRegistry::new()));
+    let result = tauri::async_runtime::block_on(open_quick_shell(
+        app.handle().clone(),
+        Some("../../evil".to_string()),
+    ));
+    assert!(result.is_err());
+}

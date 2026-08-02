@@ -25,13 +25,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm tsc -b
+      - run: pnpm typecheck
 
   js-lint:
     name: JS — Lint (ESLint + LOC)
@@ -40,8 +40,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
@@ -55,8 +55,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
@@ -70,15 +70,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Generate JavaScript and TypeScript coverage
         run: pnpm coverage:js
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-js
@@ -93,6 +93,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm assets:generate
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -114,6 +121,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm assets:generate
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -131,6 +145,13 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm assets:generate
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -144,12 +165,9 @@ jobs:
           workspaces: src-tauri
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Generate Rust four-condition coverage
-        run: |
-          mkdir -p coverage-rust
-          cargo llvm-cov --manifest-path src-tauri/Cargo.toml --branch --json --summary-only --output-path coverage-rust/coverage-summary.json
-          cargo llvm-cov report --manifest-path src-tauri/Cargo.toml --branch --lcov --output-path coverage-rust/lcov.info
-      - uses: actions/upload-artifact@v4
+      - name: Generate full-source Rust coverage
+        run: node scripts/run-rust-coverage.mjs
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-rust
@@ -158,22 +176,22 @@ jobs:
           retention-days: 7
 
   coverage-gate:
-    name: Coverage — 85% all conditions
+    name: Coverage — full source 85%
     needs: [js-coverage, rust-coverage]
-    if: always()
+    if: ${{ !cancelled() && needs.js-coverage.result == 'success' && needs.rust-coverage.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: coverage-js
           path: artifacts/coverage-js
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v6
         with:
           name: coverage-rust
           path: artifacts/coverage-rust
@@ -184,7 +202,7 @@ jobs:
             --rust artifacts/coverage-rust/coverage-summary.json \
             --threshold 85 \
             --output coverage-final.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: coverage-final
@@ -199,8 +217,8 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: pnpm

@@ -54,21 +54,21 @@ pub(crate) fn read_workspaces<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<Work
     serde_json::from_str(&content).map_err(|e| format!("workspaces.json is corrupt ({e})."))
 }
 
-fn write_workspaces(app: &AppHandle, list: &[Workspace]) -> Result<(), String> {
+fn write_workspaces<R: Runtime>(app: &AppHandle<R>, list: &[Workspace]) -> Result<(), String> {
     let path = workspaces_file(app)?;
     let content = serde_json::to_string_pretty(list).map_err(|e| e.to_string())?;
     fs::write(&path, content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn list_workspaces(app: AppHandle) -> Result<Vec<Workspace>, String> {
+pub async fn list_workspaces<R: Runtime>(app: AppHandle<R>) -> Result<Vec<Workspace>, String> {
     read_workspaces(&app)
 }
 
 /// Pin a folder. Ports Electron's `addWorkspace`: re-pinning an existing folder is idempotent and
 /// returns the entry already stored, rather than appending a duplicate with a new id.
 #[tauri::command]
-pub async fn add_workspace(app: AppHandle, path: String) -> Result<Workspace, String> {
+pub async fn add_workspace<R: Runtime>(app: AppHandle<R>, path: String) -> Result<Workspace, String> {
     if !Path::new(&path).is_dir() {
         return Err("That path is not a folder.".to_string());
     }
@@ -97,7 +97,7 @@ pub async fn add_workspace(app: AppHandle, path: String) -> Result<Workspace, St
 }
 
 #[tauri::command]
-pub async fn remove_workspace(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn remove_workspace<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
     let mut list = read_workspaces(&app)?;
     list.retain(|w| w.id != id);
     write_workspaces(&app, &list)
@@ -111,8 +111,8 @@ pub(crate) fn find_workspace<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result
 }
 
 #[tauri::command]
-pub async fn scan_scripts(
-    app: AppHandle,
+pub async fn scan_scripts<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
 ) -> Result<Vec<WorkspaceScript>, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
@@ -129,8 +129,8 @@ pub async fn scan_scripts(
 /// Every folder in a workspace — the tree's *skeleton*. Not paged: folders are a small fraction of a
 /// workspace's entries, and the panel shows them all before any of their files.
 #[tauri::command]
-pub async fn scan_workspace_folders(
-    app: AppHandle,
+pub async fn scan_workspace_folders<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
 ) -> Result<Vec<WorkspaceEntry>, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
@@ -147,8 +147,8 @@ pub async fn scan_workspace_folders(
 /// a hard scan cap) is what keeps a huge folder from shipping a giant payload, and it never hides
 /// files the "All files" filter promised to show.
 #[tauri::command]
-pub async fn scan_workspace_entries(
-    app: AppHandle,
+pub async fn scan_workspace_entries<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
     folder: String,
     offset: Option<usize>,
@@ -172,8 +172,8 @@ pub async fn scan_workspace_entries(
 
 /// Run a script, or open a plain terminal in the workspace (or a scanned subfolder).
 #[tauri::command]
-pub async fn run_script(
-    app: AppHandle,
+pub async fn run_script<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
     script: Option<WorkspaceScript>,
     sub_path: Option<String>,
@@ -232,7 +232,7 @@ pub async fn run_script(
 ///
 /// `saturating_mul` because the value comes from a JSON file the user can hand-edit — a large MB figure
 /// must clamp to the ceiling, not wrap around to a tiny cap.
-fn max_open_bytes(app: &AppHandle) -> u64 {
+fn max_open_bytes<R: Runtime>(app: &AppHandle<R>) -> u64 {
     let configured = crate::settings::read_settings(app)
         .get("maxOpenFileMb")
         .and_then(serde_json::Value::as_u64)
@@ -242,7 +242,7 @@ fn max_open_bytes(app: &AppHandle) -> u64 {
 
 /// The user's own "Excluded file types" setting, read fresh per call for the same reason as
 /// `max_open_bytes`: it must take effect on the next scan/read without a restart.
-fn excluded_viewable_exts(app: &AppHandle) -> Vec<String> {
+fn excluded_viewable_exts<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
     crate::settings::read_settings(app)
         .get("excludedViewableExts")
         .and_then(serde_json::Value::as_array)
@@ -260,8 +260,8 @@ fn excluded_viewable_exts(app: &AppHandle) -> Vec<String> {
 /// binary (see `safepath::VIEW_DENY_EXTS`), while saving stays limited to executable scripts. Named
 /// `read_script` still because it is the renderer-facing command name in the provider contract.
 #[tauri::command]
-pub async fn read_script(
-    app: AppHandle,
+pub async fn read_script<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
     path: String,
 ) -> Result<String, String> {
@@ -275,8 +275,8 @@ pub async fn read_script(
 }
 
 #[tauri::command]
-pub async fn write_script(
-    app: AppHandle,
+pub async fn write_script<R: Runtime>(
+    app: AppHandle<R>,
     workspace_id: String,
     path: String,
     content: String,

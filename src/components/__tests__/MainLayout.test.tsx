@@ -106,10 +106,8 @@ describe("MainLayout", () => {
       },
     });
     fireEvent.click(await screen.findByText("my-project"));
-
     fireEvent.click(await screen.findByLabelText("Add connection in infra"));
-    expect(screen.getByRole("heading", { name: "New Connection" })).toBeInTheDocument();
-    // Scope and the Parent Folder root are both the workspace; the clicked folder is pre-selected.
+    expect(await screen.findByRole("heading", { name: "New Connection" })).toBeInTheDocument();
     expect(screen.getByText("my-project", { selector: "span.text-xs" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     expect(screen.getByRole("combobox")).toHaveValue("infra");

@@ -31,3 +31,10 @@ fn a_path_with_spaces_stays_one_argument() {
     assert_eq!(args.len(), 1);
     assert_eq!(args[0], r"D:\my ws\prod host.rdp");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn launch_reports_the_platform_error_before_spawning_any_process() {
+    let err = launch_rdp("/tmp/host.rdp").expect_err("Linux has no built-in RDP client");
+    assert!(err.contains("No Remote Desktop client"), "got {err}");
+}

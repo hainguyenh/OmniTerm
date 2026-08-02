@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { BatchConnectionStore, renderBatch } from '../src/store'
-import type { Connection, ConnectionScope } from '../src/types'
+import type { Connection, ConnectionProvider, ConnectionScope } from '../src/types'
 
 let root: string
 let store: BatchConnectionStore
@@ -152,5 +152,60 @@ describe('Limited Connections launchers', () => {
     const marker = fs.readFileSync(path.join(root, 'launchers', '_omniterm-folders.bat'), 'utf8')
     expect(marker).toContain(':: OMNITERM_FOLDERS_V1 ')
     expect(marker).not.toMatch(/password\s*[:=]/i)
+  })
+})
+
+describe('limited connection plugin activation', () => {
+  it('registers personal and workspace providers with native launchers', async () => {
+    const providers: ConnectionProvider[] = []
+    const logs: string[] = []
+    const opened: string[] = []
+    const host = {
+      plugin: { id: 'limited', version: '1.0.0', permissions: ['connections', 'openExternal'] },
+      services: {
+        storageDir: root,
+        log: (message: string) => logs.push(message),
+        openExternal: async (url: string) => { opened.push(url) },
+      },
+      registerConnectionProvider: (provider: ConnectionProvider) => providers.push(provider),
+    }
+    const module = await import('../src/index')
+    module.activate(host)
+
+    expect(module.name).toBe('@omniterm/native-batch-connections')
+    expect(module.default.name).toBe(module.name)
+    expect(logs).toEqual(['Limited Connections activated'])
+    const provider = providers[0]
+    expect(provider.capabilities()).toEqual({
+      protocols: ['SSH', 'RDP'],
+      credentialPolicy: 'prompt-every-time',
+      scopes: ['personal', 'workspace'],
+      sftp: false,
+      importExport: true,
+    })
+
+    const connection = ssh({ passwordHelpUrl: 'https://vault.example/help' })
+    await provider.save({ connections: [connection], folders: [] })
+    expect(await provider.load()).toEqual({ connections: [connection], folders: [] })
+    expect(await provider.resolve('ssh-prod-1')).toEqual(connection)
+    const launch = await provider.resolveLaunch?.(personal, 'ssh-prod-1')
+    expect(launch?.kind).toBe('batch')
+    expect(fs.existsSync(launch!.path)).toBe(true)
+    expect(opened).toEqual(['https://vault.example/help'])
+    expect(await provider.resolveLaunch?.(personal, 'missing')).toBeNull()
+
+    const scope: ConnectionScope = {
+      kind: 'workspace',
+      workspaceId: 'ws-1',
+      workspacePath: path.join(root, 'workspace'),
+    }
+    await provider.saveScoped?.(scope, { connections: [ssh({ id: 'workspace-ssh' })], folders: [] })
+    expect(await provider.loadScoped?.(scope)).toMatchObject({
+      connections: [{ id: 'workspace-ssh' }],
+    })
+    expect(await provider.resolveScoped?.(scope, 'workspace-ssh')).toMatchObject({ id: 'workspace-ssh' })
+
+    module.deactivate()
+    module.default.deactivate?.()
   })
 })

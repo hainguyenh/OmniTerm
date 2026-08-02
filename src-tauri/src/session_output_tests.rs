@@ -186,3 +186,15 @@ fn a_dead_status_sink_is_dropped_rather_than_retried() {
     out.send_status(SessionStatus::Activity { busy: true });
     assert!(!out.has_status_sink());
 }
+
+#[test]
+fn lock_helpers_delegate_to_the_live_output() {
+    let output = Arc::new(Mutex::new(output(true)));
+
+    push_output(&output, b"through helper");
+    send_status(&output, SessionStatus::Activity { busy: true });
+
+    let out = output.lock().unwrap();
+    assert_eq!(out.buffered(), b"through helper");
+    assert!(out.busy());
+}

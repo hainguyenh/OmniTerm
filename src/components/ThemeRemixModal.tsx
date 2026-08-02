@@ -411,14 +411,3 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   )
 }
 
-
-interface ThemeRemixModalProps {
-  isOpen: boolean
-  onClose: () => void
-  themes: AppTheme[]
-  setThemes: (t: AppTheme[]) => void
-  appSettings: AppSettings
-  setAppSettings: (s: AppSettings) => void
-  currentTheme: AppTheme
-}
-

@@ -171,3 +171,68 @@ impl PluginHost {
         rx.await.map_err(|_| "Plugin host response channel dropped".to_string())?
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
+        tauri::async_runtime::block_on(future)
+    }
+
+    #[test]
+    fn stopped_host_returns_safe_fallbacks_for_every_optional_provider_call() {
+        let host = PluginHost::new();
+        assert!(!block_on(host.is_available()));
+        assert!(block_on(host.list_plugins()).unwrap().is_empty());
+        assert_eq!(block_on(host.connection_capabilities()).unwrap(), None);
+        assert!(block_on(host.auth_gate()).unwrap());
+        assert_eq!(block_on(host.load_connections()).unwrap(), None);
+        assert!(!block_on(host.save_connections(json!([]))).unwrap());
+        assert_eq!(block_on(host.resolve_connection("x".to_string())).unwrap(), None);
+        assert_eq!(block_on(host.load_scoped_connections(json!({}))).unwrap(), None);
+        assert!(!block_on(host.save_scoped_connections(json!({}), json!([]))).unwrap());
+        assert_eq!(
+            block_on(host.resolve_scoped_connection(json!({}), "x".to_string())).unwrap(),
+            None
+        );
+        assert_eq!(
+            block_on(host.resolve_connection_launch(json!({}), "x".to_string())).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn disabled_reason_is_exposed_as_a_descriptor() {
+        let host = PluginHost::new();
+        block_on(host.disable("Node missing".to_string()));
+        let plugins = block_on(host.list_plugins()).unwrap();
+        assert_eq!(plugins.len(), 1);
+        assert_eq!(plugins[0]["id"], "omniterm.plugin-host");
+        assert_eq!(plugins[0]["error"], "Node missing");
+    }
+
+    #[test]
+    fn started_host_without_transport_fails_every_rpc_and_cleans_pending_requests() {
+        let host = PluginHost::new();
+        host.started.store(true, Ordering::SeqCst);
+
+        assert!(!block_on(host.is_available()));
+        assert!(block_on(host.list_plugins()).is_err());
+        assert!(block_on(host.set_enabled("x".to_string(), true)).is_err());
+        assert!(block_on(host.select_connection_provider(Some("x".to_string()))).is_err());
+        assert!(block_on(host.connection_capabilities()).is_err());
+        assert!(block_on(host.uninstall("x".to_string())).is_err());
+        assert!(block_on(host.invoke("method".to_string(), vec![json!(1)])).is_err());
+        assert!(block_on(host.auth_gate()).is_err());
+        assert!(block_on(host.load_connections()).is_err());
+        assert!(block_on(host.save_connections(json!([]))).is_err());
+        assert!(block_on(host.resolve_connection("x".to_string())).is_err());
+        assert!(block_on(host.load_scoped_connections(json!({}))).is_err());
+        assert!(block_on(host.save_scoped_connections(json!({}), json!([]))).is_err());
+        assert!(block_on(host.resolve_scoped_connection(json!({}), "x".to_string())).is_err());
+        assert!(block_on(host.resolve_connection_launch(json!({}), "x".to_string())).is_err());
+        assert!(host.pending.is_empty());
+        assert!(host.next_id.load(Ordering::SeqCst) > 1);
+    }
+}

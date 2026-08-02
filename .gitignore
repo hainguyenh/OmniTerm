@@ -33,3 +33,12 @@ artifacts/
 docs/superpowers/
 .impeccable/
 .opencode/
+
+# Generated from assets/OmniTerm-Logo-Original.png by scripts/generate-app-assets.mjs
+src/generated/
+src-tauri/icons/*
+!src-tauri/icons/.gitkeep
+
+# Patch files
+*.patch
+*.diff

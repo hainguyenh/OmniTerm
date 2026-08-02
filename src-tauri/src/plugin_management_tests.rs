@@ -90,7 +90,8 @@ fn manifest_requires_string_known_permissions() {
 
 #[test]
 fn manifest_rejects_unsafe_package_and_entrypoint_names() {
-    for id in [".."] {
+    {
+        let id = "..";
         let bytes = format!(r#"{{"name":"{id}","omnitermPlugin":{{"apiVersion":2}}}}"#);
         assert!(parse_manifest(bytes.as_bytes()).unwrap_err().contains("unsafe"));
     }
@@ -103,4 +104,112 @@ fn manifest_rejects_unsafe_package_and_entrypoint_names() {
         .unwrap();
         assert!(parse_manifest(&bytes).unwrap_err().contains("main path is unsafe"));
     }
+}
+
+fn zip_file(entries: &[(&str, &[u8], Option<u32>)]) -> tempfile::NamedTempFile {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut writer = zip::ZipWriter::new(file.reopen().unwrap());
+    for (name, bytes, mode) in entries {
+        let mut options = SimpleFileOptions::default();
+        if let Some(mode) = mode {
+            options = options.unix_permissions(*mode);
+        }
+        writer.start_file(*name, options).unwrap();
+        writer.write_all(bytes).unwrap();
+    }
+    writer.finish().unwrap();
+    file
+}
+
+#[test]
+fn package_archive_manifest_and_extraction_cover_safe_and_unsafe_entries() {
+    let package = manifest();
+    let archive_file = zip_file(&[
+        ("package.json", package.as_slice(), None),
+        ("dist/index.js", b"module.exports = {}", None),
+    ]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(archive_file.path()).unwrap()).unwrap();
+    let parsed = read_package_manifest(&mut archive).unwrap();
+    assert_eq!(parsed.id, "@x/demo");
+
+    let destination = tempfile::TempDir::new().unwrap();
+    extract_validated(&mut archive, destination.path()).unwrap();
+    assert!(destination.path().join("dist/index.js").is_file());
+
+    let missing = zip_file(&[("dist/index.js", b"x", None)]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(missing.path()).unwrap()).unwrap();
+    assert!(read_package_manifest(&mut archive)
+        .unwrap_err()
+        .contains("must contain package.json"));
+
+    let unsafe_zip = zip_file(&[("../escape.js", b"x", None)]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(unsafe_zip.path()).unwrap()).unwrap();
+    assert!(extract_validated(&mut archive, destination.path())
+        .unwrap_err()
+        .contains("unsafe path"));
+
+    let symlink_zip = zip_file(&[("link", b"target", Some(0o120777))]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(symlink_zip.path()).unwrap()).unwrap();
+    assert!(extract_validated(&mut archive, destination.path())
+        .unwrap_err()
+        .contains("symbolic links"));
+}
+
+#[test]
+fn oversized_package_manifest_is_rejected_before_json_parsing() {
+    let oversized = vec![b' '; 1024 * 1024 + 1];
+    let file = zip_file(&[("package.json", oversized.as_slice(), None)]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(file.path()).unwrap()).unwrap();
+    assert!(read_package_manifest(&mut archive)
+        .unwrap_err()
+        .contains("package.json is too large"));
+}
+
+#[test]
+fn installed_plugin_directory_and_remove_command_validate_identity() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    assert!(app.manage(PluginHost::new()));
+    let handle = app.handle().clone();
+    let root = installed_dir(&handle).unwrap();
+    let _ = fs::remove_dir_all(&root);
+    let target = root.join("demo");
+    fs::create_dir_all(&target).unwrap();
+    fs::write(
+        target.join("package.json"),
+        br#"{"name":"other","omnitermPlugin":{"apiVersion":2}}"#,
+    )
+    .unwrap();
+    let host = app.state::<PluginHost>();
+    assert!(tauri::async_runtime::block_on(remove_plugin(
+        handle.clone(),
+        host.clone(),
+        "demo".to_string(),
+    ))
+    .unwrap_err()
+    .contains("identity does not match"));
+
+    fs::write(
+        target.join("package.json"),
+        br#"{"name":"demo","omnitermPlugin":{"apiVersion":2}}"#,
+    )
+    .unwrap();
+    assert!(tauri::async_runtime::block_on(remove_plugin(
+        handle.clone(),
+        host,
+        "demo".to_string(),
+    ))
+    .unwrap());
+    assert!(!target.exists());
+    assert!(tauri::async_runtime::block_on(remove_plugin(
+        handle,
+        app.state::<PluginHost>(),
+        "demo".to_string(),
+    ))
+    .is_err());
+    let _ = fs::remove_dir_all(root);
 }

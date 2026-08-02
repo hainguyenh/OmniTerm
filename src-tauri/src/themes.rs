@@ -1,7 +1,7 @@
 use std::fs;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
-fn get_themes_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+fn get_themes_dir<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
     let data_dir = app
         .path()
         .app_data_dir()
@@ -17,7 +17,7 @@ fn get_themes_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn list_themes(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+pub async fn list_themes<R: Runtime>(app: AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
     let mut themes = Vec::new();
 
     // 1. Read built-in themes
@@ -87,7 +87,7 @@ pub fn validate_theme_id(id: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn save_theme(app: tauri::AppHandle, theme: serde_json::Value) -> Result<(), String> {
+pub async fn save_theme<R: Runtime>(app: AppHandle<R>, theme: serde_json::Value) -> Result<(), String> {
     let themes_dir = get_themes_dir(&app)?;
 
     let id = theme
@@ -107,7 +107,7 @@ pub async fn save_theme(app: tauri::AppHandle, theme: serde_json::Value) -> Resu
 }
 
 #[tauri::command]
-pub async fn delete_theme(app: tauri::AppHandle, id: String) -> Result<(), String> {
+pub async fn delete_theme<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
     validate_theme_id(&id)?;
     let themes_dir = get_themes_dir(&app)?;
     let theme_path = themes_dir.join(format!("{id}.json"));
@@ -167,7 +167,7 @@ mod tests {
 }
 
 #[tauri::command]
-pub async fn open_themes_folder(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_themes_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let themes_dir = get_themes_dir(&app)?;
 
     // Try opening using opener crate

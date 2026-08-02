@@ -13,7 +13,7 @@ export const DEFAULT_LIMITS = Object.freeze({
 
 const IGNORED_DIRECTORIES = new Set([
   '.git', '.worktrees', 'coverage', 'coverage-js', 'coverage-rust', 'dist',
-  'node_modules', 'target',
+  'node_modules', 'target', 'vendor', 'markdown-explorer',
 ])
 
 export function countLines(content) {

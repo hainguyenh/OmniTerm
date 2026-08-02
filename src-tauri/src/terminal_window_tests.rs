@@ -79,3 +79,76 @@ fn folding_back_is_recorded_per_session() {
     assert!(registry.entries.get("session-a").unwrap().folding_back.load(Ordering::SeqCst));
     assert!(!registry.entries.get("session-b").unwrap().folding_back.load(Ordering::SeqCst));
 }
+
+#[test]
+fn mock_runtime_covers_missing_session_and_registry_command_paths() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    assert!(app.manage(PtyManager::new()));
+    let handle = app.handle().clone();
+    let registry = app.state::<DetachRegistry>();
+    let pty = app.state::<PtyManager>();
+
+    let detached = tauri::async_runtime::block_on(detach_terminal(
+        handle.clone(),
+        registry.clone(),
+        pty,
+        "missing".to_string(),
+        "Missing".to_string(),
+        serde_json::json!({"id": "missing"}),
+    ))
+    .unwrap();
+    assert!(!detached);
+
+    assert!(!tauri::async_runtime::block_on(reattach_terminal(
+        handle.clone(),
+        registry.clone(),
+        "missing".to_string(),
+    ))
+    .unwrap());
+    tauri::async_runtime::block_on(focus_terminal_window(
+        handle.clone(),
+        registry.clone(),
+        "missing".to_string(),
+    ))
+    .unwrap();
+    tauri::async_runtime::block_on(release_terminal_window(
+        registry,
+        "missing".to_string(),
+    ))
+    .unwrap();
+
+    assert!(!session_is_busy(&handle, "missing"));
+    on_window_destroyed(&handle, "missing");
+    finish_reattach(&handle, "missing");
+}
+
+#[test]
+fn destroyed_window_respects_shutdown_and_finish_reattach_removes_the_entry() {
+    use tauri::Manager;
+
+    let app = tauri::test::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    assert!(app.manage(PtyManager::new()));
+    let handle = app.handle().clone();
+    let registry = app.state::<DetachRegistry>();
+    registry
+        .entries
+        .insert("session".to_string(), entry("term-1", "Coverage"));
+
+    registry.begin_shutdown();
+    on_window_destroyed(&handle, "session");
+    assert!(registry.entries.contains_key("session"));
+
+    registry.shutting_down.store(false, Ordering::SeqCst);
+    registry
+        .entries
+        .get("session")
+        .unwrap()
+        .folding_back
+        .store(true, Ordering::SeqCst);
+    on_window_destroyed(&handle, "session");
+    assert!(!registry.entries.contains_key("session"));
+}

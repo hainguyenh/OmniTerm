@@ -26,6 +26,7 @@ const packageJson = JSON.parse(readRepoFile("package.json")) as {
   devDependencies?: Record<string, string>;
 };
 const workflow = readRepoFile(".github", "workflows", "build-release.yml").replace(/\r\n/g, "\n");
+const qualityWorkflow = readRepoFile(".github", "workflows", "test-gate.yml").replace(/\r\n/g, "\n");
 
 describe("release configuration", () => {
   it("pins the repo Node engine to 24+", () => {
@@ -78,6 +79,17 @@ describe("release configuration", () => {
     expect(workflow).not.toMatch(/\n {2}(?:test-gate|rust-test-gate):/);
   });
 
+  it("enforces 85% on a fixed core and ratchets every full-source metric", () => {
+    expect(packageJson.scripts?.["coverage:js"]).toContain("coverage:js:full");
+    expect(packageJson.scripts?.["coverage:js"]).toContain("coverage:js:core");
+    expect(qualityWorkflow).toContain("Coverage — core 85% + full-source ratchet");
+    expect(qualityWorkflow).toContain("--js-core artifacts/coverage-js/core/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--rust-core artifacts/coverage-rust/core/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--js-full artifacts/coverage-js/full/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--rust-full artifacts/coverage-rust/full/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--policy coverage-policy.json");
+  });
+
   it("creates the release page only after the artifacts finish", () => {
     expect(workflow).toMatch(
       /create-release-page:[\s\S]*needs:\s*\[resolve-release-version, build-desktop-packages\]/,
@@ -119,10 +131,11 @@ describe("release configuration", () => {
     const buildRs = readRepoFile("src-tauri", "build.rs");
     const indexHtml = readRepoFile("index.html");
 
-    expect(appLogo).toMatch(/import\s+appLogo\s+from\s+['"]\.\/OmniTerm-Logo\.png['"]/);
+    expect(appLogo).toMatch(/import\s+appLogo\s+from\s+['"]\.\.\/generated\/OmniTerm-Logo\.webp['"]/);
     expect(appLogo).not.toContain("'/OmniTerm-Logo.png'");
     expect(buildRs).toContain("cargo:rerun-if-changed=icons/icon.ico");
-    expect(indexHtml).toContain('href="./OmniTerm-Logo.png"');
-    expect(indexHtml).not.toContain('href="/OmniTerm-Logo.png"');
+    expect(indexHtml).toContain('href="/src/generated/OmniTerm-Logo.webp"');
+    expect(packageJson.scripts?.["assets:generate"]).toBe("node scripts/generate-app-assets.mjs");
+    expect(packageJson.devDependencies?.potrace).toBeUndefined();
   });
 });

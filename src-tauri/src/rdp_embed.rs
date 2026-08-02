@@ -57,8 +57,6 @@ pub struct RdpSessionManager {
 }
 
 struct RdpSession {
-    #[allow(dead_code)]
-    child_pid: u32,
     temp_file: PathBuf,
 }
 
@@ -80,9 +78,9 @@ impl RdpSessionManager {
         self.seq.fetch_add(1, Ordering::SeqCst)
     }
 
-    pub fn register(&self, id: String, pid: u32, temp_file: PathBuf) {
+    pub fn register(&self, id: String, temp_file: PathBuf) {
         let mut map = self.sessions.lock().unwrap();
-        map.insert(id, RdpSession { child_pid: pid, temp_file });
+        map.insert(id, RdpSession { temp_file });
     }
 
     pub fn remove(&self, id: &str) -> Option<PathBuf> {
@@ -166,7 +164,7 @@ fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&P
 }
 
 #[tauri::command]
-pub async fn connect_rdp(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+pub async fn connect_rdp<R: Runtime>(app: AppHandle<R>, id: String) -> Result<serde_json::Value, String> {
     // Resolves through the ad-hoc registry, the global tree, workspace profiles, then a plugin's
     // `ConnectionProvider`. A plugin owning the tree therefore also owns what gets launched from it.
     let conn = crate::pty_resolve::resolve_connection_by_id(&app, &id).await?;
@@ -225,9 +223,8 @@ pub async fn connect_rdp(app: AppHandle, id: String) -> Result<serde_json::Value
         }
     };
 
-    let pid = child.id();
     if let Some(mgr) = app.try_state::<RdpSessionManager>() {
-        mgr.register(id.clone(), pid, temp_file.clone());
+        mgr.register(id.clone(), temp_file.clone());
     }
     let _ = app.emit(&format!("rdp-ready-{id}"), ());
 
@@ -249,7 +246,7 @@ pub async fn connect_rdp(app: AppHandle, id: String) -> Result<serde_json::Value
 }
 
 #[tauri::command]
-pub async fn rdp_disconnect(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn rdp_disconnect<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
     let temp = app
         .try_state::<RdpSessionManager>()
         .and_then(|m| m.remove(&id));

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import {
+  COVERAGE_METRICS,
   combineCoverage,
   evaluateCoverage,
   normalizeJsCoverage,
@@ -89,3 +90,4 @@ test('normalization rejects a missing fourth condition instead of silently passi
     functions: { count: 1, covered: 1 },
   } }] }), /branches/)
 })
+

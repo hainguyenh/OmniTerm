@@ -67,10 +67,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       if (e.key === 'Escape') {
         onClose();
         e.preventDefault();
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' && filteredConnections.length > 0) {
         setSelectedIndex(prev => (prev + 1) % filteredConnections.length);
         e.preventDefault();
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' && filteredConnections.length > 0) {
         setSelectedIndex(prev => (prev - 1 + filteredConnections.length) % filteredConnections.length);
         e.preventDefault();
       } else if (e.key === 'Enter' && filteredConnections.length > 0) {

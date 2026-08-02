@@ -180,3 +180,24 @@ fn an_empty_tree_deserializes_from_an_empty_object() {
     assert!(tree.connections.is_empty());
     assert!(tree.folders.is_empty());
 }
+
+#[test]
+fn bounded_import_reader_accepts_small_text_and_rejects_missing_or_oversized_files() {
+    use std::io::Write;
+
+    let mut small = tempfile::NamedTempFile::new().unwrap();
+    small.write_all(PLAIN_EXPORT.as_bytes()).unwrap();
+    assert_eq!(read_bounded(small.path()).unwrap(), PLAIN_EXPORT);
+
+    let missing = small.path().with_extension("missing");
+    assert_eq!(read_bounded(&missing).unwrap_err(), "Cannot read the selected file.");
+
+    let oversized = tempfile::NamedTempFile::new().unwrap();
+    oversized
+        .as_file()
+        .set_len(MAX_IMPORT_FILE_BYTES + 1)
+        .unwrap();
+    assert!(read_bounded(oversized.path())
+        .unwrap_err()
+        .contains("File too large to import"));
+}

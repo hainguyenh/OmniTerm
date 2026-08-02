@@ -16,7 +16,7 @@
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::PathBuf;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 #[cfg(test)]
 #[path = "settings_tests.rs"]
@@ -80,7 +80,7 @@ pub fn merge_shallow(base: &Value, patch: &Value) -> Value {
     Value::Object(out)
 }
 
-fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
+fn settings_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_data_dir()
@@ -91,7 +91,7 @@ fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
 /// Read stored settings layered over the defaults. An unreadable or corrupt file yields the defaults
 /// rather than an error — the same fallback the Electron store used. Losing a preference is
 /// recoverable; refusing to start is not.
-pub fn read_settings(app: &AppHandle) -> Value {
+pub fn read_settings<R: Runtime>(app: &AppHandle<R>) -> Value {
     let stored = settings_path(app)
         .ok()
         .filter(|p| p.exists())
@@ -106,13 +106,13 @@ pub fn read_settings(app: &AppHandle) -> Value {
 }
 
 #[tauri::command]
-pub async fn get_settings(app: AppHandle) -> Result<Value, String> {
+pub async fn get_settings<R: Runtime>(app: AppHandle<R>) -> Result<Value, String> {
     Ok(read_settings(&app))
 }
 
 /// Merge a partial settings object into what is stored.
 #[tauri::command]
-pub async fn save_settings(app: AppHandle, settings: Value) -> Result<(), String> {
+pub async fn save_settings<R: Runtime>(app: AppHandle<R>, settings: Value) -> Result<(), String> {
     if !settings.is_object() {
         return Err("Settings must be an object.".to_string());
     }

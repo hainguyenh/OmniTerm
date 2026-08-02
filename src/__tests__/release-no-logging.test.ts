@@ -108,6 +108,16 @@ describe("packaged builds emit no diagnostics", () => {
     expect(DIAGNOSTICS_ENABLED).toBe(true);
   });
 
+  it("ignores non-functions and survives a non-writable console method", () => {
+    const original = () => "still present";
+    const stub: Record<string, unknown> = { value: 42 };
+    Object.defineProperty(stub, "log", { value: original, enumerable: true, writable: false });
+
+    expect(neuterConsole(stub)).toBe(0);
+    expect(stub.log).toBe(original);
+    expect(stub.value).toBe(42);
+  });
+
   it("compiles the Rust log macros away in release (not merely filters them at runtime)", () => {
     expect(readRepoFile("src-tauri", "Cargo.toml")).toMatch(
       /^log\s*=\s*\{[^}]*release_max_level_off/m,

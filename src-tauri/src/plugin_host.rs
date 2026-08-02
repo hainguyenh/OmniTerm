@@ -17,6 +17,10 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 // What the host presents — the Node->Rust capability surface and the descriptor shown when the host is
 // not running — lives in plugin_host_api.rs. This file owns the process and the transport.
 use crate::plugin_host_api::{handle_reverse_call, node_arg_path};
+
+#[cfg(test)]
+#[path = "plugin_host_tests.rs"]
+mod tests;
 #[path = "plugin_host_rpc.rs"]
 mod rpc;
 pub struct PluginHost {

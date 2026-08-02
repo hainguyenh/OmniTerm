@@ -6,7 +6,7 @@
 //! checks always read false.
 
 use std::fs;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(test)]
 #[path = "app_utils_tests.rs"]
@@ -86,7 +86,7 @@ pub const fn logging_enabled() -> bool {
 const LOGGING_DISABLED: &str = "This build keeps no log.";
 
 #[tauri::command]
-pub async fn reveal_log(app: AppHandle) -> Result<String, String> {
+pub async fn reveal_log<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     if !logging_enabled() {
         return Err(LOGGING_DISABLED.to_string());
     }
@@ -99,7 +99,7 @@ pub async fn reveal_log(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub async fn clear_log(app: AppHandle) -> Result<bool, String> {
+pub async fn clear_log<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
     // Vacuously true: there is nothing to clear, and no reason to read the directory to find out.
     if !logging_enabled() {
         return Ok(true);
@@ -128,7 +128,7 @@ pub async fn open_external(url: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn get_version(app: AppHandle) -> Result<String, String> {
+pub async fn get_version<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     Ok(app.package_info().version.to_string())
 }
 

@@ -12,7 +12,7 @@ use serde_json::Value;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, Runtime, State};
 use uuid::Uuid;
 
 const MAX_ARCHIVE_BYTES: u64 = 64 * 1024 * 1024;
@@ -200,7 +200,7 @@ fn extract_validated(
     Ok(())
 }
 
-fn installed_dir(app: &AppHandle) -> Result<PathBuf, String> {
+fn installed_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     Ok(app
         .path()
         .app_data_dir()
@@ -209,8 +209,8 @@ fn installed_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-pub async fn install_plugin_package(
-    app: AppHandle,
+pub async fn install_plugin_package<R: Runtime>(
+    app: AppHandle<R>,
     host: State<'_, PluginHost>,
 ) -> Result<Option<PluginChange>, String> {
     let Some(file) = AsyncFileDialog::new()
@@ -287,8 +287,8 @@ pub async fn install_plugin_package(
 }
 
 #[tauri::command]
-pub async fn remove_plugin(
-    app: AppHandle,
+pub async fn remove_plugin<R: Runtime>(
+    app: AppHandle<R>,
     host: State<'_, PluginHost>,
     id: String,
 ) -> Result<bool, String> {
@@ -309,7 +309,7 @@ pub async fn remove_plugin(
 }
 
 #[tauri::command]
-pub fn restart_app(app: AppHandle) {
+pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
     app.restart()
 }
 
