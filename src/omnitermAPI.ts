@@ -280,7 +280,6 @@ function createTauriAPI(): any {
       remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<void>('remove_custom_art', { slot }),
     },
 
-
     settings: {
       get: () => invoke<any>('get_settings'),
       // A partial object is a partial write — the backend merges it into what is stored.

@@ -235,4 +235,34 @@ mod tests {
         assert!(host.pending.is_empty());
         assert!(host.next_id.load(Ordering::SeqCst) > 1);
     }
+
+    /// `call()`'s real success path — send on `stdin_tx`, await the reply on the `pending` oneshot —
+    /// is otherwise never exercised: every other test only ever hits the "not started"/"no sender"
+    /// fallbacks. This substitutes a channel-backed fake transport for the real Node sidecar, playing
+    /// the part of `PluginHost::start`'s stdout-reader task: parse the request line, resolve the
+    /// matching `pending` entry, and reply.
+    #[test]
+    fn call_round_trips_through_a_real_channel_transport() {
+        let host = PluginHost::new();
+        host.started.store(true, Ordering::SeqCst);
+
+        let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(8);
+        block_on(async {
+            *host.stdin_tx.lock().await = Some(stdin_tx);
+        });
+
+        let pending = Arc::clone(&host.pending);
+        tauri::async_runtime::spawn(async move {
+            while let Some(line) = stdin_rx.recv().await {
+                let msg: Value = serde_json::from_str(&line).expect("a well-formed JSON-RPC request");
+                let id = msg["id"].as_u64().expect("request should carry a numeric id");
+                if let Some((_, tx)) = pending.remove(&id) {
+                    let _ = tx.send(Ok(json!({ "echoedMethod": msg["method"] })));
+                }
+            }
+        });
+
+        let result = block_on(host.invoke("ping".to_string(), vec![json!(1)])).unwrap();
+        assert_eq!(result, json!({ "echoedMethod": "plugin.invoke" }));
+    }
 }

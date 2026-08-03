@@ -1,6 +1,115 @@
 use super::*;
+use crate::adhoc::AdhocRegistry;
+use crate::openshell::OpenShellRequest;
+use crate::shell_spec::LocalShell;
 use crate::test_support;
+use tauri::ipc::InvokeResponseBody;
 use tauri::Manager;
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
+
+/// The platform's own shell, mirroring `tests/common/mod.rs::native_shell` — `cmd`/`sh` are the two
+/// shells whose `resolve_exe()` succeeds on their respective CI runners without depending on what
+/// else happens to be installed.
+fn native_shell() -> LocalShell {
+    if cfg!(target_os = "windows") {
+        LocalShell::Cmd
+    } else {
+        LocalShell::Sh
+    }
+}
+
+fn recording_channel() -> (Channel<Response>, mpsc::Receiver<Vec<u8>>) {
+    let (tx, rx) = mpsc::channel();
+    let channel = Channel::new(move |body: InvokeResponseBody| {
+        if let InvokeResponseBody::Raw(bytes) = body {
+            let _ = tx.send(bytes);
+        }
+        Ok(())
+    });
+    (channel, rx)
+}
+
+fn status_channel() -> (Channel<SessionStatus>, mpsc::Receiver<SessionStatus>) {
+    let (tx, rx) = mpsc::channel();
+    let channel = Channel::new(move |body: InvokeResponseBody| {
+        if let InvokeResponseBody::Json(text) = body {
+            if let Ok(status) = serde_json::from_str::<SessionStatus>(&text) {
+                let _ = tx.send(status);
+            }
+        }
+        Ok(())
+    });
+    (channel, rx)
+}
+
+/// Runs a real, self-terminating shell command through the actual command — not a reimplementation
+/// of its spawn logic — and follows it through Ready, output, and Closed. This is the single largest
+/// uncovered function in the crate: `tests/common/mod.rs` deliberately mirrors this function's PTY
+/// setup for the integration tests rather than calling it, so none of that coverage ever counted here.
+#[test]
+fn start_local_session_runs_a_real_shell_through_its_full_lifecycle() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(PtyManager::new()));
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle().clone();
+
+    let marker = "omniterm-coverage-marker";
+    handle.state::<AdhocRegistry>().insert_named(
+        "adhoc-coverage".to_string(),
+        OpenShellRequest {
+            shell: native_shell(),
+            cwd: None,
+            command: Some(format!("echo {marker}")),
+            args: None,
+            keep_open: false,
+            name: "Coverage".to_string(),
+        },
+    );
+
+    let (on_data, data_rx) = recording_channel();
+    let (on_status, status_rx) = status_channel();
+    let manager = handle.state::<PtyManager>();
+
+    tauri::async_runtime::block_on(start_local_session(
+        handle.clone(),
+        manager.clone(),
+        "session-coverage".to_string(),
+        "adhoc-coverage".to_string(),
+        None,
+        on_data,
+        on_status,
+    ))
+    .expect("a plain echo through the native shell should start");
+
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut saw_ready = false;
+    let mut closed_code = None;
+    while Instant::now() < deadline && closed_code.is_none() {
+        if let Ok(status) = status_rx.recv_timeout(Duration::from_millis(200)) {
+            match status {
+                SessionStatus::Ready { .. } => saw_ready = true,
+                SessionStatus::Closed { code } => closed_code = Some(code),
+                _ => {}
+            }
+        }
+    }
+    assert!(saw_ready, "expected a Ready status before Closed");
+    assert_eq!(closed_code, Some(0), "echo should exit cleanly");
+
+    let mut seen = String::new();
+    while let Ok(bytes) = data_rx.try_recv() {
+        seen.push_str(&String::from_utf8_lossy(&bytes));
+    }
+    assert!(
+        seen.contains(marker),
+        "expected the echoed marker in the session's output, got: {seen:?}"
+    );
+
+    // The exit-watcher removes the session before it sends `Closed` — already observed above.
+    assert!(manager.sessions.get("session-coverage").is_none());
+}
 
 #[test]
 fn manager_defaults_empty_and_missing_session_commands_fail_cleanly() {
