@@ -225,13 +225,14 @@ describe('complete Tauri bridge behavior', () => {
 
     state.open.mockResolvedValueOnce('/tmp/art.png')
     state.invoke.mockResolvedValueOnce('/stored/art.png')
-    await expect(api.customArt.upload('idle-light')).resolves.toBe('asset:///stored/art.png')
+    await expect(api.customArt.upload('idle-light')).resolves.toMatch(/^asset:\/\/\/stored\/art\.png\?t=\d+$/)
     state.open.mockResolvedValueOnce(null)
     await expect(api.customArt.upload('idle-dark')).rejects.toThrow('cancelled')
     state.invoke.mockResolvedValueOnce('/stored/art.png')
-    await expect(api.customArt.get('idle-light')).resolves.toBe('asset:///stored/art.png')
+    await expect(api.customArt.get('idle-light')).resolves.toMatch(/^asset:\/\/\/stored\/art\.png\?t=\d+$/)
     state.invoke.mockResolvedValueOnce(null)
     await expect(api.customArt.get('idle-dark')).resolves.toBeNull()
+
     await api.customArt.remove('idle-dark')
   })
 

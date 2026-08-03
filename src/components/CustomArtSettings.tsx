@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react'
-import { ChevronRight, ImagePlus, RotateCcw } from 'lucide-react'
+import { ChevronRight, ImagePlus, RotateCcw, Info, Save } from 'lucide-react'
 import { DefaultIdleArt, DefaultLoadingArt } from '../assets/defaultArt'
 
 /**
@@ -28,12 +28,17 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
 }) => {
   const [uploading, setUploading] = useState<ArtSlot | null>(null)
   const [expanded, setExpanded] = useState(false)
+  const [showTooltip, setShowTooltip] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+
+  /** Tracks which slots have unsaved changes (freshly uploaded this session). */
+  const [pendingSlots, setPendingSlots] = useState<Set<ArtSlot>>(new Set())
 
   const handleUpload = async (slot: ArtSlot) => {
     setUploading(slot)
     try {
       await window.omnitermAPI.customArt.upload(slot)
+      setPendingSlots(prev => new Set(prev).add(slot))
       onArtChanged()
     } catch {
       // User cancelled the dialog or an error occurred — silently ignore.
@@ -45,26 +50,61 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
   const handleRemove = async (slot: ArtSlot) => {
     try {
       await window.omnitermAPI.customArt.remove(slot)
+      setPendingSlots(prev => {
+        const next = new Set(prev)
+        next.delete(slot)
+        return next
+      })
       onArtChanged()
     } catch {
       // Ignore
     }
   }
 
+  const handleSave = () => {
+    // Refresh to ensure the latest art is loaded everywhere, then clear pending state.
+    onArtChanged()
+    setPendingSlots(new Set())
+  }
+
+  const hasAnyCustom = !!(idleArtUrlLight || idleArtUrlDark || loadingArtUrlLight || loadingArtUrlDark)
+  const hasPendingChanges = pendingSlots.size > 0
+
   return (
     <div className="px-4 py-2.5 border-t border-theme-border">
       {/* Clickable header row — toggles expand/collapse */}
-      <button
-        type="button"
-        onClick={() => setExpanded(v => !v)}
-        className="w-full flex items-center gap-1.5 group cursor-pointer bg-transparent border-none p-0 text-left"
-      >
-        <ChevronRight
-          className="w-3 h-3 text-theme-dim transition-transform duration-200"
-          style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
-        />
-        <span className="text-[10px] uppercase font-bold tracking-widest text-theme-dim">Pane Art</span>
-      </button>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="flex-1 flex items-center gap-1.5 group cursor-pointer bg-transparent border-none p-0 text-left"
+        >
+          <ChevronRight
+            className="w-3 h-3 text-theme-dim transition-transform duration-200"
+            style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
+          />
+          <span className="text-[10px] uppercase font-bold tracking-widest text-theme-dim">Pane Art</span>
+        </button>
+
+        {/* Info icon with tooltip */}
+        <div className="relative">
+          <button
+            type="button"
+            className="p-0.5 text-theme-dim hover:text-theme-accent transition-colors bg-transparent border-none cursor-help"
+            onMouseEnter={() => setShowTooltip(true)}
+            onMouseLeave={() => setShowTooltip(false)}
+            onClick={(e) => { e.stopPropagation(); setShowTooltip(v => !v) }}
+            aria-label="Pane Art info"
+          >
+            <Info className="w-3 h-3" />
+          </button>
+          {showTooltip && (
+            <div className="absolute right-0 top-full mt-1 z-50 w-56 px-2.5 py-2 rounded-lg bg-[var(--theme-popup-bg)] border border-theme-border shadow-xl text-[10px] text-theme-fg leading-relaxed pointer-events-none">
+              Upload custom images or GIFs to replace the default idle and loading pane art. Light and Dark mode each have separate slots. Max file size: 2 MB.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Collapsible body — animated max-height */}
       <div
@@ -86,6 +126,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
             customUrl={idleArtUrlLight}
             defaultPreview={<DefaultIdleArt dark={false} />}
             uploading={uploading === 'idle-light'}
+            isPending={pendingSlots.has('idle-light')}
             onUpload={() => handleUpload('idle-light')}
             onRemove={() => handleRemove('idle-light')}
           />
@@ -96,6 +137,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
             customUrl={idleArtUrlDark}
             defaultPreview={<DefaultIdleArt dark={true} />}
             uploading={uploading === 'idle-dark'}
+            isPending={pendingSlots.has('idle-dark')}
             onUpload={() => handleUpload('idle-dark')}
             onRemove={() => handleRemove('idle-dark')}
           />
@@ -106,6 +148,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
             customUrl={loadingArtUrlLight}
             defaultPreview={<DefaultLoadingArt dark={false} />}
             uploading={uploading === 'loading-light'}
+            isPending={pendingSlots.has('loading-light')}
             onUpload={() => handleUpload('loading-light')}
             onRemove={() => handleRemove('loading-light')}
           />
@@ -116,10 +159,30 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
             customUrl={loadingArtUrlDark}
             defaultPreview={<DefaultLoadingArt dark={true} />}
             uploading={uploading === 'loading-dark'}
+            isPending={pendingSlots.has('loading-dark')}
             onUpload={() => handleUpload('loading-dark')}
             onRemove={() => handleRemove('loading-dark')}
           />
         </div>
+
+        {/* Save button — shown when there are pending uploads to confirm */}
+        {(hasPendingChanges || hasAnyCustom) && (
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!hasPendingChanges}
+              className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-bold rounded-lg border transition-colors ${
+                hasPendingChanges
+                  ? 'bg-theme-accent text-theme-accent-fg border-theme-accent hover:opacity-90'
+                  : 'bg-theme-bg text-theme-dim border-theme-border cursor-default opacity-50'
+              }`}
+            >
+              <Save className="w-3 h-3" />
+              {hasPendingChanges ? `Save Changes (${pendingSlots.size})` : 'All Saved'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -131,14 +194,19 @@ interface ArtCardProps {
   customUrl: string | null
   defaultPreview: React.ReactNode
   uploading: boolean
+  isPending: boolean
   onUpload: () => void
   onRemove: () => void
 }
 
 const ArtCard: React.FC<ArtCardProps> = ({
-  label, description, customUrl, defaultPreview, uploading, onUpload, onRemove,
+  label, description, customUrl, defaultPreview, uploading, isPending, onUpload, onRemove,
 }) => (
-  <div className="rounded-lg border border-theme-border bg-[var(--theme-popup-bg)] overflow-hidden">
+  <div className={`rounded-lg border overflow-hidden transition-colors ${
+    isPending
+      ? 'border-theme-accent/50 bg-[var(--theme-popup-bg)]'
+      : 'border-theme-border bg-[var(--theme-popup-bg)]'
+  }`}>
     {/* Preview area */}
     <div className="relative w-full aspect-square flex items-center justify-center bg-[var(--theme-bg)] overflow-hidden p-3">
       {customUrl ? (
@@ -154,11 +222,13 @@ const ArtCard: React.FC<ArtCardProps> = ({
       )}
       {/* Badge */}
       <span className={`absolute top-1.5 right-1.5 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
-        customUrl
-          ? 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10'
-          : 'text-theme-dim border-theme-border bg-[var(--theme-popup-bg)]'
+        isPending
+          ? 'text-[var(--theme-accent)] border-[var(--theme-accent)]/30 bg-[var(--theme-accent)]/10'
+          : customUrl
+            ? 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10'
+            : 'text-theme-dim border-theme-border bg-[var(--theme-popup-bg)]'
       }`}>
-        {customUrl ? 'Custom' : 'Default'}
+        {isPending ? 'Pending' : customUrl ? 'Custom' : 'Default'}
       </span>
     </div>
 

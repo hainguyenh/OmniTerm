@@ -27,7 +27,13 @@ tauri = { version = "2", features = ["test"] }
 # The `devtools` feature is deliberately absent: it only exists to enable the inspector in a RELEASE
 # build, and a packaged OmniTerm reports nothing about itself — no log, no console, no inspector. A
 # debug build still gets devtools, which Tauri wires up from `debug_assertions` on its own.
-tauri = { version = "2", features = [] }
+#
+# `protocol-asset` compiles in the `asset:` URI scheme handler. It is what serves the user's uploaded
+# pane art (custom_art.rs) to the webview: `convertFileSrc()` in the frontend mints an
+# `http://asset.localhost/<path>` URL, and without this feature that scheme is never registered, so
+# every custom-art <img> fails to load. The paths it will serve are still confined by
+# `app.security.assetProtocol.scope` in tauri.conf.json — the feature only makes the handler exist.
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"

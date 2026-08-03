@@ -265,18 +265,21 @@ function createTauriAPI(): any {
 
     customArt: {
       // The backend opens a file picker, validates the image, and stores it in custom-art/.
+      // A cache-busting query param is appended so the webview always fetches the latest file
+      // when the user replaces art for the same slot (the path stays the same).
       upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') =>
         open({
           multiple: false,
           filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
         }).then((path) =>
           typeof path === 'string'
-            ? invoke<string>('upload_custom_art', { slot, path }).then(convertFileSrc)
+            ? invoke<string>('upload_custom_art', { slot, path }).then(p => `${convertFileSrc(p)}?t=${Date.now()}`)
             : Promise.reject(new Error('cancelled')),
         ),
-      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<string | null>('get_custom_art', { slot }).then(p => p ? convertFileSrc(p) : null),
+      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<string | null>('get_custom_art', { slot }).then(p => p ? `${convertFileSrc(p)}?t=${Date.now()}` : null),
       remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<void>('remove_custom_art', { slot }),
     },
+
 
     settings: {
       get: () => invoke<any>('get_settings'),
