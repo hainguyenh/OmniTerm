@@ -40,7 +40,7 @@ describe('UpdateSettings', () => {
 
     rerender(<UpdateSettings {...props({ updateChecking: true, appSettings: { ...baseSettings, checkUpdatesOnStartup: true } })} />)
     expect(screen.getByText('Checking…')).toBeInTheDocument()
-    expect(screen.getByText('Checking…')).toBeDisabled()
+    expect(screen.getByText('Check for updates').closest('button')).toBeDisabled()
   })
 
   it('shows current, last-check, newer-version, and skipped-version states', () => {

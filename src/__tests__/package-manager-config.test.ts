@@ -79,15 +79,12 @@ describe("release configuration", () => {
     expect(workflow).not.toMatch(/\n {2}(?:test-gate|rust-test-gate):/);
   });
 
-  it("enforces 85% on a fixed core and ratchets every full-source metric", () => {
-    expect(packageJson.scripts?.["coverage:js"]).toContain("coverage:js:full");
-    expect(packageJson.scripts?.["coverage:js"]).toContain("coverage:js:core");
-    expect(qualityWorkflow).toContain("Coverage — core 85% + full-source ratchet");
-    expect(qualityWorkflow).toContain("--js-core artifacts/coverage-js/core/coverage-summary.json");
-    expect(qualityWorkflow).toContain("--rust-core artifacts/coverage-rust/core/coverage-summary.json");
-    expect(qualityWorkflow).toContain("--js-full artifacts/coverage-js/full/coverage-summary.json");
-    expect(qualityWorkflow).toContain("--rust-full artifacts/coverage-rust/full/coverage-summary.json");
-    expect(qualityWorkflow).toContain("--policy coverage-policy.json");
+  it("enforces an 85% coverage threshold across JS and Rust plus their combined total", () => {
+    expect(packageJson.scripts?.["coverage:js"]).toContain("vitest run --coverage");
+    expect(qualityWorkflow).toContain("Coverage — full source 85%");
+    expect(qualityWorkflow).toContain("--js artifacts/coverage-js/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--rust artifacts/coverage-rust/coverage-summary.json");
+    expect(qualityWorkflow).toContain("--threshold 85");
   });
 
   it("creates the release page only after the artifacts finish", () => {

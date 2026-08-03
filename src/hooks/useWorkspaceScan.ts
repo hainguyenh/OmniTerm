@@ -59,7 +59,7 @@ export function useWorkspaceScan() {
   /** First page of a folder's files, asked for when the folder is expanded. */
   const loadFolder = useCallback(async (id: string, folder: string) => {
     const key = `${id}:${folder}`
-    if (inFlight.current.has(key) || stateRef.current.files[id]?.[folder] !== undefined) return
+    if (inFlight.current.has(key) || stateRef.current.files[id]?.[folder] !== undefined) return null
     inFlight.current.add(key)
     setLoadingFolders((prev) => new Set(prev).add(key))
     try {
@@ -72,6 +72,7 @@ export function useWorkspaceScan() {
         ...prev,
         [id]: { ...(prev[id] ?? {}), [folder]: { total: page.total, hasMore: page.hasMore } },
       }))
+      return page
     } finally {
       inFlight.current.delete(key)
       setLoadingFolders((prev) => {
@@ -83,14 +84,21 @@ export function useWorkspaceScan() {
     }
   }, [])
 
-  /** Append the next page of one folder — asked for by that folder's "Show more" row. */
-  const loadMore = useCallback(async (id: string, folder: string) => {
+  /**
+   * Append the next page of one folder — asked for by that folder's "Show more" row.
+   *
+   * `knownLoaded` lets a caller that is draining several pages back-to-back (see `loadAll` below)
+   * pass the count it already knows it fetched, rather than reading `stateRef` — which only
+   * refreshes on a render, so a burst of pages resolving faster than React commits would otherwise
+   * see the same stale count and refetch the same page forever.
+   */
+  const loadMore = useCallback(async (id: string, folder: string, knownLoaded?: number) => {
     const key = `${id}:${folder}`
-    if (inFlight.current.has(key)) return
+    if (inFlight.current.has(key)) return null
     inFlight.current.add(key)
     setLoadingMore({ wsId: id, folder })
     try {
-      const loaded = stateRef.current.files[id]?.[folder]?.length ?? 0
+      const loaded = knownLoaded ?? stateRef.current.files[id]?.[folder]?.length ?? 0
       const page = await window.omnitermAPI.workspace.scanFolderEntries(id, folder, loaded, PAGE_SIZE)
       setFiles((prev) => ({
         ...prev,
@@ -100,6 +108,7 @@ export function useWorkspaceScan() {
         ...prev,
         [id]: { ...(prev[id] ?? {}), [folder]: { total: page.total, hasMore: page.hasMore } },
       }))
+      return page
     } finally {
       inFlight.current.delete(key)
       setLoadingMore(null)
@@ -114,17 +123,37 @@ export function useWorkspaceScan() {
     setLoadingAll(id)
     try {
       const paths = ['', ...(stateRef.current.folders[id] ?? []).map((d) => d.id)]
-      // Every folder needs its first page — `loadFolder` skips what is already loaded.
+      // Every folder needs its first page — `loadFolder` skips what is already loaded. Track each
+      // folder's hasMore/loaded-count from what it actually returned rather than re-reading
+      // `stateRef` afterward: several pages resolving back-to-back can outrun the render that would
+      // refresh it, which would otherwise make this loop refetch the same page forever.
+      const hasMore = new Map<string, boolean>()
+      const loadedCount = new Map<string, number>()
       for (let i = 0; i < paths.length; i += 8) {
-        await Promise.all(paths.slice(i, i + 8).map((p) => loadFolder(id, p)))
+        const pages = await Promise.all(paths.slice(i, i + 8).map((p) => loadFolder(id, p)))
+        paths.slice(i, i + 8).forEach((p, j) => {
+          const page = pages[j]
+          if (page) {
+            hasMore.set(p, page.hasMore)
+            loadedCount.set(p, page.entries.length)
+          } else {
+            // Already loaded by a previous call — current state is reliable here since nothing
+            // else is racing to fetch this folder's first page in this operation.
+            hasMore.set(p, stateRef.current.pageInfo[id]?.[p]?.hasMore ?? false)
+            loadedCount.set(p, stateRef.current.files[id]?.[p]?.length ?? 0)
+          }
+        })
       }
-      // Then keep draining every folder that still has more, re-checking after each batch so a page
-      // fetched in parallel can only advance, never be repeated.
       for (;;) {
-        const pending = paths.filter((p) => stateRef.current.pageInfo[id]?.[p]?.hasMore)
+        const pending = paths.filter((p) => hasMore.get(p))
         if (pending.length === 0) break
         for (let i = 0; i < pending.length; i += 8) {
-          await Promise.all(pending.slice(i, i + 8).map((p) => loadMore(id, p)))
+          await Promise.all(pending.slice(i, i + 8).map(async (p) => {
+            const page = await loadMore(id, p, loadedCount.get(p) ?? 0)
+            if (!page) { hasMore.set(p, false); return }
+            hasMore.set(p, page.hasMore)
+            loadedCount.set(p, (loadedCount.get(p) ?? 0) + page.entries.length)
+          }))
         }
       }
     } finally {

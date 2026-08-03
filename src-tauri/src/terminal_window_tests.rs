@@ -3,6 +3,7 @@
 //! label minting and the calling-window lookup that stops one webview asking about another.
 
 use super::*;
+use crate::test_support;
 
 fn entry(label: &str, name: &str) -> DetachEntry {
     DetachEntry {
@@ -84,7 +85,7 @@ fn folding_back_is_recorded_per_session() {
 fn mock_runtime_covers_missing_session_and_registry_command_paths() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     assert!(app.manage(DetachRegistry::new()));
     assert!(app.manage(PtyManager::new()));
     let handle = app.handle().clone();
@@ -129,7 +130,7 @@ fn mock_runtime_covers_missing_session_and_registry_command_paths() {
 fn destroyed_window_respects_shutdown_and_finish_reattach_removes_the_entry() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     assert!(app.manage(DetachRegistry::new()));
     assert!(app.manage(PtyManager::new()));
     let handle = app.handle().clone();

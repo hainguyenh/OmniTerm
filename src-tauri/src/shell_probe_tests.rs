@@ -92,7 +92,9 @@ fn command_returns_only_supported_shell_identifiers_without_duplicates() {
     let shells = tauri::async_runtime::block_on(list_available_shells());
     let mut ids = std::collections::HashSet::new();
     for shell in shells {
-        assert!(["powershell", "cmd", "wsl", "bash", "zsh"].contains(&shell.id.as_str()));
+        let parsed = LocalShell::parse(&shell.id)
+            .unwrap_or_else(|| panic!("{} is not a LocalShell", shell.id));
+        assert!(parsed.is_supported_here(), "{} is foreign here", shell.id);
         assert!(ids.insert(shell.id));
         assert!(!shell.label.trim().is_empty());
     }

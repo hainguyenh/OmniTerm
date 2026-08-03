@@ -145,7 +145,8 @@ describe("packaged builds emit no diagnostics", () => {
     // reveal_log used to create_dir_all unconditionally — asking to see the log in a packaged build
     // created a directory. The guard must come first in both commands.
     for (const command of ["reveal_log", "clear_log"]) {
-      const body = appUtils.slice(appUtils.indexOf(`pub async fn ${command}(`));
+      const fnStart = appUtils.search(new RegExp(`pub async fn ${command}\\b`));
+      const body = appUtils.slice(fnStart);
       const guard = body.indexOf("if !logging_enabled()");
       const firstIo = Math.min(
         ...["app_log_dir", "create_dir_all", "read_dir", "fs::write"]

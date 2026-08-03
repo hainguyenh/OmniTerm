@@ -19,11 +19,12 @@ const batch: PluginDescriptor = {
 const custom: PluginDescriptor = {
   ...full, id: 'custom-plugin', name: 'Custom', permissions: ['openExternal', 'clipboard'], source: 'user',
   enabled: false, status: 'error', error: 'broken', activeConnectionProvider: false, selectedConnectionProvider: false,
+  description: undefined,
 }
 const incompatible: PluginDescriptor = {
   ...custom, id: 'old-plugin', name: 'Old', status: 'incompatible', error: undefined,
 }
-const host: PluginDescriptor = { ...full, id: 'omniterm.plugin-host', name: 'Host', activeConnectionProvider: false, selectedConnectionProvider: false }
+const host: PluginDescriptor = { ...full, id: 'omniterm.plugin-host', name: 'Host', activeConnectionProvider: false, selectedConnectionProvider: false, description: undefined }
 const capabilities: ConnectionProviderCapabilities = {
   protocols: ['SSH', 'RDP'], credentialPolicy: 'prompt-every-time', scopes: ['personal', 'workspace'], sftp: true, importExport: true,
 }

@@ -199,7 +199,7 @@ pub async fn run_script<R: Runtime>(
         _ => {
             let (cwd, name) = match sub_path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
                 Some(sub) => {
-                    let dir = safepath::safe_subdir(&workspace.path, sub)?;
+                    let dir = safepath::safe_subdir(&workspace.path, sub, false)?;
                     let leaf = sub
                         .split('/').rfind(|s| !s.is_empty())
                         .unwrap_or(&workspace.name)

@@ -1,10 +1,9 @@
 use super::*;
 use std::fs;
-use std::sync::Mutex as StdMutex;
 use tempfile::TempDir;
 use tauri::Manager;
 
-static ENV_LOCK: StdMutex<()> = StdMutex::new(());
+use crate::test_support;
 
 fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
     tauri::async_runtime::block_on(future)
@@ -23,8 +22,8 @@ fn installed_plugin_detection_requires_a_child_package_manifest() {
 
 #[test]
 fn development_plugin_directory_uses_only_an_existing_explicit_path() {
-    let _guard = ENV_LOCK.lock().unwrap();
-    let app = tauri::test::mock_app();
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
     let handle = app.handle().clone();
     let original = std::env::var_os("OMNITERM_DEV_PLUGIN");
     let plugin = TempDir::new().unwrap();
@@ -42,10 +41,10 @@ fn development_plugin_directory_uses_only_an_existing_explicit_path() {
 
 #[test]
 fn source_sidecar_resolves_in_debug_and_plugin_free_start_is_silent() {
-    let _guard = ENV_LOCK.lock().unwrap();
+    let _guard = test_support::lock();
     let original_plugin = std::env::var_os("OMNITERM_DEV_PLUGIN");
     std::env::remove_var("OMNITERM_DEV_PLUGIN");
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     let handle = app.handle().clone();
     let data = handle.path().app_data_dir().unwrap();
     let _ = fs::remove_dir_all(data.join("plugins"));
@@ -64,8 +63,8 @@ fn source_sidecar_resolves_in_debug_and_plugin_free_start_is_silent() {
 
 #[test]
 fn startup_failure_records_a_visible_disabled_reason() {
-    let _guard = ENV_LOCK.lock().unwrap();
-    let app = tauri::test::mock_app();
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
     let handle = app.handle().clone();
     let plugins = handle.path().app_data_dir().unwrap().join("plugins/demo");
     fs::create_dir_all(&plugins).unwrap();
@@ -94,7 +93,7 @@ fn startup_failure_records_a_visible_disabled_reason() {
 
 #[test]
 fn already_started_host_returns_without_touching_the_transport() {
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     let host = PluginHost::new();
     host.started.store(true, Ordering::SeqCst);
     block_on(host.start(app.handle())).unwrap();

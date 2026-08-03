@@ -224,7 +224,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           const needsConfirm = sessionIds.some(id => {
               if (editorTabs[id])
                   return false;
-              const s = connStatuses[id] || 'closed';
+              const s = statuses[id] || 'closed';
               return s === 'connected' || s === 'connecting';
           });
           if (needsConfirm) {
@@ -277,12 +277,13 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       setResumeMode(prev => (prev[id] ? { ...prev, [id]: false } : prev));
       setReconnectKeys(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
   };
-  const activeSshId = activeTabId &&
-      connById(activeTabId)?.type === 'SSH' &&
-      statuses[activeTabId] === 'connected'
+  const activeTab = activeTabs.find(t => t.id === activeTabId);
+  const activeConn = activeTab && connById(activeTab.connId);
+  const activeSshId = activeConn?.type === 'SSH' &&
+      statuses[activeTabId ?? ''] === 'connected'
       ? activeTabId
       : null;
-  const activeSshName = activeSshId ? connById(activeSshId)?.name ?? '' : '';
+  const activeSshName = activeSshId ? activeConn?.name ?? '' : '';
   useEffect(() => {
       if (activeView === 'files' && !activeSshId) {
           setActiveView('workspace');

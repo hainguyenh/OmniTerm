@@ -356,8 +356,10 @@ export function useMainLayoutBase({
       const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape')
           setDataMenuOpen(false); };
       const onClick = (e: MouseEvent) => {
-          if (dataMenuRef.current && !dataMenuRef.current.contains(e.target as Node) &&
-              dataMenuBtnRef.current && !dataMenuBtnRef.current.contains(e.target as Node))
+          const target = e.target instanceof Node ? e.target : null;
+          const insideMenu = !!target && !!dataMenuRef.current?.contains(target);
+          const insideBtn = !!target && !!dataMenuBtnRef.current?.contains(target);
+          if (dataMenuRef.current && !insideMenu && dataMenuBtnRef.current && !insideBtn)
               setDataMenuOpen(false);
       };
       window.addEventListener('keydown', onKey);

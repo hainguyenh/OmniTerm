@@ -80,7 +80,7 @@ describe('useWorkspaceScan', () => {
     mockOmnitermAPI({ workspace: { scanFolderEntries } })
     const { result } = renderHook(() => useWorkspaceScan())
 
-    let first!: Promise<void>
+    let first!: Promise<unknown>
     act(() => {
       first = result.current.loadFolder('ws', 'docs')
       void result.current.loadFolder('ws', 'docs')
@@ -116,7 +116,7 @@ describe('useWorkspaceScan', () => {
     const { result } = renderHook(() => useWorkspaceScan())
 
     await act(async () => result.current.loadFolder('ws', 'docs'))
-    let more!: Promise<void>
+    let more!: Promise<unknown>
     act(() => { more = result.current.loadMore('ws', 'docs') })
     expect(result.current.loadingMore).toEqual({ wsId: 'ws', folder: 'docs' })
     await act(async () => more)
@@ -133,7 +133,7 @@ describe('useWorkspaceScan', () => {
     mockOmnitermAPI({ workspace: { scanFolderEntries } })
     const { result } = renderHook(() => useWorkspaceScan())
 
-    let request!: Promise<void>
+    let request!: Promise<unknown>
     act(() => {
       request = result.current.loadMore('ws', 'docs')
       void result.current.loadMore('ws', 'docs')

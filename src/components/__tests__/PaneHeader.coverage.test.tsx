@@ -53,7 +53,7 @@ describe('PaneHeader remaining behavior', () => {
     expect(screen.getAllByText('Desktop')).toHaveLength(2)
     expect(screen.getByText('Empty this pane')).toBeInTheDocument()
     expect(document.querySelector('.bg-theme-bg')).toBeInTheDocument()
-    expect(document.querySelector('.bg-theme-accent')).toBeInTheDocument()
+    expect(document.querySelector('.bg-theme-warning')).toBeInTheDocument()
   })
 
   it('renders an inert empty pane and its empty picker state', () => {

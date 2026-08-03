@@ -57,7 +57,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         const Shape = identity.icon
         return (
           <p className="flex items-center justify-center gap-1 mb-1 text-[10px] font-bold uppercase tracking-wider"
-            style={{ color: identity.color }} title={identity.label}>
+            style={{ color: identity.color }} title={`Pane ${paneIndex + 1} · ${identity.label}`}>
             <Shape className="w-3 h-3" fill={identity.color} />
             Pane {paneIndex + 1}
           </p>

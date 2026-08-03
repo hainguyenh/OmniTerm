@@ -257,7 +257,7 @@ describe('useMainLayoutSessions complete behavior', () => {
     expect(window.omnitermAPI.connect.rdpSetOverlay).toHaveBeenCalledWith(true)
     act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
     expect(result.current.base.panePicker).toBeNull()
-    await waitFor(() => expect(focusTerminal).toHaveBeenCalledWith('s1'))
+    expect(focusTerminal).toHaveBeenCalledWith('s1')
     act(() => window.dispatchEvent(new Event('omniterm:close-tab')))
     act(() => vi.runAllTimers())
     expect(result.current.base.activeTabs).toHaveLength(0)

@@ -8,12 +8,11 @@ use crate::connections::{Connection, ConnectionTree};
 use crate::plugin_host::PluginHost;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard};
+use crate::test_support;
+use std::sync::MutexGuard;
 use tauri::test::MockRuntime;
 use tauri::Manager;
 use tempfile::TempDir;
-
-static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct Fixture {
     _guard: MutexGuard<'static, ()>,
@@ -23,10 +22,8 @@ struct Fixture {
 
 impl Fixture {
     fn new(with_host: bool) -> Self {
-        let guard = TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let app = tauri::test::mock_app();
+        let guard = test_support::lock();
+        let app = test_support::mock_app();
         assert!(app.manage(AdhocRegistry::new()));
         if with_host {
             assert!(app.manage(PluginHost::new()));

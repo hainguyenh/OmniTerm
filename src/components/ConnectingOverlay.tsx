@@ -19,7 +19,7 @@ const ConnectingOverlay: React.FC<ConnectingOverlayProps> = ({ dark, label = 'Co
       /* User-uploaded custom art */
       <img
         src={customArtUrl}
-        alt=""
+        alt={label}
         className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] h-auto"
       />
     ) : (

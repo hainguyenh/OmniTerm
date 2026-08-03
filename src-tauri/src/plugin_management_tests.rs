@@ -2,6 +2,7 @@
 //! these tests cover every pure rejection path before an archive can write executable files.
 
 use super::*;
+use crate::test_support;
 
 fn manifest() -> Vec<u8> {
     br#"{"name":"@x/demo","version":"1.2.3","main":"dist/index.js","omnitermPlugin":{"apiVersion":2,"displayName":"Demo","permissions":["connections"]}}"#.to_vec()
@@ -106,6 +107,10 @@ fn manifest_rejects_unsafe_package_and_entrypoint_names() {
     }
 }
 
+fn is_symlink_mode(mode: u32) -> bool {
+    mode & 0o170000 == 0o120000
+}
+
 fn zip_file(entries: &[(&str, &[u8], Option<u32>)]) -> tempfile::NamedTempFile {
     use std::io::Write;
     use zip::write::SimpleFileOptions;
@@ -116,6 +121,16 @@ fn zip_file(entries: &[(&str, &[u8], Option<u32>)]) -> tempfile::NamedTempFile {
         let mut options = SimpleFileOptions::default();
         if let Some(mode) = mode {
             options = options.unix_permissions(*mode);
+        }
+        // `unix_permissions` masks its argument down to `0o777`, dropping the file-type bits, so a
+        // mode of `0o120777` does not produce a symlink entry — it produces an ordinary file that
+        // `extract_validated` accepts, and the symlink rejection below was never being exercised.
+        // `add_symlink` is what sets `S_IFLNK` in the external attributes `unix_mode()` reads back.
+        if mode.is_some_and(is_symlink_mode) {
+            writer
+                .add_symlink(*name, String::from_utf8_lossy(bytes), options)
+                .unwrap();
+            continue;
         }
         writer.start_file(*name, options).unwrap();
         writer.write_all(bytes).unwrap();
@@ -172,7 +187,10 @@ fn oversized_package_manifest_is_rejected_before_json_parsing() {
 fn installed_plugin_directory_and_remove_command_validate_identity() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    // Writes under the mock app's data directory, which every mock app in this binary shares.
+    let _guard = test_support::lock();
+
+    let app = test_support::mock_app();
     assert!(app.manage(PluginHost::new()));
     let handle = app.handle().clone();
     let root = installed_dir(&handle).unwrap();

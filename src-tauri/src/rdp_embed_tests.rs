@@ -4,6 +4,7 @@
 //! anything secret that reaches it is a stored password by definition.
 
 use super::*;
+use crate::test_support;
 
 fn rdp_conn() -> Connection {
     Connection {
@@ -116,7 +117,7 @@ fn session_manager_sequences_registers_and_removes_temp_files() {
 fn temp_file_helpers_write_sweep_and_finish_only_omniterm_rdp_files() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     let handle = app.handle().clone();
     let cache = handle.path().app_cache_dir().unwrap();
     fs::create_dir_all(&cache).unwrap();

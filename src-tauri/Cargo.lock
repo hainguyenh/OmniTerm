@@ -2657,6 +2657,7 @@ dependencies = [
  "dashmap",
  "dirs",
  "dunce",
+ "embed-resource",
  "log",
  "opener",
  "portable-pty",

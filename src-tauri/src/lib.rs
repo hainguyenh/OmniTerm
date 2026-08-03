@@ -6,6 +6,8 @@ mod window_control;
 
 #[cfg(test)]
 mod command_coverage_tests;
+#[cfg(test)]
+mod test_support;
 
 // Public so the integration tests under tests/ can drive the real launch and command paths.
 pub mod adhoc;

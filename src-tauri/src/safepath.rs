@@ -185,7 +185,13 @@ pub fn safe_runnable_path(root: &str, script_path: &str) -> Result<PathBuf, Stri
 
 /// Resolve a relative `sub_path` under `root` and assert it stays inside the workspace and is a
 /// directory. Used by "open a terminal here" on a subfolder.
-pub fn safe_subdir(root: &str, sub_path: &str) -> Result<PathBuf, String> {
+///
+/// `create` makes a missing `sub_path`, for callers that own the directory rather than only read it.
+/// It has to happen in here: `canonical` fails on a path that is not there yet, so validating first
+/// and creating afterwards could never create anything. Ordering keeps the guarantee intact — `root`
+/// is canonicalized and `sub_path` rejected as absolute or traversing before anything is written, and
+/// containment is re-checked against the canonical result, catching a symlink aimed out of the tree.
+pub fn safe_subdir(root: &str, sub_path: &str, create: bool) -> Result<PathBuf, String> {
     let real_root = canonical(Path::new(root))?;
 
     // Reject absolute paths and `..` before touching the filesystem: `Path::join` silently discards
@@ -200,7 +206,11 @@ pub fn safe_subdir(root: &str, sub_path: &str) -> Result<PathBuf, String> {
         return Err("directory is outside its workspace".to_string());
     }
 
-    let real = canonical(&real_root.join(candidate))?;
+    let target = real_root.join(candidate);
+    if create && !target.exists() {
+        fs::create_dir_all(&target).map_err(|e| e.to_string())?;
+    }
+    let real = canonical(&target)?;
     if !real.starts_with(&real_root) {
         return Err("directory is outside its workspace".to_string());
     }

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkspaceEntry } from '@omniterm/contract'
 import { DEFAULT_TREE_FILTER, type TreeFilter } from '../../utils/workspaceFilter'
@@ -75,7 +75,7 @@ describe('useTreeReveal', () => {
 
     rerender({ revealRequest: { workspaceId: 'ws', path: target.id, nonce: 1 } })
     await vi.runAllTimersAsync()
-    await waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
+    await vi.waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
 
     expect(props.setExpandedId).toHaveBeenCalledWith('ws')
     expect(props.scan).toHaveBeenCalledWith('ws')
@@ -101,11 +101,11 @@ describe('useTreeReveal', () => {
     const { result, rerender, props } = setup(null, all)
 
     rerender({ revealRequest: { workspaceId: 'ws', path: target.id, nonce: 1 } })
-    await waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
+    await vi.waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
     expect(props.setFilters).not.toHaveBeenCalled()
 
     rerender({ revealRequest: { workspaceId: 'ws', path: target.id, nonce: 2 } })
-    await waitFor(() => expect(props.scan).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(props.scan).toHaveBeenCalledTimes(2))
   })
 
   it('does not widen the filter when the requested entry no longer exists', async () => {
@@ -113,7 +113,7 @@ describe('useTreeReveal', () => {
     props.entriesOf.mockReturnValue([])
 
     rerender({ revealRequest: { workspaceId: 'ws', path: 'gone.txt', nonce: 1 } })
-    await waitFor(() => expect(result.current.isHighlighted('ws', 'gone.txt')).toBe(true))
+    await vi.waitFor(() => expect(result.current.isHighlighted('ws', 'gone.txt')).toBe(true))
     expect(props.setFilters).not.toHaveBeenCalled()
   })
 
@@ -140,7 +140,7 @@ describe('useTreeReveal', () => {
     props.loadFolder.mockImplementationOnce(() => gate.promise)
 
     rerender({ revealRequest: { workspaceId: 'ws', path: target.id, nonce: 1 } })
-    await waitFor(() => expect(props.loadFolder).toHaveBeenCalledWith('ws', 'docs'))
+    await vi.waitFor(() => expect(props.loadFolder).toHaveBeenCalledWith('ws', 'docs'))
     rerender({ revealRequest: null })
     await act(async () => {
       gate.resolve()
@@ -162,7 +162,7 @@ describe('useTreeReveal', () => {
     })
 
     rerender({ revealRequest: { workspaceId: 'ws', path: target.id, nonce: 1 } })
-    await waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
+    await vi.waitFor(() => expect(result.current.isHighlighted('ws', target.id)).toBe(true))
     expect(scrollIntoView).not.toHaveBeenCalled()
   })
 })

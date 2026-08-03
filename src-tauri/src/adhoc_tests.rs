@@ -2,6 +2,7 @@
 //! registry, and what a quick "new session" shell is allowed to be.
 
 use super::*;
+use crate::test_support;
 use crate::shell_spec::LocalShell;
 
 fn request() -> OpenShellRequest {
@@ -138,7 +139,7 @@ fn quick_shell_refuses_a_shell_that_cannot_exist_here() {
 fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     assert!(app.manage(AdhocRegistry::new()));
     let handle = app.handle().clone();
 
@@ -175,7 +176,7 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
 fn quick_shell_command_rejects_unsupported_renderer_input() {
     use tauri::Manager;
 
-    let app = tauri::test::mock_app();
+    let app = test_support::mock_app();
     assert!(app.manage(AdhocRegistry::new()));
     let result = tauri::async_runtime::block_on(open_quick_shell(
         app.handle().clone(),

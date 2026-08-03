@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { createRef } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import { TOKYO_NIGHT } from '../../themes'
@@ -120,12 +120,13 @@ describe('MainLayoutView coverage', () => {
       resolveAppearance: vi.fn(() => ({ fontSize: 19 })),
     })
     const { rerender } = render(<MainLayoutView model={m} />)
-    expect(screen.getByText('SSH')).toBeInTheDocument()
+    const footer = document.querySelector('.order-last') as HTMLElement
+    expect(within(footer).getByText('SSH')).toBeInTheDocument()
     expect(screen.getByTestId('metrics')).toHaveTextContent('error:12:true')
     fireEvent.click(screen.getByTitle('Decrease font size'))
     fireEvent.click(screen.getByTitle('Increase font size'))
     fireEvent.click(screen.getByText('Reconnect'))
-    fireEvent.click(screen.getByTitle(/Pop out/i))
+    fireEvent.click(screen.getByTitle('Detach into its own window'))
     fireEvent.click(screen.getByTitle('Reset zoom to 100%'))
     expect(m.onFontSizeChange).toHaveBeenCalledTimes(2)
     expect(m.reconnectSession).toHaveBeenCalledWith('ssh-tab')
@@ -183,6 +184,7 @@ describe('MainLayoutView coverage', () => {
       editorTabs: { 'edit-tab': editor }, poppedOut: { 'pop-tab': true }, resumeMode: { 'local-tab': true },
       statuses: { 'rdp-tab': 'connecting', 'local-tab': 'connecting' }, reconnectKeys: { 'rdp-tab': 1, 'local-tab': 2 },
       dragPane: 2, isOverlayOpen: true,
+      connById: (id?: string) => (id === 'local' ? { ...local, localKeepOpen: false } : [local, ssh, rdp].find(c => c.id === id)),
     })
     const { container } = render(<MainLayoutView model={m} />)
     fireEvent.click(screen.getByText('run-editor'))
@@ -193,12 +195,13 @@ describe('MainLayoutView coverage', () => {
     fireEvent.click(screen.getByText('rdp-latency'))
     fireEvent.click(screen.getByText('focus-detached'))
     fireEvent.click(screen.getByText('reattach-detached'))
-    fireEvent.click(screen.getByText('terminal-status'))
-    fireEvent.click(screen.getByText('terminal-metrics'))
-    fireEvent.click(screen.getByText('terminal-busy'))
-    fireEvent.click(screen.getByText('terminal-font'))
-    fireEvent.click(screen.getByText('terminal-exit'))
-    expect(screen.getByTestId('terminal-local-tab')).toHaveAttribute('data-mode', 'attach')
+    const localTerminal = screen.getByTestId('terminal-local-tab')
+    fireEvent.click(within(localTerminal).getByText('terminal-status'))
+    fireEvent.click(within(localTerminal).getByText('terminal-metrics'))
+    fireEvent.click(within(localTerminal).getByText('terminal-busy'))
+    fireEvent.click(within(localTerminal).getByText('terminal-font'))
+    fireEvent.click(within(localTerminal).getByText('terminal-exit'))
+    expect(localTerminal).toHaveAttribute('data-mode', 'attach')
     expect(screen.getAllByTestId('connecting')).toHaveLength(2)
     expect(m.scriptRuns.run).toHaveBeenCalled()
     expect(m.keepTab).toHaveBeenCalledWith('edit-tab')

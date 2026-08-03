@@ -64,7 +64,7 @@ fn resolved_paths_carry_no_verbatim_prefix() {
     let script = f.root.join("deploy.bat");
     for resolved in [
         safe_runnable_path(&root_str(&f), &script.to_string_lossy()).unwrap(),
-        safe_subdir(&root_str(&f), "sub").unwrap(),
+        safe_subdir(&root_str(&f), "sub", false).unwrap(),
     ] {
         assert!(
             !resolved.to_string_lossy().starts_with(r"\\?\"),
@@ -187,7 +187,7 @@ fn run_refuses_an_arbitrary_executable_inside_the_workspace() {
 #[test]
 fn accepts_a_subdirectory_of_the_workspace() {
     let f = fixture();
-    let resolved = safe_subdir(&root_str(&f), "sub").expect("should accept");
+    let resolved = safe_subdir(&root_str(&f), "sub", false).expect("should accept");
     assert_eq!(resolved, dunce::canonicalize(f.root.join("sub")).unwrap());
 }
 
@@ -196,7 +196,7 @@ fn rejects_subdir_traversal_and_absolute_paths() {
     let f = fixture();
     let absolute = f.outside.to_string_lossy().into_owned();
     for hostile in ["../outside", "sub/../../outside", &absolute] {
-        let err = safe_subdir(&root_str(&f), hostile)
+        let err = safe_subdir(&root_str(&f), hostile, false)
             .expect_err("must reject escaping subPath");
         assert!(err.contains("outside its workspace"), "{hostile}: got {err}");
     }
@@ -205,6 +205,6 @@ fn rejects_subdir_traversal_and_absolute_paths() {
 #[test]
 fn rejects_a_subdir_that_is_a_file() {
     let f = fixture();
-    let err = safe_subdir(&root_str(&f), "deploy.bat").expect_err("must reject a file");
+    let err = safe_subdir(&root_str(&f), "deploy.bat", false).expect_err("must reject a file");
     assert!(err.contains("not a directory"), "got {err}");
 }

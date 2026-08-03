@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { ImagePlus, RotateCcw } from 'lucide-react'
+import React, { useRef, useState } from 'react'
+import { ChevronRight, ImagePlus, RotateCcw } from 'lucide-react'
 import { DefaultIdleArt, DefaultLoadingArt } from '../assets/defaultArt'
 
 /**
@@ -7,6 +7,8 @@ import { DefaultIdleArt, DefaultLoadingArt } from '../assets/defaultArt'
  *
  * Users can upload their own images/GIFs for the idle pane and connecting overlay, replacing the
  * built-in defaults. Uploaded files are stored in the app data directory by the Rust backend.
+ *
+ * The section is collapsed by default to save space.
  */
 
 interface CustomArtSettingsProps {
@@ -25,6 +27,8 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
   idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, onArtChanged,
 }) => {
   const [uploading, setUploading] = useState<ArtSlot | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   const handleUpload = async (slot: ArtSlot) => {
     setUploading(slot)
@@ -49,51 +53,73 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
 
   return (
     <div className="px-4 py-2.5 border-t border-theme-border">
-      <p className="text-[10px] uppercase font-bold tracking-widest text-theme-dim mb-2">Pane Art</p>
-      <p className="text-[11px] text-theme-dim mb-3">
-        Upload custom images or GIFs for idle and loading panes in Light and Dark modes. (max 2 MB).
-      </p>
-
-      <div className="grid grid-cols-2 gap-3">
-        <ArtCard
-          label="Idle (Light)"
-          description="Empty panes in Light theme"
-          customUrl={idleArtUrlLight}
-          defaultPreview={<DefaultIdleArt dark={false} />}
-          uploading={uploading === 'idle-light'}
-          onUpload={() => handleUpload('idle-light')}
-          onRemove={() => handleRemove('idle-light')}
+      {/* Clickable header row — toggles expand/collapse */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-1.5 group cursor-pointer bg-transparent border-none p-0 text-left"
+      >
+        <ChevronRight
+          className="w-3 h-3 text-theme-dim transition-transform duration-200"
+          style={{ transform: expanded ? 'rotate(90deg)' : undefined }}
         />
+        <span className="text-[10px] uppercase font-bold tracking-widest text-theme-dim">Pane Art</span>
+      </button>
 
-        <ArtCard
-          label="Idle (Dark)"
-          description="Empty panes in Dark theme"
-          customUrl={idleArtUrlDark}
-          defaultPreview={<DefaultIdleArt dark={true} />}
-          uploading={uploading === 'idle-dark'}
-          onUpload={() => handleUpload('idle-dark')}
-          onRemove={() => handleRemove('idle-dark')}
-        />
+      {/* Collapsible body — animated max-height */}
+      <div
+        ref={contentRef}
+        className="overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out"
+        style={{
+          maxHeight: expanded ? contentRef.current?.scrollHeight ?? 600 : 0,
+          opacity: expanded ? 1 : 0,
+        }}
+      >
+        <p className="text-[11px] text-theme-dim mt-2 mb-3">
+          Upload custom images or GIFs for idle and loading panes in Light and Dark modes. (max 2 MB).
+        </p>
 
-        <ArtCard
-          label="Loading (Light)"
-          description="Connecting in Light theme"
-          customUrl={loadingArtUrlLight}
-          defaultPreview={<DefaultLoadingArt dark={false} />}
-          uploading={uploading === 'loading-light'}
-          onUpload={() => handleUpload('loading-light')}
-          onRemove={() => handleRemove('loading-light')}
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <ArtCard
+            label="Idle (Light)"
+            description="Empty panes in Light theme"
+            customUrl={idleArtUrlLight}
+            defaultPreview={<DefaultIdleArt dark={false} />}
+            uploading={uploading === 'idle-light'}
+            onUpload={() => handleUpload('idle-light')}
+            onRemove={() => handleRemove('idle-light')}
+          />
 
-        <ArtCard
-          label="Loading (Dark)"
-          description="Connecting in Dark theme"
-          customUrl={loadingArtUrlDark}
-          defaultPreview={<DefaultLoadingArt dark={true} />}
-          uploading={uploading === 'loading-dark'}
-          onUpload={() => handleUpload('loading-dark')}
-          onRemove={() => handleRemove('loading-dark')}
-        />
+          <ArtCard
+            label="Idle (Dark)"
+            description="Empty panes in Dark theme"
+            customUrl={idleArtUrlDark}
+            defaultPreview={<DefaultIdleArt dark={true} />}
+            uploading={uploading === 'idle-dark'}
+            onUpload={() => handleUpload('idle-dark')}
+            onRemove={() => handleRemove('idle-dark')}
+          />
+
+          <ArtCard
+            label="Loading (Light)"
+            description="Connecting in Light theme"
+            customUrl={loadingArtUrlLight}
+            defaultPreview={<DefaultLoadingArt dark={false} />}
+            uploading={uploading === 'loading-light'}
+            onUpload={() => handleUpload('loading-light')}
+            onRemove={() => handleRemove('loading-light')}
+          />
+
+          <ArtCard
+            label="Loading (Dark)"
+            description="Connecting in Dark theme"
+            customUrl={loadingArtUrlDark}
+            defaultPreview={<DefaultLoadingArt dark={true} />}
+            uploading={uploading === 'loading-dark'}
+            onUpload={() => handleUpload('loading-dark')}
+            onRemove={() => handleRemove('loading-dark')}
+          />
+        </div>
       </div>
     </div>
   )

@@ -30,14 +30,14 @@ pub struct WorkspaceConnectionsFile {
 
 /// The validated path to a workspace's connections file.
 ///
-/// `safe_subdir` runs before anything touches the filesystem. The first version called
+/// Validation runs before anything touches the filesystem. The first version called
 /// `fs::create_dir_all` on the unvalidated join and only then validated, so a workspace path that
-/// failed validation had already had a directory created inside it.
+/// failed validation had already had a directory created inside it. Creating it afterwards instead was
+/// no better: `safe_subdir` canonicalizes, canonicalizing a path that does not exist yet fails, and so
+/// the very first save into a workspace could never get past validation. `safe_subdir` owns both
+/// halves now, in the one order that is both safe and able to make the directory.
 fn connections_path(workspace_path: &str, create: bool) -> Result<PathBuf, String> {
-    let dir = safepath::safe_subdir(workspace_path, ".omniterm")?;
-    if create && !dir.exists() {
-        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    }
+    let dir = safepath::safe_subdir(workspace_path, ".omniterm", create)?;
     Ok(dir.join("connections.json"))
 }
 

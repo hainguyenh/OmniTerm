@@ -24,7 +24,7 @@ export function useTreeReveal(params: {
   /** First-load of a workspace (a no-op once its skeleton is in). */
   scan: (id: string) => Promise<void>
   /** First page of one folder's files. */
-  loadFolder: (workspaceId: string, folder: string) => Promise<void>
+  loadFolder: (workspaceId: string, folder: string) => Promise<unknown>
   filterOf: (workspaceId: string) => TreeFilter
   setExpandedId: (id: string | null) => void
   setFlatView: (v: boolean) => void

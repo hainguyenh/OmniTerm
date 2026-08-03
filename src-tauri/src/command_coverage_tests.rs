@@ -8,11 +8,10 @@ use super::*;
 use crate::connections::Connection;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
+use crate::test_support;
+use std::sync::MutexGuard;
 use tauri::test::MockRuntime;
 use tauri::Manager;
-
-static APP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 struct MockApp {
     _guard: MutexGuard<'static, ()>,
@@ -22,10 +21,8 @@ struct MockApp {
 
 impl MockApp {
     fn new() -> Self {
-        let guard = APP_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let app = tauri::test::mock_app();
+        let guard = test_support::lock();
+        let app = test_support::mock_app();
         assert!(app.manage(AdhocRegistry::new()));
         assert!(app.manage(PluginHost::new()));
         assert!(app.manage(terminal_window::DetachRegistry::new()));

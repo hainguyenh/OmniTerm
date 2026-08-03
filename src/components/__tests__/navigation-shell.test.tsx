@@ -132,7 +132,7 @@ describe('navigation and empty-session shell', () => {
         onChooseSession={onChooseSession}
       />,
     )
-    expect(screen.getByTitle('violet hexagon')).toBeInTheDocument()
+    expect(screen.getByTitle('Pane 3 · violet hexagon')).toBeInTheDocument()
     expect(screen.queryByText('Ctrl+N')).not.toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'asset://idle.png')
     fireEvent.click(screen.getByRole('button', { name: 'Choose open session (3)' }))

@@ -12,7 +12,7 @@ vi.mock('react-markdown', () => ({
     const source = String(children)
     const match = /```(\w+)?\n([\s\S]*?)```/.exec(source)
     if (match) {
-      return <>{components.code({ className: match[1] ? `language-${match[1]}` : undefined, children: `${match[2]}\n` })}</>
+      return <>{components.code({ className: match[1] ? `language-${match[1]}` : undefined, children: match[2] })}</>
     }
     return <p>{source}</p>
   },

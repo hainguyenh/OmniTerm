@@ -29,6 +29,9 @@ export default defineConfig({
         "src/testUtils.tsx",
         "src/assets/**",
         "src/generated/**",
+        // Sidecar entry point: exercised only via plugin-host.integration.test.ts, which spawns it
+        // as a child process — its own coverage instrumentation can't see code that runs out-of-process.
+        "src-tauri/sidecar/plugin-host.cjs",
       ],
       reporter: ["text", "json-summary", "lcov"],
       reportsDirectory: "coverage-js",

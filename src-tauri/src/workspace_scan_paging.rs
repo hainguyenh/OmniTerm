@@ -21,7 +21,7 @@ pub fn scan_folder_files_excluding(
     limit: usize,
 ) -> Result<WorkspaceEntryPage, String> {
     let root = scan_root(root);
-    let dir = safepath::safe_subdir(&root.to_string_lossy(), folder)?;
+    let dir = safepath::safe_subdir(&root.to_string_lossy(), folder, false)?;
     let mut files: Vec<WorkspaceEntry> = Vec::new();
     if let Ok(read) = fs::read_dir(&dir) {
         for entry in read.flatten() {

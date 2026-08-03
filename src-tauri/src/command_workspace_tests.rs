@@ -64,11 +64,14 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     .unwrap();
     assert!(!remainder.entries.is_empty());
 
+    // These commands take the absolute path the scan handed the renderer, not the relative id — see
+    // `ScannedScript::path`, and the `read_script`/`write_script` cases in tauriBridge.contract.test.ts.
+    let absolute = |name: &str| project.join(name).to_string_lossy().into_owned();
     assert_eq!(
         block_on(workspace::read_script(
             app.clone(),
             added.id.clone(),
-            "notes.txt".to_string(),
+            absolute("notes.txt"),
         ))
         .unwrap(),
         "hello\n"
@@ -76,7 +79,7 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     block_on(workspace::write_script(
         app.clone(),
         added.id.clone(),
-        "run.sh".to_string(),
+        absolute("run.sh"),
         "echo changed\n".to_string(),
     ))
     .unwrap();
@@ -84,14 +87,18 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     assert!(block_on(workspace::write_script(
         app.clone(),
         added.id.clone(),
-        "notes.txt".to_string(),
+        absolute("notes.txt"),
         "blocked".to_string(),
     ))
     .is_err());
+
+    // A real file, outside the workspace but inside the temp root, so this exercises the containment
+    // check rather than just failing to resolve a path that is not there.
+    write_file(root.path().join("outside.txt"), b"nope\n");
     assert!(block_on(workspace::read_script(
         app.clone(),
         added.id.clone(),
-        "../outside.txt".to_string(),
+        root.path().join("outside.txt").to_string_lossy().into_owned(),
     ))
     .is_err());
 
