@@ -198,3 +198,36 @@ fn lock_helpers_delegate_to_the_live_output() {
     assert_eq!(out.buffered(), b"through helper");
     assert!(out.busy());
 }
+
+#[test]
+fn lock_helpers_handle_poisoned_locks_gracefully() {
+    let output = Arc::new(Mutex::new(output(true)));
+    let output_clone = Arc::clone(&output);
+    let _ = std::panic::catch_unwind(|| {
+        let _guard = output_clone.lock().unwrap();
+        panic!("simulated panic to poison mutex");
+    });
+    assert!(output.is_poisoned());
+    // Calling push_output and send_status on poisoned lock should not panic
+    push_output(&output, b"ignored due to poison");
+    send_status(&output, SessionStatus::Activity { busy: true });
+}
+
+
+#[test]
+fn ready_updates_the_label_and_failed_replay_leaves_the_session_detached() {
+    let mut out = output(true);
+    out.send_status(SessionStatus::Ready {
+        label: "Bash".to_string(),
+    });
+    out.detach();
+    out.push(b"buffered while detached");
+
+    let (dead_data, _) = recording_channel(false);
+    let (new_status, _) = status_channel(true);
+    let snapshot = out.attach(dead_data, new_status);
+    assert_eq!(snapshot.status, "ready");
+    assert_eq!(snapshot.label.as_deref(), Some("Bash"));
+    assert!(!out.has_status_sink());
+    assert_eq!(out.buffered(), b"buffered while detached");
+}

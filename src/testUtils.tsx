@@ -171,8 +171,6 @@ const defaults: Api = {
     platform: "win32",
     revealLog: async () => "",
     clearLog: async () => false,
-    cleanupRdpCert: async () => false,
-    openExternal: async () => false,
     setZoomFactor: () => {},
     getZoomFactor: () => 1,
   },

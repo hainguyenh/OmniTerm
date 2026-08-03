@@ -38,7 +38,6 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-os = "2"
-tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
 
 # Serialization
@@ -57,7 +56,6 @@ tokio = { version = "1", features = ["full"] }
 
 # Utilities
 uuid = { version = "1", features = ["v4"] }
-dirs = "6"
 dunce = "1"
 opener = "0.7"
 rfd = "0.15"
@@ -66,7 +64,6 @@ rfd = "0.15"
 # record at all — this is a compile-time guarantee, not a runtime filter that a stray
 # `tauri_plugin_log` registration or an env var could switch back on. See lib.rs's setup hook.
 log = { version = "0.4", features = ["release_max_level_off"] }
-zeroize = "1"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Windows-specific (for future RDP Phase 3, and for pty.rs's job-object cleanup).

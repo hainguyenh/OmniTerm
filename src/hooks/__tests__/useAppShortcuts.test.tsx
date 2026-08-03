@@ -94,4 +94,168 @@ describe('useAppShortcuts', () => {
     expect(onLayout).not.toHaveBeenCalled()
     window.removeEventListener('omniterm:change-layout', onLayout)
   })
+
+  it('toggles dark mode on Ctrl+/', () => {
+    const setAppSettings = vi.fn()
+    const { cleanup } = (() => {
+      const host = document.createElement('span')
+      const btn = document.createElement('button')
+      host.appendChild(btn)
+      document.body.appendChild(host)
+      btn.focus()
+      renderHook(() => useAppShortcuts({
+        appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+      }))
+      return { cleanup: () => host.remove() }
+    })()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
+    expect(setAppSettings).toHaveBeenCalledWith({ ...appSettings, darkMode: false })
+    cleanup()
+  })
+
+  it('zooms out inside terminal via changeFontSize', () => {
+    const { changeFontSize, cleanup } = setup('xterm')
+    window.dispatchEvent(ctrlKey('-'))
+    expect(changeFontSize).toHaveBeenCalledWith(-1)
+    cleanup()
+  })
+
+  it('zooms chrome out on Ctrl+-', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    window.dispatchEvent(ctrlKey('-'))
+    expect(setZoomFactor).toHaveBeenCalledWith(0.9)
+    expect(persistZoom).toHaveBeenCalledWith(0.9)
+    cleanup()
+  })
+
+  it('ignores shortcuts when an input is focused outside xterm', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    renderHook(() => useAppShortcuts({
+      appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+    }))
+    const onSession = vi.fn()
+    window.addEventListener('omniterm:new-session', onSession)
+    window.dispatchEvent(ctrlKey('N'))
+    expect(onSession).not.toHaveBeenCalled()
+    window.removeEventListener('omniterm:new-session', onSession)
+    input.remove()
+  })
+
+  it('opens settings on Ctrl+,', () => {
+    const setSettingsOpen = vi.fn()
+    const btn = document.createElement('button')
+    document.body.appendChild(btn)
+    btn.focus()
+    renderHook(() => useAppShortcuts({
+      appSettings, setAppSettings: vi.fn(), setSettingsOpen,
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+    }))
+    window.dispatchEvent(ctrlKey(','))
+    expect(setSettingsOpen).toHaveBeenCalledWith(true)
+    btn.remove()
+  })
+
+  it('dispatches omniterm:toggle-sidebar on Ctrl+B', () => {
+    const { cleanup } = setup('chrome')
+    const onSidebar = vi.fn()
+    window.addEventListener('omniterm:toggle-sidebar', onSidebar)
+    window.dispatchEvent(ctrlKey('b'))
+    expect(onSidebar).toHaveBeenCalled()
+    window.removeEventListener('omniterm:toggle-sidebar', onSidebar)
+    cleanup()
+  })
+
+  it('dispatches omniterm:new-session on Ctrl+N', () => {
+    const { cleanup } = setup('chrome')
+    const onNew = vi.fn()
+    window.addEventListener('omniterm:new-session', onNew)
+    window.dispatchEvent(ctrlKey('n'))
+    expect(onNew).toHaveBeenCalled()
+    window.removeEventListener('omniterm:new-session', onNew)
+    cleanup()
+  })
+
+  it('dispatches omniterm:close-tab on Ctrl+W', () => {
+    const { cleanup } = setup('chrome')
+    const onClose = vi.fn()
+    window.addEventListener('omniterm:close-tab', onClose)
+    window.dispatchEvent(ctrlKey('w'))
+    expect(onClose).toHaveBeenCalled()
+    window.removeEventListener('omniterm:close-tab', onClose)
+    cleanup()
+  })
+
+  it('dispatches omniterm:new-folder on Ctrl+Shift+N', () => {
+    const { cleanup } = setup('chrome')
+    const onFolder = vi.fn()
+    window.addEventListener('omniterm:new-folder', onFolder)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
+    expect(onFolder).toHaveBeenCalled()
+    window.removeEventListener('omniterm:new-folder', onFolder)
+    cleanup()
+  })
+
+  it('dispatches omniterm:command-palette on Ctrl+P', () => {
+    const { cleanup } = setup('chrome')
+    const onPalette = vi.fn()
+    window.addEventListener('omniterm:command-palette', onPalette)
+    window.dispatchEvent(ctrlKey('p'))
+    expect(onPalette).toHaveBeenCalled()
+    window.removeEventListener('omniterm:command-palette', onPalette)
+    cleanup()
+  })
+
+  it('Ctrl+wheel up zooms in', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true }))
+    expect(setZoomFactor).toHaveBeenCalledWith(1.1)
+    expect(persistZoom).toHaveBeenCalledWith(1.1)
+    cleanup()
+  })
+
+  it('Ctrl+wheel down zooms out', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, ctrlKey: true, cancelable: true }))
+    expect(setZoomFactor).toHaveBeenCalledWith(0.9)
+    expect(persistZoom).toHaveBeenCalledWith(0.9)
+    cleanup()
+  })
+
+  it('wheel without Ctrl is ignored', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, cancelable: true }))
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    expect(persistZoom).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('clamps zoom to MIN_ZOOM (0.5)', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    getZoomFactor.mockReturnValue(0.5)
+    window.dispatchEvent(ctrlKey('-'))
+    expect(setZoomFactor).toHaveBeenCalledWith(0.5)
+    expect(persistZoom).toHaveBeenCalledWith(0.5)
+    cleanup()
+  })
+
+  it('clamps zoom to MAX_ZOOM (2.0)', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    getZoomFactor.mockReturnValue(2.0)
+    window.dispatchEvent(ctrlKey('='))
+    expect(setZoomFactor).toHaveBeenCalledWith(2.0)
+    expect(persistZoom).toHaveBeenCalledWith(2.0)
+    cleanup()
+  })
+
+  it('ignores wheel without Ctrl/meta key', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, cancelable: true }))
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    expect(persistZoom).not.toHaveBeenCalled()
+    cleanup()
+  })
 })

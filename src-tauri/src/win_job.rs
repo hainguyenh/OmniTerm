@@ -61,3 +61,25 @@ impl Drop for JobHandle {
         let _ = unsafe { CloseHandle(self.0) };
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::io::AsRawHandle;
+    use std::process::Command;
+
+    #[test]
+    fn assigns_job_and_terminates_process() {
+        let mut child = Command::new("cmd")
+            .args(["/c", "ping 127.0.0.1 -n 10 > nul"])
+            .spawn()
+            .expect("spawn cmd child process");
+
+        let raw_handle = child.as_raw_handle();
+        let job = assign_new_job(raw_handle).expect("assign process to job object");
+        job.terminate(0);
+
+        let _ = child.wait();
+    }
+}
+

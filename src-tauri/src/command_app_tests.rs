@@ -2,20 +2,12 @@ use super::*;
 use serde_json::json;
 
 #[test]
-fn app_plugin_and_update_commands_cover_safe_no_side_effect_paths() {
+fn app_and_plugin_commands_cover_safe_no_side_effect_paths() {
     let fixture = MockApp::new();
     let app = fixture.handle();
 
-    assert!(!block_on(app_utils::open_external("file:///tmp/bad".to_string())).unwrap());
-    assert!(!block_on(app_utils::open_external(
-        "https://example.test/help".to_string(),
-    ))
-    .unwrap());
     assert!(block_on(app_utils::clear_log(app.clone())).unwrap());
     assert!(!block_on(app_utils::get_version(app.clone())).unwrap().is_empty());
-    assert!(!block_on(app_utils::get_platform()).unwrap().is_empty());
-    assert!(!block_on(app_utils::get_home_dir()).unwrap().is_empty());
-    assert!(block_on(app_utils::cleanup_rdp_cert()).unwrap());
 
     let host = fixture.app.state::<PluginHost>();
     assert!(!block_on(plugin_available(app.clone(), host.clone())).unwrap());
@@ -27,11 +19,6 @@ fn app_plugin_and_update_commands_cover_safe_no_side_effect_paths() {
     ))
     .is_err());
 
-    assert_eq!(block_on(check_updates()).unwrap(), json!(null));
-    assert_eq!(block_on(get_update_state()).unwrap(), json!(null));
-    block_on(skip_version(None)).unwrap();
-    block_on(skip_version(Some("1.2.3".to_string()))).unwrap();
-
     handle_second_instance(&app, &["omniterm".to_string()]);
     handle_second_instance(
         &app,
@@ -41,8 +28,48 @@ fn app_plugin_and_update_commands_cover_safe_no_side_effect_paths() {
             "bad".to_string(),
         ],
     );
+    handle_second_instance(
+        &app,
+        &[
+            "omniterm".to_string(),
+            "--open-shell".to_string(),
+            if cfg!(target_os = "windows") { "powershell" } else { "bash" }.to_string(),
+            "--cwd".to_string(),
+            std::env::temp_dir().to_string_lossy().into_owned(),
+            "--name".to_string(),
+            "Second instance".to_string(),
+        ],
+    );
 }
 
+/// `setup_launcher` is invoked once from the renderer mount; it must write the three shim files
+/// idempotently and return the directory the pane PATH-prepending logic expects.
+#[test]
+fn setup_launcher_idempotently_writes_all_three_shims_into_app_data() {
+    let fixture = MockApp::new();
+    let app = fixture.handle();
+
+    let bin_dir = block_on(launcher::setup_launcher(app.clone())).unwrap();
+    assert_eq!(bin_dir, launcher::launcher_bin_dir(&app).to_string_lossy().into_owned());
+
+    for shim in ["nc-open.cmd", "wt.cmd", "wt-shim.ps1"] {
+        let path = std::path::Path::new(&bin_dir).join(shim);
+        assert!(path.is_file(), "{shim} should have been written on first setup");
+    }
+
+    // Idempotent: same payload ⇒ no rewrite, same return path, no error.
+    let again = block_on(launcher::setup_launcher(app.clone())).unwrap();
+    assert_eq!(again, bin_dir);
+
+    // Verify the actual content matches what launcher.rs produces. `nc-open.cmd` carries the
+    // running executable, so this guards the regression where the shim pointed two levels above
+    // <appData>/bin instead of naming the real running exe.
+    let nc_open = std::fs::read_to_string(std::path::Path::new(&bin_dir).join("nc-open.cmd")).unwrap();
+    let exe = std::env::current_exe().unwrap();
+    let exe_display = exe.display().to_string();
+    assert!(nc_open.contains(&exe_display), "nc-open.cmd should name the running exe: {nc_open}");
+    assert!(!nc_open.contains(".."), "the shim must not use a relative hop");
+}
 
 #[test]
 fn plugin_command_wrappers_preserve_stopped_host_fallbacks_and_errors() {
@@ -72,7 +99,6 @@ fn plugin_command_wrappers_preserve_stopped_host_fallbacks_and_errors() {
     ))
     .is_err());
 }
-
 
 #[test]
 fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {

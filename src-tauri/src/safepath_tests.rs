@@ -208,3 +208,22 @@ fn rejects_a_subdir_that_is_a_file() {
     let err = safe_subdir(&root_str(&f), "deploy.bat", false).expect_err("must reject a file");
     assert!(err.contains("not a directory"), "got {err}");
 }
+
+#[test]
+fn safe_viewable_path_accepts_valid_file() {
+    let f = fixture();
+    let path = f.root.join("notes.txt");
+    let resolved = safe_viewable_path(&root_str(&f), &path.to_string_lossy()).unwrap();
+    assert_eq!(resolved, dunce::canonicalize(&path).unwrap());
+}
+
+#[test]
+fn safe_subdir_with_create_makes_missing_directory() {
+    let f = fixture();
+    let new_dir = "new_sub";
+    let target = f.root.join(new_dir);
+    assert!(!target.exists());
+    let resolved = safe_subdir(&root_str(&f), new_dir, true).expect("should create and accept");
+    assert!(target.exists());
+    assert_eq!(resolved, dunce::canonicalize(&target).unwrap());
+}

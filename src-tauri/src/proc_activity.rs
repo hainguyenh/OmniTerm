@@ -67,13 +67,6 @@ impl ProcTable {
         }))
     }
 
-    /// One-shot snapshot for callers with no long-lived `System` (integration tests, one-off checks).
-    /// Allocates a `System` per call — not for the poller.
-    pub fn snapshot_now() -> Self {
-        let mut sys = System::new();
-        Self::snapshot(&mut sys)
-    }
-
     /// Build a table from explicit `(pid, parent, start_time, image)` rows. The platform layer above
     /// is the only other producer, so every traversal rule below is testable with no real processes.
     pub fn from_rows<S: AsRef<str>>(rows: impl IntoIterator<Item = (u32, u32, u64, S)>) -> Self {
@@ -128,9 +121,6 @@ impl ProcTable {
         out
     }
 
-    pub fn process_count(&self) -> usize {
-        self.procs.len()
-    }
 }
 
 #[cfg(test)]

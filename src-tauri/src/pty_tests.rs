@@ -192,3 +192,147 @@ fn pane_path_is_none_when_path_is_absent() {
         std::env::set_var("PATH", value);
     }
 }
+
+#[test]
+fn pty_manager_default_initializes_with_empty_sessions() {
+    let mgr = PtyManager::default();
+    assert!(mgr.sessions.is_empty(), "new PtyManager must have no sessions");
+}
+
+fn wait_for_status(
+    receiver: &mpsc::Receiver<SessionStatus>,
+    predicate: impl Fn(&SessionStatus) -> bool,
+) -> SessionStatus {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        if let Ok(status) = receiver.recv_timeout(Duration::from_millis(200)) {
+            if predicate(&status) {
+                return status;
+            }
+        }
+    }
+    panic!("timed out waiting for session status");
+}
+
+#[test]
+fn live_session_accepts_input_resize_and_same_id_replacement() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(PtyManager::new()));
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle().clone();
+    let manager = handle.state::<PtyManager>();
+
+    handle.state::<AdhocRegistry>().insert_named(
+        "adhoc-interactive".into(),
+        OpenShellRequest {
+            shell: native_shell(), cwd: None, command: None, args: None,
+            keep_open: true, name: "Interactive".into(),
+        },
+    );
+    let (data, data_rx) = recording_channel();
+    let (status, status_rx) = status_channel();
+    tauri::async_runtime::block_on(start_local_session(
+        handle.clone(), manager.clone(), "replace-me".into(),
+        "adhoc-interactive".into(), None, data, status,
+    )).unwrap();
+    wait_for_status(&status_rx, |status| matches!(status, SessionStatus::Ready { .. }));
+    tauri::async_runtime::block_on(resize_session(
+        manager.clone(), "replace-me".into(), 100, 40,
+    )).unwrap();
+    tauri::async_runtime::block_on(send_session_input(
+        manager.clone(), "replace-me".into(),
+        if cfg!(target_os = "windows") { "echo live-input\r\n" } else { "echo live-input\n" }.into(),
+    )).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut first_output = String::new();
+    while Instant::now() < deadline && !first_output.contains("live-input") {
+        if let Ok(bytes) = data_rx.recv_timeout(Duration::from_millis(200)) {
+            first_output.push_str(&String::from_utf8_lossy(&bytes));
+        }
+    }
+    assert!(first_output.contains("live-input"), "{first_output:?}");
+
+    handle.state::<AdhocRegistry>().insert_named(
+        "adhoc-replacement".into(),
+        OpenShellRequest {
+            shell: native_shell(), cwd: None, command: Some("echo replacement".into()), args: None,
+            keep_open: false, name: "Replacement".into(),
+        },
+    );
+    let (replacement_data, replacement_rx) = recording_channel();
+    let (replacement_status, replacement_status_rx) = status_channel();
+    tauri::async_runtime::block_on(start_local_session(
+        handle.clone(), manager.clone(), "replace-me".into(),
+        "adhoc-replacement".into(), None, replacement_data, replacement_status,
+    )).unwrap();
+    wait_for_status(&replacement_status_rx, |status| matches!(status, SessionStatus::Closed { .. }));
+
+    let mut replacement = String::new();
+    while let Ok(bytes) = replacement_rx.try_recv() {
+        replacement.push_str(&String::from_utf8_lossy(&bytes));
+    }
+    assert!(replacement.contains("replacement"), "{replacement:?}");
+}
+
+#[test]
+fn poisoned_session_locks_report_errors_and_disconnect_still_cleans_registry() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(PtyManager::new()));
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle().clone();
+    let manager = handle.state::<PtyManager>();
+    handle.state::<AdhocRegistry>().insert_named(
+        "adhoc-poison".into(),
+        OpenShellRequest {
+            shell: native_shell(), cwd: None, command: None, args: None,
+            keep_open: true, name: "Poison".into(),
+        },
+    );
+    let (data, _) = recording_channel();
+    let (status, status_rx) = status_channel();
+    tauri::async_runtime::block_on(start_local_session(
+        handle, manager.clone(), "poisoned".into(), "adhoc-poison".into(), None, data, status,
+    )).unwrap();
+    wait_for_status(&status_rx, |status| matches!(status, SessionStatus::Ready { .. }));
+
+    let (writer, master, killer) = {
+        let session = manager.sessions.get("poisoned").unwrap();
+        (
+            Arc::clone(&session.writer),
+            Arc::clone(&session.master),
+            Arc::clone(&session.killer),
+        )
+    };
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = writer.lock().unwrap();
+        panic!("poison writer");
+    }));
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = master.lock().unwrap();
+        panic!("poison master");
+    }));
+    assert_eq!(
+        tauri::async_runtime::block_on(send_session_input(
+            manager.clone(), "poisoned".into(), "ignored".into(),
+        )).unwrap_err(),
+        "Failed to acquire writer lock"
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(resize_session(
+            manager.clone(), "poisoned".into(), 80, 24,
+        )).unwrap_err(),
+        "Failed to acquire master lock"
+    );
+
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = killer.lock().unwrap();
+        panic!("poison killer");
+    }));
+    tauri::async_runtime::block_on(disconnect_session(manager.clone(), "poisoned".into())).unwrap();
+    assert!(!manager.sessions.contains_key("poisoned"));
+    let _ = killer.lock().unwrap_or_else(|error| error.into_inner()).kill();
+}

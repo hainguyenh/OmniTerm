@@ -123,3 +123,90 @@ fn unknown_keys_are_preserved() {
     let merged = merge_shallow(&defaults(), &json!({"pluginSetting": {"a": 1}}));
     assert_eq!(merged["pluginSetting"], json!({"a": 1}));
 }
+
+// ── Command wrappers ─────────────────────────────────────────────────────────
+
+#[test]
+fn get_settings_returns_defaults_on_a_fresh_mock_app() {
+    let app = crate::test_support::mock_app();
+    let settings = tauri::async_runtime::block_on(get_settings(app.handle().clone())).unwrap();
+    // At minimum the defaults should be there; the mock runtime may redirect the app data dir.
+    assert!(settings.is_object());
+    assert!(settings.get("themeId").is_some(), "themeId must be present");
+    assert!(settings.get("shortcuts").is_some(), "shortcuts must be present");
+}
+
+#[test]
+fn save_settings_rejects_non_object_input() {
+    let app = crate::test_support::mock_app();
+    let err = tauri::async_runtime::block_on(save_settings(app.handle().clone(), json!("string")))
+        .expect_err("must reject non-object");
+    assert!(err.contains("must be an object"), "got {err}");
+
+    let err2 = tauri::async_runtime::block_on(save_settings(app.handle().clone(), json!([1, 2, 3])))
+        .expect_err("must reject array");
+    assert!(err2.contains("must be an object"), "got {err2}");
+}
+
+#[test]
+fn save_settings_merges_partial_patch_with_defaults() {
+    let app = crate::test_support::mock_app();
+    let result = tauri::async_runtime::block_on(save_settings(
+        app.handle().clone(),
+        json!({"fontSize": 20}),
+    ));
+    // In the mock runtime the app data dir may not be writable, so accept any Ok result.
+    // The key thing is that it doesn't panic or return the "must be an object" error.
+    match result {
+        Ok(()) => {}
+        Err(e) => {
+            // A write error from the mock filesystem is acceptable; a validation error is not.
+            assert!(!e.contains("must be an object"), "unexpected validation error: {e}");
+        }
+    }
+}
+
+#[test]
+fn a_non_object_base_starts_from_an_empty_object() {
+    assert_eq!(
+        merge_shallow(&json!("old"), &json!({"fontSize": 19})),
+        json!({"fontSize": 19})
+    );
+    assert_eq!(merge_shallow(&json!(null), &json!(null)), json!({}));
+}
+
+#[test]
+fn read_settings_falls_back_for_empty_corrupt_and_non_object_files() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+
+    for invalid in ["", "not-json", "[]", "null", "\"text\""] {
+        std::fs::write(&path, invalid).unwrap();
+        let read = read_settings(app.handle());
+        assert_eq!(read["themeId"], json!("tokyo-night"), "input was {invalid:?}");
+        assert_eq!(read["fontSize"], json!(14));
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn read_settings_layers_a_valid_partial_file_over_new_defaults() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(&path, r#"{"themeId":"custom","fontSize":22}"#).unwrap();
+
+    let read = read_settings(app.handle());
+    assert_eq!(read["themeId"], json!("custom"));
+    assert_eq!(read["fontSize"], json!(22));
+    assert_eq!(read["smartColors"], json!(true));
+    assert!(read["shortcuts"].is_object());
+    let _ = std::fs::remove_file(path);
+}

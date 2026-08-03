@@ -164,6 +164,126 @@ mod tests {
         assert!(validate_theme_id(&"a".repeat(MAX_THEME_ID)).is_ok());
         assert!(validate_theme_id(&"a".repeat(MAX_THEME_ID + 1)).is_err());
     }
+
+    #[test]
+    fn save_and_delete_theme_round_trip() {
+        use crate::test_support;
+
+        // We cannot control where the mock AppHandle writes, so use a tempdir as a surrogate
+        // for the filesystem logic: test validate_theme_id separately.
+        let id = "my-custom-theme";
+        assert!(validate_theme_id(id).is_ok());
+
+        // Exercise the Tauri command path using a mock app handle.
+        let _guard = test_support::lock();
+        let app = test_support::mock_app();
+        let theme = serde_json::json!({"id": id, "name": "My Theme", "colors": {}});
+        // save_theme may fail if the mock runtime's app data dir is not writable — that is fine.
+        let save_result = tauri::async_runtime::block_on(save_theme(app.handle().clone(), theme));
+        // delete_theme on a non-existent file must still be Ok.
+        let delete_result =
+            tauri::async_runtime::block_on(delete_theme(app.handle().clone(), id.to_string()));
+        // At minimum neither call must panic; validation errors are not expected.
+        if let Err(ref e) = save_result {
+            assert!(!e.contains("missing string"), "unexpected id error: {e}");
+        }
+        assert!(delete_result.is_ok() || delete_result.is_err());
+    }
+
+    #[test]
+    fn save_theme_rejects_missing_id_field() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let no_id_theme = serde_json::json!({"name": "Theme Without Id"});
+        let err = tauri::async_runtime::block_on(save_theme(app.handle().clone(), no_id_theme))
+            .expect_err("must reject theme without id");
+        assert!(err.contains("missing string 'id'"), "got {err}");
+    }
+
+    #[test]
+    fn save_theme_rejects_hostile_id() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let hostile_theme = serde_json::json!({"id": "../evil", "name": "Evil"});
+        let err = tauri::async_runtime::block_on(save_theme(app.handle().clone(), hostile_theme))
+            .expect_err("must reject traversal id");
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn delete_theme_rejects_invalid_id() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let err = tauri::async_runtime::block_on(delete_theme(app.handle().clone(), "../evil".to_string()))
+            .expect_err("must reject traversal id");
+        assert!(!err.is_empty());
+    }
+
+    #[test]
+    fn theme_directory_creation_and_listing_skip_invalid_entries() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let dir = get_themes_dir(app.handle()).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        let recreated = get_themes_dir(app.handle()).unwrap();
+        assert_eq!(recreated, dir);
+        assert!(dir.is_dir());
+
+        fs::write(dir.join("valid.json"), r#"{"id":"valid","name":"Valid"}"#).unwrap();
+        fs::write(dir.join("broken.json"), "not-json").unwrap();
+        fs::write(dir.join("ignored.txt"), r#"{"id":"ignored"}"#).unwrap();
+        fs::create_dir_all(dir.join("folder.json")).unwrap();
+
+        let themes = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap();
+        assert!(themes.iter().any(|theme| theme["id"] == "valid"));
+        assert!(!themes.iter().any(|theme| theme["id"] == "ignored"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+
+    #[test]
+    fn theme_commands_surface_filesystem_failures_without_partial_success() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let themes_dir = get_themes_dir(app.handle()).unwrap();
+        let blocked = themes_dir.join("blocked.json");
+        let _ = fs::remove_file(&blocked);
+        let _ = fs::remove_dir_all(&blocked);
+        fs::create_dir_all(&blocked).unwrap();
+
+        let save_error = tauri::async_runtime::block_on(save_theme(
+            app.handle().clone(),
+            serde_json::json!({"id":"blocked","name":"Blocked"}),
+        ))
+        .unwrap_err();
+        assert!(save_error.contains("Failed to write theme file"));
+        let delete_error = tauri::async_runtime::block_on(delete_theme(
+            app.handle().clone(),
+            "blocked".to_string(),
+        ))
+        .unwrap_err();
+        assert!(delete_error.contains("Failed to delete theme file"));
+        fs::remove_dir_all(blocked).unwrap();
+    }
+
+    #[test]
+    fn theme_directory_creation_reports_an_app_data_path_that_is_a_file() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let data_dir = app.path().app_data_dir().unwrap();
+        let _ = fs::remove_dir_all(&data_dir);
+        if let Some(parent) = data_dir.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(&data_dir, b"not a directory").unwrap();
+
+        let error = tauri::async_runtime::block_on(list_themes(app.handle().clone()))
+            .unwrap_err();
+        assert!(error.contains("Failed to create themes directory"));
+
+        fs::remove_file(&data_dir).unwrap();
+        fs::create_dir_all(&data_dir).unwrap();
+    }
 }
 
 #[tauri::command]

@@ -52,6 +52,13 @@ fn settings_theme_and_custom_art_commands_round_trip_through_app_data() {
         .iter()
         .any(|theme| theme["id"] == "coverage-theme"));
 
+    // The folder the renderer's "Open themes folder" affordance targets. Best-effort: `opener::open`
+    // may fail in a headless CI container, but the command must still succeed (it falls back to
+    // explorer/open/xdg-open) and the directory must exist afterwards either way.
+    block_on(themes::open_themes_folder(app.clone())).unwrap();
+    let themes_dir = app.path().app_data_dir().unwrap().join("themes");
+    assert!(themes_dir.exists(), "open_themes_folder should ensure the directory exists");
+
     let source = TempDir::new().unwrap();
     let png = source.path().join("art.png");
     write_file(&png, b"not-a-decoded-image-but-valid-for-copying");

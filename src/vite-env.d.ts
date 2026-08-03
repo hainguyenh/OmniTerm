@@ -222,8 +222,6 @@ interface Window {
       platform: NodeJS.Platform
       revealLog: () => Promise<string>
       clearLog: () => Promise<boolean>
-      cleanupRdpCert: () => Promise<boolean>
-      openExternal: (url: string) => Promise<boolean>
       setZoomFactor: (factor: number) => void
       getZoomFactor: () => number
     }

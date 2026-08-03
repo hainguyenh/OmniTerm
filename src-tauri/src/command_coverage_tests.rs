@@ -87,3 +87,5 @@ mod workspace_commands;
 mod app_commands;
 #[path = "command_connection_tests.rs"]
 mod connection_commands;
+#[path = "command_edge_tests.rs"]
+mod edge_commands;

@@ -15,8 +15,14 @@ use app_lib::proc_activity::ProcTable;
 use std::io::Write;
 use std::thread;
 use std::time::{Duration, Instant};
+use sysinfo::System;
 
 const SETTLE: Duration = Duration::from_secs(20);
+
+fn snapshot() -> ProcTable {
+    let mut system = System::new();
+    ProcTable::snapshot(&mut system)
+}
 
 /// An interactive shell with no command baked in — what a plain "new session" pane runs.
 fn interactive() -> LocalLaunch {
@@ -34,7 +40,7 @@ fn interactive() -> LocalLaunch {
 fn wait_until_busy(pid: u32, want: bool) -> bool {
     let deadline = Instant::now() + SETTLE;
     while Instant::now() < deadline {
-        if ProcTable::snapshot_now().has_descendant(pid) == want {
+        if snapshot().has_descendant(pid) == want {
             return true;
         }
         thread::sleep(Duration::from_millis(100));
@@ -60,7 +66,7 @@ fn an_idle_shell_has_no_descendants() {
     assert!(
         wait_until_busy(pid, false),
         "an idle shell reported a descendant; process table: {:?}",
-        ProcTable::snapshot_now().descendants(pid),
+        snapshot().descendants(pid),
     );
 
     let _ = session.killer.kill();
@@ -87,7 +93,7 @@ fn a_running_command_is_seen_and_then_released() {
         "the running command never appeared as a descendant of {pid}",
     );
     assert!(
-        !ProcTable::snapshot_now().descendants(pid).is_empty(),
+        !snapshot().descendants(pid).is_empty(),
         "descendants() must name the child, not merely count it",
     );
     assert!(

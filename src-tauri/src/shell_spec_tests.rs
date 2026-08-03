@@ -247,3 +247,58 @@ fn shell_quote_wraps_and_escapes_single_quotes() {
 fn is_on_path_finds_nothing_for_a_bogus_executable() {
     assert!(!is_on_path("omniterm-definitely-not-a-real-binary.exe"));
 }
+
+// ── Shell labels and default names ───────────────────────────────────────────
+
+#[test]
+fn label_returns_human_readable_string_for_all_variants() {
+    assert_eq!(LocalShell::Powershell.label(), "PowerShell");
+    assert_eq!(LocalShell::Cmd.label(), "Command Prompt");
+    assert_eq!(LocalShell::Wsl.label(), "WSL");
+    assert_eq!(LocalShell::Default.label(), "Default shell");
+    assert_eq!(LocalShell::Zsh.label(), "Z shell");
+    assert_eq!(LocalShell::Bash.label(), "Bash");
+    assert_eq!(LocalShell::Sh.label(), "POSIX shell");
+}
+
+#[test]
+fn default_name_returns_expected_string_for_all_variants() {
+    assert_eq!(LocalShell::Powershell.default_name(), "PowerShell");
+    assert_eq!(LocalShell::Cmd.default_name(), "Command Prompt");
+    assert_eq!(LocalShell::Wsl.default_name(), "WSL");
+    // Non-Windows-specific shells delegate to label()
+    assert_eq!(LocalShell::Default.default_name(), LocalShell::Default.label());
+    assert_eq!(LocalShell::Zsh.default_name(), LocalShell::Zsh.label());
+    assert_eq!(LocalShell::Bash.default_name(), LocalShell::Bash.label());
+    assert_eq!(LocalShell::Sh.default_name(), LocalShell::Sh.label());
+}
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn executable_and_path_probes_cover_positive_empty_and_missing_environment_cases() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let _guard = crate::test_support::lock();
+    let dir = tempfile::tempdir().unwrap();
+    let executable = dir.path().join("omniterm-probe");
+    std::fs::write(&executable, b"#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(&executable, permissions).unwrap();
+
+    assert!(is_executable(&executable));
+    assert!(!is_executable(Path::new("relative-probe")));
+    let ordinary = dir.path().join("ordinary");
+    std::fs::write(&ordinary, b"not executable").unwrap();
+    assert!(!is_executable(&ordinary));
+    assert!(!is_executable(&dir.path().join("missing")));
+
+    let previous = std::env::var_os("PATH");
+    std::env::set_var("PATH", std::env::join_paths([Path::new(""), dir.path()]).unwrap());
+    assert!(is_on_path("omniterm-probe"));
+    std::env::remove_var("PATH");
+    assert!(!is_on_path("omniterm-probe"));
+    if let Some(previous) = previous {
+        std::env::set_var("PATH", previous);
+    }
+}

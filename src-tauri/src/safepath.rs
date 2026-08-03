@@ -128,7 +128,13 @@ pub const LAUNCHABLE_EXTS: [&str; 5] = ["bat", "cmd", "ps1", "sh", "rdp"];
 /// what stops a crafted webview request from reaching outside the pinned workspace at all.
 fn contained_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
     let real_root = canonical(Path::new(root))?;
-    let real = canonical(Path::new(script_path))?;
+    let script_buf = Path::new(script_path);
+    let target = if script_buf.is_relative() {
+        real_root.join(script_buf)
+    } else {
+        script_buf.to_path_buf()
+    };
+    let real = canonical(&target)?;
 
     if !is_inside(&real_root, &real) {
         return Err("script is outside its workspace".to_string());
@@ -218,17 +224,6 @@ pub fn safe_subdir(root: &str, sub_path: &str, create: bool) -> Result<PathBuf, 
         return Err("not a directory".to_string());
     }
     Ok(real)
-}
-
-/// True if `kind_or_ext` is something the viewer will attempt to read.
-///
-/// Takes the scan's `kind` rather than a path so `workspace_scan` can flag each entry without a second
-/// filesystem round-trip. The scan's kind *is* the lowercased extension for every non-script file, and
-/// the script kinds (`bat`/`ps1`/`sh`/`rdp`) are none of them denied — except that `.rdp` is
-/// deliberately viewable now: it is an INI-style text file, and showing the user which host a
-/// double-click would connect to is the entire point of a viewer.
-pub fn is_viewable_kind(kind_or_ext: &str) -> bool {
-    is_viewable_kind_excluding(kind_or_ext, &[])
 }
 
 /// Same check, additionally denying anything in `excluded` — the user's own "Excluded file types"

@@ -107,3 +107,60 @@ fn null_optional_fields_are_treated_as_absent() {
     }]);
     assert!(validate_tree(&json!([]), &c).is_ok());
 }
+
+#[test]
+fn rejects_invalid_folder_records() {
+    let cases = vec![
+        json!(["not an object"]),
+        json!([{"name": "No ID"}]),
+        json!([{"id": "", "name": "Empty ID"}]),
+        json!([{"id": "f1"}]), // missing name
+        json!([{"id": "f1", "name": "x".repeat(257)}]),
+        json!([{"id": "f1", "name": "Valid", "parentId": "x".repeat(129)}]),
+        json!([{"id": "f1", "name": "Valid", "parentId": 123}]),
+    ];
+    for f in cases {
+        assert!(validate_tree(&f, &json!([])).is_err(), "should reject folder case {f}");
+    }
+}
+
+
+#[test]
+fn accepts_exact_boundaries_parent_links_and_boolean_flags() {
+    let folders = json!([{
+        "id": "i".repeat(MAX_ID_LENGTH),
+        "name": "n".repeat(MAX_NAME_LENGTH),
+        "parentId": "p".repeat(MAX_ID_LENGTH),
+    }, {
+        "id": "child",
+        "name": "Child",
+        "parentId": null,
+    }]);
+    let connections = json!([{
+        "id": "c".repeat(MAX_ID_LENGTH),
+        "name": "n".repeat(MAX_NAME_LENGTH),
+        "type": "LOCAL",
+        "shell": null,
+        "localArgs": "a".repeat(MAX_LOCAL_FIELD_LENGTH),
+        "localCwd": "c".repeat(MAX_LOCAL_FIELD_LENGTH),
+        "localCommand": "x".repeat(MAX_LOCAL_FIELD_LENGTH),
+        "localKeepOpen": true,
+        "redirectDrives": false,
+    }]);
+    assert!(validate_tree(&folders, &connections).is_ok());
+}
+
+#[test]
+fn rejects_wrong_optional_string_types_and_too_many_connections() {
+    for field in ["localArgs", "localCwd", "localCommand"] {
+        let connection = json!([{
+            "id": "c1", "name": "n", "type": "LOCAL", (field): 7
+        }]);
+        assert!(validate_tree(&json!([]), &connection).is_err());
+    }
+
+    let many: Vec<_> = (0..=MAX_RECORDS)
+        .map(|index| json!({"id": format!("c{index}"), "name": "n", "type": "SSH"}))
+        .collect();
+    assert!(validate_tree(&json!([]), &json!(many)).is_err());
+}

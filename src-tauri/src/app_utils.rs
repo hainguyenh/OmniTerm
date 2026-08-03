@@ -1,9 +1,7 @@
-//! Log helpers, version/platform reporting, and the guarded external-link opener.
+//! Log helpers, version/platform reporting, and plugin URL validation.
 //!
-//! Ports the `app:*` handlers from electron/main.ts. Return types match the declarations in
-//! src/vite-env.d.ts (`revealLog: Promise<string>`, `clearLog`/`openExternal`/`cleanupRdpCert`:
-//! `Promise<boolean>`) — the first port returned unit from all four, so the renderer's truthiness
-//! checks always read false.
+//! Ports the implemented `app:*` handlers from electron/main.ts. Unimplemented update and RDP
+//! cleanup placeholders are deliberately not registered as production commands.
 
 use std::fs;
 use tauri::{AppHandle, Manager, Runtime};
@@ -12,45 +10,9 @@ use tauri::{AppHandle, Manager, Runtime};
 #[path = "app_utils_tests.rs"]
 mod tests;
 
-/// GitHub path prefix external opens are limited to. Empty disables external opens entirely, which is
-/// the current state in electron/main.ts (`const RELEASE_REPO_PATH = ''`).
-const RELEASE_REPO_PATH: &str = "";
-
-/// Host external links are limited to.
-const RELEASE_HOST: &str = "github.com";
-
-/// True if `url` may be handed to the OS.
-///
-/// The first port passed the renderer's string straight to `opener::open`, which launches whatever the
-/// OS associates with it — so `open_external("C:\\evil.exe")`, a `file://` URL, or any custom protocol
-/// handler became arbitrary program execution driven by the webview. Electron restricted this to
-/// HTTPS release pages, and so does this.
-pub fn is_allowed_external(url: &str) -> bool {
-    // Not configured → external opens are disabled, matching the Electron build.
-    if RELEASE_REPO_PATH.is_empty() {
-        return false;
-    }
-
-    let Some(rest) = url.strip_prefix("https://") else {
-        return false;
-    };
-    // Split host[:port] from the path. A URL with no path can never match a path prefix.
-    let Some((authority, path)) = rest.split_once('/') else {
-        return false;
-    };
-    // Rejects embedded credentials (`https://github.com@evil.test/…`) along with any other host,
-    // since the whole authority must equal the release host.
-    if authority != RELEASE_HOST {
-        return false;
-    }
-    format!("/{path}").starts_with(RELEASE_REPO_PATH)
-}
-
 /// True if `url` may be handed to the OS on a *plugin's* behalf.
 ///
-/// Deliberately not `is_allowed_external`: that one is pinned to the release page on `github.com`, so
-/// reusing it would refuse a plugin-provided HTTPS help page. The host cannot know which approved
-/// documentation or company vault a deployment uses, so the host is not the allowlist.
+/// The host cannot know which approved documentation or company vault a deployment uses, so the host is not the allowlist.
 ///
 /// What it still refuses is the part that made the unguarded version arbitrary program execution: any
 /// scheme other than https (no `file:`, no custom protocol handler, no bare Windows path), and any
@@ -118,47 +80,6 @@ pub async fn clear_log<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn open_external(url: String) -> Result<bool, String> {
-    if !is_allowed_external(&url) {
-        log::warn!("[app] refused to open an external URL outside the allowlist");
-        return Ok(false);
-    }
-    opener::open(&url).map_err(|e| e.to_string())?;
-    Ok(true)
-}
-
-#[tauri::command]
 pub async fn get_version<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     Ok(app.package_info().version.to_string())
-}
-
-#[tauri::command]
-pub async fn get_home_dir() -> Result<String, String> {
-    dirs::home_dir()
-        .map(|p| p.to_string_lossy().into_owned())
-        .ok_or_else(|| "Could not find home directory".to_string())
-}
-
-/// Reported using Node's `process.platform` values, which is what the renderer branches on.
-#[tauri::command]
-pub async fn get_platform() -> Result<String, String> {
-    Ok(current_platform().to_string())
-}
-
-pub fn current_platform() -> &'static str {
-    if cfg!(target_os = "windows") {
-        "win32"
-    } else if cfg!(target_os = "macos") {
-        "darwin"
-    } else if cfg!(target_os = "linux") {
-        "linux"
-    } else {
-        "unknown"
-    }
-}
-
-/// RDP certificate cleanup is Phase 3 work; there is nothing to clean up yet.
-#[tauri::command]
-pub async fn cleanup_rdp_cert() -> Result<bool, String> {
-    Ok(true)
 }

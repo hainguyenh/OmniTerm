@@ -115,6 +115,39 @@ pub fn resolve_tick(
     changed
 }
 
+fn listening_target(
+    id: String,
+    pid: Option<u32>,
+    launched_with_command: bool,
+    output: &Arc<Mutex<Output>>,
+) -> Option<(Target, Arc<Mutex<Output>>)> {
+    let listening = output
+        .lock()
+        .map(|out| out.has_status_sink())
+        .unwrap_or(false);
+    listening.then(|| {
+        (
+            Target {
+                id,
+                pid,
+                launched_with_command,
+            },
+            Arc::clone(output),
+        )
+    })
+}
+
+fn deliver_changes(
+    outputs: &HashMap<String, Arc<Mutex<Output>>>,
+    changes: &[(String, bool)],
+) {
+    for (id, busy) in changes {
+        if let Some(output) = outputs.get(id) {
+            crate::session_output::send_status(output, SessionStatus::Activity { busy: *busy });
+        }
+    }
+}
+
 /// Start the single activity poller. Called once from `run()`'s setup.
 pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
@@ -141,20 +174,15 @@ pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) {
                 // A detached pane has no status sink until its new window attaches. Polling it would
                 // fail every send and, worse, discard the debounce state below on every tick — so it
                 // sits out until someone is listening again.
-                let listening = entry
-                    .output
-                    .lock()
-                    .map(|out| out.has_status_sink())
-                    .unwrap_or(false);
-                if !listening {
-                    continue;
+                if let Some((target, output)) = listening_target(
+                    entry.key().clone(),
+                    entry.pid,
+                    entry.launched_with_command,
+                    &entry.output,
+                ) {
+                    outputs.insert(target.id.clone(), output);
+                    targets.push(target);
                 }
-                outputs.insert(entry.key().clone(), Arc::clone(&entry.output));
-                targets.push(Target {
-                    id: entry.key().clone(),
-                    pid: entry.pid,
-                    launched_with_command: entry.launched_with_command,
-                });
             }
             if targets.is_empty() {
                 states.clear();
@@ -186,13 +214,10 @@ pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) {
                     continue;
                 }
             };
-            for (id, busy) in resolve_tick(&table, &mut states, &targets) {
-                if let Some(output) = outputs.get(&id) {
-                    // `send_status` records `busy` on the session even when the sink is gone, so a
-                    // window attaching later still learns whether the shell is working.
-                    crate::session_output::send_status(output, SessionStatus::Activity { busy });
-                }
-            }
+            let changes = resolve_tick(&table, &mut states, &targets);
+            // `send_status` records `busy` on the session even when the sink is gone, so a window
+            // attaching later still learns whether the shell is working.
+            deliver_changes(&outputs, &changes);
         }
     });
 }

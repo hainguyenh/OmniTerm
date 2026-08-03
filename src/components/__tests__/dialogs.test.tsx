@@ -39,6 +39,35 @@ describe("ConfirmDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("calls onCancel when Escape pressed", () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog title="Delete?" message="Remove?" onConfirm={vi.fn()} onCancel={onCancel} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onCancel when backdrop clicked", () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog title="Delete?" message="Remove?" onConfirm={vi.fn()} onCancel={onCancel} />);
+    const backdrop = document.querySelector(".fixed.inset-0")!;
+    fireEvent.click(backdrop);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call onCancel when panel is clicked", () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog title="Delete?" message="Remove?" onConfirm={vi.fn()} onCancel={onCancel} />);
+    const panel = document.querySelector(".bg-theme-popup")!;
+    fireEvent.click(panel);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("cancel button has autoFocus attribute", () => {
+    render(<ConfirmDialog title="Delete?" message="Remove?" onConfirm={vi.fn()} onCancel={vi.fn()} />);
+    const cancelBtn = screen.getByRole("button", { name: "Keep editing" });
+    expect(cancelBtn).toHaveFocus();
+  });
 });
 
 // ── DialogHost ────────────────────────────────────────────────────────────────

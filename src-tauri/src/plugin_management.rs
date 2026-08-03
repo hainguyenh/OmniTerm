@@ -208,6 +208,45 @@ fn installed_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
         .join("plugins"))
 }
 
+fn install_validated_archive(
+    archive: &mut zip::ZipArchive<fs::File>,
+    plugins: &Path,
+    manifest: &PackageManifest,
+) -> Result<(), String> {
+    fs::create_dir_all(plugins).map_err(|error| error.to_string())?;
+    let staging = plugins.join(format!(".install-{}", Uuid::new_v4()));
+    fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
+    let result = (|| {
+        extract_validated(archive, &staging)?;
+        if !staging.join(&manifest.main).is_file() {
+            return Err(format!(
+                "Plugin entry point \"{}\" is missing from the ZIP.",
+                manifest.main
+            ));
+        }
+        let target = plugins.join(checked_dir_name(&manifest.id)?);
+        let backup = plugins.join(format!(".replace-{}", Uuid::new_v4()));
+        if target.exists() {
+            fs::rename(&target, &backup)
+                .map_err(|error| format!("Could not replace the installed plugin: {error}"))?;
+        }
+        if let Err(error) = fs::rename(&staging, &target) {
+            if backup.exists() {
+                let _ = fs::rename(&backup, &target);
+            }
+            return Err(format!("Could not install the plugin: {error}"));
+        }
+        if backup.exists() {
+            fs::remove_dir_all(&backup).map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    })();
+    if result.is_err() && staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
 #[tauri::command]
 pub async fn install_plugin_package<R: Runtime>(
     app: AppHandle<R>,
@@ -245,38 +284,7 @@ pub async fn install_plugin_package<R: Runtime>(
 
     let restart_required = !host.list_plugins().await.unwrap_or_default().is_empty();
     let plugins = installed_dir(&app)?;
-    fs::create_dir_all(&plugins).map_err(|error| error.to_string())?;
-    let staging = plugins.join(format!(".install-{}", Uuid::new_v4()));
-    fs::create_dir_all(&staging).map_err(|error| error.to_string())?;
-    let result = (|| {
-        extract_validated(&mut archive, &staging)?;
-        if !staging.join(&manifest.main).is_file() {
-            return Err(format!(
-                "Plugin entry point \"{}\" is missing from the ZIP.",
-                manifest.main
-            ));
-        }
-        let target = plugins.join(checked_dir_name(&manifest.id)?);
-        let backup = plugins.join(format!(".replace-{}", Uuid::new_v4()));
-        if target.exists() {
-            fs::rename(&target, &backup)
-                .map_err(|error| format!("Could not replace the installed plugin: {error}"))?;
-        }
-        if let Err(error) = fs::rename(&staging, &target) {
-            if backup.exists() {
-                let _ = fs::rename(&backup, &target);
-            }
-            return Err(format!("Could not install the plugin: {error}"));
-        }
-        if backup.exists() {
-            fs::remove_dir_all(&backup).map_err(|error| error.to_string())?;
-        }
-        Ok(())
-    })();
-    if result.is_err() && staging.exists() {
-        let _ = fs::remove_dir_all(&staging);
-    }
-    result?;
+    install_validated_archive(&mut archive, &plugins, &manifest)?;
     Ok(Some(PluginChange {
         installed: true,
         id: manifest.id,

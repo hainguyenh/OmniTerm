@@ -131,7 +131,7 @@ fn clamps_a_configured_cap_into_the_supported_range() {
 #[test]
 fn viewable_and_editable_gates_stay_distinct() {
     for ext in EDITABLE_EXTS {
-        assert!(is_viewable_kind(ext), "{ext} is editable so must be viewable");
+        assert!(is_viewable_kind_excluding(ext, &[]), "{ext} is editable so must be viewable");
     }
     for &ext in VIEW_DENY_EXTS {
         assert!(
@@ -160,6 +160,20 @@ fn user_exclusions_never_widen_the_fixed_deny_list() {
     for &ext in VIEW_DENY_EXTS {
         assert!(!is_viewable_kind_excluding(ext, &["something-else".to_string()]));
     }
+}
+
+/// The Settings panel renders `system_excluded_view_exts` so a user can see which locked entries
+/// came from the app rather than their own list. The contents must match the slice the viewer uses,
+/// or Settings would list `.exe` as locked while the viewer still opened it.
+#[test]
+fn system_excluded_view_exts_matches_the_viewer_deny_list() {
+    let excluded = system_excluded_view_exts();
+    assert_eq!(
+        excluded.iter().map(String::as_str).collect::<Vec<_>>(),
+        VIEW_DENY_EXTS.to_vec(),
+        "the Settings UI and the viewer must source the same deny-list"
+    );
+    assert!(!excluded.is_empty(), "the deny-list is non-empty in production");
 }
 
 #[test]

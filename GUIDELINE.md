@@ -139,6 +139,9 @@ pnpm lint:tauri
 
 ESLint is configured with `--max-warnings 0`. Any warning fails the check.
 
+`pnpm lint:dead-code` rejects orphan TypeScript/Rust modules, Tauri commands that only return a
+constant, and Rust commands registered in `generate_handler!` but never invoked by production code.
+
 ---
 
 ## TypeScript Type Checking
@@ -257,7 +260,7 @@ OmniTerm/
 **Workspace**: `scan_scripts`, `scan_workspace_entries`, `read_script`, `write_script`, `load_workspace_connections`, `delete_workspace_connection`
 **Windows**: `detach_terminal`, `bootstrap_terminal_window`, `reattach_terminal`, `focus_terminal_window`, `release_terminal_window`
 **Plugins**: `install_plugin_package`, `remove_plugin`, `restart_app`, `plugin_invoke`, `plugin_auth_gate`
-**Utilities**: `minimize_window`, `toggle_maximize`, `open_external` (HTTPS + github.com only), `get_version`, `reveal_log` (debug only), `list_themes`, `save_theme`, `change_font`
+**Utilities**: `minimize_window`, `toggle_maximize`, `get_version`, `reveal_log` (debug only), `list_themes`, `save_theme`, `change_font`
 
 ### Frontend -- Key Components
 
@@ -310,7 +313,7 @@ OmniTerm/
 | Terminal | xterm.js 5.5 + `@xterm/addon-fit` |
 | PTY transport | `portable-pty` v0.8 (Rust) |
 | Plugin host | Node.js 24 sidecar, JSON-RPC v2.0 over stdio |
-| Rust crates | serde, tokio, sysinfo, dashmap, zeroize, opener, rfd |
+| Rust crates | serde, tokio, sysinfo, dashmap, opener, rfd |
 | Installer | Tauri NSIS (Windows) |
 | License | LGPL-3.0-or-later |
 | Platform min | Windows 10+ (WSL2 for Linux shells), macOS 12+ |

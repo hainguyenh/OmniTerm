@@ -2,6 +2,8 @@
 
 use super::*;
 use crate::proc_activity::ProcTable;
+use std::sync::{Arc, Mutex};
+use tauri::ipc::{Channel, InvokeResponseBody, Response};
 
 fn plain(id: &str, pid: u32) -> Target {
     Target {
@@ -18,6 +20,22 @@ fn busy_table() -> ProcTable {
 
 fn idle_table() -> ProcTable {
     ProcTable::from_rows([(100u32, 1u32, 10u64, "pwsh.exe")])
+}
+
+fn output_with_status_log() -> (Arc<Mutex<Output>>, Arc<Mutex<Vec<SessionStatus>>>) {
+    let data = Channel::<Response>::new(|_| Ok(()));
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&log);
+    let status = Channel::<SessionStatus>::new(move |body| {
+        if let InvokeResponseBody::Json(text) = body {
+            sink.lock().unwrap().push(serde_json::from_str(&text).unwrap());
+        }
+        Ok(())
+    });
+    (
+        Arc::new(Mutex::new(Output::new(data, status, "shell".into()))),
+        log,
+    )
 }
 
 #[test]
@@ -136,5 +154,40 @@ fn a_reopened_session_starts_fresh() {
     assert_eq!(
         resolve_tick(&busy_table(), &mut states, &targets),
         vec![("pane-1".to_string(), true)],
+    );
+}
+
+#[test]
+fn target_collection_requires_a_live_status_sink_and_handles_poisoning() {
+    let (output, _) = output_with_status_log();
+    let (target, cloned) = listening_target("pane".into(), Some(42), true, &output).unwrap();
+    assert_eq!(target.id, "pane");
+    assert_eq!(target.pid, Some(42));
+    assert!(target.launched_with_command);
+    assert!(Arc::ptr_eq(&output, &cloned));
+
+    output.lock().unwrap().detach();
+    assert!(listening_target("pane".into(), None, false, &output).is_none());
+
+    let (poisoned, _) = output_with_status_log();
+    let poisoned_clone = Arc::clone(&poisoned);
+    let _ = std::panic::catch_unwind(move || {
+        let _guard = poisoned_clone.lock().unwrap();
+        panic!("poison output lock");
+    });
+    assert!(listening_target("pane".into(), None, false, &poisoned).is_none());
+}
+
+#[test]
+fn change_delivery_updates_known_outputs_and_ignores_closed_sessions() {
+    let (output, log) = output_with_status_log();
+    let outputs = HashMap::from([("known".to_string(), output)]);
+    deliver_changes(
+        &outputs,
+        &[("missing".to_string(), true), ("known".to_string(), true)],
+    );
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec![SessionStatus::Activity { busy: true }]
     );
 }

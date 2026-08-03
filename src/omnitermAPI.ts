@@ -235,8 +235,6 @@ function createTauriAPI(): any {
       platform: platformValue,
       revealLog: () => invoke<string>('reveal_log'),
       clearLog: () => invoke<boolean>('clear_log'),
-      cleanupRdpCert: () => invoke<boolean>('cleanup_rdp_cert'),
-      openExternal: (url: string) => invoke<boolean>('open_external', { url }),
       setZoomFactor: (factor: number) => {
         zoomFactor = factor
         invoke('set_webview_zoom', { factor }).catch(() => {
@@ -333,10 +331,9 @@ function createTauriAPI(): any {
 
     // The updater is a later phase; these are the "no update available" values.
     updates: {
-      check: () => invoke<any>('check_updates').catch(() => null),
-      state: () => invoke<any>('get_update_state').catch(() => null),
-      skip: (version: string | null) =>
-        invoke('skip_version', { version }).catch(() => {}),
+      check: () => Promise.resolve(null),
+      state: () => Promise.resolve(null),
+      skip: (_version: string | null) => Promise.resolve(undefined),
       getVersion: () => invoke<string>('get_version'),
       showSaveDialog: (_defaultName: string) => Promise.resolve(null),
       downloadPortable: (_savePath: string) => Promise.resolve(),

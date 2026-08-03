@@ -14,6 +14,9 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(test)]
 #[path = "pty_resolve_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "pty_resolve_coverage_tests.rs"]
+mod coverage_tests;
 
 fn safe_ssh_value(value: &str) -> bool {
     !value.is_empty()
@@ -133,10 +136,9 @@ pub async fn prepare_ssh_session<R: Runtime>(
         );
         return Ok(());
     }
-    require_windows_client(
-        "ssh.exe",
-        "Enable the Windows OpenSSH Client optional feature, then try again.",
-    )?;
+    // Validate the saved-record fields before checking for the native client: an unsafe host or
+    // port is a configuration error regardless of platform, surfacing the right message instead of
+    // masking it behind "ssh.exe is not available".
     if !safe_ssh_value(&conn.host) || (!conn.user.is_empty() && !safe_ssh_value(&conn.user)) {
         return Err("SSH host or username contains unsupported characters.".to_string());
     }
@@ -150,6 +152,10 @@ pub async fn prepare_ssh_session<R: Runtime>(
     if port == 0 {
         return Err("SSH port must be between 1 and 65535.".to_string());
     }
+    require_windows_client(
+        "ssh.exe",
+        "Enable the Windows OpenSSH Client optional feature, then try again.",
+    )?;
     let destination = if conn.user.is_empty() {
         conn.host
     } else {

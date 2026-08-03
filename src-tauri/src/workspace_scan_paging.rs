@@ -61,3 +61,86 @@ pub fn scan_entries_page_excluding(
         has_more: end < total,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn pages_folder_files_and_entries() {
+        let dir = tempdir().unwrap();
+        let sub = dir.path().join("scripts");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("a.sh"), "echo a\n").unwrap();
+        std::fs::write(sub.join("b.sh"), "echo b\n").unwrap();
+
+        let page1 = scan_folder_files_excluding(dir.path(), "scripts", &[], 0, 1).unwrap();
+        assert_eq!(page1.total, 2);
+        assert_eq!(page1.entries.len(), 1);
+        assert!(page1.has_more);
+
+        let page_all = scan_entries_page_excluding(dir.path(), &[], 0, 10);
+        assert_eq!(page_all.total, 3);
+        assert!(!page_all.has_more);
+    }
+
+    #[test]
+    fn folder_pages_are_direct_sorted_bounded_and_respect_view_exclusions() {
+        let dir = tempdir().unwrap();
+        let sub = dir.path().join("scripts");
+        std::fs::create_dir_all(sub.join("nested")).unwrap();
+        std::fs::write(sub.join("z.txt"), "z").unwrap();
+        std::fs::write(sub.join("a.sh"), "echo a").unwrap();
+        std::fs::write(sub.join("nested/hidden.sh"), "echo hidden").unwrap();
+
+        let page = scan_folder_files_excluding(
+            dir.path(),
+            "scripts",
+            &["txt".to_string()],
+            0,
+            10,
+        )
+        .unwrap();
+        assert_eq!(page.total, 2, "nested files belong to the nested folder's page");
+        assert_eq!(page.entries[0].id, "scripts/a.sh");
+        assert_eq!(page.entries[1].id, "scripts/z.txt");
+        assert_eq!(page.entries[1].viewable, Some(false));
+        assert!(!page.has_more);
+
+        let empty = scan_folder_files_excluding(dir.path(), "scripts", &[], 1, 0).unwrap();
+        assert!(empty.entries.is_empty());
+        assert!(empty.has_more);
+        let past_end =
+            scan_folder_files_excluding(dir.path(), "scripts", &[], usize::MAX, 5).unwrap();
+        assert!(past_end.entries.is_empty());
+        assert!(!past_end.has_more);
+    }
+
+    #[test]
+    fn missing_and_hostile_folder_pages_are_handled_without_escaping_the_root() {
+        let dir = tempdir().unwrap();
+        let missing = scan_folder_files_excluding(dir.path(), "missing", &[], 0, 10).unwrap();
+        assert_eq!(missing.total, 0);
+        assert!(missing.entries.is_empty());
+        assert!(scan_folder_files_excluding(dir.path(), "../outside", &[], 0, 10).is_err());
+        assert!(scan_folder_files_excluding(dir.path(), "/tmp", &[], 0, 10).is_err());
+    }
+
+    #[test]
+    fn full_entry_paging_handles_zero_and_out_of_range_windows() {
+        let dir = tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "a").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "b").unwrap();
+
+        let zero = scan_entries_page_excluding(dir.path(), &[], 0, 0);
+        assert_eq!(zero.total, 2);
+        assert!(zero.entries.is_empty());
+        assert!(zero.has_more);
+
+        let beyond = scan_entries_page_excluding(dir.path(), &[], 99, usize::MAX);
+        assert!(beyond.entries.is_empty());
+        assert!(!beyond.has_more);
+    }
+}
+

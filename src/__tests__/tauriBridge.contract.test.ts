@@ -262,13 +262,10 @@ describe('settings and plugins', () => {
     expect(lastInvoke()).toEqual(['save_connections', { data: tree }])
   })
 
-  it('reads the version and the guarded external opener through the backend', async () => {
+  it('reads the version through the backend', async () => {
     invokeMock.mockResolvedValueOnce('0.1.0')
     await expect(api.updates.getVersion()).resolves.toBe('0.1.0')
 
-    invokeMock.mockResolvedValueOnce(false)
-    await expect(api.app.openExternal('file:///etc/passwd')).resolves.toBe(false)
-    expect(lastInvoke()).toEqual(['open_external', { url: 'file:///etc/passwd' }])
   })
 
   it('round-trips the zoom factor it was given, through the native webview zoom command', () => {

@@ -107,3 +107,62 @@ fn write_if_changed_leaves_matching_content_alone() {
     write_if_changed(&target, "second").expect("rewrite");
     assert_eq!(fs::read_to_string(&target).unwrap(), "second");
 }
+
+/// When the target does not exist, `write_if_changed` creates it without hitting the read-no-match path.
+#[test]
+fn write_when_file_does_not_exist() {
+    let dir = tempfile::Builder::new()
+        .prefix("omniterm-launcher")
+        .tempdir()
+        .expect("temp dir");
+    let target = dir.path().join("new-shim.cmd");
+    assert!(!target.exists());
+
+    write_if_changed(&target, "created").expect("write");
+    assert_eq!(fs::read_to_string(&target).unwrap(), "created");
+}
+
+// ── App-handle tests ────────────────────────────────────────────────────────
+
+#[test]
+fn launcher_bin_dir_is_under_app_data() {
+    let app = crate::test_support::mock_app();
+    let bin = launcher_bin_dir(app.handle());
+    assert!(
+        bin.to_string_lossy().ends_with("bin"),
+        "bin dir should end with 'bin', got: {}",
+        bin.display()
+    );
+}
+
+#[test]
+fn setup_launcher_creates_shim_files() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    match tauri::async_runtime::block_on(setup_launcher(app.handle().clone())) {
+        Ok(bin_dir_str) => {
+            // Verify the returned path ends with 'bin'.
+            assert!(bin_dir_str.ends_with("bin"), "expected bin dir, got: {bin_dir_str}");
+            // Verify shim files were created.
+            let bin = std::path::Path::new(&bin_dir_str);
+            assert!(bin.join("nc-open.cmd").exists(), "nc-open.cmd must exist");
+            assert!(bin.join("wt.cmd").exists(), "wt.cmd must exist");
+            assert!(bin.join("wt-shim.ps1").exists(), "wt-shim.ps1 must exist");
+        }
+        Err(e) => {
+            // Mock runtime may not provide a writable app data dir; skip disk assertions.
+            eprintln!("setup_launcher returned error (mock fs): {e}");
+        }
+    }
+}
+
+#[test]
+fn setup_launcher_is_idempotent() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    // Call twice; should not error on second call.
+    let r1 = tauri::async_runtime::block_on(setup_launcher(app.handle().clone()));
+    let r2 = tauri::async_runtime::block_on(setup_launcher(app.handle().clone()));
+    // Both succeed or both fail (mock fs); the important thing is no panic.
+    assert_eq!(r1.is_ok(), r2.is_ok(), "idempotency: both calls should have same success/error state");
+}

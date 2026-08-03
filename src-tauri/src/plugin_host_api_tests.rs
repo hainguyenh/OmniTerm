@@ -94,3 +94,13 @@ fn node_arg_path_leaves_loadable_paths_alone() {
         assert_eq!(node_arg_path(Path::new(path)), PathBuf::from(path), "{path}");
     }
 }
+
+#[test]
+fn disabled_descriptor_formats_error_descriptor() {
+    let desc = disabled_descriptor("Node.js not found".to_string());
+    assert_eq!(desc["id"], "omniterm.plugin-host");
+    assert_eq!(desc["status"], "error");
+    assert_eq!(desc["error"], "Node.js not found");
+    assert_eq!(desc["enabled"], false);
+}
+

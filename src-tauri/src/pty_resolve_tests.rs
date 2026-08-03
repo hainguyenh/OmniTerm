@@ -248,3 +248,92 @@ fn native_batch_provider_is_optional() {
         None
     );
 }
+
+/// `prepare_ssh_session` rejects anything the `safe_ssh_value` check stops: a host carrying a shell
+/// metacharacter (`;`) would otherwise reach `ssh.exe` as an extra argv element.
+#[test]
+fn prepare_ssh_session_rejects_an_unsafe_host_or_user() {
+    let fixture = Fixture::new(true);
+    let app = fixture.handle();
+
+    let mut bad_host = ssh_connection("ssh-bad-host");
+    bad_host.host = "host;echo".to_string();
+    let mut bad_user = ssh_connection("ssh-bad-user");
+    bad_user.user = "user\nroot".to_string();
+    for conn in [bad_host, bad_user] {
+        let id = conn.id.clone();
+        save_one(&app, conn);
+        let err = block_on(prepare_ssh_session(app.clone(), id.clone())).unwrap_err();
+        assert!(err.contains("unsupported characters"), "got: {err}");
+    }
+}
+
+/// Port parsing edge cases: out-of-range (not parseable as u16) and explicit zero both reject the
+/// session before `ssh.exe` is ever consulted.
+#[test]
+fn prepare_ssh_session_rejects_an_unparseable_or_zero_port() {
+    let fixture = Fixture::new(true);
+    let app = fixture.handle();
+
+    for (id, port) in [("ssh-bad-port", "99999"), ("ssh-zero-port", "0")] {
+        let mut conn = ssh_connection(id);
+        conn.port = port.to_string();
+        save_one(&app, conn);
+        let err = block_on(prepare_ssh_session(app.clone(), id.to_string())).unwrap_err();
+        assert!(err.contains("must be between 1 and 65535"), "got: {err}");
+    }
+}
+
+/// An RDP-typed connection refuses SSH preparation outright — the message in the panel depends on
+/// the type check not silently accepting any record with a host string.
+#[test]
+fn prepare_ssh_session_refuses_an_rdp_connection() {
+    let fixture = Fixture::new(true);
+    let app = fixture.handle();
+    let mut rdp = ssh_connection("rdp-prepare-check");
+    rdp.conn_type = "RDP".to_string();
+    save_one(&app, rdp);
+    let err = block_on(prepare_ssh_session(app, "rdp-prepare-check".to_string())).unwrap_err();
+    assert_eq!(err, "Not an SSH connection.");
+}
+
+/// A bare SSH helper so the prepare_ssh_session edge-case tests share one fixture shape.
+fn ssh_connection(id: &str) -> Connection {
+    serde_json::from_value(serde_json::json!({
+        "id": id,
+        "name": format!("Server {id}"),
+        "type": "SSH",
+        "host": "ssh.example.test",
+        "port": "22",
+        "user": "root",
+    }))
+    .expect("ssh fixture should deserialize")
+}
+
+/// Save one connection through the real app so a prepare_ssh_session case can resolve it.
+fn save_one(app: &AppHandle<MockRuntime>, conn: Connection) {
+    block_on(connections::save_connections(
+        app.clone(),
+        app.state::<PluginHost>(),
+        ConnectionTree { connections: vec![conn], folders: vec![] },
+    ))
+    .unwrap();
+}
+
+#[test]
+fn prepare_ssh_session_defaults_user_and_port() {
+    let fixture = Fixture::new(true);
+    let app = fixture.handle();
+    let mut conn = ssh_connection("ssh-default-user-port");
+    conn.user = "".to_string();
+    conn.port = "".to_string();
+    save_one(&app, conn);
+
+    if cfg!(target_os = "windows") && require_windows_client("ssh.exe", "").is_ok() {
+        assert!(block_on(prepare_ssh_session(app.clone(), "ssh-default-user-port".to_string())).is_ok());
+        let adhoc = app.state::<AdhocRegistry>().get("ssh-default-user-port").unwrap();
+        assert_eq!(adhoc.name, "Server ssh-default-user-port");
+        assert!(adhoc.command.unwrap().contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
+    }
+}
+

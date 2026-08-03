@@ -183,6 +183,93 @@ fn oversized_package_manifest_is_rejected_before_json_parsing() {
         .contains("package.json is too large"));
 }
 
+
+#[test]
+fn extraction_creates_explicit_directories_and_nested_files() {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut writer = zip::ZipWriter::new(file.reopen().unwrap());
+    writer
+        .add_directory("dist/assets/", SimpleFileOptions::default())
+        .unwrap();
+    writer
+        .start_file("dist/assets/index.js", SimpleFileOptions::default())
+        .unwrap();
+    writer.write_all(b"module.exports = 1").unwrap();
+    writer.finish().unwrap();
+
+    let mut archive = zip::ZipArchive::new(fs::File::open(file.path()).unwrap()).unwrap();
+    let destination = tempfile::TempDir::new().unwrap();
+    extract_validated(&mut archive, destination.path()).unwrap();
+    assert!(destination.path().join("dist/assets").is_dir());
+    assert_eq!(
+        fs::read(destination.path().join("dist/assets/index.js")).unwrap(),
+        b"module.exports = 1"
+    );
+}
+
+#[test]
+fn package_archive_rejects_more_than_the_file_limit() {
+    use zip::write::SimpleFileOptions;
+
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut writer = zip::ZipWriter::new(file.reopen().unwrap());
+    for index in 0..=MAX_FILES {
+        writer
+            .start_file(format!("entry-{index}"), SimpleFileOptions::default())
+            .unwrap();
+    }
+    writer.finish().unwrap();
+
+    let mut archive = zip::ZipArchive::new(fs::File::open(file.path()).unwrap()).unwrap();
+    assert!(read_package_manifest(&mut archive)
+        .unwrap_err()
+        .contains("too many files"));
+}
+
+#[test]
+fn install_transaction_installs_replaces_and_cleans_failed_staging() {
+    let plugins = tempfile::TempDir::new().unwrap();
+    let package = manifest();
+
+    let first = zip_file(&[
+        ("package.json", package.as_slice(), None),
+        ("dist/index.js", b"first", None),
+    ]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(first.path()).unwrap()).unwrap();
+    let parsed = read_package_manifest(&mut archive).unwrap();
+    install_validated_archive(&mut archive, plugins.path(), &parsed).unwrap();
+    let target = plugins.path().join("@x_demo");
+    assert_eq!(fs::read(target.join("dist/index.js")).unwrap(), b"first");
+
+    let replacement = zip_file(&[
+        ("package.json", package.as_slice(), None),
+        ("dist/index.js", b"second", None),
+    ]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(replacement.path()).unwrap()).unwrap();
+    let parsed = read_package_manifest(&mut archive).unwrap();
+    install_validated_archive(&mut archive, plugins.path(), &parsed).unwrap();
+    assert_eq!(fs::read(target.join("dist/index.js")).unwrap(), b"second");
+    assert!(fs::read_dir(plugins.path()).unwrap().all(|entry| {
+        let name = entry.unwrap().file_name();
+        !name.to_string_lossy().starts_with(".replace-")
+    }));
+
+    let missing_main = zip_file(&[("package.json", package.as_slice(), None)]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(missing_main.path()).unwrap()).unwrap();
+    let parsed = read_package_manifest(&mut archive).unwrap();
+    assert!(install_validated_archive(&mut archive, plugins.path(), &parsed)
+        .unwrap_err()
+        .contains("entry point"));
+    assert!(fs::read_dir(plugins.path()).unwrap().all(|entry| {
+        let name = entry.unwrap().file_name();
+        !name.to_string_lossy().starts_with(".install-")
+    }));
+    assert_eq!(fs::read(target.join("dist/index.js")).unwrap(), b"second");
+}
+
 #[test]
 fn installed_plugin_directory_and_remove_command_validate_identity() {
     use tauri::Manager;

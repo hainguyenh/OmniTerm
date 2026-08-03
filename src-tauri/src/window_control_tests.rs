@@ -21,10 +21,7 @@ fn minimize_close_and_is_maximized_round_trip_through_a_mock_window() {
 
     // MockRuntime's dispatcher always reports `false`, regardless of maximize/unmaximize calls —
     // there is no tracked state behind it, so this only ever exercises the "not maximized" branch.
-    assert_eq!(
-        tauri::async_runtime::block_on(is_maximized(window.clone())).unwrap(),
-        false
-    );
+    assert!(!tauri::async_runtime::block_on(is_maximized(window.clone())).unwrap());
 
     assert!(tauri::async_runtime::block_on(close_window(window)).is_ok());
 }

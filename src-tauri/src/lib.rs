@@ -7,6 +7,8 @@ mod window_control;
 #[cfg(test)]
 mod command_coverage_tests;
 #[cfg(test)]
+mod ipc_contract_tests;
+#[cfg(test)]
 mod test_support;
 
 // Public so the integration tests under tests/ can drive the real launch and command paths.
@@ -46,7 +48,7 @@ use terminal_window::DetachRegistry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // The single-instance plugin must be registered first so a second launch is forwarded before
         // any other plugin has a chance to initialize against a duplicate instance.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -55,7 +57,6 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_shell::init())
         .manage(PtyManager::new())
         .manage(AdhocRegistry::new())
         .manage(DetachRegistry::new())
@@ -125,93 +126,9 @@ pub fn run() {
             }
 
             Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            // PTY
-            pty::start_local_session,
-            pty::send_session_input,
-            pty::resize_session,
-            pty::disconnect_session,
-            pty_resolve::prepare_ssh_session,
-            // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
-            // positioned a window that was never reparented and got no error saying so. Docking, if
-            // built, belongs to a plugin — see the note at the top of rdp_embed.rs.
-            rdp_embed::connect_rdp,
-            rdp_embed::rdp_disconnect,
-            // Detached terminal windows
-            terminal_window::detach_terminal,
-            terminal_window::bootstrap_terminal_window,
-            terminal_window::attach_session,
-            terminal_window::reattach_terminal,
-            terminal_window::focus_terminal_window,
-            terminal_window::release_terminal_window,
-            // Settings
-            settings::get_settings,
-            settings::save_settings,
-            // Themes
-            themes::list_themes,
-            themes::save_theme,
-            themes::delete_theme,
-            themes::open_themes_folder,
-            // Custom art
-            custom_art::upload_custom_art,
-            custom_art::get_custom_art,
-            custom_art::remove_custom_art,
-            // Connections
-            connections::load_connections,
-            connections::save_connections,
-            connections::export_json,
-            connections::import_json,
-            connections::import_file,
-            // Window control
-            window_control::minimize_window,
-            window_control::toggle_maximize,
-            window_control::close_window,
-            window_control::is_maximized,
-            window_control::set_webview_zoom,
-            // Workspace
-            workspace::list_workspaces,
-            workspace::add_workspace,
-            workspace::remove_workspace,
-            workspace::scan_scripts,
-            workspace::scan_workspace_folders,
-            workspace::scan_workspace_entries,
-            workspace::run_script,
-            workspace::read_script,
-            workspace::write_script,
-            safepath::system_excluded_view_exts,
-            workspace_connections::load_workspace_connections,
-            workspace_connections::save_workspace_connections,
-            workspace_connections::delete_workspace_connection,
-            // App utils
-            app_utils::reveal_log,
-            app_utils::clear_log,
-            app_utils::open_external,
-            app_utils::get_version,
-            app_utils::get_home_dir,
-            app_utils::get_platform,
-            app_utils::cleanup_rdp_cert,
-            // Ad-hoc shells + launcher
-            adhoc::shells_ready,
-            adhoc::shells_release,
-            adhoc::open_quick_shell,
-            shell_probe::list_available_shells,
-            launcher::setup_launcher,
-            // Plugin host commands
-            plugin_available,
-            plugin_list,
-            plugin_management::install_plugin_package,
-            plugin_management::remove_plugin,
-            plugin_management::restart_app,
-            plugin_set_enabled,
-            plugin_select_connection_provider,
-            connection_provider_capabilities,
-            plugin_invoke,
-            plugin_auth_gate,
-            check_updates,
-            get_update_state,
-            skip_version,
-        ])
+        });
+
+    with_invoke_handler(builder)
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -225,6 +142,88 @@ pub fn run() {
                 }
             }
         });
+}
+
+fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder.invoke_handler(tauri::generate_handler![
+        // PTY
+        pty::start_local_session,
+        pty::send_session_input,
+        pty::resize_session,
+        pty::disconnect_session,
+        pty_resolve::prepare_ssh_session,
+        // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
+        // positioned a window that was never reparented and got no error saying so. Docking, if
+        // built, belongs to a plugin — see the note at the top of rdp_embed.rs.
+        rdp_embed::connect_rdp,
+        rdp_embed::rdp_disconnect,
+        // Detached terminal windows
+        terminal_window::detach_terminal,
+        terminal_window::bootstrap_terminal_window,
+        terminal_window::attach_session,
+        terminal_window::reattach_terminal,
+        terminal_window::focus_terminal_window,
+        terminal_window::release_terminal_window,
+        // Settings
+        settings::get_settings,
+        settings::save_settings,
+        // Themes
+        themes::list_themes,
+        themes::save_theme,
+        themes::delete_theme,
+        themes::open_themes_folder,
+        // Custom art
+        custom_art::upload_custom_art,
+        custom_art::get_custom_art,
+        custom_art::remove_custom_art,
+        // Connections
+        connections::load_connections,
+        connections::save_connections,
+        connections::export_json,
+        connections::import_json,
+        connections::import_file,
+        // Window control
+        window_control::minimize_window,
+        window_control::toggle_maximize,
+        window_control::close_window,
+        window_control::is_maximized,
+        window_control::set_webview_zoom,
+        // Workspace
+        workspace::list_workspaces,
+        workspace::add_workspace,
+        workspace::remove_workspace,
+        workspace::scan_scripts,
+        workspace::scan_workspace_folders,
+        workspace::scan_workspace_entries,
+        workspace::run_script,
+        workspace::read_script,
+        workspace::write_script,
+        safepath::system_excluded_view_exts,
+        workspace_connections::load_workspace_connections,
+        workspace_connections::save_workspace_connections,
+        workspace_connections::delete_workspace_connection,
+        // App utils
+        app_utils::reveal_log,
+        app_utils::clear_log,
+        app_utils::get_version,
+        // Ad-hoc shells + launcher
+        adhoc::shells_ready,
+        adhoc::shells_release,
+        adhoc::open_quick_shell,
+        shell_probe::list_available_shells,
+        launcher::setup_launcher,
+        // Plugin host commands
+        plugin_available,
+        plugin_list,
+        plugin_management::install_plugin_package,
+        plugin_management::remove_plugin,
+        plugin_management::restart_app,
+        plugin_set_enabled,
+        plugin_select_connection_provider,
+        connection_provider_capabilities,
+        plugin_invoke,
+        plugin_auth_gate,
+    ])
 }
 
 /// A second launch arrived. Its argv is untrusted — any local process can run
@@ -299,19 +298,4 @@ async fn plugin_invoke(
 #[tauri::command]
 async fn plugin_auth_gate(host: State<'_, PluginHost>) -> Result<bool, String> {
     host.auth_gate().await
-}
-
-#[tauri::command]
-async fn check_updates() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!(null))
-}
-
-#[tauri::command]
-async fn get_update_state() -> Result<serde_json::Value, String> {
-    Ok(serde_json::json!(null))
-}
-
-#[tauri::command]
-async fn skip_version(_version: Option<String>) -> Result<(), String> {
-    Ok(())
 }

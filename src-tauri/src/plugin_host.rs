@@ -21,6 +21,9 @@ use crate::plugin_host_api::{handle_reverse_call, node_arg_path};
 #[cfg(test)]
 #[path = "plugin_host_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "plugin_host_integration_tests.rs"]
+mod integration_tests;
 #[path = "plugin_host_rpc.rs"]
 mod rpc;
 pub struct PluginHost {

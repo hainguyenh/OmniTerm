@@ -172,6 +172,45 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
     assert!(app.state::<AdhocRegistry>().get(&named).is_none());
 }
 
+
+#[test]
+fn poisoned_registry_lock_fails_closed_without_panicking() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    let registry = AdhocRegistry::new();
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = registry.conns.lock().unwrap();
+        panic!("poison connection registry");
+    }));
+
+    assert!(registry.get("missing").is_none());
+    registry.insert_named("ignored".to_string(), request());
+    registry.remove("ignored");
+    assert!(registry.get("ignored").is_none());
+}
+
+#[test]
+fn poisoned_pending_queue_rejects_ready_and_drops_new_opens() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use tauri::Manager;
+
+    let app = test_support::mock_app();
+    assert!(app.manage(AdhocRegistry::new()));
+    let registry = app.state::<AdhocRegistry>();
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = registry.pending.lock().unwrap();
+        panic!("poison pending queue");
+    }));
+
+    let id = open_adhoc_shell(app.handle(), request());
+    assert!(id.starts_with("adhoc-"));
+    assert!(registry.get(&id).is_some());
+    flush_pending(app.handle());
+
+    let error = tauri::async_runtime::block_on(shells_ready(app.handle().clone())).unwrap_err();
+    assert_eq!(error, "adhoc queue is poisoned");
+}
+
 #[test]
 fn quick_shell_command_rejects_unsupported_renderer_input() {
     use tauri::Manager;

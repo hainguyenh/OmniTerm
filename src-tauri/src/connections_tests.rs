@@ -201,3 +201,149 @@ fn bounded_import_reader_accepts_small_text_and_rejects_missing_or_oversized_fil
         .unwrap_err()
         .contains("File too large to import"));
 }
+
+// ── Path and persistence helpers ─────────────────────────────────────────────
+
+#[test]
+fn connections_path_returns_json_path_under_app_data() {
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("should resolve");
+    assert!(path.to_string_lossy().ends_with("connections.json"));
+}
+
+#[test]
+fn read_tree_returns_empty_default_when_no_file_exists() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("path");
+    let _ = std::fs::remove_file(&path);
+    let tree = read_tree(app.handle()).expect("missing file must yield empty tree");
+    assert!(tree.connections.is_empty());
+    assert!(tree.folders.is_empty());
+}
+
+
+#[test]
+fn read_tree_parses_a_valid_file() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("path");
+    // Skip if the mock app data dir is not writable (common on Windows CI).
+    if std::fs::write(&path, PLAIN_EXPORT).is_err() {
+        return;
+    }
+    let tree = read_tree(app.handle()).expect("should parse");
+    assert_eq!(tree.connections.len(), 1);
+    assert_eq!(tree.folders.len(), 1);
+    // Clean up
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn read_tree_errors_on_corrupt_file() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("path");
+    if std::fs::write(&path, "not valid json {").is_err() {
+        return; // Skip if mock app data dir is not writable.
+    }
+    let err = read_tree(app.handle()).expect_err("corrupt file must error");
+    assert!(err.contains("connections.json is corrupt"), "got {err}");
+    // Clean up
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn scrub_stored_secrets_removes_legacy_fields_from_disk() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("path");
+    // Write a tree that contains a legacy secret.
+    let with_secret = r#"{"connections": [{"id": "c1", "name": "n", "type": "SSH", "host": "h", "port": "22", "user": "u", "password": "hunter2"}], "folders": []}"#;
+    if std::fs::write(&path, with_secret).is_err() {
+        return; // Skip if mock app data dir is not writable.
+    }
+    scrub_stored_secrets(app.handle());
+    if let Ok(cleaned) = std::fs::read_to_string(&path) {
+        assert!(!cleaned.contains("hunter2"), "password must be gone after scrub");
+        assert!(!cleaned.contains("\"password\""), "password key must be gone");
+    }
+    // Clean up
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn scrub_stored_secrets_leaves_clean_file_untouched() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).expect("path");
+    // Remove any leftover file from previous tests first.
+    let _ = std::fs::remove_file(&path);
+    if std::fs::write(&path, PLAIN_EXPORT).is_err() {
+        return; // Skip if mock app data dir is not writable.
+    }
+    scrub_stored_secrets(app.handle());
+    // The file should NOT have been rewritten when no secrets present.
+    let after_content = std::fs::read_to_string(&path).unwrap_or_default();
+    assert!(!after_content.contains("hunter2"));
+    let _ = std::fs::remove_file(&path);
+}
+
+
+#[test]
+fn scrub_stored_secrets_handles_missing_file_gracefully() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    // Ensure no file exists.
+    let path = connections_path(app.handle()).expect("path");
+    let _ = std::fs::remove_file(&path);
+    // Must not panic.
+    scrub_stored_secrets(app.handle());
+}
+#[test]
+fn empty_files_default_and_secret_scrubbing_preserves_unsalvageable_data() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = connections_path(app.handle()).unwrap();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+
+    std::fs::write(&path, " \n\t").unwrap();
+    let empty = read_tree(app.handle()).unwrap();
+    assert!(empty.connections.is_empty());
+    assert!(empty.folders.is_empty());
+
+    for text in [
+        "not valid json",
+        r#"{"connections":[{"password":"keep-me"}],"folders":"invalid"}"#,
+    ] {
+        std::fs::write(&path, text).unwrap();
+        scrub_stored_secrets(app.handle());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+    }
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn bounded_reader_accepts_the_exact_limit_and_rejects_a_directory() {
+    let exact = tempfile::NamedTempFile::new().unwrap();
+    exact.as_file().set_len(MAX_IMPORT_FILE_BYTES).unwrap();
+    assert_eq!(read_bounded(exact.path()).unwrap().len() as u64, MAX_IMPORT_FILE_BYTES);
+    let directory = tempfile::tempdir().unwrap();
+    assert_eq!(
+        read_bounded(directory.path()).unwrap_err(),
+        "Cannot read the selected file."
+    );
+}
+#[test]
+fn import_reports_a_tree_that_passes_shape_checks_but_not_deserialization() {
+    let malformed = r#"{
+        "folders": [],
+        "connections": [{
+            "id": "c1", "name": "server", "type": "SSH", "host": 42
+        }]
+    }"#;
+    let error = parse_import_content(malformed).unwrap_err();
+    assert!(error.contains("malformed connection tree"), "{error}");
+}

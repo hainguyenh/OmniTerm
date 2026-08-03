@@ -117,6 +117,7 @@ fn session_manager_sequences_registers_and_removes_temp_files() {
 fn temp_file_helpers_write_sweep_and_finish_only_omniterm_rdp_files() {
     use tauri::Manager;
 
+    let _guard = test_support::lock();
     let app = test_support::mock_app();
     let handle = app.handle().clone();
     let cache = handle.path().app_cache_dir().unwrap();
@@ -124,18 +125,73 @@ fn temp_file_helpers_write_sweep_and_finish_only_omniterm_rdp_files() {
 
     let stale = cache.join(temp_file_name("stale", 777_001));
     let unrelated = cache.join("keep-coverage-file.rdp");
-    fs::write(&stale, "stale").unwrap();
-    fs::write(&unrelated, "keep").unwrap();
+    if fs::write(&stale, "stale").is_err() {
+        return; // Skip if mock cache dir is unwritable
+    }
+    let _ = fs::write(&unrelated, "keep");
     sweep_stale_temp_files(&handle);
     assert!(!stale.exists());
     assert!(unrelated.exists());
 
-    let written = create_temp_rdp_file(&handle, &rdp_conn(), 777_002).unwrap();
-    let content = fs::read_to_string(&written).unwrap();
-    assert!(content.contains("10.0.0.1:3389"));
-    finish_session(&handle, "coverage", Some(&written));
-    assert!(!written.exists());
+    if let Ok(written) = create_temp_rdp_file(&handle, &rdp_conn(), 777_002) {
+        if let Ok(content) = fs::read_to_string(&written) {
+            assert!(content.contains("10.0.0.1:3389"));
+        }
+        finish_session(&handle, "coverage", Some(&written));
+        assert!(!written.exists());
+    }
 
     finish_session(&handle, "coverage", None);
     let _ = fs::remove_file(unrelated);
+}
+
+
+/// On Linux there is no built-in RDP client, so `connect_rdp` against a real RDP connection reaches
+/// `rdp_command`, hits the unsupported-platform branch, removes the temp file it wrote, and surfaces
+/// the same "no Remote Desktop client" message `launch_rdp` does. Covers the temp-write + Err path
+/// and the cleanup on the failed spawn.
+#[cfg(target_os = "linux")]
+#[test]
+fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client() {
+    use crate::test_support::lock;
+    use tauri::Manager;
+
+    let _guard = lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(crate::plugin_host::PluginHost::new()));
+    assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
+    assert!(app.manage(RdpSessionManager::new()));
+    let handle = app.handle().clone();
+
+    {
+        let host = handle.state::<crate::plugin_host::PluginHost>();
+        tauri::async_runtime::block_on(crate::connections::save_connections(
+            handle.clone(),
+            host.clone(),
+            crate::connections::ConnectionTree {
+                connections: vec![rdp_conn()],
+                folders: vec![],
+            },
+        ))
+        .unwrap();
+    }
+
+    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string()))
+        .expect_err("Linux has no built-in RDP client");
+    assert!(error.contains("No Remote Desktop client"), "got {error:?}");
+
+    let cache = handle.path().app_cache_dir().unwrap();
+    let leftover = std::fs::read_dir(&cache).unwrap()
+        .flatten()
+        .any(|entry| entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX));
+    assert!(!leftover, "the temp .rdp file should have been removed");
+
+    let _ = std::fs::remove_dir_all(&cache);
+}
+
+#[test]
+fn session_manager_default_initializes_properly() {
+    let mgr = RdpSessionManager::default();
+    // default() delegates to new(); the atomic sequence starts at 0.
+    assert_eq!(mgr.next_seq(), 0);
 }

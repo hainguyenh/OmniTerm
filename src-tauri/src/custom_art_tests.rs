@@ -110,3 +110,69 @@ fn test_get_and_remove_custom_art() {
     // Ensure actual file is deleted
     assert!(!art_dir.join("idle-light.png").exists());
 }
+
+#[test]
+fn test_upload_non_existent_or_dir_path() {
+    let tmp = TempDir::new().unwrap();
+    let art_dir = tmp.path().join("custom-art");
+    let non_existent = tmp.path().join("missing.png");
+    assert!(upload_custom_art_impl(&art_dir, "idle-light", &non_existent).is_err());
+
+    let dir_path = tmp.path().join("folder.png");
+    fs::create_dir_all(&dir_path).unwrap();
+    assert!(upload_custom_art_impl(&art_dir, "idle-light", &dir_path).is_err());
+}
+
+
+#[test]
+fn get_and_remove_reject_invalid_slots_and_unreadable_art_roots() {
+    let tmp = TempDir::new().unwrap();
+    assert_eq!(
+        get_custom_art_impl(tmp.path(), "unknown").unwrap_err(),
+        "Invalid slot name"
+    );
+    assert_eq!(
+        remove_custom_art_impl(tmp.path(), "unknown").unwrap_err(),
+        "Invalid slot name"
+    );
+
+    let root_file = tmp.path().join("not-a-directory");
+    fs::write(&root_file, b"x").unwrap();
+    assert!(get_custom_art_impl(&root_file, "idle-light")
+        .unwrap_err()
+        .contains("Failed to read directory"));
+    assert!(remove_custom_art_impl(&root_file, "idle-light")
+        .unwrap_err()
+        .contains("Failed to read directory"));
+}
+
+#[test]
+fn upload_accepts_the_exact_size_limit_and_reports_an_unusable_destination() {
+    let tmp = TempDir::new().unwrap();
+    let source = create_dummy_file(tmp.path(), "limit.webp", 2 * 1024 * 1024);
+    let art_dir = tmp.path().join("art");
+    let stored = upload_custom_art_impl(&art_dir, "loading-dark", &source).unwrap();
+    assert_eq!(fs::metadata(stored).unwrap().len(), 2 * 1024 * 1024);
+
+    let blocked = tmp.path().join("blocked");
+    fs::write(&blocked, b"not a directory").unwrap();
+    assert!(upload_custom_art_impl(&blocked, "loading-dark", &source)
+        .unwrap_err()
+        .contains("Failed to copy file"));
+}
+
+#[test]
+fn removal_deletes_every_matching_extension_but_leaves_other_entries() {
+    let tmp = TempDir::new().unwrap();
+    let art_dir = tmp.path().join("art");
+    fs::create_dir_all(art_dir.join("idle-light.folder")).unwrap();
+    fs::write(art_dir.join("idle-light.png"), b"png").unwrap();
+    fs::write(art_dir.join("idle-light.jpg"), b"jpg").unwrap();
+    fs::write(art_dir.join("idle-dark.png"), b"other").unwrap();
+
+    remove_custom_art_impl(&art_dir, "idle-light").unwrap();
+    assert!(!art_dir.join("idle-light.png").exists());
+    assert!(!art_dir.join("idle-light.jpg").exists());
+    assert!(art_dir.join("idle-light.folder").is_dir());
+    assert!(art_dir.join("idle-dark.png").is_file());
+}

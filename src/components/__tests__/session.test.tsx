@@ -142,4 +142,40 @@ describe("SessionMetricsChips", () => {
     expect(screen.getByText("2.0/4.0 GB")).toBeInTheDocument();
     expect(screen.getByText("85%")).toBeInTheDocument();
   });
+
+  it("renders compact memory without GB suffix", () => {
+    render(<SessionMetricsChips status="connected" latency={42} compact metrics={{ latency: 42, cpu: 10, memUsed: 2 * 1024 ** 3, memTotal: 4 * 1024 ** 3, diskUsedPct: null, ts: Date.now() }} />);
+    expect(screen.getByText("2.0/4.0")).toBeInTheDocument();
+    expect(screen.queryByText("2.0/4.0 GB")).not.toBeInTheDocument();
+  });
+
+  it("hides CPU chip when cpu is null", () => {
+    render(<SessionMetricsChips status="connected" latency={10} metrics={{ latency: 10, cpu: null, memUsed: null, memTotal: null, diskUsedPct: null, ts: Date.now() }} />);
+    expect(screen.queryByText(/\u0025/)).not.toBeInTheDocument();
+  });
+
+  it("hides memory chip when memUsed is null", () => {
+    render(<SessionMetricsChips status="connected" latency={10} metrics={{ latency: 10, cpu: 5, memUsed: null, memTotal: null, diskUsedPct: null, ts: Date.now() }} />);
+    expect(screen.queryByText(/\//)).not.toBeInTheDocument();
+  });
+
+  it("hides disk chip when diskUsedPct is null", () => {
+    render(<SessionMetricsChips status="connected" latency={10} metrics={{ latency: 10, cpu: 5, memUsed: 1, memTotal: 4, diskUsedPct: null, ts: Date.now() }} />);
+    expect(screen.queryByTitle("Remote root filesystem usage")).not.toBeInTheDocument();
+  });
+
+  it("shows uptime chip when connectedAt is set", () => {
+    vi.useFakeTimers()
+    const now = Date.now()
+    vi.setSystemTime(now)
+    const connectedAt = now - 120000 // 2 minutes ago
+    render(<SessionMetricsChips status="connected" latency={10} metrics={undefined} connectedAt={connectedAt} />)
+    expect(screen.getByText("2m")).toBeInTheDocument()
+    vi.useRealTimers()
+  });
+
+  it("does not show uptime chip when connectedAt is undefined", () => {
+    render(<SessionMetricsChips status="connected" latency={10} metrics={undefined} />)
+    expect(screen.queryByTitle("Session uptime")).not.toBeInTheDocument()
+  });
 });

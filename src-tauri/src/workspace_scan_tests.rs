@@ -316,3 +316,30 @@ fn folder_pages_reject_paths_outside_the_workspace() {
     }
     assert!(scan_folder_files_excluding(&root, "does-not-exist", &[], 0, DEFAULT_PAGE_SIZE).is_err());
 }
+
+#[test]
+fn as_script_converts_script_entries_only() {
+    fn make_entry(is_dir: bool, kind: &str) -> WorkspaceEntry {
+        WorkspaceEntry { id: "s".into(), name: "s".into(), path: "s".into(), is_dir, kind: kind.into(), shell: None, editable: None, viewable: None }
+    }
+    assert!(make_entry(true, "bat").as_script().is_none());
+    for kind in ["txt", "json", "rs"] { assert!(make_entry(false, kind).as_script().is_none()); }
+    for kind in ["bat", "ps1", "sh", "rdp"] {
+        let script = make_entry(false, kind).as_script().unwrap();
+        assert_eq!(script.kind, kind);
+    }
+}
+
+#[test]
+fn scan_dir_excluding_filters_specified_extensions() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    fs::write(tmp.path().join("build.bat"), "echo hi").unwrap();
+    fs::write(tmp.path().join("setup.ps1"), "Write-Host hi").unwrap();
+    let all = scan_dir_excluding(tmp.path(), &[]);
+    assert!(all.iter().any(|s| s.kind == "bat"));
+    let with_excluded = scan_dir_excluding(tmp.path(), &["ps1".to_string()]);
+    for s in &with_excluded {
+        if s.kind == "ps1" { assert_eq!(s.viewable, Some(false)); }
+    }
+}
+
