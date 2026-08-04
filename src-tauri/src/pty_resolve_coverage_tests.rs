@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use super::*;
 use crate::connections::{self, Connection, ConnectionTree};
 use crate::plugin_host::PluginHost;

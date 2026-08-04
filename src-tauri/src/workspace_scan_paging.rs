@@ -120,9 +120,7 @@ mod tests {
     #[test]
     fn missing_and_hostile_folder_pages_are_handled_without_escaping_the_root() {
         let dir = tempdir().unwrap();
-        let missing = scan_folder_files_excluding(dir.path(), "missing", &[], 0, 10).unwrap();
-        assert_eq!(missing.total, 0);
-        assert!(missing.entries.is_empty());
+        assert!(scan_folder_files_excluding(dir.path(), "missing", &[], 0, 10).is_err());
         assert!(scan_folder_files_excluding(dir.path(), "../outside", &[], 0, 10).is_err());
         assert!(scan_folder_files_excluding(dir.path(), "/tmp", &[], 0, 10).is_err());
     }

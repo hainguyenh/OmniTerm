@@ -295,7 +295,7 @@ fn poisoned_session_locks_report_errors_and_disconnect_still_cleans_registry() {
     let (data, _) = recording_channel();
     let (status, status_rx) = status_channel();
     tauri::async_runtime::block_on(start_local_session(
-        handle, manager.clone(), "poisoned".into(), "adhoc-poison".into(), None, data, status,
+        handle.clone(), manager.clone(), "poisoned".into(), "adhoc-poison".into(), None, data, status,
     )).unwrap();
     wait_for_status(&status_rx, |status| matches!(status, SessionStatus::Ready { .. }));
 
