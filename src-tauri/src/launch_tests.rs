@@ -206,6 +206,60 @@ mod windows {
     }
 }
 
+
+/// `windows_args` is ordinary platform-independent argv construction even though `invocation()`
+/// selects it only on Windows. Exercise it directly on Linux CI so every shell arm and keep-open
+/// branch remains covered instead of waiting for a Windows-only coverage job.
+#[test]
+fn windows_argv_builder_is_tested_on_every_platform() {
+    let cmd_keep = launch(LocalShell::Cmd, None, true)
+        .windows_args(vec!["/v:on".to_string()], Some("build.bat".to_string()));
+    assert_eq!(cmd_keep, vec!["/v:on", "/k", "build.bat"]);
+    let cmd_exit = launch(LocalShell::Cmd, None, false)
+        .windows_args(Vec::new(), Some("build.bat".to_string()));
+    assert_eq!(cmd_exit, vec!["/c", "build.bat"]);
+    assert!(launch(LocalShell::Cmd, None, true)
+        .windows_args(Vec::new(), None)
+        .is_empty());
+
+    let ps_keep = launch(LocalShell::Powershell, None, true)
+        .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()));
+    assert_eq!(
+        ps_keep,
+        vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "echo hi"]
+    );
+    let ps_exit = launch(LocalShell::Default, None, false)
+        .windows_args(Vec::new(), Some("echo hi".to_string()));
+    assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "echo hi"]);
+    assert_eq!(
+        launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None),
+        vec!["-NoLogo"]
+    );
+
+    let wsl_keep = launch(LocalShell::Wsl, None, true).windows_args(
+        vec!["-d".to_string(), "Ubuntu".to_string()],
+        Some("make".to_string()),
+    );
+    assert_eq!(
+        wsl_keep,
+        vec!["-d", "Ubuntu", "--", "bash", "-lc", "make; exec bash -l"]
+    );
+    let wsl_exit = launch(LocalShell::Wsl, None, false)
+        .windows_args(Vec::new(), Some("make".to_string()));
+    assert_eq!(wsl_exit, vec!["--", "bash", "-lc", "make"]);
+    assert_eq!(
+        launch(LocalShell::Wsl, None, true)
+            .windows_args(vec!["-d".to_string(), "Debian".to_string()], None),
+        vec!["-d", "Debian"]
+    );
+
+    assert_eq!(
+        launch(LocalShell::Bash, None, true)
+            .windows_args(vec!["--norc".to_string()], Some("ignored".to_string())),
+        vec!["--norc"]
+    );
+}
+
 // ── POSIX argv ───────────────────────────────────────────────────────────────
 
 #[cfg(not(target_os = "windows"))]

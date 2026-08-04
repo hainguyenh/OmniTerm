@@ -149,7 +149,7 @@ fn deliver_changes(
 }
 
 /// Start the single activity poller. Called once from `run()`'s setup.
-pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) {
+pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) -> tauri::async_runtime::JoinHandle<()> {
     tauri::async_runtime::spawn(async move {
         // Handed to a blocking thread and back on every tick (see below), so it lives in an Option.
         let mut sys = Some(System::new());
@@ -219,5 +219,5 @@ pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) {
             // attaching later still learns whether the shell is working.
             deliver_changes(&outputs, &changes);
         }
-    });
+    })
 }

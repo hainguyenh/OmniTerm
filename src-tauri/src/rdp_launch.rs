@@ -33,7 +33,11 @@ pub fn rdp_command(path: &str, os: &str) -> Result<(String, Vec<String>), String
 /// `path` must already have been through `safepath::safe_runnable_path` — this function does no
 /// containment checking of its own.
 pub fn launch_rdp(path: &str) -> Result<(), String> {
-    let (exe, args) = rdp_command(path, std::env::consts::OS)?;
+    launch_rdp_for_os(path, std::env::consts::OS)
+}
+
+fn launch_rdp_for_os(path: &str, os: &str) -> Result<(), String> {
+    let (exe, args) = rdp_command(path, os)?;
     // spawn, not status: waiting would block the command until the user closed the session.
     Command::new(&exe)
         .args(&args)

@@ -166,3 +166,29 @@ fn setup_launcher_is_idempotent() {
     // Both succeed or both fail (mock fs); the important thing is no panic.
     assert_eq!(r1.is_ok(), r2.is_ok(), "idempotency: both calls should have same success/error state");
 }
+
+#[test]
+fn write_if_changed_reports_a_missing_parent_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("missing/nc-open.cmd");
+    assert!(write_if_changed(&target, "content").is_err());
+    assert!(!target.exists());
+}
+
+#[test]
+fn setup_launcher_reports_a_bin_path_that_is_a_file() {
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let data_dir = app.handle().path().app_data_dir().unwrap();
+    let bin_dir = data_dir.join("bin");
+    let _ = fs::remove_dir_all(&data_dir);
+    fs::create_dir_all(&data_dir).unwrap();
+    fs::write(&bin_dir, b"not a directory").unwrap();
+
+    assert!(tauri::async_runtime::block_on(setup_launcher(app.handle().clone())).is_err());
+
+    fs::remove_file(bin_dir).unwrap();
+    let _ = fs::remove_dir_all(data_dir);
+}

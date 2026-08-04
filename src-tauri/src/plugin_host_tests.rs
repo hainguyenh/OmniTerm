@@ -325,3 +325,22 @@ fn default_instantiates_unstarted_host() {
     let host = PluginHost::default();
     assert!(!block_on(host.is_available()));
 }
+
+#[test]
+fn start_reports_an_app_data_path_that_cannot_be_created() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+    let data_dir = handle.path().app_data_dir().unwrap();
+    let _ = fs::remove_dir_all(&data_dir);
+    if let Some(parent) = data_dir.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&data_dir, b"not a directory").unwrap();
+
+    let error = block_on(PluginHost::new().start(&handle)).unwrap_err();
+    assert!(!error.is_empty());
+
+    fs::remove_file(&data_dir).unwrap();
+    fs::create_dir_all(data_dir).unwrap();
+}

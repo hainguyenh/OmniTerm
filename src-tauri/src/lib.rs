@@ -116,7 +116,7 @@ pub fn run() {
             rdp_embed::sweep_stale_temp_files(app.handle());
 
             // Tells each pane whether its shell is running something (tab busy/idle indicator).
-            session_activity::spawn_poller(app.handle().clone());
+            let _activity_poller = session_activity::spawn_poller(app.handle().clone());
 
             // This launch may itself carry --open-shell (the shim can start a cold instance).
             let handle = app.handle().clone();

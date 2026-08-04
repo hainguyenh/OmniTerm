@@ -318,9 +318,15 @@ pub async fn remove_plugin<R: Runtime>(
 
 #[tauri::command]
 pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
-    app.restart()
+    // Request the restart through the runtime event loop so shutdown hooks run before relaunch.
+    // Unlike `restart()`, this returns after scheduling the restart, which also makes the command
+    // response deterministic for the webview.
+    app.request_restart();
 }
 
 #[cfg(test)]
 #[path = "plugin_management_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "plugin_management_io_tests.rs"]
+mod io_tests;

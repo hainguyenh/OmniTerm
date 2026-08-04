@@ -108,3 +108,73 @@ fn ipc_uploads_and_removes_custom_art() {
         Value::Null
     );
 }
+
+#[test]
+fn ipc_settings_recover_from_a_corrupt_file_and_preserve_defaults() {
+    let fixture = IpcApp::new();
+    fs::create_dir_all(&fixture.app_data_dir).unwrap();
+
+    let settings_path = fixture.app_data_dir.join("settings.json");
+    fs::write(&settings_path, b"{ definitely not json").unwrap();
+    let fallback = fixture.ok("get_settings", json!({}));
+    assert_eq!(fallback["fontSize"], 14);
+    assert_eq!(fallback["themeId"], "tokyo-night");
+
+    assert_eq!(
+        fixture.ok(
+            "save_settings",
+            json!({ "settings": { "fontSize": 19, "smartColors": false } }),
+        ),
+        Value::Null
+    );
+    let repaired = fixture.ok("get_settings", json!({}));
+    assert_eq!(repaired["fontSize"], 19);
+    assert_eq!(repaired["smartColors"], false);
+    assert_eq!(repaired["themeId"], "tokyo-night");
+}
+
+#[test]
+fn ipc_connections_reject_corruption_then_round_trip_a_valid_tree() {
+    let fixture = IpcApp::new();
+    fs::create_dir_all(&fixture.app_data_dir).unwrap();
+
+    let connections_path = fixture.app_data_dir.join("connections.json");
+    fs::write(&connections_path, b"[not a connection tree]").unwrap();
+    assert!(fixture.invoke("load_connections", json!({})).is_err());
+
+    let repaired_tree = json!({
+        "connections": [connection("recovered-ssh")],
+        "folders": [{ "id": "ops", "name": "Ops", "parentId": null }]
+    });
+    assert_eq!(
+        fixture.ok("save_connections", json!({ "data": repaired_tree })),
+        Value::Null
+    );
+    let loaded = fixture.ok("load_connections", json!({}));
+    assert_eq!(loaded["connections"][0]["id"], "recovered-ssh");
+    assert_eq!(loaded["folders"][0]["id"], "ops");
+}
+
+#[test]
+fn ipc_theme_listing_skips_invalid_entries_and_missing_deletes_are_safe() {
+    let fixture = IpcApp::new();
+    let themes = fixture.app_data_dir.join("themes");
+    fs::create_dir_all(themes.join("directory.json")).unwrap();
+    fs::write(themes.join("broken.json"), b"{ broken").unwrap();
+    fs::write(themes.join("ignored.txt"), b"not a theme").unwrap();
+    fs::write(
+        themes.join("recovered.json"),
+        br#"{"id":"recovered","name":"Recovered","colors":{}}"#,
+    )
+    .unwrap();
+
+    let listed = fixture.ok("list_themes", json!({}));
+    assert!(listed.as_array().is_some_and(|items| {
+        items.iter().any(|theme| theme["id"] == "recovered")
+            && items.iter().all(|theme| theme["id"] != "broken")
+    }));
+    assert_eq!(
+        fixture.ok("delete_theme", json!({ "id": "missing-theme" })),
+        Value::Null
+    );
+}

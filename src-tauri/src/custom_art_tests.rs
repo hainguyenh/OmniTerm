@@ -176,3 +176,66 @@ fn removal_deletes_every_matching_extension_but_leaves_other_entries() {
     assert!(art_dir.join("idle-light.folder").is_dir());
     assert!(art_dir.join("idle-dark.png").is_file());
 }
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_art_paths_report_conversion_errors_after_real_file_operations() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let tmp = TempDir::new().unwrap();
+    let source = create_dummy_file(tmp.path(), "source.png", 32);
+    let invalid_component = OsString::from_vec(vec![b'a', b'r', b't', 0xff]);
+    let art_dir = tmp.path().join(invalid_component);
+
+    assert_eq!(
+        upload_custom_art_impl(&art_dir, "idle-light", &source).unwrap_err(),
+        "Failed to convert path to string"
+    );
+    assert!(art_dir.join("idle-light.png").is_file());
+    assert_eq!(
+        get_custom_art_impl(&art_dir, "idle-light").unwrap_err(),
+        "Failed to convert path to string"
+    );
+    remove_custom_art_impl(&art_dir, "idle-light").unwrap();
+    assert!(!art_dir.join("idle-light.png").exists());
+}
+
+#[test]
+fn upload_reports_a_destination_whose_parent_is_a_file() {
+    let tmp = TempDir::new().unwrap();
+    let source = create_dummy_file(tmp.path(), "source.png", 32);
+    let blocked_parent = tmp.path().join("blocked-parent");
+    fs::write(&blocked_parent, b"file").unwrap();
+    let art_dir = blocked_parent.join("custom-art");
+
+    assert!(upload_custom_art_impl(&art_dir, "idle-dark", &source)
+        .unwrap_err()
+        .contains("Failed to create directory"));
+}
+
+
+#[cfg(unix)]
+#[test]
+fn removal_reports_a_directory_that_forbids_deletion() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tmp = TempDir::new().unwrap();
+    let art_dir = tmp.path().join("art");
+    fs::create_dir_all(&art_dir).unwrap();
+    let target = art_dir.join("idle-light.png");
+    fs::write(&target, b"image").unwrap();
+    let mut permissions = fs::metadata(&art_dir).unwrap().permissions();
+    permissions.set_mode(0o500);
+    fs::set_permissions(&art_dir, permissions).unwrap();
+
+    let result = remove_custom_art_impl(&art_dir, "idle-light");
+    if let Err(error) = result {
+        assert!(error.contains("Failed to remove file"), "got {error}");
+        assert!(target.exists());
+    }
+
+    let mut permissions = fs::metadata(&art_dir).unwrap().permissions();
+    permissions.set_mode(0o700);
+    fs::set_permissions(&art_dir, permissions).unwrap();
+}

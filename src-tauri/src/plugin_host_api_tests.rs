@@ -104,3 +104,40 @@ fn disabled_descriptor_formats_error_descriptor() {
     assert_eq!(desc["enabled"], false);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn open_external_reports_real_opener_success_and_failure() {
+    use crate::test_support;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let _guard = test_support::lock();
+    let original_path = std::env::var_os("PATH");
+    let tools = tempfile::tempdir().unwrap();
+    let opener = tools.path().join("xdg-open");
+    fs::write(&opener, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = fs::metadata(&opener).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&opener, permissions).unwrap();
+    std::env::set_var("PATH", tools.path());
+
+    assert_eq!(
+        handle_reverse_call(
+            "host.openExternal",
+            Some(&json!({ "url": "https://docs.example.test/help" })),
+        ),
+        Ok(Value::Bool(true))
+    );
+
+    fs::remove_file(opener).unwrap();
+    assert!(handle_reverse_call(
+        "host.openExternal",
+        Some(&json!({ "url": "https://docs.example.test/missing" })),
+    )
+    .is_err());
+
+    match original_path {
+        Some(value) => std::env::set_var("PATH", value),
+        None => std::env::remove_var("PATH"),
+    }
+}

@@ -38,3 +38,31 @@ fn launch_reports_the_platform_error_before_spawning_any_process() {
     let err = launch_rdp("/tmp/host.rdp").expect_err("Linux has no built-in RDP client");
     assert!(err.contains("No Remote Desktop client"), "got {err}");
 }
+
+
+#[cfg(unix)]
+#[test]
+fn detached_launcher_covers_success_and_spawn_failure() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let _guard = crate::test_support::lock();
+    let original_path = std::env::var_os("PATH");
+    let tools = tempfile::tempdir().unwrap();
+    let opener = tools.path().join("open");
+    fs::write(&opener, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = fs::metadata(&opener).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&opener, permissions).unwrap();
+    std::env::set_var("PATH", tools.path());
+
+    launch_rdp_for_os("/tmp/coverage host.rdp", "macos").unwrap();
+    fs::remove_file(&opener).unwrap();
+    let error = launch_rdp_for_os("/tmp/coverage host.rdp", "macos").unwrap_err();
+    assert!(error.contains("Could not start open"), "got {error}");
+
+    match original_path {
+        Some(value) => std::env::set_var("PATH", value),
+        None => std::env::remove_var("PATH"),
+    }
+}

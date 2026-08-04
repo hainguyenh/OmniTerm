@@ -18,6 +18,9 @@ use crate::launcher;
 #[cfg(test)]
 #[path = "pty_tests.rs"]
 mod tests;
+#[cfg(all(test, unix))]
+#[path = "pty_io_tests.rs"]
+mod io_tests;
 use crate::pty_resolve::resolve_local_launch;
 use crate::session_output::{push_output, send_status, Output};
 use dashmap::DashMap;
@@ -29,13 +32,11 @@ use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, Runtime};
 
-/// Initial geometry. The renderer resizes as soon as xterm's fit addon has measured the pane; this
-/// matches the 80x24 the Electron build opened with so the first prompt lands identically.
+/// Initial geometry; the renderer resizes after xterm measures the pane, matching the initial 80x24 Electron geometry.
 const INITIAL_COLS: u16 = 80;
 const INITIAL_ROWS: u16 = 24;
 
-/// Everything a pane reports that is not raw output. One tagged message instead of three channels,
-/// so the renderer sees ready/error/closed in the order they happened.
+/// Non-output pane status, kept in one tagged channel so ready/error/closed remain ordered.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SessionStatus {
@@ -306,8 +307,7 @@ pub async fn resize_session(
 
 /// Remove a session and kill its child. Idempotent.
 ///
-/// Takes `&PtyManager` rather than the `State` wrapper so the detached-window close handler — which
-/// only has an `AppHandle` — can reap an idle pane through the same path a disconnect uses.
+/// Takes `&PtyManager` so an `AppHandle`-only detached-window close handler can use the disconnect path.
 pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     let Some((_, session)) = manager.sessions.remove(id) else {
         return;
