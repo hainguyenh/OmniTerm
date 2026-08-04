@@ -189,6 +189,38 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
     let _ = std::fs::remove_dir_all(&cache);
 }
 
+
+#[test]
+fn temp_file_creation_reports_cache_and_target_collisions() {
+    use tauri::Manager;
+
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+    let cache = handle.path().app_cache_dir().unwrap();
+    let _ = fs::remove_dir_all(&cache);
+    let _ = fs::remove_file(&cache);
+
+    fs::create_dir_all(cache.parent().unwrap()).unwrap();
+    fs::write(&cache, "not a directory").unwrap();
+    let create_error = create_temp_rdp_file(&handle, &rdp_conn(), 881_001)
+        .expect_err("a file at the cache path must block directory creation");
+    assert!(!create_error.is_empty());
+    fs::remove_file(&cache).unwrap();
+
+    fs::create_dir_all(&cache).unwrap();
+    let target = cache.join(temp_file_name("c1", 881_002));
+    fs::create_dir_all(&target).unwrap();
+    let write_error = create_temp_rdp_file(&handle, &rdp_conn(), 881_002)
+        .expect_err("a directory at the target path must block the RDP write");
+    assert!(
+        write_error.contains("Failed to write temporary RDP file"),
+        "got {write_error:?}"
+    );
+
+    let _ = fs::remove_dir_all(&cache);
+}
+
 #[test]
 fn session_manager_default_initializes_properly() {
     let mgr = RdpSessionManager::default();

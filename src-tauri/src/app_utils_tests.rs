@@ -115,3 +115,120 @@ fn reveal_log_errors_when_logging_is_disabled() {
     #[cfg(debug_assertions)]
     let _ = ();
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn clear_log_truncates_only_files_and_reports_an_unreadable_log_root() {
+    use crate::test_support;
+    use tauri::Manager;
+
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let log_dir = app.handle().path().app_log_dir().unwrap();
+    let _ = fs::remove_dir_all(&log_dir);
+    fs::create_dir_all(log_dir.join("nested")).unwrap();
+    fs::write(log_dir.join("app.log"), b"secret log text").unwrap();
+    fs::write(log_dir.join("nested/keep.log"), b"nested").unwrap();
+
+    assert_eq!(
+        tauri::async_runtime::block_on(clear_log(app.handle().clone())),
+        Ok(true)
+    );
+    assert!(fs::read(log_dir.join("app.log")).unwrap().is_empty());
+    assert_eq!(fs::read(log_dir.join("nested/keep.log")).unwrap(), b"nested");
+
+    fs::remove_dir_all(&log_dir).unwrap();
+    fs::write(&log_dir, b"not a directory").unwrap();
+    assert!(tauri::async_runtime::block_on(clear_log(app.handle().clone())).is_err());
+    fs::remove_file(log_dir).unwrap();
+}
+
+
+#[cfg(all(unix, debug_assertions))]
+#[test]
+fn clear_log_reports_a_log_file_that_cannot_be_truncated() {
+    use std::os::unix::fs::PermissionsExt;
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let log_dir = app.path().app_log_dir().unwrap();
+    let _ = fs::remove_dir_all(&log_dir);
+    fs::create_dir_all(&log_dir).unwrap();
+    let log = log_dir.join("readonly.log");
+    fs::write(&log, b"keep me").unwrap();
+    let mut permissions = fs::metadata(&log).unwrap().permissions();
+    permissions.set_mode(0o400);
+    fs::set_permissions(&log, permissions).unwrap();
+
+    let result = tauri::async_runtime::block_on(clear_log(app.handle().clone()));
+    if let Err(error) = result {
+        assert!(!error.is_empty());
+        assert_eq!(fs::read(&log).unwrap(), b"keep me");
+    }
+
+    if log.exists() {
+        let mut permissions = fs::metadata(&log).unwrap().permissions();
+        permissions.set_mode(0o600);
+        fs::set_permissions(&log, permissions).unwrap();
+    }
+    fs::remove_dir_all(log_dir).unwrap();
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn reveal_log_reports_a_parent_path_that_is_a_file() {
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let log_dir = app.path().app_log_dir().unwrap();
+    let parent = log_dir.parent().expect("log directory has a parent");
+    let _ = fs::remove_dir_all(parent);
+    if let Some(grandparent) = parent.parent() {
+        fs::create_dir_all(grandparent).unwrap();
+    }
+    fs::write(parent, b"not a directory").unwrap();
+
+    let error = tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap_err();
+    assert!(!error.is_empty());
+
+    fs::remove_file(parent).unwrap();
+    fs::create_dir_all(parent).unwrap();
+}
+
+#[cfg(all(target_os = "linux", debug_assertions))]
+#[test]
+fn reveal_log_covers_directory_creation_reuse_and_opener_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let original_path = std::env::var_os("PATH").expect("test process has PATH");
+    let tools = tempfile::tempdir().unwrap();
+    let opener = tools.path().join("xdg-open");
+    fs::write(&opener, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = fs::metadata(&opener).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&opener, permissions).unwrap();
+    std::env::set_var("PATH", tools.path());
+
+    let app = crate::test_support::mock_app();
+    let log_dir = app.path().app_log_dir().unwrap();
+    let _ = fs::remove_dir_all(&log_dir);
+    let expected = log_dir.to_string_lossy().into_owned();
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+
+    fs::remove_file(opener).unwrap();
+    assert!(tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_err());
+
+    std::env::set_var("PATH", original_path);
+    fs::remove_dir_all(log_dir).unwrap();
+}

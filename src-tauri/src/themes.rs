@@ -1,6 +1,10 @@
 use std::fs;
 use tauri::{AppHandle, Manager, Runtime};
 
+#[cfg(test)]
+#[path = "themes_coverage_tail_tests.rs"]
+mod coverage_tail_tests;
+
 fn get_themes_dir<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, String> {
     let data_dir = app
         .path()

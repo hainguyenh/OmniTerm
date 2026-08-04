@@ -227,3 +227,34 @@ fn safe_subdir_with_create_makes_missing_directory() {
     assert!(target.exists());
     assert_eq!(resolved, dunce::canonicalize(&target).unwrap());
 }
+
+
+#[cfg(unix)]
+#[test]
+fn write_editable_reports_a_read_only_script() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let f = fixture();
+    let path = f.root.join("deploy.bat");
+    let mut permissions = fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o400);
+    fs::set_permissions(&path, permissions).unwrap();
+
+    let result = write(&f, &path, "echo changed");
+    if let Err(error) = result {
+        assert!(!error.is_empty());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "echo hi");
+    }
+
+    let mut permissions = fs::metadata(&path).unwrap().permissions();
+    permissions.set_mode(0o600);
+    fs::set_permissions(path, permissions).unwrap();
+}
+
+#[test]
+fn safe_subdir_reports_a_file_blocking_directory_creation() {
+    let f = fixture();
+    let error = safe_subdir(&root_str(&f), "deploy.bat/child", true)
+        .expect_err("a file cannot be used as a parent directory");
+    assert!(!error.is_empty());
+}

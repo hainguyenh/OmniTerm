@@ -188,3 +188,37 @@ fn workspace_settings_change_file_limits_and_user_exclusions_immediately() {
     .unwrap_err()
     .contains("viewer limit"));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn persistence_commands_report_an_uncreatable_xdg_data_root() {
+    use std::ffi::OsString;
+
+    struct Restore(Option<OsString>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            match self.0.take() {
+                Some(value) => std::env::set_var("XDG_DATA_HOME", value),
+                None => std::env::remove_var("XDG_DATA_HOME"),
+            }
+        }
+    }
+
+    let _guard = crate::test_support::lock();
+    let root = TempDir::new().unwrap();
+    let blocked = root.path().join("data-root");
+    fs::write(&blocked, b"not a directory").unwrap();
+    let _restore = Restore(std::env::var_os("XDG_DATA_HOME"));
+    std::env::set_var("XDG_DATA_HOME", &blocked);
+
+    let app = crate::test_support::mock_app();
+    let handle = app.handle().clone();
+    assert!(connections::connections_path(&handle).is_err());
+    assert!(block_on(workspace::list_workspaces(handle.clone())).is_err());
+    assert!(block_on(settings::save_settings(
+        handle.clone(),
+        json!({ "fontSize": 16 }),
+    ))
+    .is_err());
+    assert!(block_on(themes::list_themes(handle)).is_err());
+}

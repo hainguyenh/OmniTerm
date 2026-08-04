@@ -129,6 +129,77 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         ),
         json!(true)
     );
+    assert_eq!(
+        fixture.ok(
+            "run_script",
+            json!({
+                "workspaceId": workspace_id,
+                "script": {
+                    "id": "scripts/build.sh",
+                    "name": "Build",
+                    "path": "scripts/build.sh",
+                    "kind": "sh",
+                    "editable": true,
+                    "viewable": true
+                },
+                "subPath": null
+            }),
+        ),
+        json!(true)
+    );
+    assert_eq!(
+        fixture.ok(
+            "run_script",
+            json!({
+                "workspaceId": workspace_id,
+                "script": {
+                    "id": "empty",
+                    "name": "Workspace shell",
+                    "path": "",
+                    "kind": "sh"
+                },
+                "subPath": "   "
+            }),
+        ),
+        json!(true)
+    );
+    assert!(fixture
+        .invoke(
+            "run_script",
+            json!({
+                "workspaceId": workspace_id,
+                "script": {
+                    "id": "scripts/notes.txt",
+                    "name": "Notes",
+                    "path": "scripts/notes.txt",
+                    "kind": "txt"
+                },
+                "subPath": null
+            }),
+        )
+        .is_err());
+
+    fs::write(
+        workspace_dir.path().join("scripts/remote.rdp"),
+        "full address:s:host.test\n",
+    )
+    .unwrap();
+    #[cfg(target_os = "linux")]
+    assert!(fixture
+        .invoke(
+            "run_script",
+            json!({
+                "workspaceId": workspace_id,
+                "script": {
+                    "id": "scripts/remote.rdp",
+                    "name": "Remote",
+                    "path": "scripts/remote.rdp",
+                    "kind": "rdp"
+                },
+                "subPath": null
+            }),
+        )
+        .is_err());
 
     assert_eq!(
         fixture.ok(

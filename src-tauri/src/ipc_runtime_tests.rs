@@ -176,3 +176,46 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
     assert!(!fixture.app_data_dir.join("workspaces.json").exists());
 }
 
+#[test]
+fn ipc_runs_a_quick_shell_lifecycle() {
+    let fixture = IpcApp::new();
+    let shell = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "sh"
+    };
+
+    let opened = fixture.ok("open_quick_shell", json!({ "shell": shell }));
+    let id = opened["id"]
+        .as_str()
+        .expect("quick shell response carries an id")
+        .to_string();
+    assert_eq!(opened["type"], "LOCAL");
+    assert_eq!(opened["shell"], shell);
+
+    let handle = fixture.handle();
+    let registry = handle.state::<crate::adhoc::AdhocRegistry>();
+    assert!(
+        registry.get(&id).is_some(),
+        "quick shell must be launchable"
+    );
+    assert_eq!(
+        fixture.ok("shells_release", json!({ "connId": id.as_str() })),
+        Value::Null
+    );
+    assert!(
+        registry.get(&id).is_none(),
+        "released shell must leave the registry"
+    );
+}
+
+#[test]
+#[should_panic(expected = "not implemented")]
+fn ipc_reaches_the_mock_runtime_restart_boundary() {
+    let fixture = IpcApp::new();
+
+    // Tauri 2.11.5 deliberately leaves restart unimplemented in MockRuntime. The expected panic
+    // proves the real IPC adapter reached the runtime boundary without pretending a mock restart
+    // can complete normally.
+    fixture.ok("restart_app", json!({}));
+}

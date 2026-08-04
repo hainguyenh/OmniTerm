@@ -16,6 +16,9 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(test)]
 #[path = "connections_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "connections_coverage_tail_tests.rs"]
+mod coverage_tail_tests;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

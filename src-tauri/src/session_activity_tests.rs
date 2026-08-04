@@ -191,3 +191,12 @@ fn change_delivery_updates_known_outputs_and_ignores_closed_sessions() {
         vec![SessionStatus::Activity { busy: true }]
     );
 }
+
+
+#[test]
+fn poller_exits_cleanly_when_no_pty_manager_is_registered() {
+    let app = crate::test_support::mock_app();
+    let task = spawn_poller(app.handle().clone());
+    tauri::async_runtime::block_on(task)
+        .expect("poller task should stop without managed PTY state");
+}
