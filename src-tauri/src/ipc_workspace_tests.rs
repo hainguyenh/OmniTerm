@@ -47,8 +47,8 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     assert_eq!(scripts_folder["isDir"], true);
     let expected_scripts_path = workspace_dir.path().join("scripts");
     assert_eq!(
-        scripts_folder["path"].as_str().map(Path::new),
-        Some(expected_scripts_path.as_path())
+        scripts_folder["path"].as_str().map(Path::new).and_then(|p| std::fs::canonicalize(p).ok()),
+        std::fs::canonicalize(&expected_scripts_path).ok()
     );
     assert!(folders.iter().any(|item| item["id"] == "scripts/tools"));
     assert!(!folders

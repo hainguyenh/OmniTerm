@@ -230,6 +230,26 @@ fn package_archive_rejects_more_than_the_file_limit() {
 }
 
 #[test]
+fn manifest_rejects_empty_and_oversized_names() {
+    let empty = br#"{"name":"","omnitermPlugin":{"apiVersion":2}}"#;
+    assert!(parse_manifest(empty).unwrap_err().contains("no valid name"));
+
+    let name = "a".repeat(201);
+    let oversized = format!(r#"{{"name":"{}","omnitermPlugin":{{"apiVersion":2}}}}"#, name);
+    assert!(parse_manifest(oversized.as_bytes()).unwrap_err().contains("no valid name"));
+}
+
+#[test]
+fn package_archive_rejects_oversized_uncompressed_total() {
+    let oversized = vec![b' '; 64 * 1024 * 1024 + 1];
+    let file = zip_file(&[("big.txt", oversized.as_slice(), None)]);
+    let mut archive = zip::ZipArchive::new(fs::File::open(file.path()).unwrap()).unwrap();
+    assert!(read_package_manifest(&mut archive)
+        .unwrap_err()
+        .contains("too large after extraction"));
+}
+
+#[test]
 fn install_transaction_installs_replaces_and_cleans_failed_staging() {
     let plugins = tempfile::TempDir::new().unwrap();
     let package = manifest();

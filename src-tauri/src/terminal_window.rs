@@ -23,6 +23,9 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuild
 #[cfg(test)]
 #[path = "terminal_window_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "terminal_window_session_tests.rs"]
+mod session_tests;
 
 /// Label prefix for detached windows. The capability file grants `term-*` the same permissions as
 /// `main`; anything outside that prefix gets nothing, so the prefix is load-bearing.

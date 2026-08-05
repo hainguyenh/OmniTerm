@@ -66,3 +66,15 @@ fn detached_launcher_covers_success_and_spawn_failure() {
         None => std::env::remove_var("PATH"),
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn detached_launcher_covers_spawn_failure_on_windows() {
+    let _guard = crate::test_support::lock();
+    
+    let error = launch_rdp_for_os("C:\\coverage\0.rdp", "windows").unwrap_err();
+    assert!(error.contains("Could not start mstsc.exe"), "got {error}");
+    
+    let error2 = launch_rdp("C:\\coverage\0.rdp").unwrap_err();
+    assert!(error2.contains("Could not start mstsc.exe"), "got {error2}");
+}

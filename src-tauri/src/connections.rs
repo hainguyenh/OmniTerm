@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(test)]
 #[path = "connections_tests.rs"]
 mod tests;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "connections_coverage_tail_tests.rs"]
 mod coverage_tail_tests;
 

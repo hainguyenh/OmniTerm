@@ -24,6 +24,12 @@ mod tests;
 #[cfg(test)]
 #[path = "plugin_host_integration_tests.rs"]
 mod integration_tests;
+#[cfg(all(test, unix))]
+#[path = "plugin_host_sidecar_unix_tests.rs"]
+mod sidecar_unix_tests;
+#[cfg(all(test, windows))]
+#[path = "plugin_host_sidecar_windows_tests.rs"]
+mod sidecar_windows_tests;
 #[path = "plugin_host_rpc.rs"]
 mod rpc;
 pub struct PluginHost {

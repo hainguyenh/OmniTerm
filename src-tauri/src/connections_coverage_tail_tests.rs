@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(unix)]
 #[test]
 fn secret_scrubber_contains_a_read_only_rewrite_failure() {
     use std::fs::OpenOptions;

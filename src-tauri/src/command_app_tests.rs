@@ -138,6 +138,14 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
     ))
     .is_err());
 
+    let loaded = block_on(connections::load_connections(
+        app.clone(),
+        fixture.app.state::<PluginHost>(),
+    ))
+    .unwrap();
+    assert_eq!(loaded.connections.len(), 1);
+    assert_eq!(loaded.connections[0].name, "Connection local-rdp-check");
+
     let temp = fixture.data_dir.join("coverage.rdp");
     write_file(&temp, b"coverage");
     fixture
@@ -151,4 +159,17 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
     .unwrap();
     assert!(!temp.exists());
     block_on(rdp_embed::rdp_disconnect(app, "missing".to_string())).unwrap();
+}
+
+#[test]
+fn handle_second_instance_finds_main_window_and_unminimizes_it() {
+    let fixture = MockApp::new();
+    let app = fixture.handle();
+    let _window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "main",
+        tauri::WebviewUrl::App("index.html".into())
+    ).build().unwrap();
+
+    handle_second_instance(&app, &["omniterm".to_string()]);
 }
