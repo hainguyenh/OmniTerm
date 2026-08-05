@@ -36,8 +36,10 @@ fn workspaces_file_path_ends_with_workspaces_json() {
 
 #[test]
 fn read_workspaces_returns_empty_when_no_file_exists() {
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
-    // Ensure the file doesn't exist by removing it if it does.
+    // Ensure the file doesn't exist by removing it if it does. The lock above is what keeps it gone
+    // until the read: the workspaces.json this deletes is shared with every other mock app.
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(&path);
     }
@@ -47,6 +49,7 @@ fn read_workspaces_returns_empty_when_no_file_exists() {
 
 #[test]
 fn write_and_read_workspaces_round_trip() {
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let ws = Workspace {
         id: "ws#test".to_string(),
@@ -54,6 +57,11 @@ fn write_and_read_workspaces_round_trip() {
         path: "C:/proj".to_string(),
         pinned: Some(true),
     };
+    // Start from no file so the "one workspace" count below is this test's own write and not a
+    // workspace another test left in the shared app-data directory.
+    if let Ok(path) = workspaces_file(app.handle()) {
+        let _ = std::fs::remove_file(&path);
+    }
     // write_workspaces may fail if mock app data dir is not writable—accept that.
     let write_result = write_workspaces(app.handle(), std::slice::from_ref(&ws));
     match write_result {
@@ -100,8 +108,14 @@ fn max_open_bytes_returns_positive_cap() {
 
 #[test]
 fn excluded_viewable_exts_returns_empty_when_setting_absent() {
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
-    // Fresh mock app has no settings file, so excluded exts should be empty or default.
+    // Absence has to be established, not assumed: every mock app shares one app-data directory, and
+    // several tests write an `excludedViewableExts` into that settings.json.
+    let data_dir = app.path().app_data_dir().expect("app data dir");
+    let _ = std::fs::remove_file(data_dir.join("settings.json"));
     let exts = excluded_viewable_exts(app.handle());
     // Default setting is [] so result should be empty.
     assert!(exts.is_empty(), "expected empty but got {exts:?}");

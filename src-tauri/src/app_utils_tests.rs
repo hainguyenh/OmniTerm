@@ -83,6 +83,10 @@ fn get_version_returns_package_version() {
 
 #[test]
 fn clear_log_is_vacuously_true_when_logging_is_disabled() {
+    // The log directory is shared by every mock app, and the test below that covers an untruncatable
+    // log leaves a 0o400 file in it for its duration. Without this lock the truncation here hits that
+    // file and fails with EACCES on unix.
+    let _guard = crate::test_support::lock();
     // `cfg!(debug_assertions)` controls `logging_enabled()`. In release builds logging
     // is off and clear_log must be a no-op that returns Ok(true).
     #[cfg(not(debug_assertions))]
