@@ -196,3 +196,39 @@ fn reveal_log_reports_a_parent_path_that_is_a_file() {
     fs::remove_file(parent).unwrap();
     fs::create_dir_all(parent).unwrap();
 }
+
+#[cfg(all(target_os = "linux", debug_assertions))]
+#[test]
+fn reveal_log_covers_directory_creation_reuse_and_opener_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let original_path = std::env::var_os("PATH").expect("test process has PATH");
+    let tools = tempfile::tempdir().unwrap();
+    let opener = tools.path().join("xdg-open");
+    fs::write(&opener, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = fs::metadata(&opener).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&opener, permissions).unwrap();
+    std::env::set_var("PATH", tools.path());
+
+    let app = crate::test_support::mock_app();
+    let log_dir = app.path().app_log_dir().unwrap();
+    let _ = fs::remove_dir_all(&log_dir);
+    let expected = log_dir.to_string_lossy().into_owned();
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+
+    fs::remove_file(opener).unwrap();
+    assert!(tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_err());
+
+    std::env::set_var("PATH", original_path);
+    fs::remove_dir_all(log_dir).unwrap();
+}

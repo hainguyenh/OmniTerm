@@ -128,7 +128,11 @@ fn unknown_keys_are_preserved() {
 
 #[test]
 fn get_settings_returns_defaults_on_a_fresh_mock_app() {
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&path);
     let settings = tauri::async_runtime::block_on(get_settings(app.handle().clone())).unwrap();
     // At minimum the defaults should be there; the mock runtime may redirect the app data dir.
     assert!(settings.is_object());
@@ -150,7 +154,11 @@ fn save_settings_rejects_non_object_input() {
 
 #[test]
 fn save_settings_merges_partial_patch_with_defaults() {
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&path);
     let result = tauri::async_runtime::block_on(save_settings(
         app.handle().clone(),
         json!({"fontSize": 20}),
@@ -164,6 +172,7 @@ fn save_settings_merges_partial_patch_with_defaults() {
             assert!(!e.contains("must be an object"), "unexpected validation error: {e}");
         }
     }
+    let _ = std::fs::remove_file(path);
 }
 
 #[test]
@@ -184,13 +193,31 @@ fn read_settings_falls_back_for_empty_corrupt_and_non_object_files() {
         std::fs::create_dir_all(parent).unwrap();
     }
 
+    let expected = defaults();
     for invalid in ["", "not-json", "[]", "null", "\"text\""] {
         std::fs::write(&path, invalid).unwrap();
         let read = read_settings(app.handle());
-        assert_eq!(read["themeId"], json!("tokyo-night"), "input was {invalid:?}");
-        assert_eq!(read["fontSize"], json!(14));
+        assert_eq!(read, expected, "input was {invalid:?}");
     }
     let _ = std::fs::remove_file(path);
+}
+
+
+#[test]
+fn read_settings_falls_back_when_settings_path_is_not_a_file() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::create_dir(&path).unwrap();
+
+    assert_eq!(read_settings(app.handle()), defaults());
+
+    std::fs::remove_dir(path).unwrap();
 }
 
 #[test]
