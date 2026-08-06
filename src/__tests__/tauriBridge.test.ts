@@ -127,6 +127,11 @@ describe('connect.local', () => {
     expect(args.onStatus).toBeInstanceOf(FakeChannel)
   })
 
+  it('forwards the app appearance mode to local PTY startup', async () => {
+    await api.connect.local('sess-1', 'conn-1', 'cmd', false)
+    expect(startArgs()).toEqual({ id: 'sess-1', connId: 'conn-1', shell: 'cmd', darkMode: false })
+  })
+
   /**
    * Resolution belongs in the backend: an `adhoc-…` id exists only in the backend's in-memory
    * registry, so a webview-side lookup against connections.json finds nothing and the pane opens as a

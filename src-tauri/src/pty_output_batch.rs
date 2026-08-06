@@ -86,12 +86,9 @@ impl Drop for OutputBatcher {
 
 fn run(rx: Receiver<Vec<u8>>, output: Arc<Mutex<Output>>) {
     let mut batch: Vec<u8> = Vec::with_capacity(FLUSH_BYTES);
-    loop {
+    while let Ok(first) = rx.recv() {
         // Block indefinitely for the first chunk: an idle session must not wake up 125 times a second
         // to flush nothing.
-        let Ok(first) = rx.recv() else {
-            break; // channel closed and drained
-        };
         batch.clear();
         batch.extend_from_slice(&first);
         let deadline = Instant::now() + FLUSH_INTERVAL;

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { mockOmnitermAPI } from '../../testUtils'
 import WorkspacePanel from '../WorkspacePanel'
 import { BAT, RDP, WS, dir, file, filterAs, mockScan, page, scriptOf } from './workspacePanelTestUtils'
@@ -212,11 +212,13 @@ describe('WorkspacePanel', () => {
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
+    await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
     expect(screen.queryByText('empty')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Filter workspace contents'))
     fireEvent.click(screen.getByLabelText('Show empty folders'))
     expect(screen.getByText('empty')).toBeInTheDocument()
+    await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
   })
 
   it('hides non-script files until the filter is opened up to all files', async () => {
@@ -224,6 +226,7 @@ describe('WorkspacePanel', () => {
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
+    await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
     expect(screen.queryByText('notes.txt')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Filter workspace contents'))
@@ -242,6 +245,7 @@ describe('WorkspacePanel', () => {
     expect(screen.queryByText('deploy.bat')).not.toBeInTheDocument()
     // The option row states what survived instead of leaving it to the funnel's tint.
     expect(screen.getByText('1 file')).toBeInTheDocument()
+    await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
   })
 
   // ── Paging: per folder, and only for the whole-tree filters ────────────────

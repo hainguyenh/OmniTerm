@@ -12,7 +12,7 @@ import { CtxItem, DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark } = model
+  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark } = model
   return (
     <>
           {aboutOpen && (
@@ -187,7 +187,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
                 {/* Only shells the backend can really start. The old hardcoded list included "Git Bash",
                     which is not a LocalShell — clicking it failed with nothing shown to the user. */}
                 {shellOptions.map(opt => (
-                  <CtxItem key={opt.id} label={opt.label} icon={<Terminal className="w-3.5 h-3.5" />} color="text-theme-fg" onClick={() => { window.dispatchEvent(new CustomEvent('omniterm:new-session', { detail: { shell: opt.id } })); setShellMenu(null) }} />
+                  <CtxItem key={opt.id} label={opt.label} icon={<Terminal className="w-3.5 h-3.5" />} color="text-theme-fg" onClick={() => { requestNewSession(opt.id); setShellMenu(null) }} />
                 ))}
               </div>
             </div>

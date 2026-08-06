@@ -37,7 +37,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
       }`}>
         {/* Art follows both pane dimensions so narrow and shallow split panes stay usable. */}
         <div
-          className="relative flex-shrink-0 max-w-full max-h-full flex items-center justify-center"
+          className="relative flex-shrink-0 max-w-full max-h-full flex items-center justify-center pointer-events-none"
           style={{
             width: compact ? 'min(44%, 10rem)' : 'min(62%, 22rem)',
             height: compact ? 'min(34%, 10rem)' : 'min(48%, 22rem)',

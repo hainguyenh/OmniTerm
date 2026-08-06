@@ -151,6 +151,16 @@ afterEach(() => {
 })
 
 describe('TerminalView full lifecycle', () => {
+  it('passes the selected appearance mode to a new local session', () => {
+    installApi()
+    render(
+      <TerminalView id="light-session" connection={localConnection} darkMode={false} />,
+    )
+    expect(window.omnitermAPI.connect.local).toHaveBeenCalledWith(
+      'light-session', 'local-connection', 'powershell', false,
+    )
+  })
+
   it('runs a local shell, handles clipboard, shortcuts, font sizing, activity, exit, and cleanup', async () => {
     installApi()
     const onStatus = vi.fn()
@@ -487,6 +497,4 @@ describe('TerminalView full lifecycle', () => {
       vi.useRealTimers()
     }
   })
-
-
 })

@@ -35,6 +35,8 @@ interface TerminalViewProps {
    */
   onExit?: (code: number) => void
   theme?: TerminalTheme
+  /** Appearance hint passed to locally spawned CLI tools so their palette matches xterm. */
+  darkMode?: boolean
   fontSize?: number
   /** Client-side editor-style coloring of plain output (errors, numbers, paths…). */
   smartColors?: boolean
@@ -69,7 +71,7 @@ interface TerminalViewProps {
   enterModes?: EnterModes
 }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, shortcuts, enterModes }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
@@ -148,7 +150,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     termRef.current = term
 
-    const api = createSessionChannel(isLocal, id, connection.id, connection.shell)
+    const api = createSessionChannel(isLocal, id, connection.id, connection.shell, darkMode)
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)

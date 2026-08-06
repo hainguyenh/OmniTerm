@@ -102,18 +102,28 @@ fn path_with_helper<R: Runtime>(app: &AppHandle<R>) -> Option<OsString> {
     std::env::join_paths(parts).ok()
 }
 
+/// Encode the renderer's appearance for CLI tools that use the conventional COLORFGBG hint.
+///
+/// `COLORFGBG` is commonly written as foreground;background ANSI indexes. Keeping this explicit
+/// at PTY launch lets agents such as Claude Code choose the same light/dark palette as xterm.
+pub(crate) fn colorfgbg_for_dark_mode(dark_mode: Option<bool>) -> Option<&'static str> {
+    dark_mode.map(|dark| if dark { "15;0" } else { "0;15" })
+}
+
 /// Start a pane and stream it back over `on_data` (raw bytes) and `on_status` (ready/error/closed).
 ///
 /// The channels come from the caller, which creates them with its callbacks already attached — so
 /// unlike the event-based port there is no window between "the PTY is running" and "the renderer can
 /// receive", and no bytes to lose in it.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn start_local_session<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, PtyManager>,
     id: String,
     conn_id: String,
     shell: Option<String>,
+    dark_mode: Option<bool>,
     on_data: Channel<Response>,
     on_status: Channel<SessionStatus>,
 ) -> Result<(), String> {
@@ -148,6 +158,9 @@ pub async fn start_local_session<R: Runtime>(
     // Agents/readline key capability detection off TERM.
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    if let Some(colorfgbg) = colorfgbg_for_dark_mode(dark_mode) {
+        cmd.env("COLORFGBG", colorfgbg);
+    }
 
     let mut child = pair
         .slave

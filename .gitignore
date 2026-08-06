@@ -46,3 +46,4 @@ coverage-js/
 coverage-rust/
 *.lcov
 lcov.info
+push-hainguyenh.*

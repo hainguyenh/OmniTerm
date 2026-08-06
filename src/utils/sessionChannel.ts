@@ -34,9 +34,12 @@ export const createSessionChannel = (
   id: string,
   connId: string,
   shell?: string,
+  darkMode?: boolean,
 ): SessionChannel => (isLocal
   ? {
-      connect: () => window.omnitermAPI.connect.local(id, connId, shell),
+      connect: () => darkMode === undefined
+        ? window.omnitermAPI.connect.local(id, connId, shell)
+        : window.omnitermAPI.connect.local(id, connId, shell, darkMode),
       input: (d) => window.omnitermAPI.connect.localInput(id, d),
       resize: (s) => window.omnitermAPI.connect.localResize(id, s),
       onReady: (cb) => window.omnitermAPI.connect.onLocalReady(id, cb),
@@ -45,7 +48,9 @@ export const createSessionChannel = (
       onClosed: (cb) => window.omnitermAPI.connect.onLocalClosed(id, cb),
     }
   : {
-      connect: () => window.omnitermAPI.connect.ssh(id),
+      connect: () => darkMode === undefined
+        ? window.omnitermAPI.connect.ssh(id)
+        : window.omnitermAPI.connect.ssh(id, darkMode),
       input: (d) => window.omnitermAPI.connect.sshInput(id, d),
       resize: (s) => window.omnitermAPI.connect.sshResize(id, s),
       onReady: (cb) => window.omnitermAPI.connect.onSSHReady(id, () => cb()),

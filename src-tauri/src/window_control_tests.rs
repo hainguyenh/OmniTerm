@@ -50,7 +50,7 @@ fn set_webview_zoom_accepts_a_mock_webview_window() {
 fn test_toggle_maximize_when_maximized() {
     let _guard = test_support::lock();
     let app = test_support::mock_app();
-    let window = mock_window(&app, "toggle-window-2");
+    let _window = mock_window(&app, "toggle-window-2");
     // MockRuntime doesn't track maximized state, so is_maximized always returns false.
     // But wait! How do we make it return true?
 }

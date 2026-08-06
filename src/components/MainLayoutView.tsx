@@ -25,7 +25,7 @@ import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl } = model
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -81,7 +81,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           {/* Panel header — session tabs fill the full width, layout picker on the right.
               Keeping the tabs in this fixed header row (above the content area) means
               the embedded RDP desktop can never paint over them. */}
-          <div className="h-[40px] px-2.5 flex items-center gap-2 border-b border-[var(--theme-border)] flex-shrink-0">
+          <div className="relative z-30 h-[40px] px-2.5 flex items-center gap-2 border-b border-[var(--theme-border)] flex-shrink-0">
   
             {/* Tab list — flex-1 so it fills all available space before the picker */}
             <div className="flex-1 min-w-0 overflow-hidden">
@@ -97,7 +97,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onPromote={keepTab}
                 onClose={closeTab}
                 onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
-                onNewSession={() => window.dispatchEvent(new Event('omniterm:new-session'))}
+                onNewSession={() => requestNewSession()}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
                 detachTabId={layoutMode === 1 ? activeTabId : null}
                 detachAction={layoutMode === 1 && activeTabId ? detachControl.stateOf(activeTabId) : null}
@@ -170,7 +170,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               ? (latencies[activeTabId] ?? null)
               : (metrics[activeTabId]?.latency ?? null)
             return (
-              <div className="order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
+              <div className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
                 {/* Which pane the footer is describing, in that pane's own shape + hue. */}
                 {layoutMode > 1 && (() => {
                   const identity = paneIdentity(focusedPane)
@@ -266,11 +266,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               frame. Sessions not in any visible pane stay mounted but hidden. In single view
               (layoutMode === 1) no frames render and the session fills the area — identical
               to the pre-split behavior. */}
-          <div className="flex-1 relative min-h-0 mt-1">
+          <div className="flex-1 relative isolate min-h-0 mt-1">
             {activeTabs.length === 0 ? (
               <WaitingPane
                 dark={!!appSettings.darkMode}
-                onNewSession={() => window.dispatchEvent(new Event('omniterm:new-session'))}
+                onNewSession={() => requestNewSession()}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
                 customArtUrl={idleArtUrl}
               />
@@ -286,7 +286,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   return (
                     <div
                       key={`frame-${i}`}
-                      className="absolute p-0.5"
+                      className="absolute z-10 p-0.5"
                       style={paneRect(i, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
                       onDrop={(e) => { e.preventDefault(); swapPanes(Number(e.dataTransfer.getData('text/plain')), i); setDragPane(null) }}
@@ -309,7 +309,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             compact
                             paneIndex={i}
                             openSessionCount={activeTabs.length}
-                            onNewSession={() => { setFocusedPane(i); window.dispatchEvent(new Event('omniterm:new-session')) }}
+                            onNewSession={() => { setFocusedPane(i); requestNewSession() }}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
                             onChooseSession={() => setPanePicker(i)}
                             customArtUrl={idleArtUrl}
@@ -374,6 +374,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       // A hidden pane keeps its layout box, so it can no longer infer this from its
                       // own size — it has to be told. Drives focus and the scroll-tail restore.
                       active={visible}
+                      darkMode={appSettings.darkMode}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}

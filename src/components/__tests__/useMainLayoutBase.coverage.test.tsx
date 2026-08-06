@@ -190,6 +190,10 @@ describe('useMainLayoutBase complete behavior', () => {
     await waitFor(() => expect(openNewSession).toHaveBeenCalledWith('powershell', expect.any(Function)))
     expect(connect).toHaveBeenCalledWith(expect.objectContaining({ id: 'new' }))
 
+    openNewSession.mockClear()
+    act(() => result.current.requestNewSession('powershell'))
+    await waitFor(() => expect(openNewSession).toHaveBeenCalledWith('powershell', expect.any(Function)))
+
     act(() => window.dispatchEvent(new Event('omniterm:toggle-sidebar')))
     expect(result.current.activeView).toBeNull()
     act(() => window.dispatchEvent(new Event('omniterm:toggle-sidebar')))
@@ -230,8 +234,14 @@ describe('useMainLayoutBase complete behavior', () => {
     expect(result.current.revealRequest?.nonce).toBe(1)
   })
 
-  it('closes data menus from Escape and outside clicks but not inside references', () => {
+  it('closes data menus from Escape and outside clicks but not inside references', async () => {
     const { result } = renderHook(() => useMainLayoutBase(props()))
+    await waitFor(() => {
+      expect(result.current.idleArtUrlLight).toBe('blob:idle-light')
+      expect(result.current.idleArtUrlDark).toBe('blob:idle-dark')
+      expect(result.current.loadingArtUrlLight).toBe('blob:loading-light')
+      expect(result.current.loadingArtUrlDark).toBe('blob:loading-dark')
+    })
     const menu = document.createElement('div')
     const button = document.createElement('button')
     document.body.append(menu, button)

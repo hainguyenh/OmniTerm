@@ -59,6 +59,7 @@ fn live_session_reports_writer_and_flush_errors() {
         "io-errors".to_string(),
         "adhoc-io-errors".to_string(),
         None,
+        None,
         data,
         status,
     ))

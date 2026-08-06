@@ -242,7 +242,6 @@ fn removal_reports_a_directory_that_forbids_deletion() {
 
 #[test]
 fn test_tauri_commands() {
-    use tauri::Manager;
     let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let handle = app.handle().clone();

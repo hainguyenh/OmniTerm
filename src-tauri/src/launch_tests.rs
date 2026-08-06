@@ -321,5 +321,5 @@ fn test_windows_args_fallthrough() {
         command: Some("echo hello".to_string()),
         keep_open: true,
     };
-    let invocation = launch.invocation();
+    let _invocation = launch.invocation();
 }

@@ -190,6 +190,18 @@ fn plugin_host_starts_successfully_when_node_is_available() {
     let app = test_support::mock_app();
     let handle = app.handle().clone();
 
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        match original_plugin {
+            Some(p) => std::env::set_var("OMNITERM_DEV_PLUGIN", p),
+            None => std::env::remove_var("OMNITERM_DEV_PLUGIN"),
+        }
+        return;
+    }
+
     let host = PluginHost::new();
     block_on(host.start(&handle)).unwrap();
 
@@ -229,4 +241,3 @@ fn plugin_host_start_fails_gracefully_when_node_is_missing() {
         None => std::env::remove_var("OMNITERM_DEV_PLUGIN"),
     }
 }
-

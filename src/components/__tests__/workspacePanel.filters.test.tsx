@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { mockOmnitermAPI } from '../../testUtils'
 import WorkspacePanel from '../WorkspacePanel'
 import { BAT, RDP, WS, dir, file, mockScan, page } from './workspacePanelTestUtils'
@@ -51,6 +51,7 @@ describe('WorkspacePanel filters and connections', () => {
 
     fireEvent.click(within(menu).getByLabelText('tools'))
     expect(screen.getByText('0 files')).toBeInTheDocument()
+    await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
   })
 
   /** A type covers files added after the pick, which is what a path selection cannot do. */

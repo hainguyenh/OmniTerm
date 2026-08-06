@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
 import { checkLoc, countLines, DEFAULT_LIMITS } from '../check-loc.mjs'
@@ -43,4 +44,11 @@ test('checkLoc has no legacy-baseline escape hatch', async () => {
 
   assert.equal(Object.hasOwn(result, 'baselineFiles'), false)
   assert.deepEqual(result.violations.map((item) => item.path), ['legacy.tsx'])
+})
+
+test('repository satisfies every configured LOC hard limit', async () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+  const result = await checkLoc({ root })
+
+  assert.deepEqual(result.violations, [])
 })

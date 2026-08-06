@@ -52,6 +52,13 @@ fn ignores_kill_errors_for_sessions_that_already_exited() {
     assert!(!is_process_gone_error(&other));
 }
 
+#[test]
+fn colorfgbg_matches_the_terminal_appearance() {
+    assert_eq!(colorfgbg_for_dark_mode(Some(true)), Some("15;0"));
+    assert_eq!(colorfgbg_for_dark_mode(Some(false)), Some("0;15"));
+    assert_eq!(colorfgbg_for_dark_mode(None), None);
+}
+
 /// Runs a real, self-terminating shell command through the actual command — not a reimplementation
 /// of its spawn logic — and follows it through Ready, output, and Closed. This is the single largest
 /// uncovered function in the crate: `tests/common/mod.rs` deliberately mirrors this function's PTY
@@ -86,6 +93,7 @@ fn start_local_session_runs_a_real_shell_through_its_full_lifecycle() {
         manager.clone(),
         "session-coverage".to_string(),
         "adhoc-coverage".to_string(),
+        None,
         None,
         on_data,
         on_status,
@@ -243,7 +251,7 @@ fn live_session_accepts_input_resize_and_same_id_replacement() {
     let (status, status_rx) = status_channel();
     tauri::async_runtime::block_on(start_local_session(
         handle.clone(), manager.clone(), "replace-me".into(),
-        "adhoc-interactive".into(), None, data, status,
+        "adhoc-interactive".into(), None, None, data, status,
     )).unwrap();
     wait_for_status(&status_rx, |status| matches!(status, SessionStatus::Ready { .. }));
     tauri::async_runtime::block_on(resize_session(
@@ -273,7 +281,7 @@ fn live_session_accepts_input_resize_and_same_id_replacement() {
     let (replacement_status, replacement_status_rx) = status_channel();
     tauri::async_runtime::block_on(start_local_session(
         handle.clone(), manager.clone(), "replace-me".into(),
-        "adhoc-replacement".into(), None, replacement_data, replacement_status,
+        "adhoc-replacement".into(), None, None, replacement_data, replacement_status,
     )).unwrap();
     wait_for_status(&replacement_status_rx, |status| matches!(status, SessionStatus::Closed { .. }));
 
@@ -304,7 +312,7 @@ fn poisoned_session_locks_report_errors_and_disconnect_still_cleans_registry() {
     let (data, _) = recording_channel();
     let (status, status_rx) = status_channel();
     tauri::async_runtime::block_on(start_local_session(
-        handle.clone(), manager.clone(), "poisoned".into(), "adhoc-poison".into(), None, data, status,
+        handle.clone(), manager.clone(), "poisoned".into(), "adhoc-poison".into(), None, None, data, status,
     )).unwrap();
     wait_for_status(&status_rx, |status| matches!(status, SessionStatus::Ready { .. }));
 

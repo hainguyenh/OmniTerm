@@ -218,7 +218,7 @@ fn test_focus_terminal_window_present() {
     assert!(app.manage(DetachRegistry::new()));
     let registry = app.state::<DetachRegistry>();
     registry.entries.insert("session-a".into(), entry("term-1", "One"));
-    let window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    let _window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
     tauri::async_runtime::block_on(focus_terminal_window(app.handle().clone(), registry.clone(), "session-a".to_string())).unwrap();
 }
 
@@ -230,7 +230,7 @@ fn test_reattach_terminal_present() {
     assert!(app.manage(DetachRegistry::new()));
     let registry = app.state::<DetachRegistry>();
     registry.entries.insert("session-a".into(), entry("term-1", "One"));
-    let window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    let _window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
     let res = tauri::async_runtime::block_on(reattach_terminal(app.handle().clone(), registry.clone(), "session-a".to_string())).unwrap();
     assert!(res);
 }
