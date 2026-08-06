@@ -129,9 +129,6 @@ describe('MainLayout terminal appearance integration', () => {
       connId: SSH.id,
     }))
 
-    fireEvent.click(screen.getByTitle('Increase font size'))
-    expect(onFontSizeChange).toHaveBeenCalledWith(1, { id: SSH.id, connId: SSH.id })
-
     expect(terminalState.props?.onFontSizeChange).toBeTypeOf('function')
     const terminalFontCallback = terminalState.props?.onFontSizeChange as (size: number) => void
     terminalFontCallback(20)

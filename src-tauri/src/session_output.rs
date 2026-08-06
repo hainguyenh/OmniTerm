@@ -80,7 +80,10 @@ impl Output {
     /// reader loop must NOT treat it as end-of-session, or popping a pane out would silently kill
     /// its output for good.
     pub fn push(&mut self, bytes: &[u8]) {
-        self.buffer.extend(bytes.iter().copied());
+        // `extend(bytes)`, not `extend(bytes.iter().copied())`: std specializes the `Extend<&u8>`
+        // impl for a slice iterator into a bulk copy, while the `Copied` adapter falls back to a
+        // per-byte `push_back`. This runs once per PTY read, so the difference is not academic.
+        self.buffer.extend(bytes);
         self.trim();
         if let Some(channel) = &self.data {
             if channel.send(Response::new(bytes.to_vec())).is_err() {
@@ -166,7 +169,10 @@ impl Output {
         status: Channel<SessionStatus>,
     ) -> AttachSnapshot {
         if !self.buffer.is_empty() {
-            let replay: Vec<u8> = self.buffer.iter().copied().collect();
+            // `make_contiguous` + `to_vec` is two memcpys at worst; the `iter().copied().collect()`
+            // this replaced walked a quarter of a megabyte one byte at a time, on the click that
+            // opens the window.
+            let replay: Vec<u8> = self.buffer.make_contiguous().to_vec();
             // A failure here means the new window died between opening the channel and this call.
             // Leave the sink unset and let the buffer stand for the next attempt.
             if data.send(Response::new(replay)).is_err() {

@@ -43,3 +43,7 @@ src-tauri/icons/*
 *.patch
 *.diff
 coverage-js/
+coverage-rust/
+*.lcov
+lcov.info
+push-hainguyenh.*

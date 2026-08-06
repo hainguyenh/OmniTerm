@@ -24,7 +24,7 @@ function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>({
     themeId: 'tokyo-night',
     fontSize: 14,
-    smartColors: true,
+    smartColors: false,
     checkUpdatesOnStartup: true,
     darkMode: true,
     defaultShell: 'powershell',
@@ -93,9 +93,12 @@ function App() {
 
   // Apply the persisted zoom factor on mount, and whenever it changes elsewhere (another window's
   // zoom, synced back through `settings:changed`) — so every window converges on one factor and a
-  // fresh window (including a detached terminal) never starts back at 1.
+  // fresh window (including a detached terminal) never starts back at 1. WebView zoom changes CSS
+  // pixel density with no DOM resize event, so xterm's cached char measurement goes stale without
+  // this — TerminalView listens for it to force a re-measure and refit.
   useEffect(() => {
     window.omnitermAPI.app.setZoomFactor?.(appSettings.zoomFactor ?? 1)
+    window.dispatchEvent(new CustomEvent('omniterm:zoom-changed'))
   }, [appSettings.zoomFactor])
 
   /** Persist the app-wide zoom factor — called after every zoom change (hotkey, wheel, Ctrl+0). */

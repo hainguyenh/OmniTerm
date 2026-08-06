@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import ConnectionForm from "../ConnectionForm";
@@ -31,8 +31,9 @@ describe("ConnectionForm", () => {
     Object.defineProperty(globalThis, "crypto", { value: { randomUUID: () => "new-id" }, configurable: true, writable: true });
   });
 
-  it("renders create mode with SSH defaults", () => {
+  it("renders create mode with SSH defaults", async () => {
     render(<ConnectionForm folders={[]} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {});
     expect(screen.getByText("New Connection")).toBeInTheDocument();
     expect(screen.getByText("SSH")).toBeInTheDocument();
     expandAdvanced();
@@ -40,8 +41,9 @@ describe("ConnectionForm", () => {
     expect(screen.queryByText("Share local drives with remote")).not.toBeInTheDocument();
   });
 
-  it("switches to RDP and shows redirect drives", () => {
+  it("switches to RDP and shows redirect drives", async () => {
     render(<ConnectionForm folders={[]} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {});
     fireEvent.click(screen.getByText("RDP"));
     expandAdvanced();
     expect(screen.getByDisplayValue("3389")).toBeInTheDocument();
@@ -68,15 +70,16 @@ describe("ConnectionForm", () => {
     });
   });
 
-  it("prefills edit mode", () => {
+  it("prefills edit mode", async () => {
     render(<ConnectionForm folders={folders} initial={sshConnection} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {});
     expect(screen.getByText("Edit Connection")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Server")).toBeInTheDocument();
     expect(screen.getByDisplayValue("10.0.0.1")).toBeInTheDocument();
   });
 
   /** A saved value hidden behind a collapsed section reads as "not set", which is worse than a click. */
-  it("opens Advanced on mount when the saved connection already uses it", () => {
+  it("opens Advanced on mount when the saved connection already uses it", async () => {
     render(
       <ConnectionForm
         folders={folders}
@@ -85,12 +88,14 @@ describe("ConnectionForm", () => {
         onSave={vi.fn()}
       />,
     );
+    await act(async () => {});
     expect(screen.getByDisplayValue("2222")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /advanced/i })).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("keeps Advanced closed for a connection with nothing set in it", () => {
+  it("keeps Advanced closed for a connection with nothing set in it", async () => {
     render(<ConnectionForm folders={folders} initial={sshConnection} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {});
     expect(screen.getByRole("button", { name: /advanced/i })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByDisplayValue("22")).not.toBeInTheDocument();
   });
@@ -98,7 +103,7 @@ describe("ConnectionForm", () => {
   /**
    * Password input belongs to the native Windows prompt, never the webview.
    */
-  it("removes credential controls entirely for the Limited provider", () => {
+  it("removes credential controls entirely for the Limited provider", async () => {
     for (const initial of [undefined, sshConnection]) {
       const { container, unmount } = render(
         <ConnectionForm
@@ -115,6 +120,7 @@ describe("ConnectionForm", () => {
           onSave={vi.fn()}
         />,
       );
+      await act(async () => {});
       expect(container.querySelector('input[type="password"]')).toBeNull();
       expect(screen.queryByText("Credentials")).not.toBeInTheDocument();
       expect(screen.queryByText(/Ask every time/)).not.toBeInTheDocument();
@@ -124,7 +130,7 @@ describe("ConnectionForm", () => {
     }
   });
 
-  it("saves the Limited password-help URL as metadata", () => {
+  it("saves the Limited password-help URL as metadata", async () => {
     const onSave = vi.fn();
     render(
       <ConnectionForm
@@ -140,6 +146,7 @@ describe("ConnectionForm", () => {
         onSave={onSave}
       />,
     );
+    await act(async () => {});
     fireEvent.change(screen.getByPlaceholderText("My Server"), { target: { value: "Prod" } });
     fireEvent.change(screen.getByPlaceholderText("192.168.1.1"), { target: { value: "10.0.0.8" } });
     expandAdvanced();
@@ -152,7 +159,7 @@ describe("ConnectionForm", () => {
     });
   });
 
-  it("never renders password persistence controls for the Full provider", () => {
+  it("never renders password persistence controls for the Full provider", async () => {
     const { container } = render(
       <ConnectionForm
         folders={[]}
@@ -167,14 +174,16 @@ describe("ConnectionForm", () => {
         onSave={vi.fn()}
       />,
     );
+    await act(async () => {});
     expect(container.querySelector('input[type="password"]')).toBeNull();
     expect(screen.queryByText("Save in Windows Credential Manager")).not.toBeInTheDocument();
     expect(screen.queryByText("Credentials")).not.toBeInTheDocument();
   });
 
-  it("saves a new SSH connection with no credential on it", () => {
+  it("saves a new SSH connection with no credential on it", async () => {
     const onSave = vi.fn();
     render(<ConnectionForm folders={[]} onClose={vi.fn()} onSave={onSave} />);
+    await act(async () => {});
     fireEvent.change(screen.getByPlaceholderText("My Server"), { target: { value: "Homelab" } });
     fireEvent.change(screen.getByPlaceholderText("192.168.1.1"), { target: { value: "192.168.1.10" } });
     fireEvent.change(screen.getByPlaceholderText("root"), { target: { value: "admin" } });
@@ -186,16 +195,18 @@ describe("ConnectionForm", () => {
     expect(Object.keys(saved)).not.toContain("hasPassword");
   });
 
-  it("closes via Escape when not dirty", () => {
+  it("closes via Escape when not dirty", async () => {
     const onClose = vi.fn();
     render(<ConnectionForm folders={[]} onClose={onClose} onSave={vi.fn()} />);
+    await act(async () => {});
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("shows discard confirm when closing with dirty changes via Escape", () => {
+  it("shows discard confirm when closing with dirty changes via Escape", async () => {
     const onClose = vi.fn();
     render(<ConnectionForm folders={[]} onClose={onClose} onSave={vi.fn()} />);
+    await act(async () => {});
     fireEvent.change(screen.getByPlaceholderText("My Server"), { target: { value: "X" } });
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.getByText("Discard changes?")).toBeInTheDocument();

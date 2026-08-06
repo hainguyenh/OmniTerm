@@ -78,10 +78,16 @@ beforeEach(() => {
 describe('App orchestration', () => {
   it('loads state and drives global and focused appearance actions', async () => {
     install(settings)
+    // TerminalView listens for this to force a re-measure — xterm's cached char size otherwise goes
+    // stale on a WebView zoom change, since that changes CSS pixel density with no DOM resize event.
+    const onZoomChanged = vi.fn()
+    window.addEventListener('omniterm:zoom-changed', onZoomChanged)
     render(<App />)
     await waitFor(() => expect(screen.getByTestId('main')).toBeInTheDocument())
     await waitFor(() => expect(settingsGet).toHaveBeenCalled())
     expect(setZoomFactor).toHaveBeenCalledWith(1.2)
+    expect(onZoomChanged).toHaveBeenCalled()
+    window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
     expect(captured.title.appVersion).toBe('1.0.0')
     expect(captured.main.currentTheme.id).toBe(TOKYO_NIGHT.id)
 

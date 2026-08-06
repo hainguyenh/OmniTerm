@@ -55,7 +55,10 @@ const updateAvailableState: UpdateState = {
 };
 
 function renderLayout(props: any = {}, overrides: any = {}) {
-  mockOmnitermAPI(overrides);
+  mockOmnitermAPI({
+    settings: { systemExcludedViewExts: vi.fn(async () => []) },
+    ...overrides,
+  });
   const handlers = {
     setAppSettings: vi.fn(),
     setLayoutMode: vi.fn(),
@@ -123,8 +126,9 @@ describe("MainLayout update UI", () => {
   });
 
   /** The update check is plain app settings, so it is visible with no tab to find. */
-  it("shows the update check without any tab to open", () => {
+  it("shows the update check without any tab to open", async () => {
     renderLayout({}, {});
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled());
 
     expect(screen.getByRole("button", { name: /install update/i })).toBeInTheDocument();
     expect(screen.getByText(/check on startup/i)).toBeInTheDocument();
@@ -161,8 +165,9 @@ describe("MainLayout update UI", () => {
     expect(screen.queryByRole("button", { name: /export encrypted backup/i })).toBeNull();
   });
 
-  it("no longer advertises the features as always-available badges", () => {
+  it("no longer advertises the features as always-available badges", async () => {
     renderLayout({}, {});
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled());
     for (const badge of ["Encrypted", "Opt-in update check"]) {
       expect(screen.queryByText(badge)).toBeNull();
     }

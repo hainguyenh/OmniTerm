@@ -58,6 +58,8 @@ describe('navigation and empty-session shell', () => {
     const { container, rerender } = render(
       <CloseConfirmModal onConfirm={onConfirm} onCancel={onCancel} isMultiple={false} />,
     )
+    expect(screen.getByText('Close Terminal')).toHaveClass('text-[var(--theme-selection-fg)]')
+    expect(screen.getByText('Close Terminal')).not.toHaveClass('text-white')
     expect(screen.getByText(/This terminal session is currently connected/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('checkbox'))
@@ -79,10 +81,12 @@ describe('navigation and empty-session shell', () => {
     const { container, rerender } = render(<ConnectingOverlay dark label="Opening SSH…" />)
     expect(screen.getByText('Opening SSH…')).toBeInTheDocument()
     expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByTestId('loading-art')).toHaveStyle({ transform: 'scale(2)' })
 
     rerender(<ConnectingOverlay dark={false} customArtUrl="asset://loading.png" />)
     expect(screen.getByText('Connecting…')).toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'asset://loading.png')
+    expect(screen.getByTestId('loading-art')).toHaveStyle({ transform: 'scale(2)' })
   })
 
   it('focuses or reattaches a detached session in normal and compact layouts', () => {
@@ -102,7 +106,7 @@ describe('navigation and empty-session shell', () => {
     expect(screen.getByText('Production SSH')).toBeInTheDocument()
   })
 
-  it('opens, adopts, and chooses a shell from waiting panes', () => {
+  it('keeps full waiting-pane controls clickable around scaled idle art', () => {
     const onNewSession = vi.fn()
     const onChooseSession = vi.fn()
     const onPickShell = vi.fn()
@@ -119,6 +123,7 @@ describe('navigation and empty-session shell', () => {
     expect(onNewSession).toHaveBeenCalledOnce()
     expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
     expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByTestId('idle-art').parentElement).toHaveClass('pointer-events-none')
 
     rerender(
       <WaitingPane
@@ -135,8 +140,13 @@ describe('navigation and empty-session shell', () => {
     expect(screen.getByTitle('Pane 3 · violet hexagon')).toBeInTheDocument()
     expect(screen.queryByText('Ctrl+N')).not.toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'asset://idle.png')
+    expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })
+    expect(screen.getByTestId('idle-art').parentElement).toHaveClass('pointer-events-none')
+    fireEvent.click(screen.getByText('New Terminal'))
     fireEvent.click(screen.getByRole('button', { name: 'Choose open session (3)' }))
-    expect(onChooseSession).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByText('Choose open session (3)'))
+    expect(onNewSession).toHaveBeenCalledTimes(2)
+    expect(onChooseSession).toHaveBeenCalledTimes(2)
   })
 })
 

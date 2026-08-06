@@ -36,7 +36,7 @@ const CloseConfirmModal: React.FC<CloseConfirmModalProps> = ({
     >
       <div className="bg-theme-popup w-full max-w-sm rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
         <div className="p-5 space-y-3">
-          <h3 className="text-white font-bold flex items-center gap-2 text-lg">
+          <h3 className="text-[var(--theme-selection-fg)] font-bold flex items-center gap-2 text-lg">
             <AlertTriangle className="w-5 h-5 text-theme-warning" />
             Close Terminal
           </h3>
@@ -53,7 +53,7 @@ const CloseConfirmModal: React.FC<CloseConfirmModalProps> = ({
               onChange={(e) => setApplyToAll(e.target.checked)} 
               className="w-4 h-4 rounded border-theme-border bg-theme-bg accent-theme-accent focus:ring-0 focus:ring-offset-0 cursor-pointer"
             />
-            <span className="group-hover:text-white transition-colors">Apply to all (Don't ask again)</span>
+            <span className="group-hover:text-[var(--theme-selection-fg)] transition-colors">Apply to all (Don't ask again)</span>
           </label>
         </div>
         
@@ -62,14 +62,14 @@ const CloseConfirmModal: React.FC<CloseConfirmModalProps> = ({
             type="button"
             autoFocus
             onClick={onCancel}
-            className="flex-1 py-2 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-white transition-colors text-sm font-semibold"
+            className="flex-1 py-2 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-[var(--theme-selection-fg)] transition-colors text-sm font-semibold"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onConfirm(applyToAll)}
-            className="flex-1 py-2 rounded-xl bg-theme-error hover:bg-[#ff8da3] text-theme-accent-fg transition-colors text-sm font-bold"
+            className="flex-1 py-2 rounded-xl bg-theme-error hover:brightness-110 text-theme-accent-fg transition-colors text-sm font-bold"
           >
             Close Anyway
           </button>

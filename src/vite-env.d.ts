@@ -61,6 +61,12 @@ interface AppSettings {
   excludedViewableExts?: string[]
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
+  /**
+   * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
+   * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).
+   */
+  shiftEnter?: 'esc-cr' | 'lf' | 'off'
+  ctrlEnter?: 'esc-cr' | 'lf' | 'off'
 }
 
 interface SessionMetrics {
@@ -152,7 +158,7 @@ interface Window {
       onRDPReady: (id: string, cb: () => void) => () => void
       onRDPError: (id: string, cb: (err: string) => void) => () => void
       onRDPClosed: (id: string, cb: () => void) => () => void
-      ssh: (id: string) => void
+      ssh: (id: string, darkMode?: boolean) => void
       sshDisconnect: (id: string) => void
       sshInput: (id: string, data: string) => void
       sshResize: (id: string, size: { cols: number, rows: number }) => void
@@ -165,7 +171,7 @@ interface Window {
       // sessionId is this instance's unique key (IPC channels + PTY); connId is the saved
       // connection to load settings from — they diverge for a second+ instance of the same
       // LOCAL connection.
-      local: (sessionId: string, connId: string, shell?: string) => void
+      local: (sessionId: string, connId: string, shell?: string, darkMode?: boolean) => void
       localDisconnect: (id: string) => void
       localInput: (id: string, data: string) => void
       localResize: (id: string, size: { cols: number, rows: number }) => void

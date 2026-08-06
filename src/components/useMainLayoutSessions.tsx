@@ -8,7 +8,7 @@ import { mintSessionId } from './mainLayoutShared'
 import type { useMainLayoutBase } from './useMainLayoutBase'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
-  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerRef, dragPane, setDragPane, statuses, setStatuses, setReconnectKeys, setLatencies, detached, setDetached, poppedOut, setPoppedOut, setResumeMode, setMetrics, setConnectedAt, setStatus, setActivity, connById, toggleDetach, canDetachWindow, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, showAlert, showConfirm, dataMenuOpen, activeView, setActiveView, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef } = base
+  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerRef, dragPane, setDragPane, statuses, setStatuses, setReconnectKeys, setLatencies, detached, setDetached, poppedOut, setPoppedOut, setResumeMode, setMetrics, setConnectedAt, setStatus, setActivity, activity, connById, toggleDetach, canDetachWindow, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, showAlert, showConfirm, dataMenuOpen, activeView, setActiveView, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef } = base
   useEffect(() => {
       const tab = activeTabs.find(item => item.id === activeTabId);
       const conn = connById(tab?.connId);
@@ -217,7 +217,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       setMetrics(prune);
       setConnectedAt(prune);
   };
-  const closeTabs = (sessionIds: string[], skipConfirm = false) => {
+  const closeTabs = (sessionIds: string[], skipConfirm = false, sessionAlreadyClosed = false) => {
       if (sessionIds.length === 0)
           return;
       if (!skipConfirm && !skipCloseConfirmRef.current) {
@@ -225,7 +225,12 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
               if (editorTabs[id])
                   return false;
               const s = statuses[id] || 'closed';
-              return s === 'connected' || s === 'connecting';
+              if (s !== 'connected' && s !== 'connecting')
+                  return false;
+              // A local shell already at its prompt has no child process to terminate, so closing
+              // it is safe and should not interrupt the user's flow with a confirmation modal.
+              const conn = connById(activeTabs.find(t => t.id === id)?.connId);
+              return !(s === 'connected' && conn?.type === 'LOCAL' && activity[id] === false);
           });
           if (needsConfirm) {
               setPendingCloseTabIds(sessionIds);
@@ -240,13 +245,13 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           setPreviewTabId(null);
       for (const t of closing) {
           removeFromPanes(t.id, remaining);
-          if (poppedOut[t.id] && window.omnitermAPI.terminalWindow)
+          if (poppedOut[t.id] && !sessionAlreadyClosed && window.omnitermAPI.terminalWindow)
               window.omnitermAPI.terminalWindow.release(t.id);
           if (editorTabs[t.id]) {
               setEditorTabs(prev => { const n = { ...prev }; delete n[t.id]; return n; });
               setEditorDirty(prev => { const n = { ...prev }; delete n[t.id]; return n; });
           }
-          else
+          else if (!sessionAlreadyClosed)
               disconnectByType(t.id, t.connId);
       }
       clearTabState(sessionIds);
@@ -258,6 +263,13 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
               window.omnitermAPI.shells.release(e.id);
       }
   };
+  useEffect(() => {
+      if (!window.omnitermAPI.terminalWindow)
+          return;
+      return window.omnitermAPI.terminalWindow.onClosed((id) => {
+          closeTabs([id], true, true);
+      });
+  }, [closeTabs]);
   const closeTab = (sessionId: string) => {
       if (editorTabs[sessionId] && editorDirty[sessionId]) {
           void showConfirm('Discard unsaved changes?', {
@@ -347,7 +359,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           onThemeApply: (themeId: string) => onThemeApply(themeId, target),
           onFontSizeChange: (delta: number) => onFontSizeChange(delta, target),
       } : undefined;
-      return <PaneHeader paneIndex={paneIndex} conn={conn} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} appearance={appearance}/>;
+      return <PaneHeader paneIndex={paneIndex} conn={conn} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} appearance={appearance}/>;
   };
   return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
 }

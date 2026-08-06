@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import FileBrowser from "../FileBrowser";
@@ -79,7 +79,7 @@ describe("FileBrowser", () => {
     });
     renderBrowser();
     await waitFor(() => expect(screen.getByText("readme.txt")).toBeInTheDocument());
-    cb!({ kind: "download", name: "archive.zip", transferred: 50, total: 100 });
+    act(() => cb!({ kind: "download", name: "archive.zip", transferred: 50, total: 100 }));
     await waitFor(() => expect(screen.getByText("50%")).toBeInTheDocument());
   });
 

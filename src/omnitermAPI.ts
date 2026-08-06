@@ -113,8 +113,8 @@ function createTauriAPI(): any {
     connect: {
       // Streaming lives in tauriSessions.ts: the ready/data/error/closed callbacks are held in a
       // local map and handed to the backend as IPC channels when the session starts.
-      local: (sessionId: string, connId: string, overrideShell?: string) =>
-        startSession(sessionId, connId, overrideShell),
+      local: (sessionId: string, connId: string, overrideShell?: string, darkMode?: boolean) =>
+        startSession(sessionId, connId, overrideShell, darkMode),
       localDisconnect: (id: string) =>
         invoke('disconnect_session', { id }).catch(() => {}),
       localInput: (id: string, data: string) =>
@@ -130,10 +130,11 @@ function createTauriAPI(): any {
 
       // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt
       // is therefore native to ssh.exe and no credential crosses the frontend API.
-      ssh: async (id: string) => {
+      ssh: async (id: string, darkMode?: boolean) => {
         try {
           await invoke('prepare_ssh_session', { connId: id })
-          await startSession(id, id, 'cmd')
+          if (darkMode === undefined) await startSession(id, id, 'cmd')
+          else await startSession(id, id, 'cmd', darkMode)
         } catch (error) {
           failSession(id, error instanceof Error ? error.message : String(error))
         }

@@ -14,21 +14,30 @@ interface ConnectingOverlayProps {
  * before 'connected'). Displays either the user's custom art or a built-in SVG animation.
  */
 const ConnectingOverlay: React.FC<ConnectingOverlayProps> = ({ dark, label = 'Connecting…', customArtUrl }) => (
-  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-[var(--theme-bg)] select-none p-4">
-    {customArtUrl ? (
-      /* User-uploaded custom art */
-      <img
-        src={customArtUrl}
-        alt={label}
-        className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] h-auto"
-      />
-    ) : (
-      /* License-free built-in default */
-      <div className="w-[60vmin] min-w-[160px] max-w-[560px] max-h-[70%] flex items-center justify-center">
-        <DefaultLoadingArt dark={dark} />
+  <div className="absolute inset-0 z-10 overflow-auto bg-[var(--theme-bg)] select-none">
+    <div className="min-h-full w-full flex flex-col items-center justify-center gap-2 p-4">
+      <div
+        className="relative w-[min(52%,20rem)] max-w-full max-h-full flex items-center justify-center flex-shrink-0"
+        style={{ height: 'min(42%, 20rem)' }}
+      >
+        {customArtUrl ? (
+          <img
+            src={customArtUrl}
+            alt={label}
+            data-testid="loading-art"
+            className="w-full h-full object-contain"
+            style={{ transform: 'scale(2)' }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" data-testid="loading-art" style={{ transform: 'scale(2)' }}>
+            <DefaultLoadingArt dark={dark} />
+          </div>
+        )}
       </div>
-    )}
-    <span className="text-xs font-medium text-[var(--theme-fg)] opacity-60 text-center">{label}</span>
+      <span className="max-w-full px-3 text-xs font-medium text-[var(--theme-fg)] opacity-60 text-center">
+        {label}
+      </span>
+    </div>
   </div>
 )
 

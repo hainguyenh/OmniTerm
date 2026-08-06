@@ -49,7 +49,11 @@ pub fn defaults() -> Value {
         "themeId": "tokyo-night",
         "fontSize": 14,
         "zoomFactor": 1.0,
-        "smartColors": true,
+        // Off by default: the client-side highlighter injects SGR codes into the output stream, which
+        // is wrong for anything that paints its own screen. It now detects main-screen TUIs and
+        // suspends itself (see highlighter.ts), but opt-in is the safer default for a fresh install —
+        // existing installs keep whatever they already saved, since `save` writes every field.
+        "smartColors": false,
         "checkUpdatesOnStartup": true,
         "skippedVersion": null,
         // Cap on what the built-in viewer/editor will open or save, in whole MB. 1 MB covers every
@@ -61,6 +65,12 @@ pub fn defaults() -> Value {
         // `safepath::VIEW_DENY_EXTS` gate (which this list can never widen — see GeneralSettings.tsx).
         "excludedViewableExts": [],
         "shortcuts": default_shortcuts(),
+        // What Shift+Enter / Ctrl+Enter send in a terminal — 'esc-cr' | 'lf' | 'off'. xterm collapses
+        // both to a bare CR on its own, so an AI agent cannot tell them from a plain Enter without
+        // these. ESC+CR is what Claude Code's `/terminal-setup` configures elsewhere, so agents
+        // already recognise it; Ctrl+Enter gets a literal newline as the useful second option.
+        "shiftEnter": "esc-cr",
+        "ctrlEnter": "lf",
         "workspaces": [],
     })
 }

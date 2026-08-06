@@ -89,3 +89,6 @@ mod app_commands;
 mod connection_commands;
 #[path = "command_edge_tests.rs"]
 mod edge_commands;
+
+#[path = "command_plugin_tests.rs"]
+mod plugin_commands;

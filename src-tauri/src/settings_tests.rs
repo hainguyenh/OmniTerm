@@ -10,7 +10,8 @@ fn defaults_expose_every_field_the_renderer_reads() {
     assert_eq!(d["themeId"], json!("tokyo-night"));
     assert_eq!(d["fontSize"], json!(14));
     assert_eq!(d["zoomFactor"], json!(1.0));
-    assert_eq!(d["smartColors"], json!(true));
+    // Opt-in: the client-side highlighter rewrites output, which is wrong for TUIs by default.
+    assert_eq!(d["smartColors"], json!(false));
     assert_eq!(d["checkUpdatesOnStartup"], json!(true));
     assert_eq!(d["skippedVersion"], json!(null));
     assert_eq!(d["workspaces"], json!([]));
@@ -233,7 +234,7 @@ fn read_settings_layers_a_valid_partial_file_over_new_defaults() {
     let read = read_settings(app.handle());
     assert_eq!(read["themeId"], json!("custom"));
     assert_eq!(read["fontSize"], json!(22));
-    assert_eq!(read["smartColors"], json!(true));
+    assert_eq!(read["smartColors"], json!(false));
     assert!(read["shortcuts"].is_object());
     let _ = std::fs::remove_file(path);
 }
