@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+  [switch]$Dev
+)
 
 $ErrorActionPreference = 'Stop'
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -48,8 +50,8 @@ function Select-Plugin {
   return @{ Name = 'limited'; Path = $LimitedPlugin }
 }
 
-function Copy-BundleArtifacts([string]$Destination) {
-  $bundle = Join-Path $RepoRoot 'src-tauri\target\release\bundle'
+function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {
+  $bundle = Join-Path $RepoRoot "src-tauri\target\$Profile\bundle"
   if (-not (Test-Path $bundle)) { throw "Tauri did not create $bundle." }
   Copy-Item -Path (Join-Path $bundle '*') -Destination $Destination -Recurse -Force
 }
@@ -59,9 +61,9 @@ function Initialize-AppArtifacts([string]$Destination) {
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 }
 
-function Copy-PortableArtifacts([string]$Destination, $Plugin) {
-  $release = Join-Path $RepoRoot 'src-tauri\target\release'
-  $executable = Join-Path $release 'omniterm.exe'
+function Copy-PortableArtifacts([string]$Destination, $Plugin, [string]$Profile) {
+  $buildRoot = Join-Path $RepoRoot "src-tauri\target\$Profile"
+  $executable = Join-Path $buildRoot 'omniterm.exe'
   if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Tauri did not create $executable."
   }
@@ -71,9 +73,12 @@ function Copy-PortableArtifacts([string]$Destination, $Plugin) {
   Copy-Item -LiteralPath $executable -Destination (Join-Path $portable 'OmniTerm.exe') -Force
 
   foreach ($resourceName in @('builtinThemes', 'sidecar')) {
-    $resource = Join-Path $release $resourceName
+    $resource = Join-Path $buildRoot $resourceName
     if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
-      throw "Tauri did not create the portable resource directory $resource."
+      $resource = Join-Path $RepoRoot "src-tauri\$resourceName"
+      if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
+        throw "Could not find resource directory $resourceName."
+      }
     }
     Copy-Item -LiteralPath $resource -Destination $portable -Recurse -Force
   }
@@ -162,10 +167,24 @@ if ($Mode -in @('1', '3')) {
   }[$outputChoice]
 }
 
+$BuildProfile = 'release'
+if ($Mode -in @('1', '3')) {
+  if ($Dev) {
+    $BuildProfile = 'debug'
+    Write-Host '  Development build selected by -Dev: debug assertions and Trace logging enabled.' -ForegroundColor DarkYellow
+  } else {
+    Write-Host ''
+    Write-Host '    1. Release (production)'
+    Write-Host '    2. Development (debug + full Trace logging)'
+    do { $profileChoice = Read-Host '  Select build profile [1-2]' } until ($profileChoice -in @('1', '2'))
+    $BuildProfile = if ($profileChoice -eq '2') { 'debug' } else { 'release' }
+  }
+}
+
 $Summary = switch ($Mode) {
-  '1' { "Basic Tauri app; no plugin will be bundled. Output: $OutputFormat." }
+  '1' { "Basic Tauri app; no plugin will be bundled. Profile: $BuildProfile. Output: $OutputFormat." }
   '2' { "Plugin package only: $($Plugin.Name)." }
-  '3' { "Tauri app bundled with exactly one plugin: $($Plugin.Name). Output: $OutputFormat." }
+  '3' { "Tauri app bundled with exactly one plugin: $($Plugin.Name). Profile: $BuildProfile. Output: $OutputFormat." }
 }
 Write-Title 'Build Summary'
 Write-Host "  $Summary"
@@ -201,8 +220,9 @@ if ($Mode -eq '2') {
   Build-PluginPackage $Plugin (Join-Path $Artifacts "plugins\$($Plugin.Name)")
 } else {
   $configArgs = @('tauri', 'build')
-  $releaseRoot = Join-Path $RepoRoot 'src-tauri\target\release'
-  Remove-BuildTree (Join-Path $releaseRoot 'plugins') $releaseRoot
+  if ($BuildProfile -eq 'debug') { $configArgs += '--debug' }
+  $buildRoot = Join-Path $RepoRoot "src-tauri\target\$BuildProfile"
+  Remove-BuildTree (Join-Path $buildRoot 'plugins') $buildRoot
   if ($Mode -eq '3') {
     Invoke-Step "Build $($Plugin.Name) plugin" 'pnpm' @('build:plugin', $Plugin.Path)
     $pluginsStageRoot = Join-Path $Stage 'plugins'
@@ -229,22 +249,29 @@ if ($Mode -eq '2') {
   if ($OutputFormat -eq 'portable') {
     $configArgs += '--no-bundle'
   }
-  $buildLabel = if ($OutputFormat -eq 'portable') { 'Build portable Tauri app' } else { 'Build Tauri app' }
-  Invoke-Step $buildLabel 'pnpm' $configArgs
-  $destination = if ($Mode -eq '1') {
-    Join-Path $Artifacts 'basic'
+  $buildLabel = if ($OutputFormat -eq 'portable') {
+    if ($BuildProfile -eq 'debug') { 'Build portable development Tauri app' } else { 'Build portable Tauri app' }
+  } elseif ($BuildProfile -eq 'debug') {
+    'Build development Tauri app with Trace logging'
   } else {
-    Join-Path $Artifacts "app-with-$($Plugin.Name)"
+    'Build Tauri app'
+  }
+  Invoke-Step $buildLabel 'pnpm' $configArgs
+  $artifactPrefix = if ($BuildProfile -eq 'debug') { 'debug-' } else { '' }
+  $destination = if ($Mode -eq '1') {
+    Join-Path $Artifacts "${artifactPrefix}basic"
+  } else {
+    Join-Path $Artifacts "${artifactPrefix}app-with-$($Plugin.Name)"
   }
   Initialize-AppArtifacts $destination
   if ($OutputFormat -in @('installer', 'installer and portable')) {
-    Copy-BundleArtifacts $destination
+    Copy-BundleArtifacts $destination $BuildProfile
   }
   if ($OutputFormat -in @('portable', 'installer and portable')) {
-    Copy-PortableArtifacts $destination $(if ($Mode -eq '3') { $Plugin } else { $null })
+    Copy-PortableArtifacts $destination $(if ($Mode -eq '3') { $Plugin } else { $null }) $BuildProfile
   }
 }
 
 Write-Title 'Build Complete'
 Write-Host "  Artifacts: $Artifacts" -ForegroundColor Green
-Start-Process explorer.exe -ArgumentList $Artifacts
+# Start-Process explorer.exe -ArgumentList $Artifacts

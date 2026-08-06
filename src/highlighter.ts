@@ -12,6 +12,11 @@
  *    anything the server already colored (prompt, ls output) passes through.
  *  - Disabled while the alternate screen is active (vim, htop, less…) so
  *    full-screen apps keep their own styling.
+ *  - Disabled while a main-screen TUI is repainting. AI agent CLIs (Claude Code,
+ *    Copilot CLI, Codex) draw their prompt box with absolute cursor moves and
+ *    synchronized updates but never switch to the alternate screen, so the
+ *    alt-screen rule alone left us injecting SGR codes into the middle of their
+ *    frames — which destroyed both their colouring and their cell accounting.
  *  - Incomplete escape sequences at a chunk boundary are carried over to the
  *    next chunk, never split or rewritten mid-sequence.
  */
@@ -58,11 +63,63 @@ const colorize = (text: string): string =>
 // Don't buffer unterminated sequences forever (e.g. binary garbage) — flush raw.
 const MAX_CARRY = 1024
 
+/**
+ * How long a main-screen TUI keeps the highlighter suspended after its last redraw sequence.
+ *
+ * Suppression has to be sticky: a TUI emits its cursor moves in bursts, and the *plain* text between
+ * them is exactly what must not be rewritten. But it cannot be permanent either, or a single `\r`
+ * progress spinner from an ordinary command would disable smart colours for the rest of the session.
+ */
+const TUI_IDLE_MS = 10_000
+
+/**
+ * How long `noteLocalEcho()` suspends colouring.
+ *
+ * A paste's echo is the one stretch of output guaranteed to be re-rendered by whatever is reading it.
+ * Injecting SGR codes into it is what made a long paste come back with overlapping text: an agent CLI
+ * (Ink, or readline in bracketed-paste mode) re-wraps and repositions the echoed block by coordinate,
+ * and every escape the highlighter adds throws off its count of what is where. The alt-screen and TUI
+ * rules do not cover it — an agent that has been idle emits no redraw sequence until *after* the first
+ * echoed bytes, by which point the damage is in the frame.
+ *
+ * It only has to bridge to that first redraw sequence, which then takes over via TUI_IDLE_MS, so this
+ * is short enough that smart colours are not noticeably absent afterwards.
+ */
+const LOCAL_ECHO_QUIET_MS = 1_500
+
+/**
+ * Sequences that mean "something is painting this screen by coordinate", checked against whole
+ * escape sequences only (the parser hands them over one at a time, never split).
+ *
+ *   ?2026h/l        synchronized update — begin/end frame
+ *   ?25l            hide cursor
+ *   ?1000-1006h     mouse tracking
+ *   2J              erase display
+ *   <n>A/B/D        cursor up / down / back
+ *
+ * Absolute cursor positioning (CSI row;col H|f) is handled separately: bare `CSI H` and `CSI 1;1H`
+ * are just "home", which plain shells emit too, so only a row beyond the first counts.
+ */
+const TUI_SEQ_RE = /^\x1b\[(?:\?(?:2026[hl]|25l|100[0-6]h)|2J|\d*[ABD])$/
+const CURSOR_POS_RE = /^\x1b\[(\d*)(?:;(\d*))?[Hf]$/
+
 export class OutputHighlighter {
   private carry = ''           // incomplete escape sequence held until next chunk
   private fgColored = false    // server set a non-default foreground
   private altScreen = false    // vim/htop/less etc. own the screen
   private enabled = true
+  // Timestamp of the last TUI-shaped sequence; 0 means none seen. See TUI_IDLE_MS.
+  private tuiSeenAt = 0
+  // Deadline set by noteLocalEcho(); 0 means none pending. See LOCAL_ECHO_QUIET_MS.
+  private echoQuietUntil = 0
+
+  /**
+   * The app just sent the terminal something it will echo back — a paste. Colouring is suspended
+   * until the echo and the reader's redraw of it are through; see LOCAL_ECHO_QUIET_MS for why.
+   */
+  noteLocalEcho(): void {
+    this.echoQuietUntil = Date.now() + LOCAL_ECHO_QUIET_MS
+  }
 
   /**
    * Pass every chunk through even when disabled — the sequence parser keeps
@@ -99,10 +156,17 @@ export class OutputHighlighter {
     return out
   }
 
-  /** Highlight only default-colored, main-screen text. */
+  /** Highlight only default-colored text that nothing else is drawing over. */
   private plain(segment: string): string {
     if (!segment || !this.enabled || this.altScreen || this.fgColored) return segment
+    if (this.tuiActive()) return segment
+    if (this.echoQuietUntil !== 0 && Date.now() < this.echoQuietUntil) return segment
     return colorize(segment)
+  }
+
+  /** True while a main-screen TUI is still considered to own the viewport. */
+  private tuiActive(): boolean {
+    return this.tuiSeenAt !== 0 && Date.now() - this.tuiSeenAt < TUI_IDLE_MS
   }
 
   /** Length of the escape sequence starting at `start`, or -1 if incomplete. */
@@ -149,6 +213,19 @@ export class OutputHighlighter {
     }
     // Alternate screen buffer on/off (vim, htop, less…).
     const alt = /^\x1b\[\?(?:1049|1047|47)(h|l)$/.exec(seq)
-    if (alt) this.altScreen = alt[1] === 'h'
+    if (alt) {
+      this.altScreen = alt[1] === 'h'
+      return
+    }
+
+    // Main-screen TUI redraw (agent CLIs, progress renderers) — suspend colouring while it paints.
+    if (TUI_SEQ_RE.test(seq)) {
+      this.tuiSeenAt = Date.now()
+      return
+    }
+    const pos = CURSOR_POS_RE.exec(seq)
+    // A row beyond the first means real positioning, not the `CSI H` / `CSI 1;1H` home that plain
+    // shells emit when clearing.
+    if (pos && parseInt(pos[1] || '1', 10) > 1) this.tuiSeenAt = Date.now()
   }
 }

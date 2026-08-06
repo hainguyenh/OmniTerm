@@ -294,19 +294,22 @@ mod tests {
 pub async fn open_themes_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let themes_dir = get_themes_dir(&app)?;
 
-    // Try opening using opener crate
-    if let Err(e) = opener::open(&themes_dir) {
-        // Fallback for missing opener or failure
-        #[cfg(target_os = "windows")]
-        std::process::Command::new("explorer").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
+    #[cfg(not(test))]
+    {
+        // Try opening using opener crate
+        if let Err(e) = opener::open(&themes_dir) {
+            // Fallback for missing opener or failure
+            #[cfg(target_os = "windows")]
+            std::process::Command::new("explorer").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
 
-        #[cfg(target_os = "macos")]
-        std::process::Command::new("open").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
+            #[cfg(target_os = "macos")]
+            std::process::Command::new("open").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
 
-        #[cfg(target_os = "linux")]
-        std::process::Command::new("xdg-open").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
-        
-        let _ = e;
+            #[cfg(target_os = "linux")]
+            std::process::Command::new("xdg-open").arg(&themes_dir).spawn().map_err(|e| e.to_string())?;
+            
+            let _ = e;
+        }
     }
 
     Ok(())

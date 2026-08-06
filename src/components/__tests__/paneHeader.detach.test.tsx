@@ -20,6 +20,7 @@ const conn = { id: "c1", name: "Web Server", type: "SSH", host: "10.0.0.1", port
 function renderHeader(props: Partial<React.ComponentProps<typeof PaneHeader>> = {}) {
   const onToggleDetach = vi.fn();
   const onTogglePicker = vi.fn();
+  const onClose = vi.fn();
   render(
     <PaneHeader
       paneIndex={0}
@@ -41,10 +42,11 @@ function renderHeader(props: Partial<React.ComponentProps<typeof PaneHeader>> = 
       onTogglePicker={onTogglePicker}
       onAssign={vi.fn()}
       onClear={vi.fn()}
+      onClose={onClose}
       {...props}
     />,
   );
-  return { onToggleDetach, onTogglePicker };
+  return { onToggleDetach, onTogglePicker, onClose };
 }
 
 describe("pane header detach control", () => {
@@ -60,6 +62,12 @@ describe("pane header detach control", () => {
     expect(screen.queryByRole("button", { name: /detach this pane/i })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /attach back/i }));
     expect(onToggleDetach).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the pane session from the header", () => {
+    const { onClose } = renderHeader();
+    fireEvent.click(screen.getByRole("button", { name: "Close pane" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("omits the control entirely when the session cannot move", () => {

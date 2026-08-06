@@ -181,3 +181,56 @@ fn on_window_destroyed_kills_an_idle_non_folding_session() {
         "an idle, non-folding session should be forgotten rather than folded back"
     );
 }
+
+#[test]
+fn test_bootstrap_terminal_window() {
+    use tauri::Manager;
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    let registry = app.state::<DetachRegistry>();
+    registry.entries.insert("session-a".into(), entry("term-1", "One"));
+    let window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    let res = tauri::async_runtime::block_on(bootstrap_terminal_window(AsRef::<tauri::Webview<tauri::test::MockRuntime>>::as_ref(&window).window(), registry.clone())).unwrap();
+    assert_eq!(res.unwrap().session_id, "session-a");
+
+    let window2 = tauri::WebviewWindowBuilder::new(&app, "term-2", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    let res2 = tauri::async_runtime::block_on(bootstrap_terminal_window(AsRef::<tauri::Webview<tauri::test::MockRuntime>>::as_ref(&window2).window(), registry.clone())).unwrap();
+    assert!(res2.is_none());
+}
+
+#[test]
+fn test_release_terminal_window_present() {
+    use tauri::Manager;
+    let app = test_support::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    let registry = app.state::<DetachRegistry>();
+    registry.entries.insert("session-a".into(), entry("term-1", "One"));
+    tauri::async_runtime::block_on(release_terminal_window(registry.clone(), "session-a".to_string())).unwrap();
+    assert!(!registry.entries.contains_key("session-a"));
+}
+
+#[test]
+fn test_focus_terminal_window_present() {
+    use tauri::Manager;
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    let registry = app.state::<DetachRegistry>();
+    registry.entries.insert("session-a".into(), entry("term-1", "One"));
+    let window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    tauri::async_runtime::block_on(focus_terminal_window(app.handle().clone(), registry.clone(), "session-a".to_string())).unwrap();
+}
+
+#[test]
+fn test_reattach_terminal_present() {
+    use tauri::Manager;
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(DetachRegistry::new()));
+    let registry = app.state::<DetachRegistry>();
+    registry.entries.insert("session-a".into(), entry("term-1", "One"));
+    let window = tauri::WebviewWindowBuilder::new(&app, "term-1", tauri::WebviewUrl::App("index.html".into())).build().unwrap();
+    let res = tauri::async_runtime::block_on(reattach_terminal(app.handle().clone(), registry.clone(), "session-a".to_string())).unwrap();
+    assert!(res);
+}

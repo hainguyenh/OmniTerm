@@ -43,6 +43,15 @@ fn status_channel() -> (Channel<SessionStatus>, mpsc::Receiver<SessionStatus>) {
     (channel, rx)
 }
 
+#[test]
+fn ignores_kill_errors_for_sessions_that_already_exited() {
+    let missing = std::io::Error::from(std::io::ErrorKind::NotFound);
+    let other = std::io::Error::other("permission denied");
+
+    assert!(is_process_gone_error(&missing));
+    assert!(!is_process_gone_error(&other));
+}
+
 /// Runs a real, self-terminating shell command through the actual command — not a reimplementation
 /// of its spawn logic — and follows it through Ready, output, and Closed. This is the single largest
 /// uncovered function in the crate: `tests/common/mod.rs` deliberately mirrors this function's PTY

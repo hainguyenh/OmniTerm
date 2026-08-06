@@ -1,24 +1,6 @@
 import { useEffect } from 'react'
 import { matchShortcut } from '../utils/keyboard'
-
-const FALLBACK_SHORTCUTS: ShortcutBindings = {
-  zoomIn: 'Ctrl+=',
-  zoomOut: 'Ctrl+-',
-  zoomReset: 'Ctrl+0',
-  newSession: 'Ctrl+N',
-  newFolder: 'Ctrl+Shift+N',
-  openSettings: 'Ctrl+,',
-  toggleThemeMode: 'Ctrl+/',
-  layout1: 'Ctrl+1',
-  layout2: 'Ctrl+2',
-  layout3: 'Ctrl+3',
-  layout4: 'Ctrl+4',
-  layout6: 'Ctrl+6',
-  layout8: 'Ctrl+8',
-  toggleSidebar: 'Ctrl+B',
-  commandPalette: 'CommandOrControl+P',
-  closeTab: 'Ctrl+W',
-}
+import { resolveShortcuts, survivesTerminalFocus } from '../utils/shortcuts'
 
 const LAYOUT_KEYS = ['layout1', 'layout2', 'layout3', 'layout4', 'layout6', 'layout8'] as const
 
@@ -61,36 +43,40 @@ export function useAppShortcuts({
       persistZoom(clamped)
     }
 
-    // Layered so a saved-but-stale `shortcuts` object (missing a binding added after it was last
-    // written — the backend's settings merge is shallow) still resolves every key.
-    const s: ShortcutBindings = { ...FALLBACK_SHORTCUTS, ...(appSettings.shortcuts ?? {}) }
+    const s = resolveShortcuts(appSettings.shortcuts)
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement
       const inTerminal = active instanceof Element && !!active.closest('.xterm')
       const isInput = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && !inTerminal
 
-      if (matchShortcut(e, s.toggleThemeMode)) {
+      // A focused terminal wins the shell/agent's own control keys (Ctrl+W, Ctrl+B, Ctrl+N, Ctrl+P,
+      // Ctrl+/, Ctrl+,, …) back from the app chrome — only the zoom trio and any Ctrl+Shift/Alt combo
+      // (which never collides with a bare-Ctrl shell default) still fire while a pane has focus.
+      const matches = (key: keyof ShortcutBindings): boolean =>
+        matchShortcut(e, s[key]) && (!inTerminal || survivesTerminalFocus(key, s[key]))
+
+      if (matches('toggleThemeMode')) {
         e.preventDefault()
         setAppSettings({ ...appSettings, darkMode: !appSettings.darkMode })
         return
       }
 
-      if (matchShortcut(e, s.zoomIn)) {
+      if (matches('zoomIn')) {
         e.preventDefault()
         if (inTerminal) changeFontSize(1)
         else setZoom(getZoom() + ZOOM_STEP)
         return
       }
 
-      if (matchShortcut(e, s.zoomOut)) {
+      if (matches('zoomOut')) {
         e.preventDefault()
         if (inTerminal) changeFontSize(-1)
         else setZoom(getZoom() - ZOOM_STEP)
         return
       }
 
-      if (matchShortcut(e, s.zoomReset)) {
+      if (matches('zoomReset')) {
         e.preventDefault()
         setZoom(1.0)
         resetFontSize()
@@ -99,7 +85,7 @@ export function useAppShortcuts({
 
       if (isInput) return
 
-      if (matchShortcut(e, s.openSettings)) {
+      if (matches('openSettings')) {
         e.preventDefault()
         setSettingsOpen(true)
         return
@@ -111,7 +97,7 @@ export function useAppShortcuts({
       // layout to switch — the event would be silently meaningless there.
       if (!isDetached) {
         for (const key of LAYOUT_KEYS) {
-          if (matchShortcut(e, s[key])) {
+          if (matches(key)) {
             e.preventDefault()
             window.dispatchEvent(new CustomEvent('omniterm:change-layout', { detail: { mode: Number(key.slice(6)) } }))
             return
@@ -119,31 +105,31 @@ export function useAppShortcuts({
         }
       }
 
-      if (matchShortcut(e, s.toggleSidebar)) {
+      if (matches('toggleSidebar')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:toggle-sidebar'))
         return
       }
 
-      if (matchShortcut(e, s.newSession)) {
+      if (matches('newSession')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:new-session'))
         return
       }
 
-      if (matchShortcut(e, s.closeTab)) {
+      if (matches('closeTab')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:close-tab'))
         return
       }
 
-      if (matchShortcut(e, s.newFolder)) {
+      if (matches('newFolder')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:new-folder'))
         return
       }
 
-      if (matchShortcut(e, s.commandPalette)) {
+      if (matches('commandPalette')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:command-palette'))
         return

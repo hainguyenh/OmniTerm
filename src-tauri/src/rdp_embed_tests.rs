@@ -294,3 +294,27 @@ fn connect_rdp_rejects_non_rdp_connections() {
         .expect_err("Should reject non-RDP");
     assert!(error.contains("Not an RDP connection"));
 }
+
+#[test]
+fn rdp_disconnect_removes_session_and_cleans_up() {
+    use tauri::Manager;
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let manager = RdpSessionManager::new();
+    let handle = app.handle().clone();
+    
+    let cache = handle.path().app_cache_dir().unwrap();
+    fs::create_dir_all(&cache).unwrap();
+    let temp_file = cache.join(temp_file_name("c1", 100));
+    fs::write(&temp_file, "content").unwrap();
+    
+    manager.register("c1".to_string(), temp_file.clone());
+    assert!(app.manage(manager));
+    
+    tauri::async_runtime::block_on(rdp_disconnect(handle.clone(), "c1".to_string())).unwrap();
+    
+    // The file should be removed.
+    assert!(!temp_file.exists());
+    let _ = fs::remove_dir_all(&cache);
+}
+

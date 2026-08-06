@@ -13,19 +13,19 @@ import MetricsChips from './SessionMetricsChips'
 import SessionTabs from './SessionTabs'
 import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
-import { Columns2, ExternalLink, LayoutGrid, Loader2, Maximize2, Minimize2, Monitor, PanelLeft, RotateCw, Square, Terminal, Unplug } from 'lucide-react'
+import { Columns2, LayoutGrid, Loader2, Monitor, PanelLeft, RotateCw, Square, Terminal, Unplug } from 'lucide-react'
 import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
 import { paneIdentity } from '../paneIdentity'
 import { paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
-import { detachTitle } from '../detachControl'
+import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { Grid6Icon, Grid8Icon } from './mainLayoutShared'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, updateFontSize, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl } = model
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -99,6 +99,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
                 onNewSession={() => window.dispatchEvent(new Event('omniterm:new-session'))}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+                detachTabId={layoutMode === 1 ? activeTabId : null}
+                detachAction={layoutMode === 1 && activeTabId ? detachControl.stateOf(activeTabId) : null}
+                onToggleDetach={() => { if (activeTabId) detachControl.toggle(activeTabId) }}
                 onReveal={revealInWorkspace}
               />
             )}
@@ -161,9 +164,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             const activeConnId = activeTabs.find(t => t.id === activeTabId)?.connId
             const conn = connById(activeConnId)
             if (!conn) return null
-            const activeTarget = { id: activeTabId, connId: conn.id }
-            const activeAppearance = resolveAppearance?.(activeTabId, conn.id) ?? {}
-            const activeFontSize = activeAppearance.fontSize ?? appSettings.fontSize ?? 14
             const status = statuses[activeTabId] ?? 'connecting'
             // Latency source differs by type: RDP has its own TCP probe; SSH carries it in metrics.
             const resolvedLatency = conn.type === 'RDP'
@@ -224,32 +224,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 )}
   
                 <div className={`flex items-center gap-1.5 ${layoutMode > 1 ? 'ml-auto' : ''}`}>
-                  <div className="flex items-center gap-1 mr-1 rounded px-1 border border-theme-border/50 bg-black/10">
-                    <button type="button" onClick={() => onFontSizeChange ? onFontSizeChange(-1, activeTarget) : updateFontSize(-1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Decrease font size">-</button>
-                    <span className="w-4 text-center font-mono text-[9px] text-theme-fg">{activeFontSize}</span>
-                    <button type="button" onClick={() => onFontSizeChange ? onFontSizeChange(1, activeTarget) : updateFontSize(1)} className="w-4 h-4 flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors" title="Increase font size">+</button>
-                  </div>
-                  {/* Detach / attach for the active tab. The same control also sits on every pane
-                      header, so a background dock does not have to be activated first. */}
-                  {(() => {
-                    const action = detachControl.stateOf(activeTabId)
-                    if (!action) return null
-                    // RDP's "detach" is native fullscreen, which reads as maximize, not as pop-out.
-                    const Icon = action === 'attach' ? Minimize2 : conn.type === 'RDP' ? Maximize2 : ExternalLink
-                    const title = conn.type === 'RDP' && action === 'detach'
-                      ? 'Fullscreen (pop out)'
-                      : detachTitle(action, 'footer')
-                    return (
-                      <button
-                        onClick={() => detachControl.toggle(activeTabId)}
-                        className="inline-flex items-center justify-center w-6 h-6 rounded border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent transition-colors"
-                        title={title}
-                        aria-label={title}
-                      >
-                        <Icon className="w-3 h-3" />
-                      </button>
-                    )
-                  })()}
                   {status === 'closed' || status === 'error' ? (
                     <button
                       onClick={() => reconnectSession(activeTabId)}
@@ -397,6 +371,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     <TerminalView
                       key={`${tab.id}:${reconnectKeys[tab.id] ?? 0}`} id={tab.id} connection={conn!}
                       mode={resumeMode[tab.id] ? 'attach' : 'connect'}
+                      // A hidden pane keeps its layout box, so it can no longer infer this from its
+                      // own size — it has to be told. Drives focus and the scroll-tail restore.
+                      active={visible}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}
@@ -409,6 +386,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         ? (size) => onFontSizeChange(size - terminalFontSize, terminalTarget)
                         : undefined}
                       shortcuts={appSettings.shortcuts}
+                      enterModes={resolveEnterModes(appSettings)}
                       fontFamilyMono={appSettings.darkMode ? terminalTheme.ui.dark.fontFamilyMono : terminalTheme.ui.light.fontFamilyMono}
                     />
                   )
@@ -418,7 +396,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       onMouseDownCapture={() => { if (visible) setFocusedPane(paneIdx) }}
                       onDragOver={split ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
                       onDrop={split ? (e) => { e.preventDefault(); swapPanes(Number(e.dataTransfer.getData('text/plain')), paneIdx); setDragPane(null) } : undefined}
-                      className={`absolute ${visible ? '' : 'hidden'} ${split ? 'p-0.5' : ''}`}
+                      // `pane-offscreen`, not Tailwind's `hidden`: `display: none` destroys an
+                      // xterm pane's scroll position and forces a re-fit on every tab switch —
+                      // see the rule's own comment in index.css.
+                      className={`absolute ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''}`}
                       style={style}
                     >
                       <div

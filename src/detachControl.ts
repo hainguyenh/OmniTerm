@@ -45,7 +45,7 @@ export function detachAction({
 }
 
 /** Tooltip for the control, phrased for where it sits. */
-export function detachTitle(action: DetachAction, where: 'pane' | 'footer' | 'window'): string {
+export function detachTitle(action: DetachAction, where: 'pane' | 'tab' | 'footer' | 'window'): string {
   if (action === 'attach') {
     return where === 'window' ? 'Re-attach into the main window' : 'Attach back into this tab'
   }

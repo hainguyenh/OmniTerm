@@ -21,8 +21,9 @@ mod tests;
 #[cfg(all(test, unix))]
 #[path = "pty_io_tests.rs"]
 mod io_tests;
+use crate::pty_output_batch::OutputBatcher;
 use crate::pty_resolve::resolve_local_launch;
-use crate::session_output::{push_output, send_status, Output};
+use crate::session_output::{send_status, Output};
 use dashmap::DashMap;
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::{Deserialize, Serialize};
@@ -123,11 +124,7 @@ pub async fn start_local_session<R: Runtime>(
 
     let launch = resolve_local_launch(&app, &conn_id, shell).await?;
     let invocation = launch.invocation()?;
-    log::info!(
-        "[pty] starting session {id} ({} {:?})",
-        invocation.exe,
-        invocation.args
-    );
+    log::info!("[pty] starting session {id} ({} {:?})", invocation.exe, invocation.args);
 
     let pair = NativePtySystem::default()
         .openpty(PtySize {
@@ -148,6 +145,9 @@ pub async fn start_local_session<R: Runtime>(
     if let Some(path) = path_with_helper(&app) {
         cmd.env("PATH", path);
     }
+    // Agents/readline key capability detection off TERM.
+    cmd.env("TERM", "xterm-256color");
+    cmd.env("COLORTERM", "truecolor");
 
     let mut child = pair
         .slave
@@ -207,25 +207,30 @@ pub async fn start_local_session<R: Runtime>(
 
     let reader_output = Arc::clone(&output);
     let reader_task = tokio::task::spawn_blocking(move || {
+        // Reads are coalesced into fewer, larger IPC messages — see pty_output_batch.rs. One message
+        // per 4 KiB read saturated the renderer's event loop under an agent CLI's repaint traffic.
+        let batcher = OutputBatcher::spawn(Arc::clone(&reader_output));
         let mut reader = reader;
         let mut buf = [0u8; 4096];
+        let mut failure = None;
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 // Deliberately does not stop when the sink is dead — that is just a detached pane,
                 // and the bytes go to its replay buffer. Breaking (as this did when there was only
                 // ever one window) would kill a popped-out pane's output permanently.
-                Ok(n) => push_output(&reader_output, &buf[..n]),
+                Ok(n) => batcher.push(&buf[..n]),
                 Err(e) => {
-                    send_status(
-                        &reader_output,
-                        SessionStatus::Error {
-                            message: e.to_string(),
-                        },
-                    );
+                    failure = Some(e.to_string());
                     break;
                 }
             }
+        }
+        // Drained before the error is reported, so whatever the shell managed to write stays ahead of
+        // the message explaining why the stream ended.
+        batcher.finish();
+        if let Some(message) = failure {
+            send_status(&reader_output, SessionStatus::Error { message });
         }
     });
 
@@ -318,8 +323,8 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     drop(session);
 
     let outcome = match killer.lock() {
-        Ok(mut killer) => killer.kill().map_err(|e| e.to_string()),
-        Err(_) => Err("killer lock is poisoned".to_string()),
+        Ok(mut killer) => killer.kill(),
+        Err(_) => Err(std::io::Error::other("killer lock is poisoned")),
     };
     // `Err` here is not evidence of failure on Windows: portable-pty 0.8.1's `WinChildKiller::kill`
     // inverts the `TerminateProcess` return-code check, so a *successful* kill comes back as `Err`
@@ -327,7 +332,9 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     // tests/shell_integration.rs, which asserts the child really does die. The authoritative signal
     // is the reader task's `session-closed` emit, so this is logged rather than surfaced.
     if let Err(e) = outcome {
-        log::debug!("[pty] kill for session {id} reported: {e}");
+        if !is_process_gone_error(&e) {
+            log::debug!("[pty] kill for session {id} reported: {e}");
+        }
     }
 
     // Same orphan cleanup the natural-exit path does, so a disconnect does not leak descendants.
@@ -335,6 +342,12 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     if let Some(job) = job {
         job.terminate(1);
     }
+}
+
+/// A shell can exit between the detached window's close event and its cleanup call. Treat the
+/// resulting not-found error as successful cleanup; the session was already gone.
+fn is_process_gone_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::NotFound
 }
 
 #[tauri::command]

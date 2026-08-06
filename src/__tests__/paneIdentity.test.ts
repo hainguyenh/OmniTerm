@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PANE_IDENTITY, paneIdentity, withAlpha } from '../paneIdentity'
+import { PANE_IDENTITY, paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 
 describe('PANE_IDENTITY', () => {
   it('covers every pane of the largest layout', () => {
@@ -40,5 +40,13 @@ describe('withAlpha', () => {
   it('clamps out-of-range alphas rather than emitting invalid CSS', () => {
     expect(withAlpha('#7aa2f7', 5)).toBe('#7aa2f7ff')
     expect(withAlpha('#7aa2f7', -2)).toBe('#7aa2f700')
+  })
+})
+
+describe('paneSurfaceColor', () => {
+  it('uses matching focused and docked title tints', () => {
+    const identity = PANE_IDENTITY[0]
+    expect(paneSurfaceColor(identity, true)).toBe('#7aa2f72e')
+    expect(paneSurfaceColor(identity, false)).toBe('#7aa2f71a')
   })
 })

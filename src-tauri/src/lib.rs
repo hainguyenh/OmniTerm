@@ -18,6 +18,7 @@ pub mod launch;
 pub mod openshell;
 pub mod proc_activity;
 pub mod pty;
+pub mod pty_output_batch;
 pub mod pty_resolve;
 pub mod rdp_launch;
 pub mod session_activity;
@@ -71,7 +72,7 @@ pub fn run() {
             #[cfg(debug_assertions)]
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
-                    .level(log::LevelFilter::Info)
+                    .level(log::LevelFilter::Trace)
                     .build(),
             )?;
 

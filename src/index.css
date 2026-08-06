@@ -121,6 +121,41 @@ a {
   font-family: var(--theme-font-mono) !important;
 }
 
+/*
+ * A more specific override for terminal panes: xterm measures its character cell from the
+ * PER-PANE font (options.fontFamily, set in TerminalView.tsx), but the rule above forces every
+ * `.xterm *` onto the APP-WIDE `--theme-font-mono` (set in App.tsx from the app's own theme, not the
+ * pane's). When a pane's font differs from the app-wide one, xterm draws glyphs at the wrong advance
+ * width and characters overlap or bleed. Two class selectors beat one among `!important`
+ * declarations, so this wins without touching the rule above (which src/__tests__/styling.test.ts
+ * pins in place). `--pane-font-mono` is set by TerminalView's wrapper from the SAME string handed to
+ * `new Terminal({ fontFamily })`, so measurement and render can no longer drift apart.
+ */
+.terminal-pane .xterm,
+.terminal-pane .xterm * {
+  font-family: var(--pane-font-mono, var(--theme-font-mono)) !important;
+}
+
+/*
+ * A session that isn't in any currently visible pane. Deliberately NOT `display: none`.
+ *
+ * `display: none` collapses `.xterm-viewport` to scrollHeight 0, so the browser clamps its
+ * scrollTop to 0 — and xterm's viewport maps scrollTop back onto the buffer's scroll offset. A
+ * hidden pane receiving output therefore got dragged to the top of its scrollback, and re-showing
+ * it landed the user at the start of the session instead of at the live tail (very visible with an
+ * AI agent CLI generating continuously in a background tab). It also zeroed clientWidth/Height,
+ * which forced a re-fit — and, before the renderer became pane-scoped, a renderer reload — on every
+ * single tab switch: that was the white/black flash.
+ *
+ * `visibility: hidden` keeps the layout box, so clientWidth/Height stay real and xterm keeps both
+ * its cols/rows and its scroll position, while the browser still paints nothing.
+ */
+.pane-offscreen {
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateX(-200vw);
+}
+
 /* Dynamic border-radius overrides */
 .rounded-sm {
   border-radius: var(--theme-rounded-sm) !important;

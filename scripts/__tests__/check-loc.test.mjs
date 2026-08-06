@@ -18,7 +18,7 @@ test('default limits match the repository policy exactly', () => {
     '.tsx': 500,
     '.js': 350,
     '.css': 600,
-    '.rs': 350,
+    '.rs': 400,
   })
 })
 

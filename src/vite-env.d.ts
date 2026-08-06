@@ -61,6 +61,12 @@ interface AppSettings {
   excludedViewableExts?: string[]
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
+  /**
+   * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
+   * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).
+   */
+  shiftEnter?: 'esc-cr' | 'lf' | 'off'
+  ctrlEnter?: 'esc-cr' | 'lf' | 'off'
 }
 
 interface SessionMetrics {

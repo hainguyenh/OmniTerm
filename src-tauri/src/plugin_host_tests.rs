@@ -98,6 +98,7 @@ fn already_started_host_returns_without_touching_the_transport() {
     host.started.store(true, Ordering::SeqCst);
     block_on(host.start(app.handle())).unwrap();
     assert!(host.started.load(Ordering::SeqCst));
+    let _ = block_on(host.list_plugins());
 }
 
 #[test]
@@ -178,3 +179,54 @@ fn plugin_host_start_attempts_launch_when_dev_plugin_set() {
         None => std::env::remove_var("PATH"),
     }
 }
+
+#[test]
+fn plugin_host_starts_successfully_when_node_is_available() {
+    let _guard = test_support::lock();
+    let original_plugin = std::env::var_os("OMNITERM_DEV_PLUGIN");
+    let plugin = TempDir::new().unwrap();
+    std::env::set_var("OMNITERM_DEV_PLUGIN", plugin.path());
+
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+
+    let host = PluginHost::new();
+    block_on(host.start(&handle)).unwrap();
+
+    assert!(host.started.load(Ordering::SeqCst));
+    let _ = block_on(host.list_plugins());
+
+    match original_plugin {
+        Some(p) => std::env::set_var("OMNITERM_DEV_PLUGIN", p),
+        None => std::env::remove_var("OMNITERM_DEV_PLUGIN"),
+    }
+}
+
+#[test]
+fn plugin_host_start_fails_gracefully_when_node_is_missing() {
+    let _guard = test_support::lock();
+    let original_plugin = std::env::var_os("OMNITERM_DEV_PLUGIN");
+    let original_path = std::env::var_os("PATH");
+    let plugin = TempDir::new().unwrap();
+    std::env::set_var("OMNITERM_DEV_PLUGIN", plugin.path());
+    std::env::set_var("PATH", ""); // Remove Node from PATH
+
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+
+    let host = PluginHost::new();
+    block_on(host.start(&handle)).unwrap();
+
+    assert!(!host.started.load(Ordering::SeqCst));
+    let disabled = block_on(host.disabled_reason.lock()).clone();
+    assert!(disabled.unwrap().contains("Plugins need Node.js on your PATH."));
+
+    if let Some(p) = original_path {
+        std::env::set_var("PATH", p);
+    }
+    match original_plugin {
+        Some(p) => std::env::set_var("OMNITERM_DEV_PLUGIN", p),
+        None => std::env::remove_var("OMNITERM_DEV_PLUGIN"),
+    }
+}
+
