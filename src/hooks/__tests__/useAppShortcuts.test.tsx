@@ -258,4 +258,60 @@ describe('useAppShortcuts', () => {
     expect(persistZoom).not.toHaveBeenCalled()
     cleanup()
   })
+
+  // A focused terminal must win back the shell/agent's own bare-Ctrl control keys — previously only
+  // the zoom trio checked terminal focus, so Ctrl+W closed the tab instead of running a shell's
+  // delete-word, Ctrl+B toggled the sidebar instead of reaching a TUI, and so on.
+  describe('a focused terminal keeps its shell/agent control keys', () => {
+    it.each([
+      ['close-tab', 'w', 'omniterm:close-tab'],
+      ['toggle-sidebar', 'b', 'omniterm:toggle-sidebar'],
+      ['new-session', 'n', 'omniterm:new-session'],
+      ['command-palette', 'p', 'omniterm:command-palette'],
+    ] as const)('does not dispatch omniterm:%s on Ctrl+%s', (_label, letter, eventName) => {
+      const { cleanup } = setup('xterm')
+      const onEvent = vi.fn()
+      window.addEventListener(eventName, onEvent)
+      window.dispatchEvent(ctrlKey(letter))
+      expect(onEvent).not.toHaveBeenCalled()
+      window.removeEventListener(eventName, onEvent)
+      cleanup()
+    })
+
+    it('does not toggle dark mode on Ctrl+/', () => {
+      const setAppSettings = vi.fn()
+      const host = document.createElement('div')
+      host.className = 'xterm'
+      const btn = document.createElement('button')
+      host.appendChild(btn)
+      document.body.appendChild(host)
+      btn.focus()
+      renderHook(() => useAppShortcuts({
+        appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+      }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
+      expect(setAppSettings).not.toHaveBeenCalled()
+      host.remove()
+    })
+
+    it('still zooms the terminal on Ctrl+= / Ctrl+- / Ctrl+0', () => {
+      const { changeFontSize, resetFontSize, cleanup } = setup('xterm')
+      window.dispatchEvent(ctrlKey('='))
+      expect(changeFontSize).toHaveBeenCalledWith(1)
+      window.dispatchEvent(ctrlKey('0'))
+      expect(resetFontSize).toHaveBeenCalled()
+      cleanup()
+    })
+
+    it('still creates a new folder on Ctrl+Shift+N — Shift means it cannot collide with a shell default', () => {
+      const { cleanup } = setup('xterm')
+      const onFolder = vi.fn()
+      window.addEventListener('omniterm:new-folder', onFolder)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
+      expect(onFolder).toHaveBeenCalled()
+      window.removeEventListener('omniterm:new-folder', onFolder)
+      cleanup()
+    })
+  })
 })

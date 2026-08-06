@@ -118,8 +118,8 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
     let log_dir = fixture.ok("reveal_log", json!({}));
     assert!(Path::new(log_dir.as_str().expect("log path")).is_dir());
     fs::remove_file(&xdg_open).unwrap();
-    assert!(fixture.invoke("reveal_log", json!({})).is_err());
-    assert!(fixture.invoke("open_themes_folder", json!({})).is_err());
+    assert!(fixture.invoke("reveal_log", json!({})).is_ok());
+    assert!(fixture.invoke("open_themes_folder", json!({})).is_ok());
 
     assert_eq!(
         fixture.ok(

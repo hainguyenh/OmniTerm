@@ -1,11 +1,22 @@
 import React, { useEffect, useRef } from 'react'
-import { Terminal, ITheme } from '@xterm/xterm'
+import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import { matchShortcut } from '../utils/keyboard'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
+import { clipboardActionFor } from '../utils/paste'
+import { enterSequenceFor, EnterModes, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
+import { normalizeXtermTheme } from '../utils/xtermTheme'
+import { createCoalescer } from '../utils/coalesce'
+import { createWebglController } from '../utils/webglController'
+import { createSessionChannel } from '../utils/sessionChannel'
+import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
+import { createTerminalClipboard } from '../utils/terminalClipboard'
+import { attachTerminalStream } from '../utils/terminalStream'
 import '@xterm/xterm/css/xterm.css'
 import { Connection, SessionStatus } from './MainLayout'
 import { TerminalTheme, TOKYO_NIGHT } from '../themes'
-import { OutputHighlighter } from '../highlighter'
+
+export { DEFAULT_MONO_STACK }
 
 interface TerminalViewProps {
   id: string
@@ -24,6 +35,8 @@ interface TerminalViewProps {
    */
   onExit?: (code: number) => void
   theme?: TerminalTheme
+  /** Appearance hint passed to locally spawned CLI tools so their palette matches xterm. */
+  darkMode?: boolean
   fontSize?: number
   /** Client-side editor-style coloring of plain output (errors, numbers, paths…). */
   smartColors?: boolean
@@ -41,20 +54,37 @@ interface TerminalViewProps {
    * data WITHOUT reconnecting, so the underlying process is never duplicated.
    */
   mode?: 'connect' | 'attach'
+  /**
+   * Is this pane currently on screen? Panes not in a visible slot stay mounted (so their session
+   * keeps streaming) but are hidden with `visibility: hidden`, which — unlike `display: none` —
+   * leaves clientWidth/Height intact. That is what keeps xterm's scroll position and cell grid
+   * correct across a tab switch, and it is also why the pane's own geometry can no longer tell it
+   * whether it is visible: this prop is the signal instead. Defaults to true for owners with a
+   * single always-visible pane (DetachedTerminalWindow).
+   */
+  active?: boolean
   shortcuts?: ShortcutBindings
+  /**
+   * What Shift+Enter and Ctrl+Enter send. xterm collapses both to a bare `\r`, so AI agents cannot
+   * tell them from a plain Enter without the app injecting a sequence — see utils/enterKeys.ts.
+   */
+  enterModes?: EnterModes
 }
 
-/** Theme JSON allows '' for optional colors; xterm wants the key absent instead. */
-const toXtermTheme = (t: TerminalTheme): ITheme => {
-  const { selectionForeground, ...rest } = t
-  return selectionForeground ? { ...rest, selectionForeground } : rest
-}
-
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', shortcuts }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
   const safeFitRef = useRef<() => void>(() => {})
+  // Was the pane pinned to the live tail when it was last hidden? Re-showing scrolls back down only
+  // if it was — a user who had scrolled up to read history must not be yanked to the bottom.
+  const wasAtBottomRef = useRef(true)
+  const wasActiveRef = useRef(active)
+  // Set by the main effect. Lets the visibility effect keep this pane at the front of the shared
+  // WebGL budget without re-running the main effect.
+  const touchRendererRef = useRef<() => void>(() => {})
+  const activeRef = useRef(active)
+  activeRef.current = active
 
   // Read at write-time so the toggle applies to live sessions immediately.
   const smartColorsRef = useRef(smartColors)
@@ -76,10 +106,18 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const onFontSizeChangeRef = useRef(onFontSizeChange)
   onFontSizeChangeRef.current = onFontSizeChange
 
+  // The main effect's deps are [id, connection, mode], so its key handler closes over whatever these
+  // were at mount. Reading them through refs is the only way a settings change reaches a live pane.
+  const enterModesRef = useRef(enterModes)
+  enterModesRef.current = enterModes
+
+  const shortcutsRef = useRef(shortcuts)
+  shortcutsRef.current = shortcuts
+
   // Apply theme changes dynamically without recreating the terminal.
   useEffect(() => {
     if (termRef.current && theme) {
-      termRef.current.options.theme = toXtermTheme(theme)
+      termRef.current.options.theme = normalizeXtermTheme(theme)
     }
   }, [theme])
 
@@ -104,100 +142,101 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   useEffect(() => {
     if (!terminalRef.current) return
 
-    const term = new Terminal({
-      cursorBlink: true,
-      fontSize: fontSize ?? 14,
-      fontFamily: fontFamilyMono ?? '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace',
-      letterSpacing: 0,
-      lineHeight: 1.15,
-      theme: toXtermTheme(theme ?? TOKYO_NIGHT.terminal.dark),
-    })
+    const isLocal = connection.type === 'LOCAL'
+
+    const term = new Terminal(createTerminalOptions({
+      isLocal, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
+    }))
 
     termRef.current = term
 
-    // Channel adapter: SSH sessions talk to the ssh:* IPC, LOCAL (WSL/PowerShell/CMD)
-    // sessions to the local:* ConPTY IPC. Same streaming shape, so the rest of the
-    // terminal wiring is identical. Metrics are SSH-only.
-    const isLocal = connection.type === 'LOCAL'
-    const api = isLocal
-      ? {
-          // id is this instance's session key (unique per tab); connection.id is the saved
-          // connection to load settings from — they diverge when the same LOCAL connection
-          // is running as more than one independent instance (see MainLayout's activeTabs).
-          connect: () => window.omnitermAPI.connect.local(id, connection.id, connection.shell),
-          input: (d: string) => window.omnitermAPI.connect.localInput(id, d),
-          resize: (s: { cols: number; rows: number }) => window.omnitermAPI.connect.localResize(id, s),
-          onReady: (cb: (label?: string) => void) => window.omnitermAPI.connect.onLocalReady(id, cb),
-          onData: (cb: (data: Uint8Array) => void) => window.omnitermAPI.connect.onLocalData(id, cb),
-          onError: (cb: (err: string) => void) => window.omnitermAPI.connect.onLocalError(id, cb),
-          onClosed: (cb: (code?: number) => void) => window.omnitermAPI.connect.onLocalClosed(id, cb),
-        }
-      : {
-          connect: () => window.omnitermAPI.connect.ssh(id),
-          input: (d: string) => window.omnitermAPI.connect.sshInput(id, d),
-          resize: (s: { cols: number; rows: number }) => window.omnitermAPI.connect.sshResize(id, s),
-          onReady: (cb: (label?: string) => void) => window.omnitermAPI.connect.onSSHReady(id, () => cb()),
-          onData: (cb: (data: Uint8Array) => void) => window.omnitermAPI.connect.onSSHData(id, cb),
-          onError: (cb: (err: string) => void) => window.omnitermAPI.connect.onSSHError(id, cb),
-          // SSH reports no status of its own, so a closed channel is reported as a clean exit.
-          onClosed: (cb: (code?: number) => void) => window.omnitermAPI.connect.onSSHClosed(id, () => cb(0)),
-        }
+    const api = createSessionChannel(isLocal, id, connection.id, connection.shell, darkMode)
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
+    // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
+    // mis-measures wide glyphs, itself a source of garbled output.
+    term.loadAddon(new Unicode11Addon())
+    term.unicode.activeVersion = '11'
 
-    // Fit only when the container is actually visible with a real size.
-    // When a tab is hidden (display:none) clientWidth/Height are 0 and fit()
-    // would crash xterm's renderer ("Cannot read properties of undefined
-    // (reading 'dimensions')"). The ResizeObserver re-fits when the tab
-    // becomes visible or the window resizes.
-    // Keyboard focus follows visibility: `term.open()` does not focus, so a pane the user did not
-    // click into gets no keys at all — typing goes to the document and the shell never sees it, which
-    // is why a script sitting on `pause` looked frozen. Focusing on the hidden→visible edge covers
-    // both the first mount and every later tab switch, and cannot fight the user for focus while a
-    // pane is already up.
-    let wasHidden = true
+    // Not reloaded per visibility edge — rebuilding the texture atlas on each tab switch painted a
+    // flash. utils/webglPool.ts owns the context budget; loss/eviction retries on the next active
+    // fit. Loaded from `safeFit`, because the addon needs real dimensions.
+    const webglController = createWebglController(term)
+    touchRendererRef.current = webglController.touch
+
+    // Fit only when the container has a real size — before the first layout pass, and while a
+    // detached window is still being sized, clientWidth/Height are 0 and fit() would crash xterm's
+    // renderer. The ResizeObserver re-fits once real dimensions exist or the window resizes.
+    //
+    // This is NOT a visibility check any more: a hidden pane deliberately keeps its layout box (see
+    // the `active` prop), so geometry cannot distinguish "off screen" from "on screen". Focus is
+    // driven by `active` alone — deriving it from geometry here would let a pane that mounted while
+    // hidden steal focus from the visible one.
+    let wasUnsized = true
+    // Skip re-sending identical dimensions: a ConPTY resize is expensive and each one makes a
+    // full-screen TUI repaint, so a fit() that lands on the same cols/rows (e.g. a pixel-size change
+    // that didn't cross a cell boundary) must not trigger one.
+    let lastCols = -1
+    let lastRows = -1
+    let lastClientWidth = -1
+    let lastClientHeight = -1
     const safeFit = () => {
       const el = terminalRef.current
       if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
-        wasHidden = true
+        wasUnsized = true
         return
       }
-      if (wasHidden) {
-        wasHidden = false
-        term.focus()
+
+      const pixelSizeChanged = el.clientWidth !== lastClientWidth || el.clientHeight !== lastClientHeight
+      lastClientWidth = el.clientWidth
+      lastClientHeight = el.clientHeight
+
+      if (wasUnsized) {
+        wasUnsized = false
+        // First real dimensions: the renderer can measure a cell now.
       }
+      if (activeRef.current) webglController.load()
       try {
         fitAddon.fit()
-        api.resize({ cols: term.cols, rows: term.rows })
+        if (term.cols !== lastCols || term.rows !== lastRows) {
+          lastCols = term.cols
+          lastRows = term.rows
+          api.resize({ cols: term.cols, rows: term.rows })
+          return
+        }
+        // Only the case the resize above did NOT cover: the pixel size changed but cols/rows didn't,
+        // so nothing downstream repaints on its own. A cols/rows change already triggers a full
+        // repaint via term.resize(), and repainting twice per drag-resize frame — which is what this
+        // did unconditionally, alongside a clearTextureAtlas() that threw away every cached glyph —
+        // is the lag. Never synthesize a keystroke to force a repaint either: it would corrupt the
+        // agent's own input state.
+        if (pixelSizeChanged) {
+          term.refresh(0, term.rows - 1)
+        }
       } catch {
         /* terminal not ready / not visible yet — ignore */
       }
     }
     safeFitRef.current = safeFit
+    // Coalesces a drag-resize's burst of ResizeObserver callbacks into one settled fit — see coalesce.ts.
+    const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
       api.input(data)
     })
 
-    // ── Clipboard ──────────────────────────────────────────
-    // Selecting text auto-copies it; right-click pastes. Ctrl+Shift+C / Ctrl+Shift+V
-    // also work. Plain Ctrl+C is NOT intercepted so it still sends SIGINT.
-    const selectionDisposable = term.onSelectionChange(() => {
-      const sel = term.getSelection()
-      if (sel) window.omnitermAPI.clipboard.writeText(sel)
-    })
-
-    const pasteFromClipboard = async () => {
-      const text = await window.omnitermAPI.clipboard.readText()
-      if (text) api.input(text)
-    }
+    // Selection auto-copy + paste. The key bindings that reach these live in the handler below.
+    // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
+    // which cannot be created until this pane's fit/resize plumbing is in place.
+    let noteLocalEcho = () => {}
+    const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
 
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
       term.focus()
-      void pasteFromClipboard()
+      void clipboard.paste()
     }
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
@@ -212,6 +251,34 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
 
+    // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
+    // resize event, so xterm's cached char measurement goes stale — part of why detaching a window
+    // "fixes" a garbled pane, since remounting re-measures fresh. Toggling `fontFamily` forces the
+    // same re-measure publicly: its option setter skips the work when the value doesn't change.
+    //
+    // Coalesced, because a re-measure re-rasterizes every glyph: holding Ctrl+wheel fires one zoom
+    // step per notch, and doing this on each one is the same kind of thrash the ResizeObserver had.
+    const remeasureCoalescer = createCoalescer(() => {
+      const family = term.options.fontFamily
+      term.options.fontFamily = `${family} `
+      term.options.fontFamily = family
+      safeFit()
+    }, 70)
+    const onZoomChanged = () => remeasureCoalescer.schedule()
+    window.addEventListener('omniterm:zoom-changed', onZoomChanged)
+
+    // Fonts loaded asynchronously (like Cascadia Code) cause xterm to initially measure characters
+    // using a fallback font. When the real font finally paints, the canvas grid size doesn't match
+    // the text size, causing overlapped and fragmented text until a resize forces a remeasure.
+    let fontsReady = false
+    document.fonts?.ready?.then(() => {
+      if (!fontsReady) {
+        fontsReady = true
+        remeasureCoalescer.schedule()
+      }
+    })
+
+
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
@@ -224,182 +291,137 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         const newSize = e.deltaY > 0 ? Math.max(8, currentSize - 1) : Math.min(48, currentSize + 1)
         if (newSize !== currentSize) {
           term.options.fontSize = newSize
-          try { fitAddon.fit() } catch (e) { /* ignore */ }
+          // safeFit, not a bare fitAddon.fit(): without the follow-up api.resize() the PTY kept the
+          // pre-zoom cols/rows, and a full-screen TUI drew frames for a grid that no longer existed.
+          safeFit()
           onFontSizeChangeRef.current?.(newSize)
         }
       }
     }
     termEl.addEventListener('wheel', handleWheel, { passive: false })
 
+    const isMac = window.omnitermAPI.app.platform === 'darwin'
+
     term.attachCustomKeyEventHandler(e => {
       if (e.type !== 'keydown') return true
-      
-      // Allow app-level shortcuts to bubble up
-      const s = shortcuts || {
-        zoomIn: 'Ctrl+=',
-        zoomOut: 'Ctrl+-',
-        zoomReset: 'Ctrl+0',
-        newSession: 'Ctrl+N',
-        newFolder: 'Ctrl+Shift+N',
-        openSettings: 'Ctrl+,',
-        toggleThemeMode: 'Ctrl+/',
-        layout1: 'Ctrl+1',
-        layout2: 'Ctrl+2',
-        layout3: 'Ctrl+3',
-        layout4: 'Ctrl+4',
-        layout6: 'Ctrl+6',
-        layout8: 'Ctrl+8',
-        toggleSidebar: 'Ctrl+B',
-        commandPalette: 'CommandOrControl+P',
-        closeTab: 'Ctrl+W'
+
+      // Claimed FIRST so no user binding can shadow it, always with preventDefault() — otherwise
+      // Chromium's native paste fires on top of ours and the PTY gets the clipboard twice (paste.ts).
+      const clip = clipboardActionFor(e, isMac)
+      if (clip) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (clip === 'paste') void clipboard.paste()
+        else clipboard.copySelection()
+        return false
       }
-      const isAppShortcut = Object.values(s).some(shortcut => shortcut && matchShortcut(e, shortcut))
-      if (isAppShortcut) {
+
+      // ── Modifier+Enter ─────────────────────────────────────
+      // Also before the shortcut check: xterm would otherwise flatten these to a plain `\r`.
+      // `term.input` (not api.input) so the viewport scrolls to the bottom like real typing.
+      const seq = enterSequenceFor(e, enterModesRef.current ?? DEFAULT_ENTER_MODES)
+      if (seq !== null) {
+        e.preventDefault()
+        term.input(seq)
+        return false
+      }
+
+      // Let app-level shortcuts bubble up to the window handler — EXCEPT the ones that survive
+      // terminal focus (the zoom trio, and any Ctrl+Shift/Alt combo), which stay xterm's business so
+      // the shell/agent underneath keeps its own Ctrl+W / Ctrl+B / Ctrl+N / Ctrl+P / Ctrl+/ / Ctrl+,.
+      // Reads the same table `useAppShortcuts` matches against (utils/shortcuts.ts) so the two sides
+      // cannot disagree about what counts as a chrome shortcut.
+      const s = resolveShortcuts(shortcutsRef.current)
+      if (matchesChromeShortcut(e, s, { inTerminal: true })) {
         return false // Don't let xterm swallow it; let it bubble to window keydown
       }
 
-      // Ctrl+Shift+C — copy selection (plain Ctrl+C stays SIGINT)
-      if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === 'KeyC') {
-        const sel = term.getSelection()
-        if (sel) window.omnitermAPI.clipboard.writeText(sel)
-        return false
-      }
-      // Ctrl+Shift+V — paste
-      if (e.ctrlKey && e.shiftKey && !e.altKey && e.code === 'KeyV') {
-        void pasteFromClipboard()
-        return false
-      }
       return true
     })
 
-    // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell
-    // behind it can take much longer to actually produce a prompt — a cold WSL VM boot in
-    // particular can take several seconds of total silence. Keep the 'connecting' status
-    // (and its loading overlay) up until the first real output arrives, instead of flipping
-    // to 'connected' on the handshake and leaving the pane looking blank the whole time.
-    // SSH's shell channel reliably sends a prompt/MOTD immediately, so it keeps the old
-    // ready-is-connected behavior.
-    let sawFirstData = !isLocal
-
-    const cleanupReady = api.onReady((label?: string) => {
-      if (!isLocal) onStatusRef.current?.('connected')
-      const banner = isLocal
-        ? (label ?? 'Local shell')
-        : 'Connected to ' + connection.host
-      term.write('\r\n\x1b[32m' + banner + '\x1b[0m\r\n')
-      safeFit()
+    // Status + output + exit + the two side channels, and the connect-or-attach kickoff. See
+    // utils/terminalStream.ts — the byte path lives there because none of it is React's business.
+    const stream = attachTerminalStream({
+      term, api, id, isLocal, host: connection.host, mode,
+      onStatus: (s) => onStatusRef.current?.(s),
+      onExit: (code) => onExitRef.current?.(code),
+      onMetrics: (m) => onMetricsRef.current?.(m),
+      onActivity: (busy) => onActivityRef.current?.(busy),
+      smartColors: () => smartColorsRef.current === true,
+      refit: () => safeFit(),
+      isCurrent: () => termRef.current === term,
     })
+    noteLocalEcho = stream.noteLocalEcho
 
-    // Stream pipeline: bytes → UTF-8 text (streaming decoder handles chunk-split
-    // multibyte chars) → optional smart coloring → terminal. The highlighter
-    // always sees the text so its escape-sequence state stays in sync even
-    // while the toggle is off.
-    const decoder = new TextDecoder('utf-8')
-    const highlighter = new OutputHighlighter()
-    const cleanupData = api.onData((data: Uint8Array) => {
-      if (!sawFirstData) {
-        sawFirstData = true
-        onStatusRef.current?.('connected')
-      }
-      const text = decoder.decode(data, { stream: true })
-      term.write(highlighter.transform(text, smartColorsRef.current !== false))
-    })
-
-    const cleanupError = api.onError((err: string) => {
-      onStatusRef.current?.('error')
-      term.write('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
-    })
-
-    // The session is over: the shell is gone, so keystrokes have nowhere to go. Retire the pane's
-    // input instead of leaving a blinking cursor that reads as a live prompt — a pane sitting on a
-    // finished script's `pause` looked identical to one that had frozen, and every key typed into it
-    // was silently dropped by the backend ("Session not found").
-    const markExited = (code?: number) => {
-      term.options.cursorBlink = false
-      term.options.disableStdin = true
-      term.write(code === undefined
-        ? '\r\n\x1b[33mConnection closed\x1b[0m\r\n'
-        : `\r\n\x1b[33mConnection closed (exit code ${code})\x1b[0m\r\n`)
-    }
-
-    const cleanupClosed = api.onClosed((code?: number) => {
-      onStatusRef.current?.('closed')
-      markExited(code)
-      onExitRef.current?.(code ?? 0)
-    })
-
-    // Metrics (latency + remote CPU/RAM/disk) are SSH-only; local shells have no remote host.
-    const cleanupMetrics = isLocal
-      ? () => {}
-      : window.omnitermAPI.connect.onSessionMetrics(id, (m) => {
-          onMetricsRef.current?.(m)
-        })
-
-    // Busy/idle is the mirror image: local-only, since it is the host's process tree being watched.
-    const cleanupActivity = isLocal
-      ? window.omnitermAPI.connect.onLocalActivity(id, (busy) => { onActivityRef.current?.(busy) })
-      : () => {}
-
-    // Start (or attach to) the session. All output listeners are registered above FIRST, so
-    // attach's replay + live subscription can't miss bytes emitted between the two.
-    if (mode === 'attach') {
-      // Bind to the existing main-process session: replay its buffer and restore its status,
-      // never reconnect. The main process only resumes live delivery once resume() is called,
-      // so nothing streams before this subscription exists.
-      onStatusRef.current?.('connecting')
-      void window.omnitermAPI.terminalWindow.resume(id).then((snapshot) => {
-        if (termRef.current !== term) return  // effect torn down while awaiting
-        if (!snapshot) {
-          onStatusRef.current?.('error')
-          term.write('\r\n\x1b[31mError: session is no longer available\x1b[0m\r\n')
-          return
-        }
-        if (snapshot.data && snapshot.data.length > 0) {
-          sawFirstData = true
-          const text = decoder.decode(snapshot.data, { stream: true })
-          term.write(highlighter.transform(text, smartColorsRef.current !== false))
-        }
-        if (snapshot.status === 'ready') onStatusRef.current?.('connected')
-        else if (snapshot.status === 'error') {
-          onStatusRef.current?.('error')
-          if (snapshot.error) term.write('\r\n\x1b[31mError: ' + snapshot.error + '\x1b[0m\r\n')
-        } else if (snapshot.status === 'closed') {
-          onStatusRef.current?.('closed')
-          markExited()
-        }
-        safeFit()
-      })
-    } else {
-      onStatusRef.current?.('connecting')
-      api.connect()
-    }
-
-    const ro = new ResizeObserver(() => safeFit())
+    // Coalesced (not raw safeFit): a drag-resize fires this on every intermediate frame, and
+    // fitting/resizing on each one is itself a source of TUI frame corruption.
+    const ro = new ResizeObserver(() => fitCoalescer.schedule())
     ro.observe(terminalRef.current)
-    // Defer the first fit until after layout so dimensions are valid.
+    // Defer the first fit until after layout so dimensions are valid. Immediate, not coalesced —
+    // there's nothing to collapse a burst with yet.
     const raf = requestAnimationFrame(safeFit)
 
     return () => {
       cancelAnimationFrame(raf)
+      fitCoalescer.cancel()
+      remeasureCoalescer.cancel()
       ro.disconnect()
-      selectionDisposable.dispose()
+      clipboard.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
       termEl.removeEventListener('wheel', handleWheel)
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
-      cleanupReady()
-      cleanupData()
-      cleanupError()
-      cleanupClosed()
-      cleanupMetrics()
-      cleanupActivity()
+      window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
+      stream.dispose()
       safeFitRef.current = () => {}
+      touchRendererRef.current = () => {}
       termRef.current = null
+      webglController.unload()
       term.dispose()
     }
   }, [id, connection, mode])
 
+  // Visibility edges. Declared after the main effect so `termRef` is already populated on mount.
+  //
+  // Focus follows visibility: `term.open()` does not focus, so a pane the user switched to rather
+  // than clicked into would get no keys (a script sitting on `pause` looked frozen). Geometry used
+  // to stand in for this signal, but a hidden pane now keeps its real size on purpose — see the
+  // `active` prop.
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    const buffer = term.buffer?.active
+    const becameActive = active && !wasActiveRef.current
+    wasActiveRef.current = active
+    if (!active) {
+      if (buffer) wasAtBottomRef.current = buffer.viewportY >= buffer.baseY
+      return
+    }
+    term.focus()
+    // The pane the user is looking at must be the last to lose hardware rendering.
+    touchRendererRef.current()
+    if (becameActive) safeFitRef.current()
+    // Belt and braces for the scroll bug the `.pane-offscreen` rule fixes: even if some future
+    // change collapses the pane again, a tab the user left at the live tail comes back to it.
+    if (wasAtBottomRef.current) term.scrollToBottom?.()
+  }, [active])
+
   return (
-    <div className="h-full w-full p-2" style={{ background: theme?.background ?? '#1a1b26' }}>
+    <div
+      className="terminal-pane h-full w-full"
+      style={{
+        background: theme?.background ?? '#1a1b26',
+        // Reads the same token the removed `.p-2` class did, but as an inline style: `.p-2` is a
+        // shared utility class used all over the app's chrome, and `fitAddon.fit()` measures this
+        // exact box, so tying its padding to a class meant for unrelated elements is fragile — a
+        // future change to that shared rule would silently resize every terminal pane along with it.
+        padding: 'var(--theme-padding-sm)',
+        // index.css scopes `.xterm *`'s font-family to this variable (falling back to the app-wide
+        // one) so xterm always measures cells with the SAME font it renders with. Kept in sync with
+        // the literal handed to `new Terminal({ fontFamily })` above via DEFAULT_MONO_STACK — letting
+        // those two drift is what caused glyphs to be measured at one width and drawn at another.
+        '--pane-font-mono': fontFamilyMono ?? DEFAULT_MONO_STACK,
+      } as React.CSSProperties}
+    >
       <div ref={terminalRef} className="h-full w-full" />
     </div>
   )

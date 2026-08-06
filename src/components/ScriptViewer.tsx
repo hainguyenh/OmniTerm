@@ -146,9 +146,12 @@ const ScriptViewer: React.FC<ScriptViewerProps> = ({ workspaceId, script, onClos
     }
   }, [dirty, saving, workspaceId, script.path, content])
 
-  // Ctrl/Cmd+S saves while editing.
+  // Ctrl/Cmd+S saves while editing. Document-wide, so without the terminal-focus guard it stole
+  // Ctrl+S from a focused terminal pane any time an editor tab happened to be open elsewhere.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const active = document.activeElement
+      if (active instanceof Element && active.closest('.xterm')) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault()
         if (mode === 'edit') void save()

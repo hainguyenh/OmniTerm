@@ -1,8 +1,9 @@
 import React from 'react'
-import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate } from 'lucide-react'
+import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate, ExternalLink, Minimize2 } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { activityDot, tabClasses, tabPlacement, tabTitle, PLACEMENT_STRIPE, type TabFlags } from '../tabVisuals'
-import { paneIdentity, withAlpha } from '../paneIdentity'
+import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
+import { detachTitle, type DetachAction } from '../detachControl'
 
 /**
  * The session tab strip.
@@ -48,6 +49,10 @@ interface SessionTabsProps {
   onContextMenu: (e: React.MouseEvent, tabId: string) => void
   onNewSession: () => void
   onPickShell: (rect: DOMRect) => void
+  /** Single-view detach control is shown only on the active terminal tab. */
+  detachTabId?: string | null
+  detachAction?: DetachAction | null
+  onToggleDetach?: () => void
   /**
    * Reveal this editor tab's file in the Workspace tree (expand its folders, scroll to it, flash a
    * highlight). Only ever called for a file tab that is also the focused pane's tab — see the
@@ -59,7 +64,8 @@ interface SessionTabsProps {
 const SessionTabs: React.FC<SessionTabsProps> = ({
   tabs, panes, layoutMode, focusedPane, statuses, activity,
   isEditor, isPreview, isEphemeral, connType,
-  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, onReveal,
+  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, detachTabId, detachAction,
+  onToggleDetach, onReveal,
 }) => (
   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
     {tabs.map(tab => {
@@ -97,7 +103,12 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
           onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
           onContextMenu={(e) => onContextMenu(e, tab.id)}
           title={tabTitle(tab.name, placement, paneIdx, layoutMode, flags, identity?.label)}
-          style={identity ? { borderColor: hue } : undefined}
+          style={identity
+            ? {
+                borderColor: hue,
+                backgroundColor: paneSurfaceColor(identity, placement === 'focused'),
+              }
+            : undefined}
           className={`group relative flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded cursor-pointer
             border transition-colors flex-shrink-0 select-none max-w-[180px] ${tabClasses(placement, flags)}`}
         >
@@ -143,6 +154,17 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
               title="Reveal in workspace tree"
             >
               <Locate className="w-3 h-3" />
+            </button>
+          )}
+          {tab.id === detachTabId && detachAction && onToggleDetach && (
+            <button
+              onClick={e => { e.stopPropagation(); onToggleDetach() }}
+              className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
+                hover:text-theme-accent hover:bg-theme-popup transition-colors"
+              title={detachTitle(detachAction, 'tab')}
+              aria-label={detachTitle(detachAction, 'tab')}
+            >
+              {detachAction === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
             </button>
           )}
           <button

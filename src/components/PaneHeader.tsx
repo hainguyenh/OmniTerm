@@ -2,7 +2,7 @@ import React from 'react'
 import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Minimize2 } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { STATUS_DOT } from '../tabVisuals'
-import { paneIdentity, withAlpha } from '../paneIdentity'
+import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 import { detachTitle, type DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import AppearanceMenu from './AppearanceMenu'
@@ -43,6 +43,8 @@ interface PaneHeaderProps {
   onTogglePicker: () => void
   onAssign: (tabId: string) => void
   onClear: () => void
+  /** Close this pane's session tab, using the main layout's normal confirmation policy. */
+  onClose?: () => void
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
   appearance?: {
     themes: AppTheme[]
@@ -57,7 +59,7 @@ interface PaneHeaderProps {
 const PaneHeader: React.FC<PaneHeaderProps> = ({
   paneIndex, conn, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, appearance,
+  onAssign, onClear, onClose, appearance,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -76,6 +78,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         className={`h-6 flex items-center gap-1.5 px-2 text-[11px] select-none ${conn ? 'cursor-grab active:cursor-grabbing' : ''} ${
           focused ? 'bg-theme-bg text-theme-fg' : 'bg-theme-sidebar text-theme-dim'
         }`}
+        style={conn ? { backgroundColor: paneSurfaceColor(identity, focused) } : undefined}
         title={conn ? `Pane ${paneIndex + 1} · ${identity.label} — drag to move this session to another pane` : `Pane ${paneIndex + 1} · ${identity.label}`}
       >
         <span className="flex items-center gap-1 flex-shrink-0">
@@ -116,6 +119,17 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               aria-label={detachTitle(detach, 'pane')}
             >
               {detach === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+            </button>
+          )}
+          {conn && sessionId && onClose && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClose() }}
+              className="ml-1 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-theme-error/20 hover:text-theme-error transition-colors"
+              title="Close pane"
+              aria-label="Close pane"
+            >
+              <X className="w-3 h-3" />
             </button>
           )}
           <button

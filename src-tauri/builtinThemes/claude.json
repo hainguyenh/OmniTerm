@@ -24,7 +24,7 @@
       "brightBlue": "#e28766",
       "brightMagenta": "#d5bbf8",
       "brightCyan": "#7fd3c2",
-      "brightWhite": "#181816"
+      "brightWhite": "#f5f3ed"
     },
     "light": {
       "background": "#faf9f5",
@@ -48,7 +48,7 @@
       "brightBlue": "#cc785c",
       "brightMagenta": "#bb9af7",
       "brightCyan": "#5db8a6",
-      "brightWhite": "#faf9f5"
+      "brightWhite": "#f0ece2"
     }
   },
   "ui": {

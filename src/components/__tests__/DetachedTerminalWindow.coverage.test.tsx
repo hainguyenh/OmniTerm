@@ -26,7 +26,12 @@ vi.mock('../AppearanceMenu', () => ({
 const connection = {
   id: 'ssh-1', name: 'Server', type: 'SSH' as const, host: 'server.test', port: 22, username: 'dev',
 }
-const otherTheme = { ...TOKYO_NIGHT, id: 'other', name: 'Other' }
+const otherTheme = {
+  ...TOKYO_NIGHT,
+  id: 'other',
+  name: 'Other',
+  terminal: { ...TOKYO_NIGHT.terminal, dark: { ...TOKYO_NIGHT.terminal.dark, background: '#010203' } },
+}
 const baseSettings: AppSettings = {
   themeId: TOKYO_NIGHT.id, fontSize: 14, smartColors: true, checkUpdatesOnStartup: true,
   darkMode: true, zoomFactor: 1.25, perConn: { 'ssh-1': { fontSize: 18 } }, shortcuts: {} as ShortcutBindings,
@@ -44,19 +49,20 @@ describe('DetachedTerminalWindow', () => {
     const minimize = vi.fn(async () => {})
     const toggleMaximize = vi.fn(async () => {})
     const close = vi.fn(async () => {})
-    const setZoomFactor = vi.fn()
     mockOmnitermAPI({
       terminalWindow: { bootstrap: vi.fn(async () => ({ sessionId: 'session-1', name: 'Server tab', connection })), reattach },
-      settings: { save }, app: { setZoomFactor }, windowControl: { minimize, toggleMaximize, close },
+      settings: { save }, windowControl: { minimize, toggleMaximize, close },
     })
 
     render(<DetachedTerminalWindow appSettings={baseSettings} setAppSettings={setAppSettings}
       themes={[TOKYO_NIGHT, otherTheme]} smartColors />)
     await waitFor(() => expect(screen.getByTestId('terminal')).toHaveTextContent('session-1:attach:18'))
     expect(screen.getByText('Server tab')).toBeInTheDocument()
-    expect(setZoomFactor).toHaveBeenCalledWith(1.25)
     expect(terminalProps.connection).toEqual(connection)
     expect(terminalProps.smartColors).toBe(true)
+
+    act(() => terminalProps.onExit(0))
+    expect(close).toHaveBeenCalledOnce()
 
     act(() => terminalProps.onStatus('connected'))
     expect(screen.getByText('Connected')).toBeInTheDocument()
@@ -99,6 +105,24 @@ describe('DetachedTerminalWindow', () => {
     await waitFor(() => expect(screen.getByTestId('terminal')).toHaveTextContent('local:attach:16'))
     expect(terminalProps.theme).toEqual(TOKYO_NIGHT.terminal.light)
     expect(terminalProps.fontFamilyMono).toBe(TOKYO_NIGHT.ui.light.fontFamilyMono)
+  })
+
+  it('updates terminal theme when shared connection appearance changes', async () => {
+    const settings = { ...baseSettings, perConn: undefined }
+    mockOmnitermAPI({
+      terminalWindow: { bootstrap: vi.fn(async () => ({ sessionId: 'session-1', name: 'Server tab', connection })) },
+    })
+    const { rerender } = render(
+      <DetachedTerminalWindow appSettings={settings} setAppSettings={vi.fn()}
+        themes={[TOKYO_NIGHT, otherTheme]} smartColors />,
+    )
+    await waitFor(() => expect(screen.getByTestId('terminal')).toHaveTextContent('session-1:attach:14'))
+    rerender(
+      <DetachedTerminalWindow appSettings={{ ...settings, perConn: { 'ssh-1': { themeId: 'other' } } }} setAppSettings={vi.fn()}
+        themes={[TOKYO_NIGHT, otherTheme]} smartColors />,
+    )
+    await waitFor(() => expect(screen.getByTestId('terminal')).toHaveTextContent('session-1:attach:14'))
+    expect(terminalProps.theme?.background).toBe('#010203')
   })
 
   it.each([

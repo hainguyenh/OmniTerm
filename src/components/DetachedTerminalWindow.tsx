@@ -5,6 +5,8 @@ import AppearanceMenu from './AppearanceMenu'
 import type { Connection, SessionStatus } from './MainLayout'
 import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
+import { closesOnExit } from '../sessionExit'
+import { resolveEnterModes } from '../utils/enterKeys'
 
 interface DetachedTerminalWindowProps {
   appSettings: AppSettings
@@ -45,35 +47,21 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [meta, setMeta] = useState<Meta | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
-  // In-window appearance overrides, seeded from the connection's persisted defaults once the
-  // session is known. Written through `appSettings.perConn` so they survive a pop-out.
-  const [override, setOverride] = useState<TerminalAppearance | null>(null)
-
-  // Inherit the main window's zoom on open, and stay in sync if it changes while this is popped out
-  // (settings.onChanged already re-reads `appSettings` for the caller — see App.tsx).
-  useEffect(() => {
-    window.omnitermAPI.app.setZoomFactor?.(appSettings.zoomFactor ?? 1)
-  }, [appSettings.zoomFactor])
-
   useEffect(() => {
     window.omnitermAPI.terminalWindow.bootstrap().then((m) => {
       if (m?.sessionId) {
         setMeta(m as Meta)
-        const connId = (m as Meta).connection?.id
-        setOverride(connId ? appSettings.perConn?.[connId] ?? {} : {})
       } else {
         setMissing(true)
       }
     }).catch(() => setMissing(true))
   }, [])
 
-  // Effective look of THIS window: in-window overrides over the connection's persisted defaults,
-  // falling back to the app-wide settings. The chrome keeps the app-wide theme via CSS variables —
-  // same as split panes in the main window.
+  // Effective look of THIS window: the connection's persisted appearance over app defaults. The
+  // settings listener in App.tsx refreshes this source when the main window changes it.
   const connId = meta?.connection?.id
   const effective: TerminalAppearance = {
     ...(connId ? (appSettings.perConn?.[connId] ?? {}) : {}),
-    ...(override ?? {}),
   }
   const themeId = effective.themeId ?? appSettings.themeId
   const fontSize = effective.fontSize ?? appSettings.fontSize ?? 14
@@ -87,7 +75,6 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
 
   const saveAppearance = (patch: TerminalAppearance) => {
     const nextOverride = { ...effective, ...patch }
-    setOverride(nextOverride)
     if (!connId) return
     const nextSettings = {
       ...appSettings,
@@ -173,6 +160,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             smartColors={smartColors}
             fontFamilyMono={fontFamilyMono}
             shortcuts={appSettings.shortcuts}
+            enterModes={resolveEnterModes(appSettings)}
+            onExit={(code) => { if (closesOnExit(meta.connection, code)) window.omnitermAPI.windowControl.close() }}
             onFontSizeChange={(size) => saveAppearance({ fontSize: size })}
           />
         ) : (

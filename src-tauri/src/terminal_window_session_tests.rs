@@ -84,6 +84,7 @@ fn happy_paths_through_a_real_session_and_a_real_mock_window() {
         session_id.clone(),
         "adhoc-terminal-window".to_string(),
         None,
+        None,
         discarding_channel(),
         ready_status,
     ))

@@ -11,8 +11,8 @@ import { PaneResizers } from '../PaneResizers'
 import WaitingPane from '../WaitingPane'
 
 vi.mock('../../assets/defaultArt', () => ({
-  DefaultLoadingArt: ({ dark }: any) => <div data-testid="loading-art">{String(dark)}</div>,
-  DefaultIdleArt: ({ dark }: any) => <div data-testid="idle-art">{String(dark)}</div>,
+  DefaultLoadingArt: ({ dark }: any) => <div data-testid="loading-art-content">{String(dark)}</div>,
+  DefaultIdleArt: ({ dark }: any) => <div data-testid="idle-art-content">{String(dark)}</div>,
 }))
 
 describe('small UI shells', () => {
@@ -53,6 +53,7 @@ describe('small UI shells', () => {
     expect(screen.getByText('Starting shell')).toBeInTheDocument()
     rerender(<ConnectingOverlay dark={false} customArtUrl="blob:custom" />)
     expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:custom')
+    expect(screen.getByTestId('loading-art')).toHaveStyle({ transform: 'scale(2)' })
     expect(screen.getByText('Connecting…')).toBeInTheDocument()
   })
 
@@ -67,6 +68,7 @@ describe('small UI shells', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 2, bottom: 9 } as DOMRect)
     rerender(<WaitingPane dark compact paneIndex={1} openSessionCount={3} onNewSession={open} onPickShell={pick} onChooseSession={choose} />)
     expect(screen.getByTitle(/Pane 2/)).toBeInTheDocument()
+    expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('New Terminal'))
     fireEvent.click(screen.getByTitle('Select Shell'))
     fireEvent.click(screen.getByText('Choose open session (3)'))
@@ -74,6 +76,7 @@ describe('small UI shells', () => {
     expect(pick).toHaveBeenCalledWith(expect.objectContaining({ left: 2, bottom: 9 }))
     expect(choose).toHaveBeenCalled()
     expect(screen.getByTestId('idle-art')).toHaveTextContent('true')
+    expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })
 
     rerender(<WaitingPane dark={false} onNewSession={open} onPickShell={pick} customArtUrl="blob:idle" />)
     expect(screen.getByRole('img', { name: 'waiting' })).toHaveAttribute('src', 'blob:idle')

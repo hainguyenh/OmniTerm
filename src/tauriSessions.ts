@@ -113,6 +113,7 @@ export async function startSession(
   id: string,
   connId: string,
   overrideShell?: string,
+  darkMode?: boolean,
 ): Promise<void> {
   const { onData, onStatus } = sessionChannels(id)
 
@@ -121,6 +122,7 @@ export async function startSession(
       id,
       connId,
       shell: overrideShell ?? null,
+      ...(darkMode === undefined ? {} : { darkMode }),
       onData,
       onStatus,
     })

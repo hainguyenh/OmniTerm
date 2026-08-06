@@ -45,3 +45,8 @@ export function withAlpha(hex: string, alpha: number): string {
   const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
   return `${hex}${a.toString(16).padStart(2, '0')}`
 }
+
+/** Shared pane-title surface, reused by pane headers and their matching session tabs. */
+export function paneSurfaceColor(identity: PaneIdentity, focused: boolean): string {
+  return withAlpha(identity.color, focused ? 0.18 : 0.1)
+}

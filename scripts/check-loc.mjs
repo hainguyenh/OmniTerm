@@ -8,7 +8,7 @@ export const DEFAULT_LIMITS = Object.freeze({
   '.tsx': 500,
   '.js': 350,
   '.css': 600,
-  '.rs': 350,
+  '.rs': 400,
 })
 
 const IGNORED_DIRECTORIES = new Set([

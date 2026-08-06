@@ -13,7 +13,7 @@ import type { MainLayoutModel } from '../useMainLayoutController'
 vi.mock('../ActivityBar', () => ({ default: (p: any) => <div data-testid="activity"><button onClick={() => p.onViewChange('workspace')}>view</button><button onClick={p.onSettingsClick}>settings</button><span>{String(p.filesEnabled)}</span></div> }))
 vi.mock('../WorkspacePanel', () => ({ default: (p: any) => <div data-testid="workspace"><button onClick={() => p.onOpenScript?.('w', { path: '/x.ts' })}>open-script</button><button onClick={() => p.onRunScript?.('w', { path: '/x.ts' })}>run-script</button><button onClick={() => p.onAddWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' })}>add-conn</button><button onClick={() => p.onEditWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' }, { id: 'c' })}>edit-conn</button></div> }))
 vi.mock('../FileBrowser', () => ({ default: (p: any) => <div data-testid="files">{p.id}:{p.connectionName}:{String(p.active)}</div> }))
-vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button></div> }))
+vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
 vi.mock('../WaitingPane', () => ({ default: (p: any) => <div data-testid={p.compact ? `waiting-${p.paneIndex}` : 'waiting'}><button onClick={p.onNewSession}>new-wait</button><button onClick={() => p.onPickShell({ left: 4, bottom: 5 })}>shell-wait</button>{p.onChooseSession && <button onClick={p.onChooseSession}>choose-wait</button>}</div> }))
 vi.mock('../ScriptViewer', () => ({ default: (p: any) => <div data-testid="editor"><button onClick={p.onRun}>run-editor</button><button onClick={p.onClose}>close-editor</button><button onClick={() => p.onDirtyChange(true)}>dirty-editor</button><button onClick={() => p.onDirtyChange(false)}>clean-editor</button></div> }))
 vi.mock('../TerminalView', () => ({ default: (p: any) => <div data-testid={`terminal-${p.id}`} data-mode={p.mode} data-font={p.fontSize}><button onClick={() => p.onStatus('connected')}>terminal-status</button><button onClick={() => p.onMetrics({ latency: 7 })}>terminal-metrics</button><button onClick={() => p.onActivity(true)}>terminal-busy</button><button onClick={() => p.onExit(0)}>terminal-exit</button>{p.onFontSizeChange && <button onClick={() => p.onFontSizeChange(p.fontSize + 2)}>terminal-font</button>}</div> }))
@@ -48,7 +48,7 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
     previewTabId: null, keepTab: vi.fn(), handleResizeDragStart: vi.fn(), handleViewChange: vi.fn(),
     revealRequest: null, revealInWorkspace: vi.fn(), splitRatios: { main: .5, cross: .5 }, setSplitRatios: vi.fn(),
     persistRatios: vi.fn(), shellOptions: [{ id: 'powershell', label: 'PowerShell' }], handleSaveConnection: vi.fn(),
-    showTab: vi.fn(), changeLayoutMode: vi.fn(), swapPanes: vi.fn(), handleConnect: vi.fn(),
+    showTab: vi.fn(), changeLayoutMode: vi.fn(), swapPanes: vi.fn(), handleConnect: vi.fn(), requestNewSession: vi.fn(),
     scriptRuns: { run: vi.fn() }, openEditor: vi.fn(), closeTabs: vi.fn(), closeTab: vi.fn(),
     disconnectSession: vi.fn(), reconnectSession: vi.fn(), activeSshId: null, activeSshName: null,
     isOverlayOpen: false, detachControl: { stateOf: vi.fn(() => null), toggle: vi.fn() },
@@ -81,6 +81,7 @@ describe('MainLayoutView coverage', () => {
     expect(first.scriptRuns.run).toHaveBeenCalled()
     expect(first.openConnectionForm).toHaveBeenCalledTimes(2)
     expect(first.handleResizeDragStart).toHaveBeenCalled()
+    expect(first.requestNewSession).toHaveBeenCalled()
     expect(first.setShellMenu).toHaveBeenCalledWith({ x: 4, y: 9 })
 
     rerender(<MainLayoutView model={model({ activeView: 'files', activeSshId: 'ssh', activeSshName: 'SSH' })} />)
@@ -90,16 +91,24 @@ describe('MainLayoutView coverage', () => {
   })
 
   it('handles the tab strip and all layout-picker transitions', () => {
-    const m = model({ activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }], panes: ['local-tab'] })
+    const m = model({
+      activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
+      panes: ['game-tab'],
+      connById: (id?: string) => id === 'local'
+        ? { ...local, localCommand: 'game.exe', localKeepOpen: false }
+        : [ssh, rdp].find(c => c.id === id),
+    })
     const { rerender } = render(<MainLayoutView model={m} />)
     for (const label of ['select-tab', 'promote-tab', 'close-tab', 'new-tab', 'shell-tab', 'reveal-tab']) fireEvent.click(screen.getByText(label))
     fireEvent.contextMenu(screen.getByText('menu-tab'), { clientX: 8, clientY: 9 })
     fireEvent.click(screen.getByTitle('Split 2'))
-    expect(m.showTab).toHaveBeenCalledWith('local-tab')
-    expect(m.keepTab).toHaveBeenCalledWith('local-tab')
-    expect(m.closeTab).toHaveBeenCalledWith('local-tab')
-    expect(m.setTabMenu).toHaveBeenCalledWith({ x: 8, y: 9, tabId: 'local-tab' })
+    expect(m.showTab).toHaveBeenCalledWith('game-tab')
+    expect(m.keepTab).toHaveBeenCalledWith('game-tab')
+    expect(m.closeTab).toHaveBeenCalledWith('game-tab')
+    expect(m.setTabMenu).toHaveBeenCalledWith({ x: 8, y: 9, tabId: 'game-tab' })
     expect(m.changeLayoutMode).toHaveBeenCalledWith(2)
+    expect(screen.getByTitle('New Terminal (Ctrl+N)')).toBeInTheDocument()
+    expect(screen.getByTitle('New Terminal (Ctrl+N)')).not.toBeDisabled()
 
     const split2 = model({ layoutMode: 2, appSettings: { ...m.appSettings, split2Style: 'columns' }, activeTabs: [], panes: [null, null] })
     rerender(<MainLayoutView model={split2} />)
@@ -110,6 +119,16 @@ describe('MainLayoutView coverage', () => {
     rerender(<MainLayoutView model={split3} />)
     fireEvent.click(screen.getByTitle(/Split 3 \(right\)/))
     expect(split3.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ split3Style: 'top' }))
+
+    const single = model({
+      activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }],
+      panes: ['local-tab'],
+      activeTabId: 'local-tab',
+      detachControl: { stateOf: vi.fn(() => 'detach'), toggle: vi.fn() },
+    })
+    rerender(<MainLayoutView model={single} />)
+    fireEvent.click(screen.getByText('toggle-detach'))
+    expect(single.detachControl.toggle).toHaveBeenCalledWith('local-tab')
   })
 
   it('renders active footer variants and invokes every footer action', () => {
@@ -123,28 +142,23 @@ describe('MainLayoutView coverage', () => {
     const footer = document.querySelector('.order-last') as HTMLElement
     expect(within(footer).getByText('SSH')).toBeInTheDocument()
     expect(screen.getByTestId('metrics')).toHaveTextContent('error:12:true')
-    fireEvent.click(screen.getByTitle('Decrease font size'))
-    fireEvent.click(screen.getByTitle('Increase font size'))
     fireEvent.click(screen.getByText('Reconnect'))
-    fireEvent.click(screen.getByTitle('Detach into its own window'))
     fireEvent.click(screen.getByTitle('Reset zoom to 100%'))
-    expect(m.onFontSizeChange).toHaveBeenCalledTimes(2)
     expect(m.reconnectSession).toHaveBeenCalledWith('ssh-tab')
-    expect(m.detachControl.toggle).toHaveBeenCalledWith('ssh-tab')
     expect(m.onZoomReset).toHaveBeenCalled()
 
     const connected = model({ activeTabs: [{ id: 'rdp-tab', connId: 'rdp', name: 'RDP' }], panes: ['rdp-tab'], activeTabId: 'rdp-tab', statuses: { 'rdp-tab': 'connected' }, latencies: { 'rdp-tab': 44 }, detachControl: { stateOf: vi.fn(() => 'detach'), toggle: vi.fn() } })
     rerender(<MainLayoutView model={connected} />)
     expect(screen.getByTestId('metrics')).toHaveTextContent('connected:44:false')
     fireEvent.click(screen.getByText('Disconnect'))
-    fireEvent.click(screen.getByTitle('Fullscreen (pop out)'))
+    fireEvent.click(screen.getByText('toggle-detach'))
     expect(connected.disconnectSession).toHaveBeenCalledWith('rdp-tab')
+    expect(connected.detachControl.toggle).toHaveBeenCalledWith('rdp-tab')
 
     const localModel = model({ activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }], panes: ['local-tab'], activeTabId: 'local-tab', statuses: { 'local-tab': 'connected' }, activity: { 'local-tab': true }, onFontSizeChange: undefined, zoomFactor: undefined })
     rerender(<MainLayoutView model={localModel} />)
     expect(screen.getByText('PowerShell')).toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Increase font size'))
-    expect(localModel.updateFontSize).toHaveBeenCalledWith(1)
+    expect(screen.queryByTitle('Increase font size')).not.toBeInTheDocument()
     expect(screen.queryByText('Disconnect')).not.toBeInTheDocument()
   })
 
@@ -167,6 +181,39 @@ describe('MainLayoutView coverage', () => {
     expect(m.setSplitRatios).toHaveBeenCalledWith({ main: .4, cross: .6 })
     expect(m.persistRatios).toHaveBeenCalled()
     expect(container.querySelector('.border-dashed')).toBeInTheDocument()
+  })
+
+  it('keeps the new-session and choose-session controls clickable around a launched pane', () => {
+    const single = model({
+      activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
+      panes: ['game-tab'],
+      activeTabId: 'game-tab',
+      statuses: { 'game-tab': 'connected' },
+      activity: { 'game-tab': true },
+      connById: (id?: string) => id === 'local'
+        ? { ...local, localCommand: 'game.exe', localKeepOpen: false }
+        : undefined,
+    })
+    const { rerender } = render(<MainLayoutView model={single} />)
+    fireEvent.click(screen.getByTitle('New Terminal (Ctrl+N)'))
+    expect(single.requestNewSession).toHaveBeenCalled()
+
+    const split = model({
+      layoutMode: 2,
+      activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
+      panes: ['game-tab', null],
+      focusedPane: 0,
+      statuses: { 'game-tab': 'connected' },
+      activity: { 'game-tab': true },
+      connById: (id?: string) => id === 'local'
+        ? { ...local, localCommand: 'game.exe', localKeepOpen: false }
+        : undefined,
+    })
+    rerender(<MainLayoutView model={split} />)
+    const choose = screen.getByText('choose-wait')
+    fireEvent.click(choose)
+    expect(split.setPanePicker).toHaveBeenCalledWith(1)
+    expect(screen.getByTestId('waiting-1').closest('.absolute')).toHaveClass('z-10')
   })
 
   it('covers editor, RDP, detached, terminal, hidden, and connecting session variants', () => {
@@ -213,7 +260,10 @@ describe('MainLayoutView coverage', () => {
     expect(m.setBusy).toHaveBeenCalledWith('local-tab', true)
     expect(m.onFontSizeChange).toHaveBeenCalled()
     expect(m.closeTabs).toHaveBeenCalledWith(['local-tab'], true)
-    expect(container.querySelector('.hidden')).toBeInTheDocument()
+    // Off-screen sessions keep their layout box (`.pane-offscreen`, not `display: none`) so xterm
+    // holds on to its scroll position and cell grid across a tab switch — see index.css.
+    expect(container.querySelector('.pane-offscreen')).toBeInTheDocument()
+    expect(container.querySelector('.hidden')).not.toBeInTheDocument()
   })
 
   it('opens, saves, and closes the workspace connection form', () => {

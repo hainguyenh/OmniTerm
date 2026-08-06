@@ -4,6 +4,7 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
+import { WebglAddon } from '@xterm/addon-webgl'
 import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import TerminalView from '../TerminalView'
@@ -23,12 +24,17 @@ const xterm = vi.hoisted(() => {
     rows = 30
     writes: string[] = []
     selection = ''
+    unicode = { activeVersion: '6' }
+    // Enough of the buffer API for the visibility effect to decide whether the pane was pinned to
+    // the live tail. viewportY === baseY means "at the bottom".
+    buffer = { active: { viewportY: 0, baseY: 0 } }
     dataHandler: ((data: string) => void) | null = null
     selectionHandler: (() => void) | null = null
     keyHandler: ((event: KeyboardEvent) => boolean) | null = null
     loadAddon = vi.fn()
     open = vi.fn()
     focus = vi.fn()
+    scrollToBottom = vi.fn()
     dispose = vi.fn()
     selectionDispose = vi.fn()
 
@@ -38,6 +44,11 @@ const xterm = vi.hoisted(() => {
     }
 
     write = vi.fn((text: string) => { this.writes.push(text) })
+    // Mirrors the real Terminal.paste: normalize CRLF -> CR, then hand off through onData. Keeping
+    // that shape here is the point of the mock — it is how we can tell one write from two.
+    paste = vi.fn((text: string) => { this.dataHandler?.(text.replace(/\r?\n/g, '\r')) })
+    input = vi.fn((data: string) => { this.dataHandler?.(data) })
+    refresh = vi.fn()
     onData = vi.fn((cb: (data: string) => void) => { this.dataHandler = cb })
     onSelectionChange = vi.fn((cb: () => void) => {
       this.selectionHandler = cb
@@ -106,7 +117,14 @@ function installApi(resume: () => Promise<any> = async () => null) {
 }
 
 function key(code: string, patch: Partial<KeyboardEvent> = {}) {
-  return { type: 'keydown', code, key: code.replace('Key', ''), ctrlKey: false, shiftKey: false, altKey: false, metaKey: false, ...patch } as KeyboardEvent
+  return {
+    type: 'keydown', code, key: code.replace('Key', ''),
+    ctrlKey: false, shiftKey: false, altKey: false, metaKey: false,
+    // Spies, not no-ops: the duplicate-paste bug was precisely a missing preventDefault(), so the
+    // tests below assert it was called rather than just that the handler returned false.
+    preventDefault: vi.fn(), stopPropagation: vi.fn(),
+    ...patch,
+  } as unknown as KeyboardEvent
 }
 
 beforeEach(() => {
@@ -133,6 +151,16 @@ afterEach(() => {
 })
 
 describe('TerminalView full lifecycle', () => {
+  it('passes the selected appearance mode to a new local session', () => {
+    installApi()
+    render(
+      <TerminalView id="light-session" connection={localConnection} darkMode={false} />,
+    )
+    expect(window.omnitermAPI.connect.local).toHaveBeenCalledWith(
+      'light-session', 'local-connection', 'powershell', false,
+    )
+  })
+
   it('runs a local shell, handles clipboard, shortcuts, font sizing, activity, exit, and cleanup', async () => {
     installApi()
     const onStatus = vi.fn()
@@ -152,7 +180,6 @@ describe('TerminalView full lifecycle', () => {
     expect(onStatus).toHaveBeenCalledWith('connecting')
     act(() => handlers.localReady?.('PowerShell 7'))
     expect(onStatus).not.toHaveBeenCalledWith('connected')
-    expect(term.writes.join('')).toContain('PowerShell 7')
 
     act(() => handlers.localData?.(new TextEncoder().encode('success 123')))
     expect(onStatus).toHaveBeenCalledWith('connected')
@@ -166,9 +193,34 @@ describe('TerminalView full lifecycle', () => {
     fireEvent.contextMenu(element)
     await waitFor(() => expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('local-session', 'pasted text'))
 
-    expect(term.keyHandler?.(key('KeyN', { ctrlKey: true }))).toBe(false)
+    // Ctrl+N is a bare-Ctrl shell/agent default (e.g. readline's next-history), so a focused
+    // terminal now wins it back from the app's "new session" shortcut — xterm handles it (true).
+    expect(term.keyHandler?.(key('KeyN', { ctrlKey: true }))).toBe(true)
+    // Ctrl+Shift+N can't collide with a bare-Ctrl shell default, so it still bubbles to the app.
+    expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, shiftKey: true }))).toBe(false)
     expect(term.keyHandler?.(key('KeyC', { ctrlKey: true, shiftKey: true }))).toBe(false)
-    expect(term.keyHandler?.(key('KeyV', { ctrlKey: true, shiftKey: true }))).toBe(false)
+
+    // Every clipboard combo must preventDefault, or Chromium's native paste fires on top of ours and
+    // the PTY gets the clipboard twice.
+    for (const combo of [{ ctrlKey: true }, { ctrlKey: true, shiftKey: true }]) {
+      const ev = key('KeyV', combo)
+      expect(term.keyHandler?.(ev)).toBe(false)
+      expect(ev.preventDefault).toHaveBeenCalled()
+      expect(ev.stopPropagation).toHaveBeenCalled()
+    }
+
+    // Shift+Enter / Ctrl+Enter must reach the PTY as distinct sequences — xterm would flatten both
+    // to a bare CR, leaving an AI agent unable to tell them from a plain Enter.
+    const shiftEnter = key('Enter', { shiftKey: true })
+    expect(term.keyHandler?.(shiftEnter)).toBe(false)
+    expect(shiftEnter.preventDefault).toHaveBeenCalled()
+    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('local-session', '\x1b\r')
+    expect(term.keyHandler?.(key('Enter', { ctrlKey: true }))).toBe(false)
+    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('local-session', '\n')
+    // Plain and Alt+Enter stay xterm's business.
+    expect(term.keyHandler?.(key('Enter'))).toBe(true)
+    expect(term.keyHandler?.(key('Enter', { altKey: true }))).toBe(true)
+
     expect(term.keyHandler?.({ type: 'keyup' } as KeyboardEvent)).toBe(true)
     expect(term.keyHandler?.(key('KeyA'))).toBe(true)
 
@@ -248,6 +300,51 @@ describe('TerminalView full lifecycle', () => {
     if (snapshot?.error) expect(xterm.terminals[0].writes.join('')).toContain('resume failed')
   })
 
+  // The backend pushes a session's whole buffered scrollback (up to 256 KiB) down the data channel
+  // during attach_session, before resume() resolves. Colorizing that with an 8-alternation regex and
+  // then handing it to xterm as one atomic parse is what froze the app on attach/detach.
+  it('writes an attach replay in chunks and does not run smart colors over it', async () => {
+    let resolveResume!: (value: any) => void
+    installApi(() => new Promise(r => { resolveResume = r }))
+    render(<TerminalView id="replaying" connection={sshConnection} mode="attach" smartColors />)
+    const term = xterm.terminals[0]
+
+    // Arrives while resume() is still in flight — that is what marks it as the replay. 'error' would
+    // normally be wrapped in a red SGR pair by the highlighter.
+    const replay = `error at ${'y'.repeat(40 * 1024)}\n`
+    await act(async () => { handlers.sshData?.(new TextEncoder().encode(replay)) })
+    expect(term.writes.length).toBeGreaterThan(1)
+    expect(term.writes.join('')).toBe(replay)
+
+    // Live output after the attach settles gets the normal treatment again.
+    await act(async () => { resolveResume({ status: 'ready', data: new Uint8Array() }) })
+    term.writes.length = 0
+    await act(async () => { handlers.sshData?.(new TextEncoder().encode('error now')) })
+    expect(term.writes.join('')).toContain('\x1b[91merror\x1b[39m')
+  })
+
+  // The output highlighter must not rewrite a paste's echo: an agent CLI re-wraps and repositions the
+  // echoed block by coordinate, and injected SGR codes throw off its cell accounting — that is the
+  // overlapping text a long paste produced. See OutputHighlighter.noteLocalEcho.
+  it('quiets smart colors over the echo of a paste', async () => {
+    installApi()
+    const { container } = render(<TerminalView id="echo-session" connection={localConnection} smartColors />)
+    // The inner div is the one xterm opens into, and the one the contextmenu handler is bound to.
+    const element = container.querySelectorAll('.h-full.w-full')[1] as HTMLElement
+    const term = xterm.terminals[0]
+
+    // Before the paste, the same text is colorized.
+    act(() => handlers.localData?.(new TextEncoder().encode('error one')))
+    expect(term.writes.join('')).toContain('\x1b[91merror\x1b[39m')
+
+    fireEvent.contextMenu(element)
+    await waitFor(() => expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('echo-session', 'pasted text'))
+
+    term.writes.length = 0
+    act(() => handlers.localData?.(new TextEncoder().encode('error two')))
+    expect(term.writes.join('')).toBe('error two')
+  })
+
   it('ignores a late attach result after unmount and tolerates hidden or unready terminals', async () => {
     let resolve!: (value: any) => void
     installApi(() => new Promise(r => { resolve = r }))
@@ -257,5 +354,147 @@ describe('TerminalView full lifecycle', () => {
     await act(async () => resolve({ status: 'ready', data: new Uint8Array() }))
     expect(xterm.terminals[0].writes).toHaveLength(0)
     width.mockReturnValue(640)
+  })
+
+  // A hidden pane keeps its layout box on purpose (index.css `.pane-offscreen`), so geometry cannot
+  // tell it whether it is on screen — `active` does. It drives keyboard focus, and it restores the
+  // live tail for a pane the user left at the bottom.
+  it('focuses and re-pins to the tail only on the hidden→visible edge', () => {
+    installApi()
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    const { rerender } = render(<TerminalView id="vis" connection={localConnection} active={false} />)
+    const term = xterm.terminals[0]
+    // Mounted hidden: it must not steal focus from whichever pane IS visible.
+    expect(term.focus).not.toHaveBeenCalled()
+    expect(term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon)).toHaveLength(0)
+
+    rerender(<TerminalView id="vis" connection={localConnection} active />)
+    expect(term.focus).toHaveBeenCalled()
+    expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
+    expect(term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon)).toHaveLength(1)
+
+    // Scrolled up to read history, then hidden and shown again: the position is left alone.
+    term.buffer.active.baseY = 500
+    rerender(<TerminalView id="vis" connection={localConnection} active={false} />)
+    rerender(<TerminalView id="vis" connection={localConnection} active />)
+    expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
+    width.mockReturnValue(640)
+  })
+
+  // Reloading the renderer on each visibility edge rebuilt its texture atlas from empty, and painting
+  // from an empty atlas is what the white/black flash on a tab switch was. The addon is loaded once,
+  // when real dimensions first exist, and held until unmount; utils/webglPool.ts owns the browser's
+  // context budget instead.
+  it('loads the WebGL addon once and holds it across visibility changes', () => {
+    installApi()
+    // Fake only setTimeout: the coalescer's trailing timeout needs to be controllable, but
+    // requestAnimationFrame must stay on the synchronous stub from beforeEach (the initial fit relies
+    // on it firing immediately on mount).
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const disposeSpy = vi.spyOn(WebglAddon.prototype, 'dispose')
+      const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+      const { rerender, unmount } = render(<TerminalView id="webgl-session" connection={localConnection} />)
+      const term = xterm.terminals[0]
+      const webglLoadCount = () => term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon).length
+
+      expect(webglLoadCount()).toBe(1)
+
+      // Off screen and back. The ResizeObserver callback goes through the coalescer
+      // (utils/coalesce.ts), which defers the real fit by a trailing timeout.
+      rerender(<TerminalView id="webgl-session" connection={localConnection} active={false} />)
+      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
+      rerender(<TerminalView id="webgl-session" connection={localConnection} active />)
+      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
+      expect(disposeSpy).not.toHaveBeenCalled()
+      expect(webglLoadCount()).toBe(1)
+
+      unmount()
+      expect(disposeSpy).toHaveBeenCalledTimes(1)
+      width.mockReturnValue(640)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // fit() already repaints when it changes cols/rows. Repainting a second time — and, as this used to,
+  // throwing away every cached glyph with clearTextureAtlas() — on each of a drag-resize's frames is
+  // the resize lag.
+  it('repaints only when a fit changed the pixel size without changing cols/rows', () => {
+    installApi()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+      render(<TerminalView id="refresh-session" connection={localConnection} />)
+      const term = xterm.terminals[0]
+      // The mount fit is the cols/rows-changing case (from the -1 sentinels), so it resizes the PTY
+      // and leaves the repaint to xterm.
+      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
+      expect(term.refresh).not.toHaveBeenCalled()
+
+      // A redundant fit with exactly the same pixel size does nothing
+      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
+      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
+      expect(term.refresh).not.toHaveBeenCalled()
+
+      // A fit where the pixel size changed but cols/rows didn't: no PTY resize, so we force a repaint.
+      widthSpy.mockReturnValue(642)
+      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
+      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
+      expect(term.refresh).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
+  // resize event, so without this a pane would keep drawing at the pre-zoom cell size.
+  it('re-measures and refits on omniterm:zoom-changed', () => {
+    installApi()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      render(<TerminalView id="zoom-session" connection={localConnection} />)
+      const term = xterm.terminals[0]
+      const fit = xterm.fits[0]
+      const originalFamily = term.options.fontFamily
+      fit.fit.mockClear()
+
+      window.dispatchEvent(new CustomEvent('omniterm:zoom-changed'))
+      // Restored, not left mutated — the toggle is only a trick to force xterm's option setter to
+      // treat it as a change.
+      expect(term.options.fontFamily).toBe(originalFamily)
+
+      act(() => vi.runOnlyPendingTimers())
+      // cols/rows are unchanged (the fake fit() is a no-op), so this proves the refit itself ran,
+      // not that a resize was re-sent — that's covered by the dedup test below.
+      expect(fit.fit).toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Fonts loading asynchronously can cause xterm to measure fallback fonts initially.
+  it('forces a re-measure when document.fonts.ready resolves', async () => {
+    installApi()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    let resolveFonts: (value: any) => void
+    const fontsReadyPromise = new Promise(r => { resolveFonts = r })
+    Object.defineProperty(document, 'fonts', {
+      value: { ready: fontsReadyPromise },
+      configurable: true
+    })
+    
+    try {
+      render(<TerminalView id="fonts-session" connection={localConnection} />)
+      const fit = xterm.fits[0]
+      fit.fit.mockClear()
+
+      await act(async () => { resolveFonts({}) })
+      act(() => vi.runOnlyPendingTimers())
+      expect(fit.fit).toHaveBeenCalled()
+    } finally {
+      Object.defineProperty(document, 'fonts', { value: undefined, configurable: true })
+      vi.useRealTimers()
+    }
   })
 })

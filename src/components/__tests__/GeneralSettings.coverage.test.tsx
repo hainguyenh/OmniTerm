@@ -20,6 +20,7 @@ describe('GeneralSettings', () => {
     const setAppSettings = vi.fn()
     const settings = { defaultShell: 'missing', maxOpenFileMb: 3, excludedViewableExts: [] }
     render(<GeneralSettings appSettings={settings} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
     const shell = screen.getByLabelText('Default Terminal') as HTMLSelectElement
     expect(shell.value).toBe('powershell')
     fireEvent.change(shell, { target: { value: 'cmd' } })

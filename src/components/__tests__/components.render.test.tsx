@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import { TOKYO_NIGHT } from "../../themes";
 
@@ -43,8 +43,9 @@ describe("component rendering smoke tests", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
 
-  it("renders ConnectionForm in create mode", () => {
+  it("renders ConnectionForm in create mode", async () => {
     render(<ConnectionForm folders={[]} onClose={vi.fn()} onSave={vi.fn()} />);
+    await act(async () => {});
     expect(screen.getByPlaceholderText("My Server")).toBeInTheDocument();
     expect(screen.getByText("SSH")).toBeInTheDocument();
     expect(screen.getByText("RDP")).toBeInTheDocument();
@@ -54,7 +55,7 @@ describe("component rendering smoke tests", () => {
     expect(screen.getByDisplayValue("22")).toBeInTheDocument();
   });
 
-  it("names the Parent Folder root after the workspace", () => {
+  it("names the Parent Folder root after the workspace", async () => {
     render(
       <ConnectionForm
         folders={[{ id: "scripts", name: "scripts" }]}
@@ -63,13 +64,14 @@ describe("component rendering smoke tests", () => {
         onSave={vi.fn()}
       />,
     );
+    await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     expect(screen.getByRole("option", { name: "MyProject" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Root" })).not.toBeInTheDocument();
   });
 
   /** An <option> collapses leading whitespace, so a nested folder has to spell out its own path. */
-  it("labels each Parent Folder option with its full path", () => {
+  it("labels each Parent Folder option with its full path", async () => {
     render(
       <ConnectionForm
         folders={[
@@ -82,6 +84,7 @@ describe("component rendering smoke tests", () => {
         onSave={vi.fn()}
       />,
     );
+    await act(async () => {});
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     expect(screen.getByRole("option", { name: "infra" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "infra / deploy" })).toBeInTheDocument();

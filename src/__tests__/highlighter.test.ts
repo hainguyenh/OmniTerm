@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { OutputHighlighter } from "../highlighter";
 
 describe("OutputHighlighter", () => {
@@ -109,5 +109,77 @@ describe('OutputHighlighter parser branches', () => {
       h.transform(`\x1b[?${code}l`)
       expect(h.transform('error')).toContain('\x1b[91merror')
     }
+  })
+
+  // AI agent CLIs (Claude Code, Copilot CLI, Codex) repaint on the MAIN screen, so the alt-screen
+  // rule above never fired for them and we were injecting SGR codes into the middle of their frames.
+  describe('main-screen TUI suppression', () => {
+    const TUI_SEQUENCES = [
+      '\x1b[?2026h',   // begin synchronized update
+      '\x1b[?2026l',   // end synchronized update
+      '\x1b[?25l',     // hide cursor
+      '\x1b[?1002h',   // mouse tracking
+      '\x1b[2J',       // erase display
+      '\x1b[3A',       // cursor up
+      '\x1b[1B',       // cursor down
+      '\x1b[12D',      // cursor back
+      '\x1b[5;1H',     // absolute position beyond the first row
+      '\x1b[8;20f',    // same, HVP form
+    ]
+
+    it.each(TUI_SEQUENCES)('passes text through untouched after %j', seq => {
+      const h = new OutputHighlighter()
+      expect(h.transform(seq)).toBe(seq)
+      expect(h.transform('error: /var/log/x 42')).toBe('error: /var/log/x 42')
+    })
+
+    // A plain shell emits these when clearing, so they must not disable the feature.
+    it.each(['\x1b[H', '\x1b[1;1H', '\x1b[1;40H'])('keeps colouring after home-only %j', seq => {
+      const h = new OutputHighlighter()
+      h.transform(seq)
+      expect(h.transform('error')).toContain('\x1b[91merror')
+    })
+
+    it('resumes colouring once the TUI has been idle past the timeout', () => {
+      vi.useFakeTimers()
+      try {
+        const h = new OutputHighlighter()
+        h.transform('\x1b[?2026h')
+        expect(h.transform('error')).toBe('error')
+        // Still inside the window: a burst of redraws must not un-suppress between frames.
+        vi.advanceTimersByTime(9_000)
+        expect(h.transform('error')).toBe('error')
+        // Past it: a one-off spinner shouldn't cost smart colours for the rest of the session.
+        vi.advanceTimersByTime(2_000)
+        expect(h.transform('error')).toContain('\x1b[91merror')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  // A paste's echo is re-wrapped and repositioned by whatever is reading it. SGR codes injected into
+  // that echo throw off its cell accounting, which is how a long paste came back overlapping — and the
+  // TUI rule cannot cover it, because an idle agent emits no redraw sequence until after the first
+  // echoed bytes.
+  describe('local echo suppression', () => {
+    it('stops colouring the echo of a paste, then resumes', () => {
+      vi.useFakeTimers()
+      try {
+        const h = new OutputHighlighter()
+        expect(h.transform('error')).toContain('\x1b[91merror')
+
+        h.noteLocalEcho()
+        expect(h.transform('error at /var/log/x')).toBe('error at /var/log/x')
+        // Still inside the window: a large paste echoes over several chunks.
+        vi.advanceTimersByTime(1_000)
+        expect(h.transform('error')).toBe('error')
+
+        vi.advanceTimersByTime(1_000)
+        expect(h.transform('error')).toContain('\x1b[91merror')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })

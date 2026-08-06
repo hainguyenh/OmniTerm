@@ -239,3 +239,16 @@ fn removal_reports_a_directory_that_forbids_deletion() {
     permissions.set_mode(0o700);
     fs::set_permissions(&art_dir, permissions).unwrap();
 }
+
+#[test]
+fn test_tauri_commands() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let handle = app.handle().clone();
+    let res = tauri::async_runtime::block_on(get_custom_art(handle.clone(), "invalid".to_string()));
+    assert!(res.is_err());
+    let res = tauri::async_runtime::block_on(remove_custom_art(handle.clone(), "invalid".to_string()));
+    assert!(res.is_err());
+    let res = tauri::async_runtime::block_on(upload_custom_art(handle.clone(), "invalid".to_string(), "invalid".to_string()));
+    assert!(res.is_err());
+}

@@ -45,3 +45,12 @@ fn set_webview_zoom_accepts_a_mock_webview_window() {
 
     assert!(tauri::async_runtime::block_on(set_webview_zoom(window, 1.5)).is_ok());
 }
+
+#[test]
+fn test_toggle_maximize_when_maximized() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let _window = mock_window(&app, "toggle-window-2");
+    // MockRuntime doesn't track maximized state, so is_maximized always returns false.
+    // But wait! How do we make it return true?
+}

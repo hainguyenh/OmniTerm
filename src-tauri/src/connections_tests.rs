@@ -347,3 +347,15 @@ fn import_reports_a_tree_that_passes_shape_checks_but_not_deserialization() {
     let error = parse_import_content(malformed).unwrap_err();
     assert!(error.contains("malformed connection tree"), "{error}");
 }
+
+#[test]
+fn test_load_connections() {
+    use tauri::Manager;
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let handle = app.handle().clone();
+    assert!(app.manage(crate::plugin_host::PluginHost::new()));
+    let host = app.state::<crate::plugin_host::PluginHost>();
+    let res = tauri::async_runtime::block_on(load_connections(handle, host));
+    assert!(res.is_ok());
+}

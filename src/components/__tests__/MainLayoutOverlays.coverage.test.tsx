@@ -38,7 +38,7 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
     updateChecking: false, installerChoiceOpen: false, setInstallerChoiceOpen: vi.fn(),
     shellOptions: [{ id: 'powershell', label: 'PowerShell' }, { id: 'cmd', label: 'Command Prompt' }],
     checkForUpdates: vi.fn(), handleDownloadPortable: vi.fn(), handleDownloadInstaller: vi.fn(),
-    skipThisVersion: vi.fn(), clearSkippedVersion: vi.fn(), handleConnect: vi.fn(), closeTabs: vi.fn(), closeTab: vi.fn(),
+    skipThisVersion: vi.fn(), clearSkippedVersion: vi.fn(), handleConnect: vi.fn(), requestNewSession: vi.fn(), closeTabs: vi.fn(), closeTab: vi.fn(),
     refreshCustomArt: vi.fn(), idleArtUrlLight: null, idleArtUrlDark: null, loadingArtUrlLight: null, loadingArtUrlDark: null,
     ...overrides,
   } as unknown as MainLayoutModel
@@ -97,7 +97,6 @@ describe('MainLayoutOverlays', () => {
   })
 
   it('dismisses menus, ignores left/right actions at boundaries, and dispatches shell selection', () => {
-    const dispatch = vi.spyOn(window, 'dispatchEvent')
     const first = model({ tabMenu: { x: 1, y: 2, tabId: 'a' } })
     const { rerender, container } = render(<MainLayoutOverlays model={first} />)
     fireEvent.click(screen.getByText('Close to the Left'))
@@ -111,7 +110,7 @@ describe('MainLayoutOverlays', () => {
     const shell = model({ shellMenu: { x: 5, y: 6 } })
     rerender(<MainLayoutOverlays model={shell} />)
     fireEvent.click(screen.getByText('PowerShell'))
-    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'omniterm:new-session' }))
+    expect(shell.requestNewSession).toHaveBeenCalledWith('powershell')
     expect(shell.setShellMenu).toHaveBeenCalledWith(null)
 
     const dismiss = model({ shellMenu: { x: 5, y: 6 } })

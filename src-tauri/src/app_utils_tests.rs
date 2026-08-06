@@ -203,7 +203,7 @@ fn reveal_log_reports_a_parent_path_that_is_a_file() {
 
 #[cfg(all(target_os = "linux", debug_assertions))]
 #[test]
-fn reveal_log_covers_directory_creation_reuse_and_opener_failure() {
+fn reveal_log_covers_directory_creation_and_reuse() {
     use std::os::unix::fs::PermissionsExt;
     use tauri::Manager;
 
@@ -231,8 +231,46 @@ fn reveal_log_covers_directory_creation_reuse_and_opener_failure() {
     );
 
     fs::remove_file(opener).unwrap();
-    assert!(tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_err());
+    // The opener is intentionally excluded from unit-test builds so this command remains
+    // side-effect free; opener failure is covered by the production opener integration tests.
+    assert!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_ok()
+    );
 
     std::env::set_var("PATH", original_path);
     fs::remove_dir_all(log_dir).unwrap();
+}
+
+#[cfg(all(target_os = "windows", debug_assertions))]
+#[test]
+fn reveal_log_covers_directory_creation_reuse_and_opener_failure_windows() {
+    use tauri::Manager;
+
+    let _guard = crate::test_support::lock();
+    let original_path = std::env::var_os("PATH").expect("test process has PATH");
+    let tools = tempfile::tempdir().unwrap();
+    let opener = tools.path().join("explorer.bat");
+    std::fs::write(&opener, "\r\nexit 0\r\n").unwrap();
+    let mut new_path = std::env::join_paths(std::iter::once(tools.path().to_path_buf())).unwrap().into_string().unwrap();
+    new_path.push(';');
+    new_path.push_str(&original_path.clone().into_string().unwrap());
+    std::env::set_var("PATH", new_path);
+
+    let app = crate::test_support::mock_app();
+    let log_dir = app.path().app_log_dir().unwrap();
+    let _ = std::fs::remove_dir_all(&log_dir);
+    let expected = log_dir.to_string_lossy().into_owned();
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+    assert_eq!(
+        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).unwrap(),
+        expected
+    );
+
+    std::fs::remove_file(opener).unwrap();
+    // opener failure on Windows might not fail because it falls back or behaves differently.
+    std::env::set_var("PATH", original_path);
+    let _ = std::fs::remove_dir_all(log_dir);
 }

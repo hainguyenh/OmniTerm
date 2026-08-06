@@ -85,6 +85,19 @@ pnpm build:tauri:nsis
 
 The installer outputs to `src-tauri/target/release/bundle/nsis/`.
 
+The interactive build wizard also supports a Development profile. It runs
+`tauri build --debug`, writes to `src-tauri/target/debug/`, keeps devtools enabled,
+and enables Rust `Trace` logging. Choose **Development** in the wizard, or pass
+`-Dev` through the Windows wrapper:
+
+```bat
+scripts\Build-OmniTerm.cmd -Dev
+```
+
+Development app artifacts are written under `artifacts\debug-*` so they do not
+overwrite Release artifacts. Use this profile when packaging a reproducible
+debug build; use `pnpm tauri:dev:basic` for hot-reload development.
+
 ---
 
 ## Testing

@@ -7,19 +7,24 @@
  * prompt, while every keystroke goes to a session the backend has already dropped. That is the "the
  * script said press a key to close, then the terminal hung and the tab stayed" report.
  *
- * A non-zero exit keeps the tab: the last thing on screen is why the script failed, and closing the
- * pane would take it away before it could be read. The user closes it (or reconnects) themselves.
+ * A non-zero exit keeps command panes: the last thing on screen is why the script failed, and closing
+ * the pane would take it away before it could be read. Interactive shells close on every exit code.
  *
- * Panes the user opened to work in (`localKeepOpen` absent or true, and every SSH/RDP session) are
- * never closed for them — `exit` at a shell prompt should leave the final output on screen.
+ * Panes the user opened to work in close on exit when they have no command. `localKeepOpen` applies
+ * only to command panes. SSH panes close on successful exit; RDP panes are never closed automatically.
  */
 export interface ExitPolicyConn {
   type?: string
+  localCommand?: string
   localKeepOpen?: boolean
 }
 
 export function closesOnExit(conn: ExitPolicyConn | null | undefined, exitCode: number): boolean {
-  if (!conn || conn.type !== 'LOCAL') return false
-  if (conn.localKeepOpen !== false) return false
+  if (!conn) return false
+  if (conn.type === 'RDP') return false
+  // A plain interactive shell must close when the user types `exit`; keep-open only applies to
+  // panes launched with a command that has finished.
+  if (conn.type === 'LOCAL' && !conn.localCommand?.trim()) return true
+  if (conn.localKeepOpen) return false
   return exitCode === 0
 }

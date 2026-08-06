@@ -43,6 +43,7 @@ const onThemeApply = vi.fn()
 const onFontSizeChange = vi.fn()
 let shellOpen: ((conn: unknown) => void) | undefined
 let shellCleanup: ReturnType<typeof vi.fn>
+let emitWindowClosed: ((id: string) => void) | undefined
 
 interface Initial {
   tabs?: Array<{ id: string; connId: string; name: string }>
@@ -54,6 +55,7 @@ interface Initial {
   activeView?: 'workspace' | 'files' | null
   editorTabs?: Record<string, { workspaceId: string; script: WorkspaceScript }>
   editorDirty?: Record<string, boolean>
+  activity?: Record<string, boolean>
   previewTabId?: string | null
   poppedOut?: Record<string, boolean>
   resumeMode?: Record<string, boolean>
@@ -82,7 +84,7 @@ function useHarness(initial: Initial = {}) {
   const [resumeMode, setResumeMode] = useState<Record<string, boolean>>(initial.resumeMode ?? { s1: true })
   const [metrics, setMetrics] = useState<Record<string, SessionMetrics>>({ s1: { latency: 1, cpu: 1, memUsed: 1, memTotal: 1, diskUsedPct: 1, ts: 1 } })
   const [connectedAt, setConnectedAt] = useState<Record<string, number>>({ s1: 1 })
-  const [activity, setActivity] = useState<Record<string, boolean>>({ s1: true })
+  const [activity, setActivity] = useState<Record<string, boolean>>(initial.activity ?? { s1: true })
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null)
   const skipCloseConfirmRef = useRef(false)
   const [editorTabs, setEditorTabs] = useState(initial.editorTabs ?? {})
@@ -113,12 +115,15 @@ beforeEach(() => {
   detachStateOf.mockReset().mockReturnValue(null); detachToggle.mockReset()
   showAlert.mockReset(); showConfirm.mockReset().mockResolvedValue(true); focusTerminal.mockReset()
   onActiveTerminalChange.mockReset(); onThemeApply.mockReset(); onFontSizeChange.mockReset()
-  shellCleanup = vi.fn(); shellOpen = undefined
+  shellCleanup = vi.fn(); shellOpen = undefined; emitWindowClosed = undefined
   vi.spyOn(crypto, 'randomUUID').mockReturnValue('12345678-1234-1234-1234-123456789012')
   mockOmnitermAPI({
     shells: { onOpen: vi.fn((fn: (request: unknown) => void) => { shellOpen = fn; return shellCleanup }), ready: vi.fn(), release: vi.fn() },
     connect: { rdpDisconnect: vi.fn(), localDisconnect: vi.fn(), sshDisconnect: vi.fn(), rdpSetOverlay: vi.fn() },
-    terminalWindow: { release: vi.fn(async () => {}) },
+    terminalWindow: {
+      release: vi.fn(async () => {}),
+      onClosed: vi.fn((fn: (id: string) => void) => { emitWindowClosed = fn; return vi.fn() }),
+    },
   })
 })
 afterEach(() => vi.restoreAllMocks())
@@ -219,6 +224,37 @@ describe('useMainLayoutSessions complete behavior', () => {
     const tabsAfter = result.current.base.activeTabs
     act(() => { result.current.sessions.closeTabs([]); result.current.sessions.clearTabState([]) })
     expect(result.current.base.activeTabs).toBe(tabsAfter)
+  })
+
+  it('closes an idle local shell immediately without confirmation', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 's1', connId: 'local', name: 'Local' }],
+      panes: ['s1', null, null, null, null, null, null, null],
+      statuses: { s1: 'connected' },
+      activity: { s1: false },
+      conns: [local],
+    }))
+
+    act(() => result.current.sessions.closeTab('s1'))
+
+    expect(showConfirm).not.toHaveBeenCalled()
+    expect(result.current.base.activeTabs).toEqual([])
+    expect(window.omnitermAPI.connect.localDisconnect).toHaveBeenCalledWith('s1')
+  })
+
+  it('removes the tab when backend closes an idle detached session without killing it twice', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 's1', connId: 'local', name: 'Local' }],
+      panes: ['s1', null, null, null, null, null, null, null],
+      statuses: { s1: 'closed' },
+      poppedOut: { s1: true },
+    }))
+
+    act(() => emitWindowClosed?.('s1'))
+
+    expect(result.current.base.activeTabs).toEqual([])
+    expect(window.omnitermAPI.connect.localDisconnect).not.toHaveBeenCalled()
+    expect(window.omnitermAPI.terminalWindow.release).not.toHaveBeenCalled()
   })
 
   it('confirms dirty editor closes, preserves canceled edits, and removes clean editors', async () => {

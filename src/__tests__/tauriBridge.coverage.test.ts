@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { diag } from '../diag'
 
 const state = vi.hoisted(() => ({
   platform: 'linux' as string | Error,
@@ -66,8 +67,13 @@ beforeEach(() => {
   document.body.style.zoom = ''
 })
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('complete Tauri bridge behavior', () => {
   it('maps every platform and recognizes detached window labels safely', () => {
+    const warn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     state.platform = 'macos'
     expect(__createTauriAPIForTests().app.platform).toBe('darwin')
     state.platform = 'windows'
@@ -78,6 +84,7 @@ describe('complete Tauri bridge behavior', () => {
     expect(__createTauriAPIForTests().app.platform).toBe('unknown')
     state.platform = new Error('OS unavailable')
     expect(__createTauriAPIForTests().app.platform).toBe('unknown')
+    expect(warn).toHaveBeenCalledWith('[omnitermAPI] Failed to get OS platform', state.platform)
 
     state.platform = 'linux'
     state.label = 'term-window-1'
@@ -155,6 +162,7 @@ describe('complete Tauri bridge behavior', () => {
   })
 
   it('moves detached sessions and keeps clipboard and SFTP stubs honest', async () => {
+    const error = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const api = __createTauriAPIForTests()
     state.invoke.mockResolvedValueOnce(true)
     await expect(api.terminalWindow.detach({
@@ -171,6 +179,7 @@ describe('complete Tauri bridge behavior', () => {
     await expect(api.terminalWindow.detach({
       sessionId: 's2', name: 'Shell', connection: {},
     })).resolves.toBe(false)
+    expect(error).toHaveBeenCalledWith('[omnitermAPI] detach failed', expect.any(Error))
     state.invoke.mockRejectedValueOnce(new Error('no bootstrap'))
     await expect(api.terminalWindow.bootstrap()).resolves.toBeNull()
 
@@ -280,6 +289,7 @@ describe('complete Tauri bridge behavior', () => {
   })
 
   it('covers shell launcher calls and event-listen rejection cleanup', async () => {
+    const error = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const api = __createTauriAPIForTests()
     api.shells.ready()
     await Promise.resolve()
@@ -293,8 +303,12 @@ describe('complete Tauri bridge behavior', () => {
 
     state.listen.mockRejectedValueOnce(new Error('listener unavailable'))
     const off = api.settings.onChanged(vi.fn())
-    await Promise.resolve()
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
     off()
     expect(off()).toBeUndefined()
+    expect(error).toHaveBeenCalledWith(
+      '[omnitermAPI] failed to listen for settings:changed',
+      expect.any(Error),
+    )
   })
 })
