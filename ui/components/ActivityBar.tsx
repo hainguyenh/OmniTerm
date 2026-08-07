@@ -56,16 +56,18 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           disabled={!filesEnabled}
           onClick={() => handleIconClick('files')}
         />
+      </div>
+
+      {/* ── Bottom icons (pinned) ──────────────────────────────────── */}
+      {/* Always Awake sits with Settings rather than with the panel views: it opens a modal and toggles
+          a machine-wide setting, it does not switch the secondary panel. */}
+      <div className="mt-auto flex flex-col items-center gap-1 pb-2 w-full">
         <ActivityIcon
           icon={<MoonStar className="w-5 h-5" />}
           label={alwaysAwakeEnabled ? (alwaysAwakeKeepingAwake ? 'Always Awake (active)' : 'Always Awake (waiting)') : 'Always Awake'}
           active={alwaysAwakeEnabled}
           onClick={onAlwaysAwakeClick}
         />
-      </div>
-
-      {/* ── Bottom icons (pinned) ──────────────────────────────────── */}
-      <div className="mt-auto flex flex-col items-center gap-1 pb-2 w-full">
         <ActivityIcon
           icon={<Settings className="w-5 h-5" />}
           label="Settings"
