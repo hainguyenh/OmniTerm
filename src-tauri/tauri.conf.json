@@ -50,8 +50,7 @@
     ],
     "resources": [
       "builtinThemes/*",
-      "sidecar/*.cjs",
-      "../plugins/always-awake/*"
+      "sidecar/*.cjs"
     ],
     "windows": {
       "certificateThumbprint": null,
