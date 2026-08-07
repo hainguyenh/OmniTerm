@@ -31,6 +31,30 @@ describe('small UI shells', () => {
     expect(onViewChange).toHaveBeenLastCalledWith('files')
   })
 
+  it('pins Always Awake beside Settings rather than with the panel views', () => {
+    const onAlwaysAwakeClick = vi.fn()
+    render(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        onViewChange={vi.fn()}
+        onSettingsClick={vi.fn()}
+        alwaysAwakeEnabled
+        alwaysAwakeKeepingAwake
+        onAlwaysAwakeClick={onAlwaysAwakeClick}
+      />,
+    )
+    const awake = screen.getByTitle('Always Awake (active)')
+    const settings = screen.getByTitle('Settings')
+    // Same pinned group as Settings, and immediately above it.
+    expect(awake.parentElement).toBe(settings.parentElement)
+    expect(awake.nextElementSibling).toBe(settings)
+    expect(screen.getByTitle('Files').parentElement).not.toBe(settings.parentElement)
+
+    fireEvent.click(awake)
+    expect(onAlwaysAwakeClick).toHaveBeenCalled()
+  })
+
   it('confirms and cancels closing from buttons, escape, checkbox, and backdrop', () => {
     const onConfirm = vi.fn()
     const onCancel = vi.fn()

@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { MoonStar, X } from 'lucide-react'
+import { useEscToClose } from '../../../ui/hooks/useEscToClose'
 
 type Duration = 'today' | '24h' | 'nextMonday'
 
@@ -31,6 +32,8 @@ export default function AlwaysAwakeModal({
   const [duration, setDuration] = useState<Duration>('24h')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEscToClose(false, onClose, onClose)
 
   const save = async () => {
     setBusy(true)
@@ -69,15 +72,25 @@ export default function AlwaysAwakeModal({
       style={{ backgroundColor: 'var(--theme-overlay)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-md bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-theme-border">
-          <div>
-            <h2 className="text-sm font-bold text-theme-fg">Always Awake</h2>
-            <p className="text-[11px] text-theme-dim">Prevent Windows sleep while OmniTerm is working.</p>
+      <div className="w-[26rem] max-w-full bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-theme-border">
+          <div className="flex items-start gap-3 min-w-0">
+            <span
+              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+              style={{ backgroundColor: 'var(--theme-hover-bg)', color: 'var(--theme-accent)' }}
+            >
+              <MoonStar className="w-4 h-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-theme-fg">Always Awake</h2>
+              <p className="text-[11px] leading-snug text-theme-dim">Prevent Windows sleep while OmniTerm is working.</p>
+            </div>
           </div>
-          <button type="button" onClick={onClose} className="text-theme-dim hover:text-theme-fg"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={onClose} title="Close" className="shrink-0 rounded-lg p-1 text-theme-dim hover:bg-theme-hover hover:text-theme-fg">
+            <X className="w-4 h-4" />
+          </button>
         </div>
-        <div className="p-4 space-y-4">
+        <div className="px-5 py-4 space-y-4">
           {!status.supported && <p className="text-xs text-theme-error">Always Awake is currently supported on Windows only.</p>}
           {status.error && <p className="text-xs text-theme-error">{status.error}</p>}
           <fieldset className="space-y-2">
@@ -125,15 +138,23 @@ export default function AlwaysAwakeModal({
               ))}
             </div>
           </div>
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-theme-dim">Status</span>
+          <div
+            className="flex items-center justify-between rounded-lg border border-theme-border px-3 py-2 text-[11px]"
+            style={{ backgroundColor: 'var(--theme-hover-bg)' }}
+          >
+            <span className="text-theme-dim">
+              Status
+              {status.enabled && status.activeSessionCount > 0 && (
+                <span className="ml-1">· {status.activeSessionCount} active session{status.activeSessionCount === 1 ? '' : 's'}</span>
+              )}
+            </span>
             <span className={status.enabled ? 'text-theme-accent font-semibold' : 'text-theme-dim'}>{status.enabled ? (status.keepingAwake ? 'Active' : 'Enabled, waiting') : 'Off'}</span>
           </div>
           {error && <p className="text-xs text-theme-error">{error}</p>}
-          <div className="flex justify-end gap-2">
-            <button type="button" disabled={busy} onClick={() => void disable()} className="px-3 py-1.5 rounded-lg border border-theme-border text-xs text-theme-error disabled:opacity-50">Off</button>
-            <button type="button" disabled={busy || !status.supported} onClick={() => void save()} className="px-3 py-1.5 rounded-lg bg-[var(--theme-accent)] text-theme-accent-fg text-xs disabled:opacity-50">Save</button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-theme-border px-5 py-3">
+          <button type="button" disabled={busy} onClick={() => void disable()} className="px-3 py-1.5 rounded-lg border border-theme-border text-xs text-theme-error hover:bg-theme-hover disabled:opacity-50">Off</button>
+          <button type="button" disabled={busy || !status.supported} onClick={() => void save()} className="px-4 py-1.5 rounded-lg bg-[var(--theme-accent)] text-theme-accent-fg text-xs font-semibold disabled:opacity-50">Save</button>
         </div>
       </div>
     </div>

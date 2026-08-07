@@ -3,6 +3,9 @@ export default {
   content: [
     "./index.html",
     "./ui/**/*.{js,ts,jsx,tsx}",
+    // Plugin-provided renderer components are bundled into the same page, so their classes have to be
+    // scanned too — otherwise Tailwind emits no CSS for them and they render unstyled.
+    "./plugins/*/app/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
