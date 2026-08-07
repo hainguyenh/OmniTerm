@@ -3,6 +3,8 @@ mod launcher;
 mod settings;
 mod themes;
 mod window_control;
+#[path = "../../plugins/always-awake/native/always_awake.rs"]
+pub mod always_awake;
 
 #[cfg(test)]
 mod command_coverage_tests;
@@ -47,6 +49,7 @@ use pty::PtyManager;
 use rdp_embed::RdpSessionManager;
 use tauri::{Emitter, Manager, RunEvent, State};
 use terminal_window::DetachRegistry;
+use always_awake::AlwaysAwakeState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -65,6 +68,7 @@ pub fn run() {
         .manage(DetachRegistry::new())
         .manage(PluginHost::new())
         .manage(RdpSessionManager::new())
+        .manage(AlwaysAwakeState::new())
         .setup(move |app| {
             // Logging is a development-only facility. `#[cfg]` (not `cfg!`) so the registration is
             // not even compiled into a release or portable build: nothing installs a logger, so no
@@ -120,6 +124,7 @@ pub fn run() {
 
             // Tells each pane whether its shell is running something (tab busy/idle indicator).
             let _activity_poller = session_activity::spawn_poller(app.handle().clone());
+            let _always_awake_poller = always_awake::spawn_poller(app.handle().clone());
 
             // This launch may itself carry --open-shell (the shim can start a cold instance).
             let handle = app.handle().clone();
@@ -240,6 +245,9 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         connection_provider_capabilities,
         plugin_invoke,
         plugin_auth_gate,
+        always_awake::get_state,
+        always_awake::set_state,
+        always_awake::disable,
     ])
 }
 

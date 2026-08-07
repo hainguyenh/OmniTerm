@@ -1,6 +1,12 @@
 import React, { useState } from 'react'
-import { X, Plus, Trash2, Copy, Check, Moon, Sun } from 'lucide-react'
-import { AppTheme, TOKYO_NIGHT } from '../themes'
+import { X, Plus, Trash2, Copy, Check, Moon, Sun, FolderOpen, RefreshCw } from 'lucide-react'
+import { AppTheme, DEFAULT_THEME_ID, TerminalTheme } from '../themes'
+
+const terminalColorKeys: Array<keyof TerminalTheme> = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
+  'brightMagenta', 'brightCyan', 'brightWhite',
+]
 
 interface ThemeRemixModalProps {
   isOpen: boolean
@@ -24,13 +30,23 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   const [selectedThemeId, setSelectedThemeId] = useState<string>(currentTheme.id)
   const [activeTab, setActiveTab] = useState<'ui' | 'terminal'>('ui')
   const [editMode, setEditMode] = useState<'dark' | 'light'>(appSettings.darkMode ? 'dark' : 'light')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const selectedTheme = themes.find(t => t.id === selectedThemeId) ?? currentTheme
 
   const refreshThemes = async (selectId?: string) => {
-    const list = await window.omnitermAPI.themes.list()
-    setThemes(list)
-    if (selectId) setSelectedThemeId(selectId)
+    setIsRefreshing(true)
+    try {
+      const list = await window.omnitermAPI.themes.list()
+      setThemes(list)
+      if (selectId) setSelectedThemeId(selectId)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  const handleOpenThemesFolder = async () => {
+    await window.omnitermAPI.themes.openFolder()
   }
 
   const makeThemeId = () => `theme-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -66,9 +82,9 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   }
 
   const handleDelete = async () => {
-    if (selectedTheme.id === TOKYO_NIGHT.id || themes.length <= 1) return
+    if (selectedTheme.id === DEFAULT_THEME_ID || themes.length <= 1) return
     const remaining = themes.filter(t => t.id !== selectedTheme.id)
-    const fallbackId = remaining[0]?.id ?? TOKYO_NIGHT.id
+    const fallbackId = remaining[0]?.id ?? DEFAULT_THEME_ID
     await window.omnitermAPI.themes.delete(selectedTheme.id)
     await refreshThemes(fallbackId)
     if (appSettings.themeId === selectedTheme.id) {
@@ -145,12 +161,31 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
           <div>
             <h2 className="text-lg font-bold text-theme-fg">Theme Remix</h2>
             <p className="text-xs text-theme-dim">
-              Customize app &amp; terminal layout, colors, spacing, and border roundings in real-time.
+              Customize JSON-backed app and terminal themes. Changes are saved automatically.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg transition-colors hover:bg-white/10 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => { void refreshThemes() }}
+              disabled={isRefreshing}
+              title="Reload themes from JSON files"
+              className="p-1 rounded-lg transition-colors hover:bg-white/10 hover:text-white disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleOpenThemesFolder() }}
+              title="Open themes folder"
+              className="p-1 rounded-lg transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <FolderOpen className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={onClose} title="Close" className="p-1 rounded-lg transition-colors hover:bg-white/10 hover:text-white">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -382,8 +417,8 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
                 <h3 className="text-xs uppercase font-bold tracking-widest mb-3 text-theme-fg">Terminal ANSI Colors</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {[
-                    'black','red','green','yellow','blue','magenta','cyan','white',
-                    'brightBlack','brightRed','brightGreen','brightYellow','brightBlue','brightMagenta','brightCyan','brightWhite',
+                    ...(editMode === 'light' ? ['lightModeBlackBackground' as const] : []),
+                    ...terminalColorKeys,
                   ].map(key => (
                     <div
                       key={key}
@@ -395,7 +430,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
                       </span>
                       <input
                         type="color"
-                        value={(terminal as any)[key] || '#000000'}
+                        value={terminal[key] || '#000000'}
                         onChange={(e) => updateTerminalColor(key, e.target.value)}
                         className="w-6 h-6 border-0 bg-transparent cursor-pointer flex-shrink-0"
                       />
@@ -410,4 +445,3 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
     </div>
   )
 }
-

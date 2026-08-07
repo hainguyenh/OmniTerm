@@ -1,0 +1,21 @@
+{
+  "name": "@omniterm/always-awake",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keeps the Windows host awake while OmniTerm work is active.",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "omnitermPlugin": {
+    "apiVersion": 2,
+    "hostVersion": ">=0.1.0 <1.0.0",
+    "displayName": "Always Awake",
+    "permissions": ["renderer"]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^5.2.2"
+  }
+}

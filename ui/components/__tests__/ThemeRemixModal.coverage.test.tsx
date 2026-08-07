@@ -33,9 +33,10 @@ function setup(overrides: Partial<React.ComponentProps<typeof ThemeRemixModal>> 
   const saveTheme = vi.fn(async () => {})
   const deleteTheme = vi.fn(async () => {})
   const listThemes = vi.fn(async () => [TOKYO_NIGHT, custom])
+  const openFolder = vi.fn(async () => {})
   const saveSettings = vi.fn(async () => {})
   mockOmnitermAPI({
-    themes: { save: saveTheme, delete: deleteTheme, list: listThemes },
+    themes: { save: saveTheme, delete: deleteTheme, list: listThemes, openFolder },
     settings: { save: saveSettings },
   })
   const props: React.ComponentProps<typeof ThemeRemixModal> = {
@@ -49,7 +50,7 @@ function setup(overrides: Partial<React.ComponentProps<typeof ThemeRemixModal>> 
     ...overrides,
   }
   const view = render(<ThemeRemixModal {...props} />)
-  return { ...view, props, saveTheme, deleteTheme, listThemes, saveSettings }
+  return { ...view, props, saveTheme, deleteTheme, listThemes, openFolder, saveSettings }
 }
 
 beforeEach(() => {
@@ -59,6 +60,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('ThemeRemixModal complete behavior', () => {
+  it('opens the JSON folder and reloads themes from disk', async () => {
+    const x = setup()
+    fireEvent.click(screen.getByTitle('Open themes folder'))
+    fireEvent.click(screen.getByTitle('Reload themes from JSON files'))
+    await waitFor(() => expect(x.openFolder).toHaveBeenCalledTimes(1))
+    expect(x.listThemes).toHaveBeenCalled()
+  })
+
   it('creates and duplicates a deep theme copy, selects it, and persists the app choice', async () => {
     const x = setup()
     fireEvent.click(screen.getByText('New Custom Theme'))
@@ -150,7 +159,7 @@ describe('ThemeRemixModal complete behavior', () => {
     const x = setup({ onClose, currentTheme: custom, themes: [TOKYO_NIGHT] })
     expect(screen.getByDisplayValue('Custom Theme')).toBeInTheDocument()
     const header = screen.getByText('Theme Remix').parentElement?.parentElement as HTMLElement
-    fireEvent.click(within(header).getByRole('button'))
+    fireEvent.click(within(header).getByTitle('Close'))
     expect(onClose).toHaveBeenCalled()
     x.unmount()
   })

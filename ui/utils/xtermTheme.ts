@@ -1,5 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
-import { TerminalTheme, TOKYO_NIGHT } from '../themes'
+import type { TerminalTheme } from '../themes'
 
 /**
  * Repair an app theme's colors before handing them to xterm.
@@ -94,6 +94,10 @@ const MIN_ACCEPTABLE_RATIO = 1.6
 const REPAIR_TARGET_RATIO = 2.5
 const LIGHTNESS_STEP = 0.05
 const MAX_STEPS = 20
+/** Fallback for older/user themes that do not define a light-mode ANSI black background. */
+const LIGHT_MODE_BLACK_MIN_LIGHTNESS = 0.28
+const FALLBACK_BACKGROUND = '#000000'
+const FALLBACK_FOREGROUND = '#ffffff'
 
 /**
  * If `hex` doesn't clear a minimal contrast ratio against `backgroundHex`, nudge its HSL lightness
@@ -120,7 +124,16 @@ const repairAgainstBackground = (hex: string, backgroundHex: string): string => 
   return rgbToHex(hslToRgb(hsl))
 }
 
-const COLOR_KEYS: readonly (keyof TerminalTheme)[] = [
+const softenLightModeBlack = (hex: string): string => {
+  const hsl = rgbToHsl(hexToRgb(hex))
+  if (hsl.l >= LIGHT_MODE_BLACK_MIN_LIGHTNESS) return hex
+  hsl.l = LIGHT_MODE_BLACK_MIN_LIGHTNESS
+  return rgbToHex(hslToRgb(hsl))
+}
+
+type XtermColorKey = Exclude<keyof TerminalTheme, 'lightModeBlackBackground'>
+
+const COLOR_KEYS: readonly XtermColorKey[] = [
   'foreground', 'cursor', 'cursorAccent',
   'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
   'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue',
@@ -131,14 +144,17 @@ const COLOR_KEYS: readonly (keyof TerminalTheme)[] = [
  * Convert an app `TerminalTheme` into the `ITheme` xterm accepts, dropping invalid colors and
  * repairing any that would be effectively invisible against the background.
  */
-export const normalizeXtermTheme = (t: TerminalTheme): ITheme => {
-  const background = isValidHex(t.background) ? t.background : TOKYO_NIGHT.terminal.dark.background
+export const normalizeXtermTheme = (t: TerminalTheme, lightMode = false): ITheme => {
+  const background = isValidHex(t.background) ? t.background : FALLBACK_BACKGROUND
   const out: ITheme = { background }
 
   for (const key of COLOR_KEYS) {
     const value = t[key]
     if (!isValidHex(value)) continue
-    out[key] = repairAgainstBackground(value, background)
+    const adjusted = lightMode && key === 'black'
+      ? (isValidHex(t.lightModeBlackBackground) ? t.lightModeBlackBackground : softenLightModeBlack(value))
+      : value
+    out[key] = repairAgainstBackground(adjusted, background)
   }
 
   // selectionBackground/selectionForeground are drawn over the background, not on it — repairing
@@ -148,7 +164,7 @@ export const normalizeXtermTheme = (t: TerminalTheme): ITheme => {
 
   // xterm needs a cursor to draw one at all; without a valid one, fall back to the (already
   // repaired) foreground so the cursor is never simply missing.
-  if (!out.cursor) out.cursor = out.foreground ?? TOKYO_NIGHT.terminal.dark.foreground
+  if (!out.cursor) out.cursor = out.foreground ?? FALLBACK_FOREGROUND
   if (!out.cursorAccent) out.cursorAccent = background
 
   // The cursor and the text drawn on top of it (cursorAccent) must contrast with EACH OTHER, not

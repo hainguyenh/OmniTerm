@@ -25,7 +25,7 @@ browser engine for a single pane. OmniTerm takes a different approach:
 - **Multi-window panes** -- Detach a terminal into its own OS window, re-attach it
   later. The PTY stays owned by Rust; output routing switches internally per-pane.
 - **Plugin system** -- Unsandboxed Node.js sidecar. Plugins provide connection metadata,
-  workspace content, and app-open auth gates. Install only trusted packages.
+  workspace content, app-open auth gates, and selected app features. Install only trusted packages.
 
 ---
 
@@ -41,6 +41,15 @@ Three optional provider types exist:
 Bundled providers:
 - `plugins/full-connection-manager` -- workspace-aware SSH/RDP profiles with credential scrubbing
 - `plugins/native-batch-connections` -- batch-launched SSH/RDP profiles via native client flows
+- `plugins/always-awake` -- Always Awake metadata/UI integration backed by the native Windows
+  sleep-prevention capability
+
+### Always Awake
+
+The Always Awake control is available from the Activity Bar below Files. It supports **Keep awake
+always** and **Keep awake when active** modes, with schedules ending today, 24 hours from now, or
+next Monday at 08:00 local time. Active-only mode uses LOCAL process-tree activity and conservatively
+treats a connected SSH PTY as active; the feature is Windows-first.
 
 Plugins are **unsandboxed** (access to `fs`, `net`, and `child_process`). Install only
 trusted packages. Manage plugins via **Settings > Plugins** or CLI commands in [GUIDELINE.md](GUIDELINE.md).
@@ -52,3 +61,10 @@ trusted packages. Manage plugins via **Settings > Plugins** or CLI commands in [
 OmniTerm does not embed [markdown-explorer](https://github.com/the-long-ride/markdown-explorer).
 It uses the markdown-explorer submodule at `plugins/markdown-explorer` to power Markdown
 and Mermaid preview inside the file viewer. See the markdown-explorer [GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+
+## Themes
+
+Built-in themes are JSON files in `src-tauri/builtinThemes/`. User-created themes are stored as JSON
+in OmniTerm's application data `themes` folder. Open **Theme Remix** to create, duplicate, and edit
+themes, or use its folder button to edit a JSON file externally. Use the reload button after an
+external edit; invalid JSON files are ignored by the theme loader.
