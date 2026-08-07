@@ -3,7 +3,7 @@ import MainLayout from './components/MainLayout'
 import DetachedTerminalWindow from './components/DetachedTerminalWindow'
 import { TitleBar } from './components/TitleBar'
 import { ThemeRemixModal } from './components/ThemeRemixModal'
-import { AppTheme, TOKYO_NIGHT, LayoutMode } from './themes'
+import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 
 interface AppSettings {
@@ -22,7 +22,7 @@ interface AppSettings {
 
 function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>({
-    themeId: 'tokyo-night',
+    themeId: DEFAULT_THEME_ID,
     fontSize: 14,
     smartColors: false,
     checkUpdatesOnStartup: true,
@@ -67,7 +67,7 @@ function App() {
     })
   }, [])
 
-  const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? TOKYO_NIGHT
+  const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? themes[0] ?? TOKYO_NIGHT
 
   // Load settings and themes on mount.
   const reloadSettingsAndThemes = () => {
@@ -276,6 +276,7 @@ function App() {
     root.style.setProperty('--theme-selection', t.selectionBackground)
     root.style.setProperty('--theme-hover-bg', isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)')
     root.style.setProperty('--theme-selection-fg', isDark ? '#ffffff' : t.foreground)
+    root.style.setProperty('--theme-overlay', isDark ? 'rgba(15, 23, 42, 0.58)' : 'rgba(71, 85, 105, 0.28)')
 
     // UI Layout Customizations
     if (u) {

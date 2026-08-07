@@ -18,8 +18,7 @@ import { homeDir } from '@tauri-apps/api/path'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { attachSession, failSession, onSession, startSession } from './tauriSessions'
 import { diag } from './diag'
-
-// ── Helpers ──────────────────────────────────────────────────────────
+import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
 
 /**
  * Subscribe to a Tauri event, returning a synchronous unsubscribe.
@@ -109,6 +108,8 @@ function createTauriAPI(): any {
       remove: (id: string) => invoke<boolean>('remove_plugin', { id }),
       restartApp: () => invoke<void>('restart_app'),
     },
+
+    alwaysAwake: createAlwaysAwakeAPI(),
 
     connect: {
       // Streaming lives in tauriSessions.ts: the ready/data/error/closed callbacks are held in a

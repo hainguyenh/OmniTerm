@@ -116,10 +116,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   // Apply theme changes dynamically without recreating the terminal.
   useEffect(() => {
-    if (termRef.current && theme) {
-      termRef.current.options.theme = normalizeXtermTheme(theme)
+    const term = termRef.current
+    if (!term) return
+    term.options.minimumContrastRatio = darkMode === false ? 2.5 : 1
+    if (theme) {
+      term.options.theme = normalizeXtermTheme(theme, darkMode === false)
     }
-  }, [theme])
+  }, [theme, darkMode])
 
   // Apply font size changes dynamically. Must re-fit afterwards: xterm keeps
   // cols/rows when only the font changes, so without fit() the canvas would
@@ -145,7 +148,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const isLocal = connection.type === 'LOCAL'
 
     const term = new Terminal(createTerminalOptions({
-      isLocal, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
+      isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
 
     termRef.current = term

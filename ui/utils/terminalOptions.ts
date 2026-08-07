@@ -8,6 +8,8 @@ export const DEFAULT_MONO_STACK = '"Cascadia Code", "Fira Code", "JetBrains Mono
 export interface TerminalOptionsInput {
   /** LOCAL (WSL/PowerShell/CMD) panes run over ConPTY; an SSH channel does not. */
   isLocal: boolean
+  /** Appearance mode controls xterm's per-cell contrast correction for light palettes. */
+  darkMode?: boolean
   fontSize?: number
   fontFamilyMono?: string
   theme: TerminalTheme
@@ -17,7 +19,7 @@ export interface TerminalOptionsInput {
  * The option set every pane is constructed with, in one place so a pane in a detached window can
  * never drift from one in the main window.
  */
-export const createTerminalOptions = ({ isLocal, fontSize, fontFamilyMono, theme }: TerminalOptionsInput): ITerminalOptions => ({
+export const createTerminalOptions = ({ isLocal, darkMode, fontSize, fontFamilyMono, theme }: TerminalOptionsInput): ITerminalOptions => ({
   cursorBlink: true,
   // Spelled out so an unfocused pane's cursor can never silently regress to xterm's own default
   // hollow-outline fallback, which reads as "the cursor is gone".
@@ -29,20 +31,18 @@ export const createTerminalOptions = ({ isLocal, fontSize, fontFamilyMono, theme
   // 1.15 accumulated fractional-pixel rounding drift on the DOM renderer, misaligning box-drawing
   // rows in full-screen TUIs; 1.2 keeps rows on whole-pixel offsets.
   lineHeight: 1.2,
-  // OFF (1 = no adjustment). xterm documents this as an expensive option: it recomputes a colour per
-  // cell and the result cannot be cached in the renderer's glyph atlas, so a pane under heavy output
-  // pays for it on every frame. It also silently rewrites the colours an agent TUI chose, which is
-  // its own rendering bug.
+  // Dark themes keep agent/TUI-selected colors unchanged. Light themes need per-cell correction:
+  // agent UIs commonly draw bold pale ANSI colors over dark highlight backgrounds, and a palette
+  // repaired against only the pane background cannot make both combinations readable.
   //
-  // The invisible-text problem it was guarding is handled a layer up instead: normalizeXtermTheme
-  // repairs a theme's palette and foreground against its own background (see xtermTheme.ts), which
-  // covers every colour a theme can name. What is genuinely given up is 256-colour and truecolour
-  // SGR values a remote program emits directly — a theme repair cannot reach those. Extend
-  // xtermTheme.ts if such a case turns up; do not re-enable this.
-  minimumContrastRatio: 1,
+  // xterm documents this as an expensive option: it recomputes a colour per
+  // cell and the result cannot be cached in the renderer's glyph atlas, so a pane under heavy output
+  // pays for it on every frame. Limit it to light mode, where the readability issue occurs.
+  //
+  minimumContrastRatio: darkMode === false ? 2.5 : 1,
   scrollback: 5000,
   allowProposedApi: true, // required by the Unicode11Addon
   // ConPTY-specific wrap/reflow heuristics; SSH's channel isn't ConPTY.
   ...(isLocal ? { windowsPty: { backend: 'conpty' as const } } : {}),
-  theme: normalizeXtermTheme(theme),
+  theme: normalizeXtermTheme(theme, darkMode === false),
 })

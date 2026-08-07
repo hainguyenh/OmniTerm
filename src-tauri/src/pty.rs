@@ -58,6 +58,9 @@ pub struct PtySession {
     /// busy from the start: the shell may not have forked the command yet, and a pure-batch script
     /// runs *inside* cmd.exe with no child process to find.
     pub(crate) launched_with_command: bool,
+    /// The session is an SSH transport. Always Awake treats a connected SSH PTY as active because
+    /// the remote command state is not visible in the local Windows process tree.
+    pub(crate) ssh: bool,
     /// Kill-on-close job holding the shell and its descendants (see win_job.rs). `kill_session` uses
     /// it so a manual disconnect reaps orphans the same way a natural exit does.
     #[cfg(windows)]
@@ -185,6 +188,10 @@ pub async fn start_local_session<R: Runtime>(
     // only place the pid can be captured.
     let pid = child.process_id();
     let launched_with_command = launch.command.is_some();
+    let ssh = launch
+        .command
+        .as_deref()
+        .is_some_and(|command| command.to_ascii_lowercase().contains("ssh.exe"));
 
     let label = launch.shell.label().to_string();
     let output = Arc::new(Mutex::new(Output::new(on_data, on_status, label.clone())));
@@ -198,6 +205,7 @@ pub async fn start_local_session<R: Runtime>(
             pid,
             output: Arc::clone(&output),
             launched_with_command,
+            ssh,
             #[cfg(windows)]
             job: job.clone(),
         },

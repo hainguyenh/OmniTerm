@@ -20,6 +20,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["ui"],
+  "include": ["ui", "plugins/always-awake/app"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
