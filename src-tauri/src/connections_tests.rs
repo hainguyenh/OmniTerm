@@ -206,6 +206,9 @@ fn bounded_import_reader_accepts_small_text_and_rejects_missing_or_oversized_fil
 
 #[test]
 fn connections_path_returns_json_path_under_app_data() {
+    // Every mock app resolves the same app-data directory, and `connections_path` creates it when
+    // absent. Without the lock this raced the other fixtures' `create_dir_all` and returned EEXIST.
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let path = connections_path(app.handle()).expect("should resolve");
     assert!(path.to_string_lossy().ends_with("connections.json"));
