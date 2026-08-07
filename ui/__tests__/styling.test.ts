@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs, { globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
@@ -40,5 +40,29 @@ describe("styling regression check", () => {
     expect(content).toMatch(/\.pane-offscreen\s*\{[^}]*visibility:\s*hidden/);
     expect(content).not.toMatch(/\.pane-offscreen\s*\{[^}]*display:\s*none/);
     expect(content).toMatch(/\.pane-offscreen\s*\{[^}]*transform:\s*translateX\(-200vw\)/);
+  });
+
+  // A renderer component that Tailwind does not scan still renders — with none of its classes defined.
+  // Nothing else catches that: unit tests assert markup, not the generated stylesheet, so a plugin
+  // modal styled as `max-w-md` came out full-width in the real app and every test stayed green. The
+  // config is therefore expanded against the filesystem here rather than string-matched.
+  it("scans every plugin renderer component, not just ui/", () => {
+    const config = fs.readFileSync(path.join(ROOT, "tailwind.config.js"), "utf8");
+    const contentGlobs = [...config.matchAll(/"\.\/([^"]+)"/g)].map((match) => match[1]);
+    const scanned = new Set(contentGlobs.flatMap((glob) => globSync(glob, { cwd: ROOT })));
+
+    const pluginRoot = path.join(ROOT, "plugins");
+    const pluginComponents = fs
+      .readdirSync(pluginRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(pluginRoot, entry.name, "app")))
+      .flatMap((entry) =>
+        globSync(`plugins/${entry.name}/app/**/*.{ts,tsx}`, { cwd: ROOT }),
+      );
+
+    // The suite is worthless if it silently stops finding plugin components.
+    expect(pluginComponents.length).toBeGreaterThan(0);
+    for (const component of pluginComponents) {
+      expect(scanned, `${component} is not covered by a Tailwind content glob`).toContain(component);
+    }
   });
 });

@@ -1,6 +1,14 @@
-import React, { useState } from 'react'
-import { X, Plus, Trash2, Copy, Check, Moon, Sun } from 'lucide-react'
-import { AppTheme, TOKYO_NIGHT } from '../themes'
+import React, { useCallback, useState } from 'react'
+import { X, Plus, Trash2, Copy, Check, Moon, Sun, FolderOpen, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
+import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT } from '../themes'
+import type { ColorField, ThemeMode } from '../utils/themeVars'
+import { useEscToClose } from '../hooks/useEscToClose'
+import { useThemeDraft } from './themeRemix/useThemeDraft'
+import { AppColorFields, LayoutFields, TerminalColorFields } from './themeRemix/ThemeEditorFields'
+import ThemePreview from './themeRemix/ThemePreview'
+
+/** Preview modes: one at full width, or both side by side for comparing a colour across them. */
+type PreviewMode = ThemeMode | 'both'
 
 interface ThemeRemixModalProps {
   isOpen: boolean
@@ -12,6 +20,8 @@ interface ThemeRemixModalProps {
   currentTheme: AppTheme
 }
 
+const isCustom = (theme: AppTheme) => theme.id.startsWith('theme-')
+
 export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   isOpen,
   onClose,
@@ -22,178 +32,242 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   currentTheme,
 }) => {
   const [selectedThemeId, setSelectedThemeId] = useState<string>(currentTheme.id)
-  const [activeTab, setActiveTab] = useState<'ui' | 'terminal'>('ui')
-  const [editMode, setEditMode] = useState<'dark' | 'light'>(appSettings.darkMode ? 'dark' : 'light')
+  const [editMode, setEditMode] = useState<ThemeMode>(appSettings.darkMode ? 'dark' : 'light')
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('both')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const selectedTheme = themes.find(t => t.id === selectedThemeId) ?? currentTheme
+  const { draft, dirty, setName, setColor, setUiField, revert, adoptPalette } = useThemeDraft(selectedTheme)
 
-  const refreshThemes = async (selectId?: string) => {
-    const list = await window.omnitermAPI.themes.list()
-    setThemes(list)
-    if (selectId) setSelectedThemeId(selectId)
+  const guardedClose = useCallback(() => (dirty ? setConfirmDiscard(true) : onClose()), [dirty, onClose])
+  useEscToClose(dirty, onClose, () => setConfirmDiscard(true), isOpen && !confirmDiscard)
+
+  const refreshThemes = async (selectId?: string): Promise<AppTheme[]> => {
+    setIsRefreshing(true)
+    try {
+      const list = await window.omnitermAPI.themes.list()
+      setThemes(list)
+      if (selectId) setSelectedThemeId(selectId)
+      return list
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   const makeThemeId = () => `theme-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-  const handleCreate = async () => {
-    const newId = makeThemeId()
-    const newTheme: AppTheme = {
-      id: newId,
-      name: `New Remix ${themes.filter(t => t.id.startsWith('theme-')).length + 1}`,
-      terminal: { dark: { ...selectedTheme.terminal.dark }, light: { ...selectedTheme.terminal.light } },
-      ui: { dark: { ...selectedTheme.ui.dark }, light: { ...selectedTheme.ui.light } },
-    }
-    await window.omnitermAPI.themes.save(newTheme)
-    await refreshThemes(newId)
-    const next = { ...appSettings, themeId: newId }
+  const persistSelection = async (themeId: string) => {
+    const next = { ...appSettings, themeId }
     setAppSettings(next)
     await window.omnitermAPI.settings.save(next)
   }
 
-  const handleDuplicate = async () => {
+  const addTheme = async (name: string, base: AppTheme) => {
     const newId = makeThemeId()
-    const dup: AppTheme = {
+    const created: AppTheme = {
       id: newId,
-      name: `${selectedTheme.name} Copy`.slice(0, 40),
-      terminal: { dark: { ...selectedTheme.terminal.dark }, light: { ...selectedTheme.terminal.light } },
-      ui: { dark: { ...selectedTheme.ui.dark }, light: { ...selectedTheme.ui.light } },
+      name,
+      terminal: { dark: { ...base.terminal.dark }, light: { ...base.terminal.light } },
+      ui: { dark: { ...base.ui.dark }, light: { ...base.ui.light } },
     }
-    await window.omnitermAPI.themes.save(dup)
+    await window.omnitermAPI.themes.save(created)
     await refreshThemes(newId)
-    const next = { ...appSettings, themeId: newId }
-    setAppSettings(next)
-    await window.omnitermAPI.settings.save(next)
+    await persistSelection(newId)
   }
 
-  const handleDelete = async () => {
-    if (selectedTheme.id === TOKYO_NIGHT.id || themes.length <= 1) return
-    const remaining = themes.filter(t => t.id !== selectedTheme.id)
-    const fallbackId = remaining[0]?.id ?? TOKYO_NIGHT.id
-    await window.omnitermAPI.themes.delete(selectedTheme.id)
+  const handleCreate = () =>
+    addTheme(`New Remix ${themes.filter(t => isCustom(t)).length + 1}`, draft)
+
+  const handleDuplicate = (theme: AppTheme) => addTheme(`${theme.name} Copy`.slice(0, 40), theme)
+
+  const handleDelete = async (theme: AppTheme) => {
+    if (theme.id === DEFAULT_THEME_ID || themes.length <= 1) return
+    const fallbackId = themes.find(t => t.id !== theme.id)?.id ?? DEFAULT_THEME_ID
+    await window.omnitermAPI.themes.delete(theme.id)
     await refreshThemes(fallbackId)
-    if (appSettings.themeId === selectedTheme.id) {
-      const next = { ...appSettings, themeId: fallbackId }
-      setAppSettings(next)
-      await window.omnitermAPI.settings.save(next)
+    if (appSettings.themeId === theme.id) await persistSelection(fallbackId)
+  }
+
+  const handleApply = () => persistSelection(draft.id)
+
+  /** Write the draft to its JSON file. The applied theme picks the change up through the refreshed list. */
+  const handleSave = async () => {
+    setBusy(true)
+    try {
+      await window.omnitermAPI.themes.save(draft)
+      await refreshThemes()
+    } finally {
+      setBusy(false)
     }
   }
 
-  const handleApply = async () => {
-    const next = { ...appSettings, themeId: selectedTheme.id }
-    setAppSettings(next)
-    await window.omnitermAPI.settings.save(next)
-  }
-
-  const saveThemeChanges = async (updated: AppTheme) => {
-    await window.omnitermAPI.themes.save(updated)
-    setThemes(themes.map(t => (t.id === updated.id ? updated : t)))
-  }
-
-  const updateUIField = (key: string, value: string) => {
-    const updated: AppTheme = {
-      ...selectedTheme,
-      ui: { ...selectedTheme.ui, [editMode]: { ...selectedTheme.ui[editMode], [key]: value } },
+  /**
+   * Built-in: drop the user's override so the shipped JSON comes back (`save_theme` writes a same-id
+   * copy into the user themes folder, so deleting that copy *is* the reset).
+   * Custom: load the default palette into the draft, unsaved until the user saves.
+   */
+  const handleResetToDefault = async () => {
+    setBusy(true)
+    try {
+      if (isCustom(draft)) {
+        adoptPalette(TOKYO_NIGHT)
+        return
+      }
+      await window.omnitermAPI.themes.delete(draft.id)
+      const list = await refreshThemes()
+      const restored = list.find(t => t.id === draft.id)
+      if (restored) adoptPalette(restored)
+    } finally {
+      setBusy(false)
     }
-    saveThemeChanges(updated)
-  }
-
-  const updateTerminalColor = (key: string, value: string) => {
-    const updated: AppTheme = {
-      ...selectedTheme,
-      terminal: { ...selectedTheme.terminal, [editMode]: { ...selectedTheme.terminal[editMode], [key]: value } },
-    }
-    saveThemeChanges(updated)
-  }
-
-  const parseVal = (str: string): number => {
-    const val = parseFloat(str)
-    return typeof str === 'string' && str.endsWith('rem') ? val * 16 : (isNaN(val) ? 0 : val)
-  }
-
-  const toRemOrPx = (num: number, targetStr: string): string => {
-    return typeof targetStr === 'string' && targetStr.endsWith('rem') ? `${num / 16}rem` : `${num}px`
-  }
-
-  const isColorLight = (hex: string): boolean => {
-    if (!hex || !hex.startsWith('#')) return false
-    const c = hex.substring(1)
-    const len = c.length
-    const r = parseInt(len === 3 ? c[0] + c[0] : c.substring(0, 2), 16)
-    const g = parseInt(len === 3 ? c[1] + c[1] : c.substring(2, 4), 16)
-    const b = parseInt(len === 3 ? c[2] + c[2] : c.substring(4, 6), 16)
-    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
   }
 
   if (!isOpen) return null
 
-  const ui = selectedTheme.ui[editMode]
-  const terminal = selectedTheme.terminal[editMode]
-
-  const isSidebarLight = isColorLight(ui?.sidebarBg ?? '#000')
-  const activeItemBg = isSidebarLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.10)'
-  const hoverItemBg = isSidebarLight ? 'hover:bg-black/5' : 'hover:bg-white/5'
-  const accentTextColor = isColorLight(ui?.accent ?? '#fff') ? '#000000' : '#ffffff'
-  const inputBg = isSidebarLight ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.05)'
+  const onColorChange = (field: ColorField, value: string) => setColor(field, editMode, value)
+  const onUiFieldChange = (key: string, value: string) => setUiField(editMode, key, value)
+  const previewModes: ThemeMode[] = previewMode === 'both' ? ['dark', 'light'] : [previewMode]
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div
-        className="w-full max-w-4xl h-[85vh] rounded-2xl border flex flex-col overflow-hidden shadow-2xl relative w-\[900px\] h-\[600px\] max-h-\[90vh\] max-w-\[95vw\] rounded-xl border shadow-2xl flex flex-col overflow-hidden bg-theme-popup border-theme-border text-theme-fg"
-      >
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+      style={{ backgroundColor: 'var(--theme-overlay)' }}
+    >
+      <div className="flex h-[92vh] w-[min(1500px,96vw)] flex-col overflow-hidden rounded-2xl border border-theme-border bg-theme-popup text-theme-fg shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-theme-border">
-          <div>
+        <div className="flex items-center justify-between gap-4 border-b border-theme-border px-4 py-3">
+          <div className="min-w-0">
             <h2 className="text-lg font-bold text-theme-fg">Theme Remix</h2>
             <p className="text-xs text-theme-dim">
-              Customize app &amp; terminal layout, colors, spacing, and border roundings in real-time.
+              Edit every colour the app can paint and watch both appearance modes react as you type.
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-lg transition-colors hover:bg-white/10 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
 
-        {/* Body */}
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          {/* Sidebar */}
-          <aside className="w-60 border-r flex flex-col p-3 gap-3 flex-shrink-0 border-theme-border">
+          <div className="flex items-center gap-2">
+            {dirty && <span className="text-[11px] font-semibold text-theme-warning">Unsaved changes</span>}
             <button
               type="button"
-              onClick={handleCreate}
-              className="w-full py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all"
-              style={{ backgroundColor: 'var(--theme-accent)', color: accentTextColor }}
+              onClick={() => { void handleResetToDefault() }}
+              disabled={busy}
+              title={isCustom(draft) ? 'Load the default palette into this theme' : 'Restore the built-in palette'}
+              className="flex items-center gap-1 rounded-lg border border-theme-border px-2.5 py-1.5 text-xs text-theme-dim hover:bg-theme-hover hover:text-theme-fg disabled:opacity-50"
             >
-              <Plus className="w-3.5 h-3.5" />New Custom Theme
+              <RotateCcw className="h-3.5 w-3.5" />Reset to default
             </button>
-            <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-1 pr-1">
+            <button
+              type="button"
+              onClick={revert}
+              disabled={!dirty}
+              title="Discard unsaved edits"
+              className="flex items-center gap-1 rounded-lg border border-theme-border px-2.5 py-1.5 text-xs text-theme-dim hover:bg-theme-hover hover:text-theme-fg disabled:opacity-40"
+            >
+              <Undo2 className="h-3.5 w-3.5" />Revert
+            </button>
+            <button
+              type="button"
+              onClick={() => { void handleSave() }}
+              disabled={!dirty || busy}
+              className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-theme-accent-fg disabled:opacity-40"
+              style={{ backgroundColor: 'var(--theme-accent)' }}
+            >
+              <Save className="h-3.5 w-3.5" />Save
+            </button>
+
+            <span className="mx-1 h-5 w-px" style={{ backgroundColor: 'var(--theme-border)' }} />
+
+            <button
+              type="button"
+              onClick={() => { void refreshThemes() }}
+              disabled={isRefreshing}
+              title="Reload themes from JSON files"
+              className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => { void window.omnitermAPI.themes.openFolder() }}
+              title="Open themes folder"
+              className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg"
+            >
+              <FolderOpen className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={guardedClose}
+              title="Close"
+              className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {confirmDiscard && (
+          <div className="flex items-center justify-between gap-3 border-b border-theme-border px-4 py-2 text-xs"
+            style={{ backgroundColor: 'var(--theme-hover-bg)' }}
+          >
+            <span className="text-theme-fg">This theme has unsaved changes.</span>
+            <span className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDiscard(false)}
+                className="rounded-lg border border-theme-border px-2.5 py-1 text-theme-dim hover:text-theme-fg"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => { revert(); setConfirmDiscard(false); onClose() }}
+                className="rounded-lg px-2.5 py-1 font-semibold text-theme-error hover:bg-theme-hover"
+              >
+                Discard changes
+              </button>
+            </span>
+          </div>
+        )}
+
+        {/* Body: theme list │ editor │ preview */}
+        <div className="flex min-h-0 flex-1">
+          <aside className="flex w-52 flex-shrink-0 flex-col gap-3 border-r border-theme-border p-3">
+            <button
+              type="button"
+              onClick={() => { void handleCreate() }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold text-theme-accent-fg"
+              style={{ backgroundColor: 'var(--theme-accent)' }}
+            >
+              <Plus className="h-3.5 w-3.5" />New Custom Theme
+            </button>
+            <div className="no-scrollbar flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
               {themes.map(t => {
-                const isActive = t.id === selectedThemeId
-                const isSavedActive = t.id === appSettings.themeId
+                const isSelected = t.id === selectedThemeId
                 return (
                   <div
                     key={t.id}
-                    className={`group flex items-center justify-between rounded-lg p-2 transition-colors ${!isActive ? hoverItemBg : ''}`}
-                    style={isActive ? { backgroundColor: activeItemBg } : {}}
+                    className={`group flex items-center justify-between rounded-lg p-2 transition-colors ${isSelected ? '' : 'hover:bg-theme-hover'}`}
+                    style={isSelected ? { backgroundColor: 'var(--theme-hover-bg)' } : undefined}
                   >
-                    <button type="button" onClick={() => setSelectedThemeId(t.id)} className="flex-1 text-left min-w-0">
-                      <div className="font-semibold text-xs truncate flex items-center gap-1">
+                    <button type="button" onClick={() => setSelectedThemeId(t.id)} className="min-w-0 flex-1 text-left">
+                      <span className="flex items-center gap-1 truncate text-xs font-semibold">
                         {t.name}
-                        {isSavedActive && <span className="w-1.5 h-1.5 rounded-full bg-green-400" title="Active Theme" />}
-                      </div>
-                      <div className="text-[10px] text-theme-dim">
-                        {t.id.startsWith('theme-') ? 'Custom' : 'Built-in'}
-                      </div>
+                        {t.id === appSettings.themeId && (
+                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--theme-success)' }} title="Active theme" />
+                        )}
+                      </span>
+                      <span className="block text-[10px] text-theme-dim">{isCustom(t) ? 'Custom' : 'Built-in'}</span>
                     </button>
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
-                      <button type="button" onClick={handleDuplicate} title="Duplicate" className="p-1 rounded hover:bg-white/10">
-                        <Copy className="w-3.5 h-3.5" />
+                    <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button type="button" onClick={() => { void handleDuplicate(t) }} title="Duplicate" className="rounded p-1 hover:bg-theme-hover">
+                        <Copy className="h-3.5 w-3.5" />
                       </button>
-                      {t.id.startsWith('theme-') && (
-                        <button type="button" onClick={handleDelete} title="Delete" className="p-1 rounded hover:bg-red-500/20 text-red-400">
-                          <Trash2 className="w-3.5 h-3.5" />
+                      {isCustom(t) && (
+                        <button type="button" onClick={() => { void handleDelete(t) }} title="Delete" className="rounded p-1 text-theme-error hover:bg-theme-hover">
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
-                    </div>
+                    </span>
                   </div>
                 )
               })}
@@ -201,213 +275,93 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
           </aside>
 
           {/* Editor */}
-          <section className="flex-1 flex flex-col p-4 overflow-y-auto no-scrollbar gap-4 min-w-0">
-            {/* Name + Apply */}
-            <div className="flex items-center gap-4 flex-wrap border-b pb-4 border-theme-border">
-              <div className="flex-1 min-w-[200px]">
-                <label className="block text-[10px] uppercase font-bold tracking-widest mb-1.5 text-theme-dim">Theme Name</label>
+          <section className="no-scrollbar flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <div className="flex flex-wrap items-end gap-3 border-b border-theme-border pb-3">
+              <div className="min-w-[180px] flex-1">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-widest text-theme-dim" htmlFor="theme-name">
+                  Theme name
+                </label>
                 <input
+                  id="theme-name"
                   type="text"
-                  value={selectedTheme.name}
-                  onChange={(e) => saveThemeChanges({ ...selectedTheme, name: e.target.value })}
-                  className="w-full border text-sm rounded-lg px-3 py-1.5 focus:outline-none"
-                  style={{ borderColor: 'var(--theme-border)', backgroundColor: inputBg, color: 'var(--theme-fg)' }}
+                  value={draft.name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-1.5 text-sm focus:outline-none"
+                  style={{ borderColor: 'var(--theme-border)', backgroundColor: 'var(--theme-bg)', color: 'var(--theme-fg)' }}
                 />
               </div>
               <button
                 type="button"
-                onClick={handleApply}
-                disabled={appSettings.themeId === selectedTheme.id}
-                className="py-1.5 px-4 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ backgroundColor: 'var(--theme-accent)', color: accentTextColor }}
+                onClick={() => { void handleApply() }}
+                disabled={appSettings.themeId === draft.id}
+                className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-xs font-bold text-theme-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
+                style={{ backgroundColor: 'var(--theme-accent)' }}
               >
-                <Check className="w-3.5 h-3.5" />Apply This Theme
+                <Check className="h-3.5 w-3.5" />Apply This Theme
               </button>
             </div>
 
-            {/* Tabs + Dark/Light switcher */}
-            <div className="flex items-center justify-between border-b border-theme-border">
-              <div className="flex gap-2">
-                {(['ui', 'terminal'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    className="py-1.5 px-3 font-semibold text-xs border-b-2 transition-all"
-                    style={activeTab === tab
-                      ? { borderColor: 'var(--theme-accent)', color: 'var(--theme-fg)' }
-                      : { borderColor: 'transparent', color: 'var(--theme-dim)' }}
-                    onClick={() => setActiveTab(tab)}
-                  >
-                    {tab === 'ui' ? 'App Spacing & Colors' : 'Terminal Palette'}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-1 pb-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-theme-dim">Editing variant</span>
+              <div className="flex items-center gap-1">
                 {(['dark', 'light'] as const).map(mode => (
                   <button
                     key={mode}
                     type="button"
                     onClick={() => setEditMode(mode)}
                     title={`Edit ${mode} variant`}
-                    className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all"
+                    className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-all"
                     style={editMode === mode
-                      ? { borderColor: 'var(--theme-accent)', backgroundColor: 'var(--theme-accent)', color: accentTextColor }
+                      ? { borderColor: 'var(--theme-accent)', backgroundColor: 'var(--theme-accent)', color: 'var(--theme-accent-fg)' }
                       : { borderColor: 'var(--theme-border)', color: 'var(--theme-dim)' }}
                   >
-                    {mode === 'dark' ? <Moon className="w-3 h-3" /> : <Sun className="w-3 h-3" />}
+                    {mode === 'dark' ? <Moon className="h-3 w-3" /> : <Sun className="h-3 w-3" />}
                     {mode === 'dark' ? 'Dark' : 'Light'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* UI Tab */}
-            {activeTab === 'ui' && ui && (
-              <div className="flex flex-col gap-5">
-                <div>
-                  <h3 className="text-xs uppercase font-bold tracking-widest mb-3 text-theme-fg">Layout &amp; Spacing</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                    <div className="flex flex-col">
-                      <label className="text-[11px] mb-1.5 text-theme-dim">Typography Style</label>
-                      <select
-                        value={ui.fontFamily}
-                        onChange={(e) => updateUIField('fontFamily', e.target.value)}
-                        className="border text-xs rounded-lg px-2.5 py-1.5 focus:outline-none"
-                        style={{ borderColor: 'var(--theme-border)', backgroundColor: inputBg, color: 'var(--theme-fg)' }}
-                      >
-                        <option value='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif'>Sans-Serif (Standard/Modern)</option>
-                        <option value='Cormorant Garamond, EB Garamond, Georgia, serif'>Editorial Serif (Claude/Bookish)</option>
-                        <option value='Georgia, "Times New Roman", serif'>Classic Serif (Novel/Reading)</option>
-                        <option value='Inter, -apple-system, sans-serif'>Humanist Sans (Clean/Responsive)</option>
-                        <option value='SF Mono, Menlo, Consolas, monospace'>Monospace (Volt/Technical)</option>
-                      </select>
-                    </div>
+            <AppColorFields theme={draft} mode={editMode} onColorChange={onColorChange} onUiFieldChange={onUiFieldChange} />
+            <TerminalColorFields theme={draft} mode={editMode} onColorChange={onColorChange} onUiFieldChange={onUiFieldChange} />
+            <LayoutFields theme={draft} mode={editMode} onColorChange={onColorChange} onUiFieldChange={onUiFieldChange} />
+          </section>
 
-                    <div className="flex flex-col">
-                      <label className="text-[11px] mb-1.5 text-theme-dim">Terminal Font Style</label>
-                      <select
-                        value={ui.fontFamilyMono || '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace'}
-                        onChange={(e) => updateUIField('fontFamilyMono', e.target.value)}
-                        className="border text-xs rounded-lg px-2.5 py-1.5 focus:outline-none"
-                        style={{ borderColor: 'var(--theme-border)', backgroundColor: inputBg, color: 'var(--theme-fg)' }}
-                      >
-                        <option value='"JetBrains Mono", "Fira Code", "Cascadia Code", monospace'>JetBrains Mono (Claude/Default)</option>
-                        <option value='SF Mono, Menlo, Consolas, monospace'>SF Mono (Volt/Technical)</option>
-                        <option value='"Geist Mono", "Fira Code", "JetBrains Mono", monospace'>Geist Mono (Vercel/Modern)</option>
-                        <option value='"Courier New", Courier, monospace'>Courier New (Classic/Novel)</option>
-                        <option value='"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace'>Default Multi-Stack</option>
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col">
-                      <div className="flex items-center justify-between text-[11px] mb-1.5">
-                        <span className="text-theme-dim">Border Radius</span>
-                        <span className="font-bold text-theme-fg">{ui.borderRadiusMd}</span>
-                      </div>
-                      <input
-                        type="range" min="0" max="24"
-                        value={parseVal(ui.borderRadiusMd)}
-                        onChange={(e) => {
-                          const val = Number(e.target.value)
-                          updateUIField('borderRadiusSm', toRemOrPx(val * 0.5, ui.borderRadiusSm))
-                          updateUIField('borderRadiusMd', toRemOrPx(val, ui.borderRadiusMd))
-                          updateUIField('borderRadiusLg', toRemOrPx(val * 1.5, ui.borderRadiusLg))
-                          updateUIField('borderRadiusXl', toRemOrPx(val * 2.0, ui.borderRadiusXl))
-                        }}
-                        className="w-full"
-                        style={{ accentColor: 'var(--theme-accent)' }}
-                      />
-                    </div>
-
-                    <div className="flex flex-col">
-                      <div className="flex items-center justify-between text-[11px] mb-1.5">
-                        <span className="text-theme-dim">Padding &amp; Margins</span>
-                        <span className="font-bold text-theme-fg">{ui.paddingMd}</span>
-                      </div>
-                      <input
-                        type="range" min="4" max="32"
-                        value={parseVal(ui.paddingMd)}
-                        onChange={(e) => {
-                          const val = Number(e.target.value)
-                          updateUIField('paddingSm', toRemOrPx(val * 0.6, ui.paddingSm))
-                          updateUIField('paddingMd', toRemOrPx(val, ui.paddingMd))
-                          updateUIField('paddingLg', toRemOrPx(val * 1.3, ui.paddingLg))
-                          updateUIField('paddingXl', toRemOrPx(val * 2.0, ui.paddingXl))
-                        }}
-                        className="w-full"
-                        style={{ accentColor: 'var(--theme-accent)' }}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-xs uppercase font-bold tracking-widest mb-3 text-theme-fg">App Colors</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {[
-                      { key: 'background', label: 'App Background', source: 'terminal' },
-                      { key: 'foreground', label: 'Primary Text', source: 'terminal' },
-                      { key: 'sidebarBg', label: 'Sidebar Fill', source: 'ui' },
-                      { key: 'popupBg', label: 'Dropdown/Popups', source: 'ui' },
-                      { key: 'accent', label: 'Accent Color', source: 'ui' },
-                      { key: 'dimText', label: 'Muted Text', source: 'ui' },
-                      { key: 'border', label: 'Border/Lines', source: 'ui' },
-                      { key: 'cardBg', label: 'Card/Form Fill', source: 'ui' },
-                    ].map(item => {
-                      const value = item.source === 'terminal' ? (terminal as any)[item.key] : (ui as any)[item.key]
-                      return (
-                        <div
-                          key={item.key}
-                          className="flex items-center justify-between border rounded-lg p-2 gap-2 text-xs"
-                          style={{ borderColor: 'var(--theme-border)', backgroundColor: 'rgba(0,0,0,0.05)' }}
-                        >
-                          <span className="truncate text-theme-dim">{item.label}</span>
-                          <input
-                            type="color"
-                            value={value || '#000000'}
-                            onChange={(e) => item.source === 'terminal' ? updateTerminalColor(item.key, e.target.value) : updateUIField(item.key, e.target.value)}
-                            className="w-6 h-6 border-0 bg-transparent cursor-pointer flex-shrink-0"
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
+          {/* Preview */}
+          <section className="flex w-[46%] min-w-0 flex-col gap-2 border-l border-theme-border p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-theme-dim">Live preview</span>
+              <div role="radiogroup" aria-label="Preview mode" className="flex items-center gap-1">
+                {([['dark', 'Dark'], ['light', 'Light'], ['both', 'Both']] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={previewMode === value}
+                    onClick={() => setPreviewMode(value)}
+                    className="rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-all"
+                    style={previewMode === value
+                      ? { borderColor: 'var(--theme-accent)', backgroundColor: 'var(--theme-accent)', color: 'var(--theme-accent-fg)' }
+                      : { borderColor: 'var(--theme-border)', color: 'var(--theme-dim)' }}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-            )}
-
-            {/* Terminal Tab */}
-            {activeTab === 'terminal' && terminal && (
-              <div>
-                <h3 className="text-xs uppercase font-bold tracking-widest mb-3 text-theme-fg">Terminal ANSI Colors</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {[
-                    'black','red','green','yellow','blue','magenta','cyan','white',
-                    'brightBlack','brightRed','brightGreen','brightYellow','brightBlue','brightMagenta','brightCyan','brightWhite',
-                  ].map(key => (
-                    <div
-                      key={key}
-                      className="flex items-center justify-between border rounded-lg p-2 gap-2 text-xs"
-                      style={{ borderColor: 'var(--theme-border)', backgroundColor: 'rgba(0,0,0,0.05)' }}
-                    >
-                      <span className="truncate capitalize text-theme-dim">
-                        {key.replace(/([A-Z])/g, ' $1')}
-                      </span>
-                      <input
-                        type="color"
-                        value={(terminal as any)[key] || '#000000'}
-                        onChange={(e) => updateTerminalColor(key, e.target.value)}
-                        className="w-6 h-6 border-0 bg-transparent cursor-pointer flex-shrink-0"
-                      />
-                    </div>
-                  ))}
+            </div>
+            <div className={`no-scrollbar grid min-h-0 flex-1 gap-3 overflow-y-auto ${previewMode === 'both' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {previewModes.map(mode => (
+                <div key={mode} className="flex min-h-0 min-w-0 flex-col gap-1">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-theme-dim">
+                    {mode === 'dark' ? 'Dark mode' : 'Light mode'}
+                  </span>
+                  <ThemePreview theme={draft} mode={mode} />
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </section>
         </div>
       </div>
     </div>
   )
 }
-

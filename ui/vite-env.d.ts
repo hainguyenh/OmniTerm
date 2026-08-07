@@ -126,6 +126,18 @@ interface UpdateState {
   hasNewerVersion: boolean
 }
 
+type AlwaysAwakeMode = 'always' | 'activeOnly'
+
+interface AlwaysAwakeStatus {
+  enabled: boolean
+  mode: AlwaysAwakeMode
+  expiresAtMs: number
+  activeSessionCount: number
+  keepingAwake: boolean
+  supported: boolean
+  error: string | null
+}
+
 interface Window {
   omnitermAPI: {
     connections: {
@@ -282,9 +294,15 @@ interface Window {
     }
     themes: {
       list: () => Promise<import('./themes').AppTheme[]>
-      openFolder: () => Promise<string>
+      openFolder: () => Promise<void>
       save: (theme: import('./themes').AppTheme) => Promise<void>
       delete: (id: string) => Promise<void>
+    }
+    alwaysAwake: {
+      getState: () => Promise<AlwaysAwakeStatus>
+      setState: (payload: { enabled: boolean; mode: AlwaysAwakeMode; expiresAtMs: number }) => Promise<AlwaysAwakeStatus>
+      disable: () => Promise<AlwaysAwakeStatus>
+      onState: (cb: (state: AlwaysAwakeStatus) => void) => () => void
     }
     windowControl: {
       minimize: () => Promise<void>

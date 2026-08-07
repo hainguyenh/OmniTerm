@@ -3,8 +3,9 @@ import MainLayout from './components/MainLayout'
 import DetachedTerminalWindow from './components/DetachedTerminalWindow'
 import { TitleBar } from './components/TitleBar'
 import { ThemeRemixModal } from './components/ThemeRemixModal'
-import { AppTheme, TOKYO_NIGHT, LayoutMode } from './themes'
+import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
+import { applyThemeVars, themeCssVars } from './utils/themeVars'
 
 interface AppSettings {
   themeId: string
@@ -22,7 +23,7 @@ interface AppSettings {
 
 function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>({
-    themeId: 'tokyo-night',
+    themeId: DEFAULT_THEME_ID,
     fontSize: 14,
     smartColors: false,
     checkUpdatesOnStartup: true,
@@ -67,7 +68,7 @@ function App() {
     })
   }, [])
 
-  const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? TOKYO_NIGHT
+  const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? themes[0] ?? TOKYO_NIGHT
 
   // Load settings and themes on mount.
   const reloadSettingsAndThemes = () => {
@@ -241,88 +242,11 @@ function App() {
   }, [])
 
 
-  // Dynamically update document CSS variables when the current theme changes.
+  // Dynamically update document CSS variables when the current theme changes. The mapping itself lives
+  // in utils/themeVars.ts so the Theme Remix preview paints from the very same record.
   useEffect(() => {
     if (!currentTheme) return
-    const root = document.documentElement
-    
-    // Support new light/dark subproperties
-    const isDark = appSettings.darkMode
-    const t = isDark ? currentTheme.terminal.dark : currentTheme.terminal.light
-    const u = isDark ? currentTheme.ui.dark : currentTheme.ui.light
-
-    // Helper to check color luminance
-    const isColorLight = (hex: string): boolean => {
-      const color = hex.substring(1)
-      if (color.length === 3) {
-        const r = parseInt(color[0] + color[0], 16)
-        const g = parseInt(color[1] + color[1], 16)
-        const b = parseInt(color[2] + color[2], 16)
-        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
-      }
-      if (color.length === 6) {
-        const r = parseInt(color.substring(0, 2), 16)
-        const g = parseInt(color.substring(2, 4), 16)
-        const b = parseInt(color.substring(4, 6), 16)
-        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5
-      }
-      return false
-    }
-
-    // Terminal colors
-    root.style.setProperty('--theme-bg', t.background)
-    root.style.setProperty('--theme-fg', t.foreground)
-    root.style.setProperty('--theme-border', u?.border || t.brightBlack || t.selectionBackground)
-    root.style.setProperty('--theme-selection', t.selectionBackground)
-    root.style.setProperty('--theme-hover-bg', isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)')
-    root.style.setProperty('--theme-selection-fg', isDark ? '#ffffff' : t.foreground)
-
-    // UI Layout Customizations
-    if (u) {
-      root.style.setProperty('--theme-font-family', u.fontFamily)
-      root.style.setProperty('--theme-font-mono', u.fontFamilyMono || '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace')
-      root.style.setProperty('--theme-rounded-sm', u.borderRadiusSm)
-      root.style.setProperty('--theme-rounded-md', u.borderRadiusMd)
-      root.style.setProperty('--theme-rounded-lg', u.borderRadiusLg)
-      root.style.setProperty('--theme-rounded-xl', u.borderRadiusXl)
-      
-      root.style.setProperty('--theme-padding-sm', u.paddingSm)
-      root.style.setProperty('--theme-padding-md', u.paddingMd)
-      root.style.setProperty('--theme-padding-lg', u.paddingLg)
-      root.style.setProperty('--theme-padding-xl', u.paddingXl)
-      
-      root.style.setProperty('--theme-margin-sm', u.marginSm)
-      root.style.setProperty('--theme-margin-md', u.marginMd)
-      root.style.setProperty('--theme-margin-lg', u.marginLg)
-      root.style.setProperty('--theme-margin-xl', u.marginXl)
-
-      root.style.setProperty('--theme-sidebar-bg', u.sidebarBg)
-      root.style.setProperty('--theme-popup-bg', u.popupBg)
-      root.style.setProperty('--theme-accent', u.accent)
-      root.style.setProperty('--theme-dim', u.dimText)
-      root.style.setProperty('--theme-card-bg', u.cardBg)
-      root.style.setProperty('--theme-accent-fg', u.accentFg || 'var(--theme-bg)')
-    } else {
-      // Fallback dynamic values based on color luminance
-      let accent = t.blue || t.green || t.cyan
-      if (currentTheme.id === 'tokyo-night') {
-        accent = '#7aa2f7'
-      } else if (currentTheme.id === 'mac-homebrew') {
-        accent = '#28FE14'
-      } else if (currentTheme.id === 'mac-novel') {
-        accent = '#A05A00'
-      }
-      root.style.setProperty('--theme-accent', accent)
-
-      const isLight = currentTheme.id.includes('novel') || (t.background.startsWith('#') && isColorLight(t.background))
-      root.style.setProperty('--theme-sidebar-bg', isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(0, 0, 0, 0.25)')
-      root.style.setProperty('--theme-popup-bg', isLight ? '#f2eed9' : '#24283b')
-      root.style.setProperty('--theme-dim', isLight ? '#73635A' : '#565f89')
-      root.style.setProperty('--theme-card-bg', t.background)
-      root.style.setProperty('--theme-font-family', '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif')
-      root.style.setProperty('--theme-font-mono', '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace')
-      root.style.setProperty('--theme-accent-fg', 'var(--theme-bg)')
-    }
+    applyThemeVars(document.documentElement, themeCssVars(currentTheme, appSettings.darkMode ? 'dark' : 'light'))
   }, [currentTheme, appSettings.darkMode])
 
   // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the

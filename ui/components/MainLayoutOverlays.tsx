@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { ArrowLeft, ArrowRight, Terminal, Trash2, X, XCircle } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { CommandPalette } from './CommandPalette'
@@ -8,13 +9,25 @@ import CustomArtSettings from './CustomArtSettings'
 import UpdateSettings from './UpdateSettings'
 import { appLogo } from '../assets/appLogo'
 import { diag } from '../diag'
+// Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
+// parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
+const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
 import { CtxItem, DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark } = model
+  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen } = model
   return (
     <>
+          {alwaysAwakeOpen && (
+            <Suspense fallback={null}>
+              <AlwaysAwakeModal
+                status={alwaysAwake}
+                onClose={() => setAlwaysAwakeOpen(false)}
+                onSaved={setAlwaysAwake}
+              />
+            </Suspense>
+          )}
           {aboutOpen && (
             <div
               className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"

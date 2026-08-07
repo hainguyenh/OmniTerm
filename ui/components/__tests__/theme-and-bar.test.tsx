@@ -32,16 +32,11 @@ describe("ThemeRemixModal", () => {
   it("renders the remixer when open", () => {
     render(<ThemeRemixModal isOpen onClose={vi.fn()} themes={[TOKYO_NIGHT]} setThemes={vi.fn()} appSettings={baseSettings} setAppSettings={vi.fn()} currentTheme={TOKYO_NIGHT} />);
     expect(screen.getByText("Theme Remix")).toBeInTheDocument();
-    expect(screen.getByText("App Spacing & Colors")).toBeInTheDocument();
-    expect(screen.getByText("Terminal Palette")).toBeInTheDocument();
-  });
-
-  it("switches between UI and Terminal tabs", () => {
-    render(<ThemeRemixModal isOpen onClose={vi.fn()} themes={[TOKYO_NIGHT]} setThemes={vi.fn()} appSettings={baseSettings} setAppSettings={vi.fn()} currentTheme={TOKYO_NIGHT} />);
-    fireEvent.click(screen.getByText("Terminal Palette"));
-    expect(screen.getByText("Terminal ANSI Colors")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("App Spacing & Colors"));
-    expect(screen.getByText("Layout & Spacing")).toBeInTheDocument();
+    // Every editor section is on screen at once, beside the live preview — no tabs to hunt through.
+    expect(screen.getByText("App colors")).toBeInTheDocument();
+    expect(screen.getByText("Terminal palette")).toBeInTheDocument();
+    expect(screen.getByText("Typography & spacing")).toBeInTheDocument();
+    expect(screen.getByText("Live preview")).toBeInTheDocument();
   });
 
   it("switches dark/light edit mode", () => {

@@ -1,0 +1,120 @@
+#[cfg(windows)]
+pub(super) fn apply_assertion(asserted: bool) -> Result<(), String> {
+    use windows::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
+    };
+    let flags = if asserted {
+        ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+    } else {
+        ES_CONTINUOUS
+    };
+    if unsafe { SetThreadExecutionState(flags).0 } == 0 {
+        return Err("Windows rejected the sleep-prevention request.".to_string());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub(super) fn apply_assertion(_asserted: bool) -> Result<(), String> {
+    Err("Always Awake is currently supported on Windows only.".to_string())
+}
+
+#[cfg(windows)]
+pub(super) fn sleep_timeout_seconds() -> Result<Option<u64>, String> {
+    use std::os::windows::process::CommandExt;
+
+    // Keep the compatibility fallback, but never let its console window flash over the app.
+    let output = std::process::Command::new("powercfg")
+        .creation_flags(0x0800_0000)
+        .args(["/query", "SCHEME_CURRENT", "SUB_SLEEP", "STANDBYIDLE"])
+        .output()
+        .map_err(|e| format!("Could not read Windows sleep timeout: {e}"))?;
+    if !output.status.success() {
+        return Err("Windows did not return the active sleep timeout.".to_string());
+    }
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        if line.contains("Current AC Power Setting Index") {
+            let value = line
+                .rsplit(':')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .trim_start_matches("0x");
+            let seconds = u64::from_str_radix(value, 16)
+                .map_err(|_| "Windows returned an invalid sleep timeout.".to_string())?;
+            return Ok((seconds > 0).then_some(seconds));
+        }
+    }
+    Err("Windows sleep timeout was not found.".to_string())
+}
+
+#[cfg(not(windows))]
+pub(super) fn sleep_timeout_seconds() -> Result<Option<u64>, String> {
+    Err("Windows sleep timeout is unavailable on this platform.".to_string())
+}
+
+#[cfg(windows)]
+pub(super) fn idle_seconds() -> Result<u64, String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    if !unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        return Err("Could not read Windows user idle time.".to_string());
+    }
+    let now = unsafe { windows::Win32::System::SystemInformation::GetTickCount() };
+    Ok(now.wrapping_sub(info.dwTime) as u64 / 1000)
+}
+
+#[cfg(not(windows))]
+pub(super) fn idle_seconds() -> Result<u64, String> {
+    Err("Windows user idle time is unavailable on this platform.".to_string())
+}
+
+#[cfg(windows)]
+pub(super) fn jiggle_mouse() -> Result<(), String> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+    let mut original = POINT::default();
+    unsafe {
+        GetCursorPos(&mut original).map_err(|e| format!("Could not read mouse position: {e}"))?;
+        let moved = POINT {
+            x: original.x.saturating_add(1),
+            y: original.y,
+        };
+        SetCursorPos(moved.x, moved.y)
+            .map_err(|e| format!("Could not move the mouse: {e}"))?;
+        // Restore immediately, but do not overwrite a real user movement observed between calls.
+        let mut current = POINT::default();
+        GetCursorPos(&mut current).map_err(|e| format!("Could not re-read mouse position: {e}"))?;
+        if current.x == moved.x && current.y == moved.y {
+            SetCursorPos(original.x, original.y)
+                .map_err(|e| format!("Could not restore the mouse position: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub(super) fn jiggle_mouse() -> Result<(), String> {
+    Err("Mouse jiggle is currently supported on Windows only.".to_string())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::jiggle_mouse;
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+    #[test]
+    fn jiggle_restores_cursor_position() {
+        let mut before = POINT::default();
+        unsafe { GetCursorPos(&mut before).expect("cursor position should be readable") };
+        jiggle_mouse().expect("mouse jiggle should complete");
+        let mut after = POINT::default();
+        unsafe { GetCursorPos(&mut after).expect("cursor position should be readable") };
+        assert_eq!((after.x, after.y), (before.x, before.y));
+    }
+}

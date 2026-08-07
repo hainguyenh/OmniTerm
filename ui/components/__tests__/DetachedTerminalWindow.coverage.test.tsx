@@ -104,6 +104,7 @@ describe('DetachedTerminalWindow', () => {
     render(<DetachedTerminalWindow appSettings={settings} setAppSettings={vi.fn()} themes={[TOKYO_NIGHT]} smartColors={false} />)
     await waitFor(() => expect(screen.getByTestId('terminal')).toHaveTextContent('local:attach:16'))
     expect(terminalProps.theme).toEqual(TOKYO_NIGHT.terminal.light)
+    expect(terminalProps.darkMode).toBe(false)
     expect(terminalProps.fontFamilyMono).toBe(TOKYO_NIGHT.ui.light.fontFamilyMono)
   })
 
