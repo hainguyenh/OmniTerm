@@ -48,7 +48,21 @@ export interface UITheme {
   dimText: string
   border: string
   cardBg: string
+  /* ── Optional colours ──────────────────────────────────────────────────────────────────────
+   * Absent from a theme means "use the app default" (see themeCssVars in utils/themeVars.ts), which
+   * is what these were before they became themeable. Every theme JSON written against the older
+   * schema therefore keeps rendering exactly as it did. */
+  /** Text drawn on top of `accent`. Defaults to the app background. */
   accentFg?: string
+  /** Row/icon hover fill. Defaults to a translucent white (dark) or black (light). */
+  hoverBg?: string
+  /** Text colour inside a selection. Defaults to white (dark) or the foreground (light). */
+  selectionFg?: string
+  /** Scrim painted behind a modal. Defaults to a translucent slate. */
+  overlay?: string
+  warning?: string
+  error?: string
+  success?: string
 }
 
 export interface AppTheme {
