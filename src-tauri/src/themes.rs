@@ -37,20 +37,45 @@ fn read_theme_dir(dir: &std::path::Path) -> Vec<serde_json::Value> {
         .collect()
 }
 
+fn theme_id(theme: &serde_json::Value) -> Option<&str> {
+    theme.get("id").and_then(|v| v.as_str())
+}
+
+/// Fold the user's themes into the built-ins, an id in both roots resolving to the user's copy.
+///
+/// `save_theme` always writes to the user root, keeping the theme's id — so editing a *built-in*
+/// theme produces two entries with the same id. Concatenated blindly, the renderer's
+/// `themes.find(t => t.id === …)` keeps picking the bundled one and every edit to a built-in looks
+/// like it was silently discarded (and the theme is listed twice).
+fn merge_theme_roots(
+    builtin: Vec<serde_json::Value>,
+    user: Vec<serde_json::Value>,
+) -> Vec<serde_json::Value> {
+    let mut themes = builtin;
+    for theme in user {
+        let existing = theme_id(&theme)
+            .and_then(|id| themes.iter().position(|other| theme_id(other) == Some(id)));
+        match existing {
+            Some(index) => themes[index] = theme,
+            None => themes.push(theme),
+        }
+    }
+    themes
+}
+
 #[tauri::command]
 pub async fn list_themes<R: Runtime>(app: AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
-    let mut themes = Vec::new();
-
     // 1. Built-in themes, bundled beside the executable. A build that ships none is not an error.
-    if let Ok(resource_dir) = app.path().resource_dir() {
-        themes.extend(read_theme_dir(&resource_dir.join("builtinThemes")));
-    }
+    let builtin = match app.path().resource_dir() {
+        Ok(resource_dir) => read_theme_dir(&resource_dir.join("builtinThemes")),
+        Err(_) => Vec::new(),
+    };
 
     // 2. The user's own themes. Unlike the built-ins, this root is created if absent — failing to
     //    create it is a real error, because it is where `save_theme` is about to write.
-    themes.extend(read_theme_dir(&get_themes_dir(&app)?));
+    let user = read_theme_dir(&get_themes_dir(&app)?);
 
-    Ok(themes)
+    Ok(merge_theme_roots(builtin, user))
 }
 
 /// Max length of a theme id, so a filename cannot be pushed past the OS limit.
