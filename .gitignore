@@ -35,7 +35,7 @@ docs/superpowers/
 .opencode/
 
 # Generated from assets/OmniTerm-Logo-Original.png by scripts/generate-app-assets.mjs
-src/generated/
+ui/generated/
 src-tauri/icons/*
 !src-tauri/icons/.gitkeep
 
@@ -47,3 +47,4 @@ coverage-rust/
 *.lcov
 lcov.info
 push-hainguyenh.*
+target/

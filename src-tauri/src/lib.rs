@@ -14,31 +14,32 @@ mod test_support;
 // Public so the integration tests under tests/ can drive the real launch and command paths.
 pub mod adhoc;
 pub mod connections;
-pub mod launch;
-pub mod openshell;
-pub mod proc_activity;
+// Re-exported from the shared protocol crate so every intra‑crate
+// `crate::shell_spec::*` / `crate::openshell::*` path keeps resolving unchanged.
+pub use app_protocol::{openshell, shell_spec, session_status};
+
+// Re-exported from the core crate so every intra‑crate
+// `crate::launch::*` / `crate::tree_validate::*` / `crate::workspace_launch::*` path keeps resolving.
+pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
+#[cfg(windows)]
+pub use app_core::win_job;
 pub mod pty;
 pub mod pty_output_batch;
 pub mod pty_resolve;
-pub mod rdp_launch;
 pub mod session_activity;
 pub mod session_output;
-pub mod safepath;
+pub mod safepath_command;
+pub use app_core::safepath;
+pub use app_core::workspace_scan;
 pub mod shell_probe;
-pub mod shell_spec;
 pub mod terminal_window;
-pub mod tree_validate;
 pub mod workspace;
 pub mod workspace_connections;
-pub mod workspace_scan;
-pub mod workspace_launch;
 pub mod plugin_host;
 pub mod plugin_host_api;
 pub mod plugin_management;
 pub mod rdp_embed;
 pub mod custom_art;
-#[cfg(windows)]
-pub mod win_job;
 
 use adhoc::AdhocRegistry;
 use plugin_host::PluginHost;
@@ -49,6 +50,7 @@ use terminal_window::DetachRegistry;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let smoke_test = std::env::args().any(|a| a == "--coverage-smoke");
     let builder = tauri::Builder::default()
         // The single-instance plugin must be registered first so a second launch is forwarded before
         // any other plugin has a chance to initialize against a duplicate instance.
@@ -63,7 +65,7 @@ pub fn run() {
         .manage(DetachRegistry::new())
         .manage(PluginHost::new())
         .manage(RdpSessionManager::new())
-        .setup(|app| {
+        .setup(move |app| {
             // Logging is a development-only facility. `#[cfg]` (not `cfg!`) so the registration is
             // not even compiled into a release or portable build: nothing installs a logger, so no
             // log directory is created and no line is ever written to disk. Cargo.toml's
@@ -124,6 +126,20 @@ pub fn run() {
             let argv: Vec<String> = std::env::args().collect();
             if let Some(req) = openshell::parse_open_shell_args(&argv) {
                 adhoc::open_adhoc_shell(&handle, req);
+            }
+
+            // Coverage smoke mode: boot the real (Wry) window, let setup finish, then exit
+            // cleanly. The coverage gate's function metric counts every instantiation, including
+            // the binary-only Wry copies of each #[tauri::command] that only exist when the app
+            // itself runs; launching the real binary under instrumentation covers them without
+            // needing a display-visible session or any user interaction.
+            if smoke_test {
+                std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(1200));
+                    // std::process::exit (not the handle.exit tauri event-loop exit) so the linked
+                    // LLVM profile runtime's atexit flush runs and the profraw is written.
+                    std::process::exit(0);
+                });
             }
 
             Ok(())
@@ -199,7 +215,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace::run_script,
         workspace::read_script,
         workspace::write_script,
-        safepath::system_excluded_view_exts,
+        safepath_command::system_excluded_view_exts,
         workspace_connections::load_workspace_connections,
         workspace_connections::save_workspace_connections,
         workspace_connections::delete_workspace_connection,

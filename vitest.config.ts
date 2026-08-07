@@ -4,10 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    setupFiles: ["./src/testSetup.ts"],
+    setupFiles: ["./ui/testSetup.ts"],
     include: [
-      "src/**/*.test.ts",
-      "src/**/*.test.tsx",
+      "ui/**/*.test.ts",
+      "ui/**/*.test.tsx",
       "plugins/**/*.test.ts",
       "src-tauri/sidecar/**/*.test.ts",
     ],
@@ -15,7 +15,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: [
-        "src/**/*.{ts,tsx}",
+        "ui/**/*.{ts,tsx}",
         "contract/**/*.ts",
         "plugins/*/src/**/*.ts",
         "src-tauri/sidecar/**/*.cjs",
@@ -24,13 +24,11 @@ export default defineConfig({
         "**/*.d.ts",
         "**/__tests__/**",
         "**/*.{test,spec}.{ts,tsx,js,cjs}",
-        "src/main.tsx",
-        "src/testSetup.ts",
-        "src/testUtils.tsx",
-        "src/assets/**",
-        "src/generated/**",
-        // Sidecar entry point: exercised only via plugin-host.integration.test.ts, which spawns it
-        // as a child process — its own coverage instrumentation can't see code that runs out-of-process.
+        "ui/main.tsx",
+        "ui/testSetup.ts",
+        "ui/testUtils.tsx",
+        "ui/assets/**",
+        "ui/generated/**",
         "src-tauri/sidecar/plugin-host.cjs",
       ],
       reporter: ["text", "json-summary", "lcov"],

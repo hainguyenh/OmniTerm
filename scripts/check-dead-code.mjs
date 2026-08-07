@@ -292,7 +292,7 @@ function invokedTauriCommands(source) {
 export function findUnreferencedTauriCommands({
   root = process.cwd(),
   handlerFile = 'src-tauri/src/lib.rs',
-  frontendRoots = ['src'],
+  frontendRoots = ['ui'],
 } = {}) {
   const absoluteRoot = path.resolve(root)
   const handlerPath = path.resolve(absoluteRoot, handlerFile)
@@ -326,12 +326,12 @@ export function checkRepository(root = process.cwd()) {
     : []
   const orphans = findOrphanModules({
     root,
-    sourceRoots: ['src', 'contract', 'plugins'],
+    sourceRoots: ['ui', 'contract', 'plugins'],
     entrypoints: [
-      'src/main.tsx',
-      'src/testSetup.ts',
-      'src/testUtils.tsx',
-      'src/vite-env.d.ts',
+      'ui/main.tsx',
+      'ui/testSetup.ts',
+      'ui/testUtils.tsx',
+      'ui/vite-env.d.ts',
       'contract/index.ts',
       ...pluginEntries,
     ],

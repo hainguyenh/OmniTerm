@@ -7,7 +7,7 @@ import { encodeIco } from './image/ico.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = resolve(root, 'assets/OmniTerm-Logo-Original.png')
-const rendererLogo = resolve(root, 'src/generated/OmniTerm-Logo.webp')
+const rendererLogo = resolve(root, 'ui/generated/OmniTerm-Logo.webp')
 const windowsIcon = resolve(root, 'src-tauri/icons/icon.ico')
 const ICO_SIZES = Object.freeze([16, 20, 24, 32, 40, 48, 64, 128, 256])
 

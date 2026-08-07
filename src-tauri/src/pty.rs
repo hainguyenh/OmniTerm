@@ -26,29 +26,19 @@ use crate::pty_resolve::resolve_local_launch;
 use crate::session_output::{send_status, Output};
 use dashmap::DashMap;
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
-use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, Runtime};
 
-/// Initial geometry; the renderer resizes after xterm measures the pane, matching the initial 80x24 Electron geometry.
+/// Re‑export from the shared protocol crate so every intra‑crate `crate::pty::SessionStatus` path
+/// keeps resolving unchanged.
+pub use app_protocol::session_status::SessionStatus;
+
+/// Initial output geometry; the renderer resizes after xterm measures the pane, matching the initial 80x24 Electron geometry.
 const INITIAL_COLS: u16 = 80;
 const INITIAL_ROWS: u16 = 24;
-
-/// Non-output pane status, kept in one tagged channel so ready/error/closed remain ordered.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum SessionStatus {
-    /// The PTY is live; `label` is the shell name to show in the pane banner.
-    Ready { label: String },
-    Error { message: String },
-    Closed { code: u32 },
-    /// The shell is (or is no longer) running something — see session_activity.rs. Sent on change
-    /// only, so the renderer can hold it as a plain flag.
-    Activity { busy: bool },
-}
 
 pub struct PtySession {
     master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,

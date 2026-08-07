@@ -162,18 +162,16 @@ fn user_exclusions_never_widen_the_fixed_deny_list() {
     }
 }
 
-/// The Settings panel renders `system_excluded_view_exts` so a user can see which locked entries
-/// came from the app rather than their own list. The contents must match the slice the viewer uses,
-/// or Settings would list `.exe` as locked while the viewer still opened it.
+/// The deny-list is never empty in production: only the app's built-in entries gate the
+/// viewer, since the user can only add to the list, never remove from it. The equality
+/// contract between this list and the `system_excluded_view_exts` command the Settings UI
+/// calls is asserted in the desktop adapter (`safepath_command` tests).
 #[test]
-fn system_excluded_view_exts_matches_the_viewer_deny_list() {
-    let excluded = system_excluded_view_exts();
-    assert_eq!(
-        excluded.iter().map(String::as_str).collect::<Vec<_>>(),
-        VIEW_DENY_EXTS.to_vec(),
-        "the Settings UI and the viewer must source the same deny-list"
+fn view_deny_list_is_non_empty() {
+    assert!(
+        !VIEW_DENY_EXTS.is_empty(),
+        "the deny-list is non-empty in production"
     );
-    assert!(!excluded.is_empty(), "the deny-list is non-empty in production");
 }
 
 #[test]
