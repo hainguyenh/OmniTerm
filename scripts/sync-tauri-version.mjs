@@ -1,13 +1,19 @@
 /**
- * Keep the three places a release version is written in agreement.
+ * Keep all version-bearing files in the repo in agreement.
  *
  *   node scripts/sync-tauri-version.mjs validate [expected]
  *   node scripts/sync-tauri-version.mjs write <version>
  *
- * `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml` each carry the version
- * independently. Tauri stamps the installer from tauri.conf.json, while the release workflow resolves
- * the tag from package.json — so a drift between them ships an installer whose name and its metadata
- * disagree, and nothing else in the build notices.
+ * Five files each carry the release version independently:
+ *   - package.json            (root — JS/TS host)
+ *   - src-tauri/tauri.conf.json (Tauri installer metadata)
+ *   - src-tauri/Cargo.toml   (Tauri binary)
+ *   - crates/app-core/Cargo.toml
+ *   - crates/app-protocol/Cargo.toml
+ *
+ * Tauri stamps the installer from tauri.conf.json, while the release workflow resolves
+ * the tag from package.json — so a drift between them ships an installer whose name and its
+ * metadata disagree, and nothing else in the build notices.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -18,17 +24,21 @@ import { isMain } from './is-main.mjs'
 
 export const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-/** The three files that each carry the release version, relative to a repo root. */
+/** The files that each carry the release version, relative to a repo root. */
 export const VERSION_FILES = Object.freeze({
   pkg: 'package.json',
   conf: path.join('src-tauri', 'tauri.conf.json'),
   cargo: path.join('src-tauri', 'Cargo.toml'),
+  crateCore: path.join('crates', 'app-core', 'Cargo.toml'),
+  crateProtocol: path.join('crates', 'app-protocol', 'Cargo.toml'),
 })
 
 const resolve = (root) => ({
   PKG: path.join(root, VERSION_FILES.pkg),
   CONF: path.join(root, VERSION_FILES.conf),
   CARGO: path.join(root, VERSION_FILES.cargo),
+  CRATE_CORE: path.join(root, VERSION_FILES.crateCore),
+  CRATE_PROTOCOL: path.join(root, VERSION_FILES.crateProtocol),
 })
 
 const SEMVER = /^\d+\.\d+\.\d+$/
@@ -38,13 +48,19 @@ const CARGO_VERSION = /^version\s*=\s*"([^"]+)"/m
 const read = (file) => readFileSync(file, 'utf8')
 
 export function currentVersions(root = DEFAULT_ROOT) {
-  const { PKG, CONF, CARGO } = resolve(root)
+  const { PKG, CONF, CARGO, CRATE_CORE, CRATE_PROTOCOL } = resolve(root)
   const cargo = read(CARGO).match(CARGO_VERSION)
   if (!cargo) throw new Error('Could not find a version in src-tauri/Cargo.toml')
+  const crateCore = read(CRATE_CORE).match(CARGO_VERSION)
+  if (!crateCore) throw new Error('Could not find a version in crates/app-core/Cargo.toml')
+  const crateProtocol = read(CRATE_PROTOCOL).match(CARGO_VERSION)
+  if (!crateProtocol) throw new Error('Could not find a version in crates/app-protocol/Cargo.toml')
   return {
     'package.json': JSON.parse(read(PKG)).version,
     'src-tauri/tauri.conf.json': JSON.parse(read(CONF)).version,
     'src-tauri/Cargo.toml': cargo[1],
+    'crates/app-core/Cargo.toml': crateCore[1],
+    'crates/app-protocol/Cargo.toml': crateProtocol[1],
   }
 }
 
@@ -68,7 +84,7 @@ export function validate(expected, root = DEFAULT_ROOT) {
 }
 
 export function write(version, root = DEFAULT_ROOT) {
-  const { PKG, CONF, CARGO } = resolve(root)
+  const { PKG, CONF, CARGO, CRATE_CORE, CRATE_PROTOCOL } = resolve(root)
   if (!SEMVER.test(version)) {
     throw new Error(`Version "${version}" is not a bare semver (X.Y.Z).`)
   }
@@ -83,7 +99,10 @@ export function write(version, root = DEFAULT_ROOT) {
   // Rewritten as text, not parsed: Cargo.toml carries comments the build relies on for context, and
   // a TOML round-trip would drop them.
   writeFileSync(CARGO, read(CARGO).replace(CARGO_VERSION, `version = "${version}"`))
-  console.log(`[sync-tauri-version] wrote ${version} to all three files`)
+  writeFileSync(CRATE_CORE, read(CRATE_CORE).replace(CARGO_VERSION, `version = "${version}"`))
+  writeFileSync(CRATE_PROTOCOL, read(CRATE_PROTOCOL).replace(CARGO_VERSION, `version = "${version}"`))
+
+  console.log(`[sync-tauri-version] wrote ${version} to all 5 version files`)
 }
 
 function main() {
