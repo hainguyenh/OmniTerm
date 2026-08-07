@@ -25,7 +25,7 @@ import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable } = model
   const alwaysAwake = awakeState ?? {
     enabled: false,
     mode: 'activeOnly' as const,
@@ -43,6 +43,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           filesEnabled={!!activeSshId && connectionCapabilities?.sftp === true}
           onViewChange={handleViewChange}
           onSettingsClick={() => setSettingsOpen(true)}
+          alwaysAwakeAvailable={alwaysAwakeAvailable}
           alwaysAwakeEnabled={alwaysAwake.enabled}
           alwaysAwakeKeepingAwake={alwaysAwake.keepingAwake}
           onAlwaysAwakeClick={() => setAlwaysAwakeOpen(true)}

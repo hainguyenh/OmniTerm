@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react'
 import { ArrowLeft, ArrowRight, Terminal, Trash2, X, XCircle } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { CommandPalette } from './CommandPalette'
@@ -8,7 +9,9 @@ import CustomArtSettings from './CustomArtSettings'
 import UpdateSettings from './UpdateSettings'
 import { appLogo } from '../assets/appLogo'
 import { diag } from '../diag'
-import AlwaysAwakeModal from '../../plugins/always-awake/app/AlwaysAwakeModal'
+// Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
+// parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
+const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
 import { CtxItem, DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
 import type { MainLayoutModel } from './useMainLayoutController'
 
@@ -17,11 +20,13 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
   return (
     <>
           {alwaysAwakeOpen && (
-            <AlwaysAwakeModal
-              status={alwaysAwake}
-              onClose={() => setAlwaysAwakeOpen(false)}
-              onSaved={setAlwaysAwake}
-            />
+            <Suspense fallback={null}>
+              <AlwaysAwakeModal
+                status={alwaysAwake}
+                onClose={() => setAlwaysAwakeOpen(false)}
+                onSaved={setAlwaysAwake}
+              />
+            </Suspense>
           )}
           {aboutOpen && (
             <div

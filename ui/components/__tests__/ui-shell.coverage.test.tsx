@@ -31,6 +31,18 @@ describe('small UI shells', () => {
     expect(onViewChange).toHaveBeenLastCalledWith('files')
   })
 
+  it('hides Always Awake unless the plugin providing it is loaded', () => {
+    const { rerender } = render(
+      <ActivityBar activeView={null} filesEnabled onViewChange={vi.fn()} onSettingsClick={vi.fn()} alwaysAwakeEnabled />,
+    )
+    expect(screen.queryByTitle(/Always Awake/)).not.toBeInTheDocument()
+
+    rerender(
+      <ActivityBar activeView={null} filesEnabled onViewChange={vi.fn()} onSettingsClick={vi.fn()} alwaysAwakeAvailable />,
+    )
+    expect(screen.getByTitle('Always Awake')).toBeInTheDocument()
+  })
+
   it('pins Always Awake beside Settings rather than with the panel views', () => {
     const onAlwaysAwakeClick = vi.fn()
     render(
@@ -39,6 +51,7 @@ describe('small UI shells', () => {
         filesEnabled
         onViewChange={vi.fn()}
         onSettingsClick={vi.fn()}
+        alwaysAwakeAvailable
         alwaysAwakeEnabled
         alwaysAwakeKeepingAwake
         onAlwaysAwakeClick={onAlwaysAwakeClick}
