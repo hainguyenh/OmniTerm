@@ -19,6 +19,9 @@ artifacts/
 .omniterm-build/
 *.local
 *.tsbuildinfo
+# `pnpm typecheck` runs `tsc -b`, and tsconfig.node.json is a composite project, so it cannot set
+# `noEmit` — it drops a compiled copy of vite.config.ts beside the source.
+/vite.config.js
 
 # Editor directories and files
 !.vscode/extensions.json
