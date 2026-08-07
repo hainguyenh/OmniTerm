@@ -9,7 +9,7 @@ const ROOT = path.resolve(__dirname, "..", "..");
 
 describe("styling regression check", () => {
   it("forces var(--theme-font-mono) on .xterm and its descendants to prevent overlapping/bleeding characters", () => {
-    const cssPath = path.join(ROOT, "src", "index.css");
+    const cssPath = path.join(ROOT, "ui", "index.css");
     const content = fs.readFileSync(cssPath, "utf8");
     
     // Check that we override font family for xterm container and children
@@ -22,7 +22,7 @@ describe("styling regression check", () => {
   // another. This more specific rule (still `!important`, but two classes beat one) has to exist
   // and win without touching the rule pinned above.
   it("scopes the xterm font to a per-pane variable that outranks the app-wide one", () => {
-    const cssPath = path.join(ROOT, "src", "index.css");
+    const cssPath = path.join(ROOT, "ui", "index.css");
     const content = fs.readFileSync(cssPath, "utf8");
 
     expect(content).toMatch(/\.terminal-pane\s+\.xterm,\s*\.terminal-pane\s+\.xterm\s+\*/);
@@ -34,7 +34,7 @@ describe("styling regression check", () => {
   // to the top of its scrollback. It also zeroed clientWidth/Height, forcing a re-fit on every tab
   // switch. Hiding a pane must therefore keep its layout box.
   it("hides off-screen panes without collapsing their layout box", () => {
-    const cssPath = path.join(ROOT, "src", "index.css");
+    const cssPath = path.join(ROOT, "ui", "index.css");
     const content = fs.readFileSync(cssPath, "utf8");
 
     expect(content).toMatch(/\.pane-offscreen\s*\{[^}]*visibility:\s*hidden/);

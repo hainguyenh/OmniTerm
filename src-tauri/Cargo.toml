@@ -22,6 +22,9 @@ tempfile = "3"
 tauri = { version = "2", features = ["test"] }
 
 [dependencies]
+omniterm-core = { path = "../crates/app-core" }
+omniterm-protocol = { path = "../crates/app-protocol" }
+
 # Tauri core + plugins
 #
 # The `devtools` feature is deliberately absent: it only exists to enable the inspector in a RELEASE

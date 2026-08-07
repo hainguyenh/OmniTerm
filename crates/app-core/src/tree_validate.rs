@@ -6,7 +6,7 @@
 //! mattered — an import is attacker-influenced input (the user may have been handed the file), so it
 //! is validated and rejected outright rather than coerced.
 
-use crate::shell_spec::LocalShell;
+use app_protocol::shell_spec::LocalShell;
 use serde_json::Value;
 
 /// Cap on an imported file, applied before the bytes are read so a crafted oversized file cannot

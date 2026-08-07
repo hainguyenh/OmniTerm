@@ -124,14 +124,14 @@ describe("release configuration", () => {
   });
 
   it("bundles renderer logo instead of resolving it from filesystem root", () => {
-    const appLogo = readRepoFile("src", "assets", "appLogo.ts");
+    const appLogo = readRepoFile("ui", "assets", "appLogo.ts");
     const buildRs = readRepoFile("src-tauri", "build.rs");
     const indexHtml = readRepoFile("index.html");
 
     expect(appLogo).toMatch(/import\s+appLogo\s+from\s+['"]\.\.\/generated\/OmniTerm-Logo\.webp['"]/);
     expect(appLogo).not.toContain("'/OmniTerm-Logo.png'");
     expect(buildRs).toContain("cargo:rerun-if-changed=icons/icon.ico");
-    expect(indexHtml).toContain('href="/src/generated/OmniTerm-Logo.webp"');
+    expect(indexHtml).toContain('href="/ui/generated/OmniTerm-Logo.webp"');
     expect(packageJson.scripts?.["assets:generate"]).toBe("node scripts/generate-app-assets.mjs");
     expect(packageJson.devDependencies?.potrace).toBeUndefined();
   });

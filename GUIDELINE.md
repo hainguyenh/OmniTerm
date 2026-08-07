@@ -193,20 +193,25 @@ full authoring guide.
 
 ```
 OmniTerm/
-  src/                    # React frontend (TypeScript + Tailwind)
+  ui/                     # React frontend (TypeScript + Tailwind)
     components/           # UI components
     hooks/                # React hooks
     contexts/             # App state services
     platform/             # Platform abstractions
     security/             # Security verification tools
-  src-tauri/              # Tauri Rust backend
-    src/                  # lib.rs, main.rs, commands
+  crates/
+    app-protocol/         # Shared DTOs + protocol types (no Tauri dependency)
+      src/                # shell_spec, openshell, session_status
+    app-core/             # Domain logic + IO services (no Tauri dependency)
+      src/                # launch, safepath, workspace_scan, proc_activity, ...
+  src-tauri/              # Tauri Rust backend (desktop adapter)
+    src/                  # lib.rs, main.rs, commands, Tauri-bound wrappers
     sidecar/              # Node.js host for plugins (host-api.cjs)
   plugins/
     full-connection-manager/   # SSH/RDP profiles with credential scrubbing
     native-batch-connections/  # Batch-launched SSH/RDP profiles
   contract/               # Shared TypeScript plugin contract (@omniterm/contract)
-  docs/                   # PLUGINS.md, CREDENTIAL-AUDIT.md
+  docs/                   # PLUGINS.md, CREDENTIAL-AUDIT.md, adr/
   scripts/                # Build utilities (Build-OmniTerm.ps1, plugin scripts)
 
 ```
@@ -241,8 +246,10 @@ OmniTerm/
 
 | Path | Role |
 |---|---|
-| `src-tauri/src/` | Tauri 2 Rust shell; `lib.rs` builds the app and registers all commands |
-| `src/` | React 18 + TypeScript + Tailwind frontend |
+| `crates/app-protocol/src/` | Shared protocol types (DTOs): `shell_spec`, `openshell`, `session_status`; no Tauri dependency |
+| `crates/app-core/src/` | Domain logic + IO services: `launch`, `safepath`, `workspace_scan`, `proc_activity`, `rdp_launch`, `win_job`, `tree_validate`, `workspace_launch`; no Tauri dependency |
+| `src-tauri/src/` | Tauri 2 Rust shell (desktop adapter); `lib.rs` builds the app, registers commands, re-exports `app_core`/`app_protocol` modules |
+| `ui/` | React 18 + TypeScript + Tailwind frontend |
 | `contract/index.ts` | Shared TypeScript plugin contract (`@omniterm/contract`, API v2) |
 | `plugins/` | Unsandboxed Node.js sidecar plugins |
 | `src-tauri/sidecar/host-api.cjs` | Node.js 24 sidecar process entry point |

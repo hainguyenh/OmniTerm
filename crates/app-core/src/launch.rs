@@ -10,7 +10,7 @@
 //!   * `keepOpen` (default true) decides whether the pane survives the command finishing — `/k` vs
 //!     `/c`, `-NoExit` or not, `exec $SHELL -l` appended or not.
 
-use crate::shell_spec::{shell_quote, split_args, LocalShell};
+use app_protocol::shell_spec::{shell_quote, split_args, LocalShell};
 
 /// Everything needed to start one local pane, after merging saved and ad-hoc params.
 #[derive(Debug, Clone, PartialEq, Eq)]

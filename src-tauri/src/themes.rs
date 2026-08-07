@@ -20,41 +20,35 @@ fn get_themes_dir<R: Runtime>(app: &AppHandle<R>) -> Result<std::path::PathBuf, 
     Ok(themes_dir)
 }
 
+/// Every `*.json` under `dir` that parses as JSON, in whatever order the filesystem lists them.
+///
+/// Both theme roots are read this way, so the rules are stated once. A missing or unreadable
+/// directory, a non-JSON file, a file that cannot be read and a malformed theme are all "nothing to
+/// add" rather than an error: a single hand-edited file must not cost the user every other theme.
+fn read_theme_dir(dir: &std::path::Path) -> Vec<serde_json::Value> {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+        .filter_map(|entry| fs::read_to_string(entry.path()).ok())
+        .filter_map(|contents| serde_json::from_str::<serde_json::Value>(&contents).ok())
+        .collect()
+}
+
 #[tauri::command]
 pub async fn list_themes<R: Runtime>(app: AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
     let mut themes = Vec::new();
 
-    // 1. Read built-in themes
+    // 1. Built-in themes, bundled beside the executable. A build that ships none is not an error.
     if let Ok(resource_dir) = app.path().resource_dir() {
-        let builtin_dir = resource_dir.join("builtinThemes");
-        if builtin_dir.exists() {
-            if let Ok(entries) = fs::read_dir(&builtin_dir) {
-                for entry in entries.flatten() {
-                    if entry.path().extension().is_some_and(|ext| ext == "json") {
-                        if let Ok(contents) = fs::read_to_string(entry.path()) {
-                            if let Ok(theme) = serde_json::from_str::<serde_json::Value>(&contents) {
-                                themes.push(theme);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        themes.extend(read_theme_dir(&resource_dir.join("builtinThemes")));
     }
 
-    // 2. Read user themes
-    let themes_dir = get_themes_dir(&app)?;
-    if let Ok(entries) = fs::read_dir(&themes_dir) {
-        for entry in entries.flatten() {
-            if entry.path().extension().is_some_and(|ext| ext == "json") {
-                if let Ok(contents) = fs::read_to_string(entry.path()) {
-                    if let Ok(theme) = serde_json::from_str::<serde_json::Value>(&contents) {
-                        themes.push(theme);
-                    }
-                }
-            }
-        }
-    }
+    // 2. The user's own themes. Unlike the built-ins, this root is created if absent — failing to
+    //    create it is a real error, because it is where `save_theme` is about to write.
+    themes.extend(read_theme_dir(&get_themes_dir(&app)?));
 
     Ok(themes)
 }
