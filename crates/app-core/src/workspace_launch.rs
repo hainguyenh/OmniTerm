@@ -4,8 +4,8 @@
 //! per-platform decision of *how* a `.bat` / `.ps1` / `.sh` is handed to a shell — the part that has
 //! been wrong twice, in ways only visible at the shell's own command line.
 
-use crate::openshell::OpenShellRequest;
-use crate::shell_spec::{shell_quote, LocalShell};
+use app_protocol::openshell::OpenShellRequest;
+use app_protocol::shell_spec::{shell_quote, LocalShell};
 
 #[cfg(test)]
 #[path = "workspace_launch_tests.rs"]

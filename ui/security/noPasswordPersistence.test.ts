@@ -6,9 +6,9 @@ const root = path.resolve(process.cwd())
 
 const sourceFiles = [
   'contract/index.ts',
-  'src/omnitermAPI.ts',
-  'src/vite-env.d.ts',
-  'src/components/ConnectionForm.tsx',
+  'ui/omnitermAPI.ts',
+  'ui/vite-env.d.ts',
+  'ui/components/ConnectionForm.tsx',
   'src-tauri/Cargo.toml',
   'src-tauri/src/lib.rs',
   'src-tauri/src/main.rs',

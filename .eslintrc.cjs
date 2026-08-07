@@ -30,7 +30,7 @@ module.exports = {
     'no-control-regex': 'off',
     // A packaged build reports nothing about itself, and that cannot be enforced by the bundler:
     // Vite 8 minifies with Oxc, which silently ignores esbuild's `drop: ['console']`. So app code
-    // must not call console at all — route diagnostics through `diag` (src/diag.ts), which is a set
+    // must not call console at all — route diagnostics through `diag` (ui/diag.ts), which is a set
     // of no-ops outside a dev build.
     'no-console': 'error',
   },
@@ -38,7 +38,7 @@ module.exports = {
     {
       // diag.ts owns the only console references in the app: the dev-build sink and the packaged-build
       // shutdown. Test helpers may report freely — they never ship.
-      files: ['src/diag.ts', 'src/testSetup.ts', 'src/testUtils.tsx', '**/__tests__/**'],
+      files: ['ui/diag.ts', 'ui/testSetup.ts', 'ui/testUtils.tsx', '**/__tests__/**'],
       rules: { 'no-console': 'off' },
     },
   ],

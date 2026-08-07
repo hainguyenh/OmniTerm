@@ -111,11 +111,11 @@ test('findUnreferencedTauriCommands reports handlers the production bridge never
         ]);
       }
     `,
-    'src/bridge.ts': `
+    'ui/bridge.ts': `
       import { invoke } from '@tauri-apps/api/core'
       export const run = () => invoke<Array<{ id: string }>>('used')
     `,
-    'src/bridge.test.ts': `invoke('dead')`,
+    'ui/bridge.test.ts': `invoke('dead')`,
   })
   try {
     assert.deepEqual(findUnreferencedTauriCommands({ root }), ['src-tauri/src/lib.rs:dead'])

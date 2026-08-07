@@ -12,7 +12,7 @@ import react from '@vitejs/plugin-react'
 // but Vite 8 minifies with Oxc, not esbuild, and accepts the `esbuild` option without applying it — a
 // build configured that way still shipped 33 `console.*` calls. The guarantee lives in the source
 // instead: app code calls `diag` (no-ops when not DEV) and `silenceConsole()` closes the console for
-// dependencies too. See src/diag.ts.
+// dependencies too. See ui/diag.ts.
 export default defineConfig({
   server: {
     port: 5173,

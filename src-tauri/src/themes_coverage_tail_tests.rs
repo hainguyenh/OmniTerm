@@ -1,60 +1,54 @@
 //! Coverage for built-in theme discovery and native folder opening.
 
 use super::*;
-use tauri::Manager;
+
+/// A theme root is scanned with `read_theme_dir`, which is where every "skip it" rule lives.
+///
+/// Driven directly against a temporary directory rather than through `list_themes`. The built-in root
+/// is `resource_dir()/builtinThemes`, and on Linux `resource_dir()` resolves under `/usr/lib`, which
+/// no test can write to — the previous version of this test bailed out silently there, so on the
+/// platform CI measures coverage on it asserted nothing at all.
+#[test]
+fn a_theme_root_yields_parseable_json_files_and_skips_everything_else() {
+    let root = tempfile::tempdir().unwrap();
+    let expected = serde_json::json!({ "id": "coverage-builtin", "name": "Coverage Builtin" });
+
+    fs::write(root.path().join("valid.json"), serde_json::to_vec(&expected).unwrap()).unwrap();
+    // Malformed JSON: skipped, not fatal.
+    fs::write(root.path().join("broken.json"), "not-json").unwrap();
+    // Right content, wrong extension.
+    fs::write(root.path().join("ignored.txt"), r#"{"id":"ignored"}"#).unwrap();
+    // A *directory* whose name ends in .json — `read_to_string` fails rather than the filter.
+    fs::create_dir(root.path().join("directory.json")).unwrap();
+    // No extension at all.
+    fs::write(root.path().join("README"), "notes").unwrap();
+
+    assert_eq!(read_theme_dir(root.path()), vec![expected]);
+}
 
 #[test]
-fn builtin_theme_listing_accepts_valid_json_and_skips_every_invalid_entry_shape() {
+fn a_theme_root_that_cannot_be_read_yields_nothing() {
+    let parent = tempfile::tempdir().unwrap();
+    assert!(read_theme_dir(&parent.path().join("absent")).is_empty());
+
+    // A path that exists but is a file, not a directory.
+    let file = parent.path().join("themes");
+    fs::write(&file, b"not a directory").unwrap();
+    assert!(read_theme_dir(&file).is_empty());
+}
+
+#[test]
+fn listing_themes_reads_the_user_root_and_tolerates_a_missing_builtin_root() {
     let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
-    let Ok(resource_dir) = app.path().resource_dir() else {
-        return;
-    };
-    let builtin_dir = resource_dir.join("builtinThemes");
-    if fs::create_dir_all(&builtin_dir).is_err() {
-        return;
-    }
-
-    let valid = builtin_dir.join("coverage-valid.json");
-    let broken = builtin_dir.join("coverage-broken.json");
-    let ignored = builtin_dir.join("coverage-ignored.txt");
-    let directory = builtin_dir.join("coverage-directory.json");
-    let _ = fs::remove_file(&valid);
-    let _ = fs::remove_file(&broken);
-    let _ = fs::remove_file(&ignored);
-    let _ = fs::remove_dir_all(&directory);
-
-    let expected = serde_json::json!({
-        "id": "coverage-builtin",
-        "name": "Coverage Builtin"
-    });
-    if fs::write(&valid, serde_json::to_vec(&expected).unwrap()).is_err() {
-        return;
-    }
-    if fs::write(&broken, "not-json").is_err() {
-        let _ = fs::remove_file(&valid);
-        return;
-    }
-    if fs::write(&ignored, r#"{"id":"coverage-ignored"}"#).is_err() {
-        let _ = fs::remove_file(&valid);
-        let _ = fs::remove_file(&broken);
-        return;
-    }
-    if fs::create_dir(&directory).is_err() {
-        let _ = fs::remove_file(&valid);
-        let _ = fs::remove_file(&broken);
-        let _ = fs::remove_file(&ignored);
-        return;
-    }
+    let themes_dir = get_themes_dir(app.handle()).unwrap();
+    let mine = serde_json::json!({ "id": "mine", "name": "Mine" });
+    fs::write(themes_dir.join("mine.json"), serde_json::to_vec(&mine).unwrap()).unwrap();
 
     let themes = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap();
-    assert!(themes.contains(&expected));
-    assert!(!themes.contains(&serde_json::json!({"id": "coverage-ignored"})));
+    assert!(themes.contains(&mine));
 
-    let _ = fs::remove_file(valid);
-    let _ = fs::remove_file(broken);
-    let _ = fs::remove_file(ignored);
-    let _ = fs::remove_dir(directory);
+    fs::remove_file(themes_dir.join("mine.json")).unwrap();
 }
 
 #[test]

@@ -8,7 +8,7 @@ import { Circle, Diamond, Hexagon, Leaf, Triangle, Flame, Cloud, Gem, type Lucid
  * and the footer all be matched by eye. The shape is what actually carries the identity — colour alone
  * fails for colour-blind users and against a themed background.
  *
- * Colours are literal hexes on purpose, following `src/utils/fileKind.ts`: a pane's identity must not
+ * Colours are literal hexes on purpose, following `ui/utils/fileKind.ts`: a pane's identity must not
  * shift when the user switches theme. Tailwind cannot compile classes from runtime values, so consumers
  * apply them through inline `style` (`color` / `borderColor` / `backgroundColor`).
  */

@@ -28,7 +28,7 @@ function readRepoFile(...parts: string[]) {
 }
 
 /** Every shipped renderer source — excludes tests, which never reach a build. */
-function rendererSources(dir = path.join(repoRoot, "src")): string[] {
+function rendererSources(dir = path.join(repoRoot, "ui")): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
@@ -49,12 +49,12 @@ describe("packaged builds emit no diagnostics", () => {
     const offenders: string[] = [];
     for (const file of rendererSources()) {
       const rel = path.relative(repoRoot, file).replace(/\\/g, "/");
-      if (rel === "src/diag.ts") continue;
+      if (rel === "ui/diag.ts") continue;
       const source = readFileSync(file, "utf8");
       // Matches calls and bare references alike — `.catch(console.error)` ships a log just as surely.
       for (const m of source.matchAll(/\bconsole\.[a-zA-Z]+/g)) offenders.push(`${rel}: ${m[0]}`);
     }
-    expect(offenders, "route these through `diag` from src/diag.ts").toEqual([]);
+    expect(offenders, "route these through `diag` from ui/diag.ts").toEqual([]);
   });
 
   it("keeps the no-console lint rule on, so the previous test cannot be defeated by a new file", () => {
@@ -62,12 +62,12 @@ describe("packaged builds emit no diagnostics", () => {
     expect(eslintrc).toMatch(/'no-console':\s*'error'/);
     // The exemption must stay narrow: diag.ts plus things that never ship.
     const exempt = eslintrc.match(/files:\s*\[([^\]]*)\]/)?.[1] ?? "";
-    expect(exempt).toContain("src/diag.ts");
-    expect(exempt).not.toMatch(/'src\/\*|\*\*\/\*\.tsx?'/);
+    expect(exempt).toContain("ui/diag.ts");
+    expect(exempt).not.toMatch(/'ui\/\*|\*\*\/\*\.tsx?'/);
   });
 
   it("silences the console before anything else in the entry module", () => {
-    const main = readRepoFile("src", "main.tsx");
+    const main = readRepoFile("ui", "main.tsx");
     const silence = main.indexOf("silenceConsole()");
     expect(silence, "main.tsx must call silenceConsole()").toBeGreaterThan(-1);
     // Ahead of the bridge and the first render, or a dependency gets a line out first.
@@ -160,7 +160,7 @@ describe("packaged builds emit no diagnostics", () => {
 
   // Lives in GeneralSettings.tsx since the settings panel's General block moved out of MainLayout.
   it("hides the Open log control unless this is a dev build", () => {
-    expect(readRepoFile("src", "components", "GeneralSettings.tsx")).toMatch(
+    expect(readRepoFile("ui", "components", "GeneralSettings.tsx")).toMatch(
       /import\.meta\.env\.DEV && \(\s*\n\s*<button[\s\S]{0,400}revealLog\(\)/,
     );
   });
@@ -168,7 +168,7 @@ describe("packaged builds emit no diagnostics", () => {
   /// Belt and braces: wherever the control moves next, it must not appear ungated anywhere else.
   it("names revealLog in exactly one component", () => {
     const owners = ["MainLayout.tsx", "GeneralSettings.tsx"].filter((file) =>
-      readRepoFile("src", "components", file).includes("revealLog"),
+      readRepoFile("ui", "components", file).includes("revealLog"),
     );
     expect(owners).toEqual(["GeneralSettings.tsx"]);
   });
