@@ -1,3 +1,5 @@
+import tokyoNightTheme from '../src-tauri/builtinThemes/tokyoNight.json'
+
 export interface TerminalTheme {
   background: string
   foreground: string
@@ -6,6 +8,8 @@ export interface TerminalTheme {
   selectionBackground: string
   selectionForeground: string
   black: string
+  /** Optional light-mode replacement for ANSI black background cells. */
+  lightModeBlackBackground?: string
   red: string
   green: string
   yellow: string
@@ -44,7 +48,21 @@ export interface UITheme {
   dimText: string
   border: string
   cardBg: string
+  /* ── Optional colours ──────────────────────────────────────────────────────────────────────
+   * Absent from a theme means "use the app default" (see themeCssVars in utils/themeVars.ts), which
+   * is what these were before they became themeable. Every theme JSON written against the older
+   * schema therefore keeps rendering exactly as it did. */
+  /** Text drawn on top of `accent`. Defaults to the app background. */
   accentFg?: string
+  /** Row/icon hover fill. Defaults to a translucent white (dark) or black (light). */
+  hoverBg?: string
+  /** Text colour inside a selection. Defaults to white (dark) or the foreground (light). */
+  selectionFg?: string
+  /** Scrim painted behind a modal. Defaults to a translucent slate. */
+  overlay?: string
+  warning?: string
+  error?: string
+  success?: string
 }
 
 export interface AppTheme {
@@ -62,103 +80,6 @@ export interface AppTheme {
 
 export type LayoutMode = 1 | 2 | 3 | 4 | 6 | 8
 
-export const TOKYO_NIGHT: AppTheme = {
-  id: 'tokyo-night',
-  name: 'Tokyo Night',
-  terminal: {
-    dark: {
-      background: '#1a1b26',
-      foreground: '#8f97c2',
-      cursor: '#c0caf5',
-      cursorAccent: '#1a1b26',
-      selectionBackground: '#33467c',
-      selectionForeground: '',
-      black: '#32344a',
-      red: '#f7768e',
-      green: '#9ece6a',
-      yellow: '#e0af68',
-      blue: '#7aa2f7',
-      magenta: '#bb9af7',
-      cyan: '#7dcfff',
-      white: '#a9b1d6',
-      brightBlack: '#444b6a',
-      brightRed: '#ff7a93',
-      brightGreen: '#b9f27c',
-      brightYellow: '#ff9e64',
-      brightBlue: '#7da6ff',
-      brightMagenta: '#bb9af7',
-      brightCyan: '#0db9d7',
-      brightWhite: '#acb0d0',
-    },
-    light: {
-      background: '#f5f6f9',
-      foreground: '#343b58',
-      cursor: '#0f1419',
-      cursorAccent: '#f5f6f9',
-      selectionBackground: '#c4cbd4',
-      selectionForeground: '',
-      black: '#1d202f',
-      red: '#8c4351',
-      green: '#485e30',
-      yellow: '#8f5e15',
-      blue: '#34548a',
-      magenta: '#5a3f8a',
-      cyan: '#1f6080',
-      white: '#343b58',
-      brightBlack: '#565f89',
-      brightRed: '#8c4351',
-      brightGreen: '#485e30',
-      brightYellow: '#8f5e15',
-      brightBlue: '#34548a',
-      brightMagenta: '#5a3f8a',
-      brightCyan: '#1f6080',
-      brightWhite: '#0f1419',
-    }
-  },
-  ui: {
-    dark: {
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
-      fontFamilyMono: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-      borderRadiusSm: '0.25rem',
-      borderRadiusMd: '0.5rem',
-      borderRadiusLg: '0.75rem',
-      borderRadiusXl: '1rem',
-      paddingSm: '0.5rem',
-      paddingMd: '0.75rem',
-      paddingLg: '1rem',
-      paddingXl: '1.5rem',
-      marginSm: '0.5rem',
-      marginMd: '0.75rem',
-      marginLg: '1rem',
-      marginXl: '1.5rem',
-      sidebarBg: '#16161e',
-      popupBg: '#24283b',
-      accent: '#7aa2f7',
-      dimText: '#565f89',
-      border: '#414868',
-      cardBg: '#1a1b26',
-    },
-    light: {
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
-      fontFamilyMono: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
-      borderRadiusSm: '0.25rem',
-      borderRadiusMd: '0.5rem',
-      borderRadiusLg: '0.75rem',
-      borderRadiusXl: '1rem',
-      paddingSm: '0.5rem',
-      paddingMd: '0.75rem',
-      paddingLg: '1rem',
-      paddingXl: '1.5rem',
-      marginSm: '0.5rem',
-      marginMd: '0.75rem',
-      marginLg: '1rem',
-      marginXl: '1.5rem',
-      sidebarBg: '#e1e2e7',
-      popupBg: '#e9eaef',
-      accent: '#3890e8',
-      dimText: '#565f89',
-      border: '#cfd0d7',
-      cardBg: '#f0f1f5',
-    }
-  },
-}
+/** The built-in default is authored in JSON and is also used by frontend tests and safe fallbacks. */
+export const TOKYO_NIGHT: AppTheme = tokyoNightTheme
+export const DEFAULT_THEME_ID = TOKYO_NIGHT.id

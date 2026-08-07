@@ -34,6 +34,7 @@
       "selectionBackground": "#eeccd8",
       "selectionForeground": "",
       "black": "#3d2535",
+      "lightModeBlackBackground": "#6b5962",
       "red": "#b84038",
       "green": "#3a7a4a",
       "yellow": "#a06020",

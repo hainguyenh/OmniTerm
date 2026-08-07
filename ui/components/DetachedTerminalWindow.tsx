@@ -155,6 +155,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             connection={meta.connection}
             mode="attach"
             onStatus={setStatus}
+            darkMode={appSettings.darkMode}
             theme={terminalTheme}
             fontSize={fontSize}
             smartColors={smartColors}

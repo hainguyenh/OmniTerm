@@ -68,6 +68,24 @@ describe("normalizeXtermTheme", () => {
     expect(out.red).toBe("#f7768e");
   });
 
+  it("softens ANSI black only for light-mode backgrounds", () => {
+    const lightPalette = { ...TOKYO_NIGHT.terminal.light, black: "#000000" };
+    const light = normalizeXtermTheme(lightPalette, true);
+    const unsoftened = normalizeXtermTheme(lightPalette);
+    expect(light.black).not.toBe("#000000");
+    expect(contrast(light.black!, light.background!)).toBeGreaterThan(2.5);
+    expect(unsoftened.black).not.toBe(light.black);
+  });
+
+  it("uses a theme-provided light-mode ANSI black background", () => {
+    const out = normalizeXtermTheme({
+      ...TOKYO_NIGHT.terminal.light,
+      black: "#000000",
+      lightModeBlackBackground: "#5f6368",
+    }, true);
+    expect(out.black).toBe("#5f6368");
+  });
+
   it("always produces a cursor and a cursorAccent, even if the theme omits them", () => {
     const out = normalizeXtermTheme({ ...baseTheme, cursor: "", cursorAccent: "" });
     expect(out.cursor).toBeTruthy();
@@ -100,6 +118,9 @@ describe("builtin theme invariants", () => {
     for (const mode of ["dark", "light"] as const) {
       const palette = data.terminal[mode];
       expect(palette.background).toMatch(HEX_RE);
+      if (mode === "light") {
+        expect(palette.lightModeBlackBackground, `${file} light.lightModeBlackBackground`).toMatch(HEX_RE);
+      }
       for (const key of Object.keys(palette)) {
         if (key === "background" || key === "selectionForeground") continue;
         const value = palette[key];

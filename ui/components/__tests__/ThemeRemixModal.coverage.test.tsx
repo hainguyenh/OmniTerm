@@ -33,9 +33,10 @@ function setup(overrides: Partial<React.ComponentProps<typeof ThemeRemixModal>> 
   const saveTheme = vi.fn(async () => {})
   const deleteTheme = vi.fn(async () => {})
   const listThemes = vi.fn(async () => [TOKYO_NIGHT, custom])
+  const openFolder = vi.fn(async () => {})
   const saveSettings = vi.fn(async () => {})
   mockOmnitermAPI({
-    themes: { save: saveTheme, delete: deleteTheme, list: listThemes },
+    themes: { save: saveTheme, delete: deleteTheme, list: listThemes, openFolder },
     settings: { save: saveSettings },
   })
   const props: React.ComponentProps<typeof ThemeRemixModal> = {
@@ -49,8 +50,10 @@ function setup(overrides: Partial<React.ComponentProps<typeof ThemeRemixModal>> 
     ...overrides,
   }
   const view = render(<ThemeRemixModal {...props} />)
-  return { ...view, props, saveTheme, deleteTheme, listThemes, saveSettings }
+  return { ...view, props, saveTheme, deleteTheme, listThemes, openFolder, saveSettings }
 }
+
+const nameInput = () => screen.getByLabelText('Theme name') as HTMLInputElement
 
 beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(1234)
@@ -58,39 +61,53 @@ beforeEach(() => {
 })
 afterEach(() => vi.restoreAllMocks())
 
-describe('ThemeRemixModal complete behavior', () => {
+describe('ThemeRemixModal', () => {
+  it('renders nothing while closed', () => {
+    const x = setup({ isOpen: false })
+    expect(screen.queryByText('Theme Remix')).not.toBeInTheDocument()
+    x.unmount()
+  })
+
+  it('opens the JSON folder and reloads themes from disk', async () => {
+    const x = setup()
+    fireEvent.click(screen.getByTitle('Open themes folder'))
+    fireEvent.click(screen.getByTitle('Reload themes from JSON files'))
+    await waitFor(() => expect(x.openFolder).toHaveBeenCalledTimes(1))
+    expect(x.listThemes).toHaveBeenCalled()
+  })
+
   it('creates and duplicates a deep theme copy, selects it, and persists the app choice', async () => {
     const x = setup()
     fireEvent.click(screen.getByText('New Custom Theme'))
     await waitFor(() => expect(x.saveTheme).toHaveBeenCalled())
     expect((x.saveTheme.mock.calls as any)[0][0]).toMatchObject({ id: 'theme-1234-i', name: 'New Remix 2' })
-    expect(x.listThemes).toHaveBeenCalled()
     expect(x.props.setThemes).toHaveBeenCalledWith([TOKYO_NIGHT, custom])
     expect(x.props.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'theme-1234-i' }))
     expect(x.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'theme-1234-i' }))
 
-    fireEvent.click(screen.getByText('Custom Theme'))
-    fireEvent.click(screen.getAllByTitle('Duplicate')[0])
+    fireEvent.click(screen.getAllByTitle('Duplicate')[1])
     await waitFor(() => expect(x.saveTheme).toHaveBeenCalledTimes(2))
-    expect((x.saveTheme.mock.calls as any)[1][0]).toMatchObject({ name: 'Custom Theme Copy' })
-    expect((x.saveTheme.mock.calls as any)[1][0].terminal.dark).not.toBe(custom.terminal.dark)
-    expect((x.saveTheme.mock.calls as any)[1][0].ui.dark).not.toBe(custom.ui.dark)
+    const copy = (x.saveTheme.mock.calls as any)[1][0]
+    expect(copy).toMatchObject({ name: 'Custom Theme Copy' })
+    expect(copy.terminal.dark).not.toBe(custom.terminal.dark)
+    expect(copy.ui.dark).not.toBe(custom.ui.dark)
   })
 
   it('deletes custom themes, moves active settings to a fallback, and protects built-ins', async () => {
     const active = setup({ appSettings: { ...settings, themeId: custom.id } })
-    fireEvent.click(screen.getByText('Custom Theme'))
     fireEvent.click(screen.getByTitle('Delete'))
     await waitFor(() => expect(active.deleteTheme).toHaveBeenCalledWith(custom.id))
     expect(active.props.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: TOKYO_NIGHT.id }))
     expect(active.saveSettings).toHaveBeenCalled()
-
     active.unmount()
+
+    // A built-in has no delete affordance at all.
     const builtInOnly = setup({ themes: [TOKYO_NIGHT] })
     expect(screen.queryByTitle('Delete')).not.toBeInTheDocument()
     expect(builtInOnly.deleteTheme).not.toHaveBeenCalled()
     builtInOnly.unmount()
 
+    // The last remaining theme is never deleted, even when it is a custom one.
     const singleCustom = setup({ themes: [custom], currentTheme: custom })
     fireEvent.click(screen.getByTitle('Delete'))
     expect(singleCustom.deleteTheme).not.toHaveBeenCalled()
@@ -106,52 +123,174 @@ describe('ThemeRemixModal complete behavior', () => {
     expect(x.saveSettings).toHaveBeenCalled()
   })
 
-  it('edits names, typography, terminal fonts, app colors, and dark terminal colors', async () => {
+  it('keeps edits in the draft until Save is pressed', async () => {
     const x = setup()
-    fireEvent.click(screen.getByText('Custom Theme'))
-    fireEvent.change(screen.getByDisplayValue('Custom Theme'), { target: { value: 'Renamed' } })
-    const [typography, terminalFont] = screen.getAllByRole('combobox')
-    fireEvent.change(typography, { target: { value: 'Georgia, "Times New Roman", serif' } })
-    fireEvent.change(terminalFont, { target: { value: 'SF Mono, Menlo, Consolas, monospace' } })
+    expect(screen.getByText('Save')).toBeDisabled()
 
-    const appColor = screen.getByText('App Background').parentElement?.querySelector('input') as HTMLInputElement
-    fireEvent.change(appColor, { target: { value: '#123456' } })
-    fireEvent.click(screen.getByText('Terminal Palette'))
-    const black = screen.getByText('black').parentElement?.querySelector('input') as HTMLInputElement
-    fireEvent.change(black, { target: { value: '#010203' } })
+    fireEvent.change(nameInput(), { target: { value: 'Renamed' } })
+    fireEvent.change(screen.getByLabelText('Accent'), { target: { value: '#123456' } })
+    fireEvent.change(screen.getByLabelText('Black'), { target: { value: '#010203' } })
 
-    await waitFor(() => expect(x.saveTheme.mock.calls.length).toBeGreaterThanOrEqual(5))
-    expect(x.props.setThemes).toHaveBeenCalled()
-    expect((x.saveTheme.mock.calls as any).some(([t]: any) => t.name === 'Renamed')).toBe(true)
-    expect((x.saveTheme.mock.calls as any).some(([t]: any) => t.terminal.dark.black === '#010203')).toBe(true)
+    // Not one write so far — the old editor wrote the file on every keystroke.
+    expect(x.saveTheme).not.toHaveBeenCalled()
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(x.saveTheme).toHaveBeenCalledTimes(1))
+    const saved = (x.saveTheme.mock.calls as any)[0][0]
+    expect(saved.name).toBe('Renamed')
+    expect(saved.ui.dark.accent).toBe('#123456')
+    expect(saved.terminal.dark.black).toBe('#010203')
+    expect(x.listThemes).toHaveBeenCalled()
+  })
+
+  it('reverts unsaved edits and guards the close button', () => {
+    const onClose = vi.fn()
+    const x = setup({ onClose })
+
+    fireEvent.change(nameInput(), { target: { value: 'Throwaway' } })
+    fireEvent.click(screen.getByText('Revert'))
+    expect(nameInput().value).toBe(TOKYO_NIGHT.name)
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument()
+
+    // Clean close goes straight through.
+    fireEvent.click(screen.getByTitle('Close'))
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    // Dirty close asks first, and "Keep editing" cancels.
+    fireEvent.change(nameInput(), { target: { value: 'Dirty' } })
+    fireEvent.click(screen.getByTitle('Close'))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByText('Keep editing'))
+    expect(nameInput().value).toBe('Dirty')
+
+    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByText('Discard changes'))
+    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(nameInput().value).toBe(TOKYO_NIGHT.name)
+    x.unmount()
+  })
+
+  it('resets a built-in by dropping the user override, and a custom theme to the default palette', async () => {
+    const x = setup()
+    fireEvent.change(screen.getByLabelText('Accent'), { target: { value: '#ff0000' } })
+    fireEvent.click(screen.getByText('Reset to default'))
+    await waitFor(() => expect(x.deleteTheme).toHaveBeenCalledWith(TOKYO_NIGHT.id))
+    await waitFor(() => expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument())
+    x.unmount()
+
+    const customOnly = setup({ themes: [custom, TOKYO_NIGHT], currentTheme: custom })
+    fireEvent.change(nameInput(), { target: { value: 'Custom Theme' } })
+    fireEvent.change(screen.getByLabelText('Accent'), { target: { value: '#00ff00' } })
+    fireEvent.click(screen.getByText('Reset to default'))
+    await waitFor(() =>
+      expect((screen.getByLabelText('Accent') as HTMLInputElement).value).toBe(TOKYO_NIGHT.ui.dark.accent))
+    // A custom theme has no shipped file to restore, so nothing is deleted.
+    expect(customOnly.deleteTheme).not.toHaveBeenCalled()
+    expect(nameInput().value).toBe('Custom Theme')
+  })
+
+  it('edits the light variant, including the light-only ANSI black background', async () => {
+    const x = setup()
+    fireEvent.click(screen.getByTitle('Edit light variant'))
+    fireEvent.change(screen.getByLabelText('Black background (light mode)'), { target: { value: '#eeeeee' } })
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(x.saveTheme).toHaveBeenCalled())
+    expect((x.saveTheme.mock.calls as any)[0][0].terminal.light.lightModeBlackBackground).toBe('#eeeeee')
   })
 
   it('converts rem and px sliders for both dark and light variants', async () => {
-    const x = setup()
-    fireEvent.click(screen.getByText('Custom Theme'))
-    const ranges = screen.getAllByRole('slider')
-    fireEvent.change(ranges[0], { target: { value: '16' } })
-    fireEvent.change(ranges[1], { target: { value: '20' } })
+    const x = setup({ currentTheme: custom, themes: [custom] })
+    fireEvent.change(screen.getByLabelText('Border radius'), { target: { value: '16' } })
+    fireEvent.change(screen.getByLabelText('Padding and margins'), { target: { value: '20' } })
     fireEvent.click(screen.getByTitle('Edit light variant'))
-    const lightRanges = screen.getAllByRole('slider')
-    fireEvent.change(lightRanges[0], { target: { value: '12' } })
-    fireEvent.change(lightRanges[1], { target: { value: '24' } })
+    fireEvent.change(screen.getByLabelText('Border radius'), { target: { value: '12' } })
+    fireEvent.change(screen.getByLabelText('Padding and margins'), { target: { value: '24' } })
+    fireEvent.click(screen.getByText('Save'))
 
-    await waitFor(() => expect(x.saveTheme.mock.calls.length).toBeGreaterThanOrEqual(16))
-    const updates = (x.saveTheme.mock.calls as any).map(([theme]: any) => theme)
-    expect(updates.some((t: AppTheme) => t.ui.dark.borderRadiusMd === '1rem')).toBe(true)
-    expect(updates.some((t: AppTheme) => t.ui.dark.paddingMd === '20px')).toBe(true)
-    expect(updates.some((t: AppTheme) => t.ui.light.borderRadiusMd === '12px')).toBe(true)
-    expect(updates.some((t: AppTheme) => t.ui.light.paddingMd === '1.5rem')).toBe(true)
+    await waitFor(() => expect(x.saveTheme).toHaveBeenCalled())
+    const saved = (x.saveTheme.mock.calls as any)[0][0] as AppTheme
+    expect(saved.ui.dark.borderRadiusMd).toBe('1rem')
+    expect(saved.ui.dark.paddingMd).toBe('20px')
+    expect(saved.ui.light.borderRadiusMd).toBe('12px')
+    expect(saved.ui.light.paddingMd).toBe('1.5rem')
   })
 
-  it('uses currentTheme when selected id disappears and closes from the header', () => {
+  it('accepts a non-hex colour such as the translucent hover fill through a text field', async () => {
+    const x = setup()
+    fireEvent.change(screen.getByLabelText('Hover fill'), { target: { value: 'rgba(9, 9, 9, 0.3)' } })
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(x.saveTheme).toHaveBeenCalled())
+    expect((x.saveTheme.mock.calls as any)[0][0].ui.dark.hoverBg).toBe('rgba(9, 9, 9, 0.3)')
+  })
+
+  it('previews both modes by default and narrows to one on request', () => {
+    setup()
+    expect(screen.getByTestId('theme-preview-dark')).toBeInTheDocument()
+    expect(screen.getByTestId('theme-preview-light')).toBeInTheDocument()
+    // The callouts naming what each row demonstrates.
+    expect(screen.getAllByText(/←—— terminal/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/←—— hover \/ selected/).length).toBeGreaterThan(0)
+
+    const modes = within(screen.getByRole('radiogroup', { name: 'Preview mode' }))
+    fireEvent.click(modes.getByText('Light'))
+    expect(screen.queryByTestId('theme-preview-dark')).not.toBeInTheDocument()
+    expect(screen.getByTestId('theme-preview-light')).toBeInTheDocument()
+
+    fireEvent.click(modes.getByText('Dark'))
+    expect(screen.getByTestId('theme-preview-dark')).toBeInTheDocument()
+    expect(screen.queryByTestId('theme-preview-light')).not.toBeInTheDocument()
+  })
+
+  it('previews the draft as it is typed, before anything is saved', () => {
+    const x = setup()
+    fireEvent.change(screen.getByLabelText('App background'), { target: { value: '#0b0c10' } })
+    expect(screen.getByTestId('theme-preview-dark').style.getPropertyValue('--theme-bg')).toBe('#0b0c10')
+    expect(x.saveTheme).not.toHaveBeenCalled()
+  })
+
+  it('routes Escape through the same unsaved-changes guard as the close button', () => {
     const onClose = vi.fn()
-    const x = setup({ onClose, currentTheme: custom, themes: [TOKYO_NIGHT] })
-    expect(screen.getByDisplayValue('Custom Theme')).toBeInTheDocument()
-    const header = screen.getByText('Theme Remix').parentElement?.parentElement as HTMLElement
-    fireEvent.click(within(header).getByRole('button'))
-    expect(onClose).toHaveBeenCalled()
+    const x = setup({ onClose })
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+
+    fireEvent.change(nameInput(), { target: { value: 'Dirty' } })
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('This theme has unsaved changes.')).toBeInTheDocument()
+
+    // While the prompt is up a second Escape must not re-trigger the guard behind it.
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
     x.unmount()
+  })
+
+  it('edits a theme that predates the ui block without offering spacing controls', () => {
+    const legacy = {
+      ...TOKYO_NIGHT,
+      id: 'legacy',
+      name: 'Legacy',
+      ui: undefined as unknown as AppTheme['ui'],
+    }
+    setup({ themes: [legacy], currentTheme: legacy })
+
+    expect(screen.getByText('App colors')).toBeInTheDocument()
+    expect(screen.queryByText('Typography & spacing')).not.toBeInTheDocument()
+    // The preview still dresses it from the legacy fallbacks rather than blanking out.
+    expect(screen.getByTestId('theme-preview-dark').style.getPropertyValue('--theme-accent'))
+      .toBe(TOKYO_NIGHT.terminal.dark.blue)
+  })
+
+  it('loads the selected theme into the editor and falls back to currentTheme when it disappears', () => {
+    const x = setup()
+    fireEvent.click(screen.getByText('Custom Theme'))
+    expect(nameInput().value).toBe('Custom Theme')
+    x.unmount()
+
+    const orphan = setup({ currentTheme: custom, themes: [TOKYO_NIGHT] })
+    expect(nameInput().value).toBe('Custom Theme')
+    orphan.unmount()
   })
 })

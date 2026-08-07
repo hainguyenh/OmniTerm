@@ -9,6 +9,7 @@ export default defineConfig({
       "ui/**/*.test.ts",
       "ui/**/*.test.tsx",
       "plugins/**/*.test.ts",
+      "plugins/**/*.test.tsx",
       "src-tauri/sidecar/**/*.test.ts",
     ],
     exclude: ["node_modules", "dist", "plugins/markdown-explorer"],
@@ -18,6 +19,7 @@ export default defineConfig({
         "ui/**/*.{ts,tsx}",
         "contract/**/*.ts",
         "plugins/*/src/**/*.ts",
+        "plugins/*/app/**/*.{ts,tsx}",
         "src-tauri/sidecar/**/*.cjs",
       ],
       exclude: [

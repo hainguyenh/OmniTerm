@@ -338,7 +338,10 @@ export function checkRepository(root = process.cwd()) {
   })
   const rustOrphans = findOrphanRustModules({ root })
   const noopCommands = findNoopTauriCommands({ root })
-  const unreferencedCommands = findUnreferencedTauriCommands({ root })
+  const unreferencedCommands = findUnreferencedTauriCommands({
+    root,
+    frontendRoots: ['ui', 'plugins'],
+  })
   const problems = []
   if (orphans.length) {
     problems.push(`Dead source modules (no runtime importer):\n${orphans.map((file) => `- ${file}`).join('\n')}`)

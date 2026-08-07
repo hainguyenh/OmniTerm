@@ -73,6 +73,34 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('useMainLayoutBase complete behavior', () => {
+  // Always Awake is contributed by a plugin, so a build without it must not offer the feature — and
+  // must not subscribe to the native poller either.
+  it('offers Always Awake only when the plugin answers, and subscribes to it only then', async () => {
+    const getState = vi.fn(async () => ({ enabled: true, mode: 'always', expiresAtMs: 1, activeSessionCount: 0, keepingAwake: true, supported: true, error: null }))
+    const onState = vi.fn(() => vi.fn())
+
+    // No plugin: `plugin.invoke` resolves to null, the way the bridge reports an unanswered method.
+    mockOmnitermAPI({
+      plugin: { invoke: vi.fn(async () => null) },
+      alwaysAwake: { getState, onState },
+    })
+    const absent = renderHook(() => useMainLayoutBase(props()))
+    await waitFor(() => expect(absent.result.current.hasConnectionProvider).toBeDefined())
+    expect(absent.result.current.alwaysAwakeAvailable).toBe(false)
+    expect(getState).not.toHaveBeenCalled()
+    expect(onState).not.toHaveBeenCalled()
+    absent.unmount()
+
+    mockOmnitermAPI({
+      plugin: { invoke: vi.fn(async (method: string) => (method === 'alwaysAwake.info' ? { name: 'Always Awake' } : null)) },
+      alwaysAwake: { getState, onState },
+    })
+    const present = renderHook(() => useMainLayoutBase(props()))
+    await waitFor(() => expect(present.result.current.alwaysAwakeAvailable).toBe(true))
+    await waitFor(() => expect(present.result.current.alwaysAwake.keepingAwake).toBe(true))
+    expect(onState).toHaveBeenCalled()
+  })
+
   it('loads provider state, shell options, workspace connections, and all custom art modes', async () => {
     const { result } = renderHook(() => useMainLayoutBase(props()))
     await waitFor(() => expect(result.current.hasConnectionProvider).toBe(true))

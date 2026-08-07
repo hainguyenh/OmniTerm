@@ -9,6 +9,7 @@ $Artifacts = Join-Path $RepoRoot 'artifacts'
 $Stage = Join-Path $RepoRoot '.omniterm-build'
 $FullPlugin = Join-Path $RepoRoot 'plugins\full-connection-manager'
 $LimitedPlugin = Join-Path $RepoRoot 'plugins\native-batch-connections'
+$AlwaysAwakePlugin = Join-Path $RepoRoot 'plugins\always-awake'
 
 function Write-Title([string]$Text) {
   Write-Host ''
@@ -43,11 +44,15 @@ function Remove-BuildTree([string]$Target, [string]$AllowedRoot) {
 function Select-Plugin {
   Write-Host '    1. Full Remote Suite (metadata only; never stores passwords)'
   Write-Host '    2. Limited Connections (OS launch scripts; never stores passwords)'
-  do { $choice = Read-Host '  Select plugin [1-2]' } until ($choice -in @('1', '2'))
+  Write-Host '    3. Always Awake (Windows sleep prevention)'
+  do { $choice = Read-Host '  Select plugin [1-3]' } until ($choice -in @('1', '2', '3'))
   if ($choice -eq '1') {
     return @{ Name = 'full'; Path = $FullPlugin }
   }
-  return @{ Name = 'limited'; Path = $LimitedPlugin }
+  if ($choice -eq '2') {
+    return @{ Name = 'limited'; Path = $LimitedPlugin }
+  }
+  return @{ Name = 'always-awake'; Path = $AlwaysAwakePlugin }
 }
 
 function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {

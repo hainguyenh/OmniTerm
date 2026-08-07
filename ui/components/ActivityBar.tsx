@@ -1,5 +1,5 @@
 import React from 'react'
-import { FolderOpen, FolderGit2, Settings } from 'lucide-react'
+import { FolderOpen, FolderGit2, MoonStar, Settings } from 'lucide-react'
 
 export type ActivityView = 'files' | 'workspace'
 
@@ -14,6 +14,11 @@ interface ActivityBarProps {
   onViewChange: (view: ActivityView | null) => void
   /** Opens the Settings modal. */
   onSettingsClick: () => void
+  /** Always Awake is contributed by a plugin; without it the icon must not appear at all. */
+  alwaysAwakeAvailable?: boolean
+  alwaysAwakeEnabled?: boolean
+  alwaysAwakeKeepingAwake?: boolean
+  onAlwaysAwakeClick?: () => void
 }
 
 /** A narrow icon rail (48 px) pinned to the left edge of the app — modelled after
@@ -23,6 +28,10 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   filesEnabled,
   onViewChange,
   onSettingsClick,
+  alwaysAwakeAvailable = false,
+  alwaysAwakeEnabled = false,
+  alwaysAwakeKeepingAwake = false,
+  onAlwaysAwakeClick = () => {},
 }) => {
   const handleIconClick = (view: ActivityView) => {
     if (view === 'files' && !filesEnabled) return
@@ -53,7 +62,17 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
       </div>
 
       {/* ── Bottom icons (pinned) ──────────────────────────────────── */}
+      {/* Always Awake sits with Settings rather than with the panel views: it opens a modal and toggles
+          a machine-wide setting, it does not switch the secondary panel. */}
       <div className="mt-auto flex flex-col items-center gap-1 pb-2 w-full">
+        {alwaysAwakeAvailable && (
+          <ActivityIcon
+            icon={<MoonStar className="w-5 h-5" />}
+            label={alwaysAwakeEnabled ? (alwaysAwakeKeepingAwake ? 'Always Awake (active)' : 'Always Awake (waiting)') : 'Always Awake'}
+            active={alwaysAwakeEnabled}
+            onClick={onAlwaysAwakeClick}
+          />
+        )}
         <ActivityIcon
           icon={<Settings className="w-5 h-5" />}
           label="Settings"

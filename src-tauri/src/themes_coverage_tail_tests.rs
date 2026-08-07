@@ -37,6 +37,34 @@ fn a_theme_root_that_cannot_be_read_yields_nothing() {
     assert!(read_theme_dir(&file).is_empty());
 }
 
+/// A saved edit to a built-in theme lands in the user root under the same id; the user's copy is the
+/// one that must survive the merge, or the edit is invisible to the renderer.
+#[test]
+fn a_user_theme_replaces_the_built_in_that_shares_its_id() {
+    let builtin = vec![
+        serde_json::json!({ "id": "claude", "name": "Claude" }),
+        serde_json::json!({ "id": "novel", "name": "Novel" }),
+    ];
+    let user = vec![
+        serde_json::json!({ "id": "claude", "name": "Claude (edited)" }),
+        serde_json::json!({ "id": "theme-1", "name": "Mine" }),
+        // No id at all: kept rather than dropped, matching the tolerant read of a theme root.
+        serde_json::json!({ "name": "Anonymous" }),
+    ];
+
+    let merged = merge_theme_roots(builtin, user);
+
+    assert_eq!(
+        merged,
+        vec![
+            serde_json::json!({ "id": "claude", "name": "Claude (edited)" }),
+            serde_json::json!({ "id": "novel", "name": "Novel" }),
+            serde_json::json!({ "id": "theme-1", "name": "Mine" }),
+            serde_json::json!({ "name": "Anonymous" }),
+        ]
+    );
+}
+
 #[test]
 fn listing_themes_reads_the_user_root_and_tolerates_a_missing_builtin_root() {
     let _guard = crate::test_support::lock();
