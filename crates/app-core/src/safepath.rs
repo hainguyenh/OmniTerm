@@ -80,13 +80,6 @@ pub const DEFAULT_MAX_VIEW_BYTES: u64 = 1024 * 1024;
 /// allocation.
 pub const MAX_VIEW_BYTES_CEILING: u64 = 25 * 1024 * 1024;
 
-/// The fixed, non-editable half of the viewer's deny-list, for the Settings UI: it shows these
-/// locked (with a lock icon) alongside the user's own additions, so "why can't I view a `.exe`" has an
-/// answer without the user needing to guess whether it's their setting or the app's.
-#[tauri::command]
-pub fn system_excluded_view_exts() -> Vec<String> {
-    VIEW_DENY_EXTS.iter().map(|s| s.to_string()).collect()
-}
 
 /// Coerce a configured byte cap into the supported range.
 ///
@@ -108,7 +101,7 @@ pub fn clamp_max_bytes(configured: Option<u64>) -> u64 {
 /// `\\?\D:\ws\stop.bat` as a literal relative name and answered "is not recognized as an internal or
 /// external command". `dunce` keeps the prefix only when the path genuinely needs it (>260 chars, or a
 /// name cmd could not address anyway), so containment comparisons stay exact.
-pub(crate) fn canonical(path: &Path) -> Result<PathBuf, String> {
+pub fn canonical(path: &Path) -> Result<PathBuf, String> {
     dunce::canonicalize(path).map_err(|e| format!("cannot resolve {}: {}", path.display(), e))
 }
 

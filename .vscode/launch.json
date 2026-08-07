@@ -17,7 +17,7 @@
       "type": "chrome",
       "request": "launch",
       "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}/src",
+      "webRoot": "${workspaceFolder}/ui",
       "preLaunchTask": "dev",
       "timeout": 60000
     }

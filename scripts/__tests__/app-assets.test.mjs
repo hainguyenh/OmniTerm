@@ -17,7 +17,7 @@ async function repositoryImageFiles() {
       if (IGNORED_DIR_NAMES.has(entry.name)) continue
       const full = path.join(current, entry.name)
       const relative = path.relative(root, full).replaceAll('\\', '/')
-      if (relative === 'src/generated' || relative.startsWith('src/generated/') || relative === 'src-tauri/icons' || relative.startsWith('src-tauri/icons/')) {
+      if (relative === 'ui/generated' || relative.startsWith('ui/generated/') || relative === 'src-tauri/icons' || relative.startsWith('src-tauri/icons/')) {
         continue
       }
       if (entry.isDirectory()) {
@@ -69,10 +69,10 @@ test('repository keeps one original logo and generates every derivative', async 
     assert.match(packageJson.scripts[script], /assets:generate/, `${script} must generate assets first`)
   }
 
-  const appLogo = await readFile(path.join(root, 'src/assets/appLogo.ts'), 'utf8')
+  const appLogo = await readFile(path.join(root, 'ui/assets/appLogo.ts'), 'utf8')
   assert.match(appLogo, /generated\/OmniTerm-Logo\.webp/)
   const html = await readFile(path.join(root, 'index.html'), 'utf8')
-  assert.match(html, /src\/generated\/OmniTerm-Logo\.webp/)
+  assert.match(html, /ui\/generated\/OmniTerm-Logo\.webp/)
   const tauri = JSON.parse(await readFile(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'))
   assert.deepEqual(tauri.bundle.icon, [
     'icons/32x32.png',

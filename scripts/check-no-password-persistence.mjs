@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const files = [
   'contract/index.ts',
-  'src/omnitermAPI.ts',
-  'src/vite-env.d.ts',
-  'src/components/ConnectionForm.tsx',
+  'ui/omnitermAPI.ts',
+  'ui/vite-env.d.ts',
+  'ui/components/ConnectionForm.tsx',
   'src-tauri/Cargo.toml',
   'src-tauri/src/lib.rs',
   'src-tauri/src/main.rs',
@@ -69,9 +69,9 @@ if (/["']credentials["']/.test(rustPermissions)) {
 }
 
 for (const relative of [
-  'src/hooks/useConnectionMeta.ts',
-  'src/components/MainLayout.tsx',
-  'src/components/WorkspacePanel.tsx',
+  'ui/hooks/useConnectionMeta.ts',
+  'ui/components/MainLayout.tsx',
+  'ui/components/WorkspacePanel.tsx',
 ]) {
   const content = fs.readFileSync(path.join(root, relative), 'utf8')
   if (content.includes('localStorage') && /password|credential|secret/i.test(content)) {
