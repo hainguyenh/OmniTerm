@@ -14,10 +14,22 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const PKG = path.join(root, 'package.json')
-const CONF = path.join(root, 'src-tauri', 'tauri.conf.json')
-const CARGO = path.join(root, 'src-tauri', 'Cargo.toml')
+import { isMain } from './is-main.mjs'
+
+export const DEFAULT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+/** The three files that each carry the release version, relative to a repo root. */
+export const VERSION_FILES = Object.freeze({
+  pkg: 'package.json',
+  conf: path.join('src-tauri', 'tauri.conf.json'),
+  cargo: path.join('src-tauri', 'Cargo.toml'),
+})
+
+const resolve = (root) => ({
+  PKG: path.join(root, VERSION_FILES.pkg),
+  CONF: path.join(root, VERSION_FILES.conf),
+  CARGO: path.join(root, VERSION_FILES.cargo),
+})
 
 const SEMVER = /^\d+\.\d+\.\d+$/
 /** Only the `version` on the first `[package]` key — a dependency's `version = "…"` must not match. */
@@ -25,7 +37,8 @@ const CARGO_VERSION = /^version\s*=\s*"([^"]+)"/m
 
 const read = (file) => readFileSync(file, 'utf8')
 
-function currentVersions() {
+export function currentVersions(root = DEFAULT_ROOT) {
+  const { PKG, CONF, CARGO } = resolve(root)
   const cargo = read(CARGO).match(CARGO_VERSION)
   if (!cargo) throw new Error('Could not find a version in src-tauri/Cargo.toml')
   return {
@@ -35,8 +48,8 @@ function currentVersions() {
   }
 }
 
-function validate(expected) {
-  const versions = currentVersions()
+export function validate(expected, root = DEFAULT_ROOT) {
+  const versions = currentVersions(root)
   const distinct = [...new Set(Object.values(versions))]
   if (distinct.length !== 1) {
     const detail = Object.entries(versions)
@@ -54,7 +67,8 @@ function validate(expected) {
   console.log(`[sync-tauri-version] ok — every file is at ${version}`)
 }
 
-function write(version) {
+export function write(version, root = DEFAULT_ROOT) {
+  const { PKG, CONF, CARGO } = resolve(root)
   if (!SEMVER.test(version)) {
     throw new Error(`Version "${version}" is not a bare semver (X.Y.Z).`)
   }
@@ -72,15 +86,19 @@ function write(version) {
   console.log(`[sync-tauri-version] wrote ${version} to all three files`)
 }
 
-const [mode, arg] = process.argv.slice(2)
-try {
-  if (mode === 'validate') validate(arg)
-  else if (mode === 'write') write(arg)
-  else {
-    console.error('usage: sync-tauri-version.mjs <validate [expected] | write <version>>')
-    process.exit(2)
+function main() {
+  const [mode, arg] = process.argv.slice(2)
+  try {
+    if (mode === 'validate') validate(arg)
+    else if (mode === 'write') write(arg)
+    else {
+      console.error('usage: sync-tauri-version.mjs <validate [expected] | write <version>>')
+      process.exit(2)
+    }
+  } catch (err) {
+    console.error(`[sync-tauri-version] ${err.message}`)
+    process.exit(1)
   }
-} catch (err) {
-  console.error(`[sync-tauri-version] ${err.message}`)
-  process.exit(1)
 }
+
+if (isMain(import.meta.url)) main()

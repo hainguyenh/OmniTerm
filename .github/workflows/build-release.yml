@@ -189,10 +189,12 @@ jobs:
           BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
         run: node scripts/sync-tauri-version.mjs validate $env:BARE_VERSION
 
+      # `src-tauri` is a member of the root Cargo workspace, so cargo — and therefore Tauri's
+      # bundler — writes to the workspace-root `target/`, not `src-tauri/target/`.
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: .
 
       - name: Build Tauri Windows setup installer
         run: pnpm build:tauri:nsis
@@ -200,15 +202,21 @@ jobs:
       - name: Confirm Tauri setup artifact exists
         shell: pwsh
         run: |
-          $nsis = @(Get-ChildItem -Path src-tauri/target/release/bundle/nsis -Filter *.exe -File -ErrorAction SilentlyContinue)
-          if ($nsis.Count -lt 1) { throw 'Tauri NSIS artifact was not produced.' }
+          $bundle = 'target/release/bundle/nsis'
+          # Distinguish "bundler never ran" from "ran but emitted nothing" — the two failures have
+          # completely different causes and a shared message sent the last investigation the wrong way.
+          if (-not (Test-Path -LiteralPath $bundle -PathType Container)) {
+            throw "Tauri produced no NSIS bundle directory at $bundle."
+          }
+          $nsis = @(Get-ChildItem -LiteralPath $bundle -Filter *.exe -File)
+          if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
           $nsis | Select-Object FullName, Length
 
       - name: Upload Tauri NSIS artifact
         uses: actions/upload-artifact@v6
         with:
           name: OmniTerm-Tauri-Windows-nsis
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          path: target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
   create-release-page:
