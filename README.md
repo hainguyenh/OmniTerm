@@ -68,3 +68,24 @@ Built-in themes are JSON files in `src-tauri/builtinThemes/`. User-created theme
 in OmniTerm's application data `themes` folder. Open **Theme Remix** to create, duplicate, and edit
 themes, or use its folder button to edit a JSON file externally. Use the reload button after an
 external edit; invalid JSON files are ignored by the theme loader.
+## Pre-push checks
+
+`master` requires every Test Gate check to pass before a pull request can merge, so a broken push
+costs a full CI round trip to find out. A Husky `pre-push` hook runs the same checks locally first
+and refuses the push, naming the check that failed and the one command that reproduces it.
+
+```
+pnpm check:push          # typecheck, lint + LOC, JS tests, security audit, clippy, cargo test
+pnpm check:push --full   # the above plus both coverage jobs and the 85% gate (slow)
+```
+
+The hook installs itself via the `prepare` script on `pnpm install`. The coverage jobs are left out
+of the default run because Rust coverage needs a nightly toolchain, `cargo-llvm-cov` and minutes of
+wall clock; anything skipped is named in the output rather than passed over silently. If `cargo` is
+not on PATH the Rust checks are reported as skipped, not as passing.
+
+To push past the hook — CI still enforces the gate, and master will not let a red PR merge:
+
+```
+git push --no-verify
+```

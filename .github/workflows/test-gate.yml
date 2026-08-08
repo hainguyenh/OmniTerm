@@ -32,6 +32,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      # The pre-push hook runs these same checks locally. If that runner breaks, pushes stop being
+      # screened and CI silently becomes the first line of defence again — so it is tested here.
+      - run: node --test scripts/__tests__/pre-push-check.test.mjs
 
   js-lint:
     name: JS — Lint (ESLint + LOC)
