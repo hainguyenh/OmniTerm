@@ -124,7 +124,8 @@ pub fn run() {
 
             // Tells each pane whether its shell is running something (tab busy/idle indicator).
             let _activity_poller = session_activity::spawn_poller(app.handle().clone());
-            let _always_awake_poller = always_awake::spawn_poller(app.handle().clone());
+            // Always Awake starts its own poller on the plugin's first `get_state`, so a build with
+            // the plugin absent never runs it. See always_awake::ensure_poller.
 
             // This launch may itself carry --open-shell (the shim can start a cold instance).
             let handle = app.handle().clone();
@@ -161,6 +162,12 @@ pub fn run() {
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
                 if let Some(registry) = app.try_state::<DetachRegistry>() {
                     registry.begin_shutdown();
+                }
+                // Always Awake must not outlive the app. The kernel would drop the sleep request
+                // when the process dies anyway, but only the poller thread can hand it back
+                // deliberately (SetThreadExecutionState is thread-affine), so ask it to now.
+                if let Some(awake) = app.try_state::<AlwaysAwakeState>() {
+                    awake.begin_shutdown();
                 }
             }
         });

@@ -1,23 +1,7 @@
 import { useState } from 'react'
 import { MoonStar, X } from 'lucide-react'
 import { useEscToClose } from '../../../ui/hooks/useEscToClose'
-
-type Duration = 'today' | '24h' | 'nextMonday'
-
-function expiryFor(duration: Duration): number {
-  const now = new Date()
-  if (duration === '24h') return now.getTime() + 24 * 60 * 60 * 1000
-  if (duration === 'today') {
-    const end = new Date(now)
-    end.setHours(23, 59, 59, 999)
-    return end.getTime()
-  }
-  const next = new Date(now)
-  const days = ((1 - next.getDay() + 7) % 7) || 7
-  next.setDate(next.getDate() + days)
-  next.setHours(8, 0, 0, 0)
-  return next.getTime()
-}
+import { DURATIONS, durationFromExpiry, expiryFor, formatDeadline, type Duration } from './awakeSchedule'
 
 export default function AlwaysAwakeModal({
   status,
@@ -29,7 +13,7 @@ export default function AlwaysAwakeModal({
   onSaved: (next: AlwaysAwakeStatus) => void
 }) {
   const [mode, setMode] = useState<AlwaysAwakeMode>(status.mode)
-  const [duration, setDuration] = useState<Duration>('24h')
+  const [duration, setDuration] = useState<Duration>(() => durationFromExpiry(status))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -72,7 +56,13 @@ export default function AlwaysAwakeModal({
       style={{ backgroundColor: 'var(--theme-overlay)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-[26rem] max-w-full bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
+      {/* The width is an inline style, not a `w-[…]` utility: this component ships from plugins/, and a
+          build whose Tailwind content globs miss that directory emits no rule for the class, leaving the
+          panel to stretch the full viewport. A style attribute cannot be purged. */}
+      <div
+        className="bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden"
+        style={{ width: 'min(24rem, 100%)' }}
+      >
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-theme-border">
           <div className="flex items-start gap-3 min-w-0">
             <span
@@ -129,26 +119,59 @@ export default function AlwaysAwakeModal({
           <div>
             <p className="text-xs font-semibold text-theme-fg mb-2">Keep awake for</p>
             <div className="grid grid-cols-3 gap-2">
-              {([
-                ['today', 'Today'],
-                ['24h', '24 hours'],
-                ['nextMonday', 'Mon 08:00'],
-              ] as const).map(([value, label]) => (
-                <button key={value} type="button" onClick={() => setDuration(value)} className={`rounded-lg border px-2 py-2 text-[11px] ${duration === value ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]' : 'border-theme-border text-theme-dim'}`}>{label}</button>
-              ))}
+              {DURATIONS.map(([value, label]) => {
+                const selected = duration === value
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setDuration(value)}
+                    className="rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors"
+                    // Inline, for the same purge reason as the panel width, and because the selected
+                    // state used to be a bare accent-coloured border and label — invisible against a
+                    // light theme, so the group read as stuck on its default no matter what was picked.
+                    style={{
+                      borderColor: selected ? 'var(--theme-accent)' : 'var(--theme-border)',
+                      backgroundColor: selected ? 'var(--theme-accent)' : 'transparent',
+                      color: selected ? 'var(--theme-accent-fg, #1a1b26)' : 'var(--theme-dim)',
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
             </div>
+            {/* The buttons alone never showed which instant was chosen, so a changed schedule looked
+                identical to the default. */}
+            <p className="mt-2 text-[11px] text-theme-dim">Until {formatDeadline(expiryFor(duration))}</p>
           </div>
           <div
-            className="flex items-center justify-between rounded-lg border border-theme-border px-3 py-2 text-[11px]"
-            style={{ backgroundColor: 'var(--theme-hover-bg)' }}
+            role="status"
+            className="flex items-center gap-3 rounded-xl border px-4 py-3"
+            style={{
+              backgroundColor: 'var(--theme-hover-bg)',
+              borderColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-border)',
+            }}
           >
-            <span className="text-theme-dim">
-              Status
-              {status.enabled && status.activeSessionCount > 0 && (
-                <span className="ml-1">· {status.activeSessionCount} active session{status.activeSessionCount === 1 ? '' : 's'}</span>
-              )}
-            </span>
-            <span className={status.enabled ? 'text-theme-accent font-semibold' : 'text-theme-dim'}>{status.enabled ? (status.keepingAwake ? 'Active' : 'Enabled, waiting') : 'Off'}</span>
+            <span
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-dim)' }}
+            />
+            <div className="min-w-0">
+              <p
+                className="text-2xl font-black leading-none tracking-wide"
+                style={{ color: status.enabled ? 'var(--theme-accent)' : 'var(--theme-dim)' }}
+              >
+                {status.enabled ? 'ON' : 'OFF'}
+              </p>
+              <p className="mt-1 text-[11px] text-theme-dim">
+                <span>{status.enabled ? (status.keepingAwake ? 'Active' : 'Enabled, waiting') : 'Off'}</span>
+                {status.enabled && status.activeSessionCount > 0 && (
+                  <span> · {status.activeSessionCount} active session{status.activeSessionCount === 1 ? '' : 's'}</span>
+                )}
+              </p>
+            </div>
           </div>
           {error && <p className="text-xs text-theme-error">{error}</p>}
         </div>
