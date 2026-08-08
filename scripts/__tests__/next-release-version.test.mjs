@@ -125,6 +125,49 @@ test('the tag is pushed only after the build job succeeded, and master is never 
   assert.match(workflow, /create-release-page:\n\s*needs: \[resolve-release-version, build-desktop-packages\]/)
 })
 
+/** Top-level jobs of build-release.yml as `{ name, needs, if }`, parsed without a YAML dependency. */
+function releaseJobs() {
+  const body = workflow.slice(workflow.indexOf('\njobs:\n'))
+  const blocks = body.split(/\n {2}(?=[a-z][\w-]*:\n)/).slice(1)
+  return blocks.map((block) => {
+    const name = block.match(/^([\w-]+):/)[1]
+    const needs = block.match(/\n {4}needs: \[([^\]]*)\]/)
+    return {
+      name,
+      needs: needs ? needs[1].split(',').map((entry) => entry.trim()) : [],
+      // `if:` at four spaces is the job's own; deeper ones belong to its steps.
+      condition: block.match(/\n {4}if: ([\s\S]*?)(?=\n {4}\w|\n {2}\w|$)/)?.[1] ?? '',
+    }
+  })
+}
+
+test('every job downstream of the skipped gate re-states the condition, not just the first', () => {
+  // `skipped` propagates through the entire graph. quality-gate is skipped whenever the release
+  // reuses the commit's existing green run, and build-desktop-packages overriding that was not
+  // enough: create-release-page inherited the skip and the run reported success having published
+  // nothing — the exact "green gate that did not run" this repo refuses to ship.
+  const jobs = releaseJobs()
+  assert.ok(jobs.some((job) => job.name === 'quality-gate'), 'quality-gate job not found')
+
+  const downstream = new Set(['quality-gate'])
+  for (let changed = true; changed; ) {
+    changed = false
+    for (const job of jobs) {
+      if (!downstream.has(job.name) && job.needs.some((need) => downstream.has(need))) {
+        downstream.add(job.name)
+        changed = true
+      }
+    }
+  }
+  downstream.delete('quality-gate')
+  assert.ok(downstream.size >= 2, `expected the skip to reach several jobs, got ${[...downstream]}`)
+
+  for (const name of downstream) {
+    const { condition } = jobs.find((job) => job.name === name)
+    assert.match(condition, /!cancelled\(\)/, `${name} inherits the skip instead of overriding it`)
+  }
+})
+
 test('the release publishes the installer, the portable package and the plugin', () => {
   for (const name of ['OmniTerm-Tauri-Windows-nsis', 'OmniTerm-Windows-portable', 'OmniTerm-Plugin-always-awake']) {
     assert.match(workflow, new RegExp(`name: ${name}\\b`), `${name} is never uploaded`)

@@ -355,6 +355,14 @@ jobs:
 
   create-release-page:
     needs: [resolve-release-version, build-desktop-packages]
+    # `skipped` propagates down the whole graph, not just one level: quality-gate being skipped in
+    # favour of verify-commit-is-green skipped this job too, even though build-desktop-packages
+    # overrode it and succeeded. The run then reported success having published nothing — so the
+    # override has to be repeated by every job downstream of the branch, not only the first.
+    if: >-
+      ${{ !cancelled()
+          && needs.resolve-release-version.result == 'success'
+          && needs.build-desktop-packages.result == 'success' }}
     runs-on: ubuntu-latest
 
     steps:
