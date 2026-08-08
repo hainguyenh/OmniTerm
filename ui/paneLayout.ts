@@ -182,3 +182,17 @@ export function fractionFromPointer(
   const raw = (position - origin) / size
   return clampFraction(invert ? 1 - raw : raw)
 }
+
+/**
+ * The pane index carried by a drop, or null when the drop did not come from a pane header.
+ *
+ * `Number('')` is 0, not NaN, so parsing the payload directly meant any *other* drop onto a pane —
+ * a file, a text selection, a link — read as "pane 0" and silently swapped it with the drop target.
+ * That was unreachable while the webview's own drag-drop handler ate these events; disabling it so
+ * pane reordering works is exactly what makes foreign drops reach the page.
+ */
+export function draggedPaneIndex(payload: string, paneCount: number): number | null {
+  if (!/^\d+$/.test(payload)) return null
+  const index = Number(payload)
+  return index < paneCount ? index : null
+}

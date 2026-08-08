@@ -1,0 +1,3 @@
+# Refuse a push that would fail the Test Gate. See scripts/pre-push-check.mjs.
+# Bypass with `git push --no-verify` (CI still enforces the gate on the PR).
+node scripts/pre-push-check.mjs

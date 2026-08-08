@@ -32,11 +32,13 @@
     "test:security": "node scripts/check-no-password-persistence.mjs",
     "lint:eslint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:loc": "node scripts/check-loc.mjs",
-    "test:quality": "node --test scripts/__tests__/check-loc.test.mjs scripts/__tests__/check-coverage.test.mjs scripts/__tests__/check-dead-code.test.mjs scripts/__tests__/app-assets.test.mjs scripts/__tests__/rust-coverage-runner.test.mjs",
+    "test:quality": "node --test scripts/__tests__/check-loc.test.mjs scripts/__tests__/check-coverage.test.mjs scripts/__tests__/check-dead-code.test.mjs scripts/__tests__/app-assets.test.mjs scripts/__tests__/rust-coverage-runner.test.mjs scripts/__tests__/pre-push-check.test.mjs",
     "coverage:js": "pnpm assets:generate && vitest run --coverage",
     "lint:dead-code": "node scripts/check-dead-code.mjs",
     "assets:generate": "node scripts/generate-app-assets.mjs",
-    "typecheck": "pnpm assets:generate && tsc -b"
+    "typecheck": "pnpm assets:generate && tsc -b",
+    "prepare": "husky || true",
+    "check:push": "node scripts/pre-push-check.mjs"
   },
   "dependencies": {
     "@omniterm/contract": "workspace:*",
@@ -74,6 +76,7 @@
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "postcss": "^8.4.49",
     "sharp": "^0.35.3",
