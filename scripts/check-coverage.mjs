@@ -3,6 +3,8 @@ import { appendFile, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { isMain } from './is-main.mjs'
+
 export const COVERAGE_METRICS = Object.freeze(['lines', 'statements', 'functions', 'branches'])
 
 function metricFromCounts(covered, total, label) {
@@ -139,8 +141,7 @@ async function main() {
   if (!result.ok) process.exitCode = 1
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
-if (isMain) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error)
     process.exitCode = 1

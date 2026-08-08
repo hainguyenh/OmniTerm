@@ -56,7 +56,7 @@ function Select-Plugin {
 }
 
 function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {
-  $bundle = Join-Path $RepoRoot "src-tauri\target\$Profile\bundle"
+  $bundle = Join-Path $RepoRoot "target\$Profile\bundle"
   if (-not (Test-Path $bundle)) { throw "Tauri did not create $bundle." }
   Copy-Item -Path (Join-Path $bundle '*') -Destination $Destination -Recurse -Force
 }
@@ -67,7 +67,7 @@ function Initialize-AppArtifacts([string]$Destination) {
 }
 
 function Copy-PortableArtifacts([string]$Destination, $Plugin, [string]$Profile) {
-  $buildRoot = Join-Path $RepoRoot "src-tauri\target\$Profile"
+  $buildRoot = Join-Path $RepoRoot "target\$Profile"
   $executable = Join-Path $buildRoot 'omniterm.exe'
   if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw "Tauri did not create $executable."
@@ -226,7 +226,7 @@ if ($Mode -eq '2') {
 } else {
   $configArgs = @('tauri', 'build')
   if ($BuildProfile -eq 'debug') { $configArgs += '--debug' }
-  $buildRoot = Join-Path $RepoRoot "src-tauri\target\$BuildProfile"
+  $buildRoot = Join-Path $RepoRoot "target\$BuildProfile"
   Remove-BuildTree (Join-Path $buildRoot 'plugins') $buildRoot
   if ($Mode -eq '3') {
     Invoke-Step "Build $($Plugin.Name) plugin" 'pnpm' @('build:plugin', $Plugin.Path)

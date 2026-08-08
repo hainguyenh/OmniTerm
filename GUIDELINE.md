@@ -83,10 +83,12 @@ pnpm tauri:build
 pnpm build:tauri:nsis
 ```
 
-The installer outputs to `src-tauri/target/release/bundle/nsis/`.
+The installer outputs to `target/release/bundle/nsis/`. `src-tauri` is a member of the
+root Cargo workspace, so all build output lands in the workspace-root `target/` — not
+in `src-tauri/target/`.
 
 The interactive build wizard also supports a Development profile. It runs
-`tauri build --debug`, writes to `src-tauri/target/debug/`, keeps devtools enabled,
+`tauri build --debug`, writes to `target/debug/`, keeps devtools enabled,
 and enables Rust `Trace` logging. Choose **Development** in the wizard, or pass
 `-Dev` through the Windows wrapper:
 

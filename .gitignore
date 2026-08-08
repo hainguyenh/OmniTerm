@@ -9,7 +9,6 @@ lerna-debug.log*
 
 node_modules
 .pnpm-store/
-src-tauri/target
 dist
 dist-ssr
 # Plugin build output (generated)

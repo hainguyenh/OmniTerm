@@ -250,6 +250,75 @@ mod tests {
         assert_eq!(req.name.chars().count(), MAX_NAME);
     }
 
+    /// `LocalShell::parse` maps `""` to `Default`, so a shim that expands an unset variable into an
+    /// empty argument still opens the platform's own shell rather than being rejected. Pinned
+    /// because it is the one input that reaches a spawn without naming a shell.
+    #[test]
+    fn an_empty_shell_value_selects_the_platform_default() {
+        let req = parse_open_shell_args(&argv(&["x", "--open-shell", ""])).unwrap();
+        assert_eq!(req.shell, LocalShell::Default);
+        assert_eq!(req.name, LocalShell::Default.default_name());
+    }
+
+    /// `flag()` reads `idx + 1`, so a flag in the last slot has nothing after it to read.
+    #[test]
+    fn a_trailing_flag_at_the_end_of_argv_has_no_value() {
+        let (name, _) = native_shell();
+        let req = parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd"])).unwrap();
+        assert_eq!(req.cwd, None);
+    }
+
+    /// `position()` stops at the first match. An attacker appending a second copy of a flag cannot
+    /// override the value the shim already set.
+    #[test]
+    fn a_repeated_flag_takes_the_first_occurrence() {
+        let (name, expected) = native_shell();
+        let foreign = if cfg!(target_os = "windows") { "bash" } else { "cmd" };
+
+        let req = parse_open_shell_args(&argv(&[
+            "x",
+            "--open-shell",
+            name,
+            "--name",
+            "First",
+            "--name",
+            "Second",
+            "--open-shell",
+            foreign,
+        ]))
+        .unwrap();
+
+        assert_eq!(req.name, "First");
+        assert_eq!(req.shell, expected);
+    }
+
+    /// The scan is by token value, not by position, so `--open-shell` is honoured even where it sits
+    /// in another flag's value slot — and that flag is then correctly treated as valueless.
+    #[test]
+    fn finds_the_open_shell_token_even_as_another_flags_value() {
+        let (name, expected) = native_shell();
+        let req = parse_open_shell_args(&argv(&["x", "--name", "--open-shell", name])).unwrap();
+        assert_eq!(req.shell, expected);
+        assert_eq!(req.name, expected.default_name());
+    }
+
+    /// The caps must bite at exactly the limit — one over truncates, exactly at it passes through.
+    #[test]
+    fn caps_bite_exactly_at_the_boundary() {
+        let (name, _) = native_shell();
+        let at_limit = "a".repeat(MAX_CWD);
+        let over_limit = "a".repeat(MAX_CWD + 1);
+
+        let exact =
+            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", &at_limit])).unwrap();
+        let over =
+            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", &over_limit]))
+                .unwrap();
+
+        assert_eq!(exact.cwd, Some(at_limit));
+        assert_eq!(over.cwd.unwrap().len(), MAX_CWD);
+    }
+
     #[test]
     fn empty_flag_values_are_absent() {
         let (name, expected) = native_shell();

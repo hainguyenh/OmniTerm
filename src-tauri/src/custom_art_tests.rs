@@ -177,7 +177,10 @@ fn removal_deletes_every_matching_extension_but_leaves_other_entries() {
     assert!(art_dir.join("idle-dark.png").is_file());
 }
 
-#[cfg(unix)]
+/// Linux-only rather than all-unix: the fixture needs a directory name that is valid bytes but
+/// invalid UTF-8, and APFS rejects those outright (`EILSEQ`) — so on macOS `create_dir_all` fails
+/// before the path-conversion branch under test is ever reached.
+#[cfg(target_os = "linux")]
 #[test]
 fn non_utf8_art_paths_report_conversion_errors_after_real_file_operations() {
     use std::ffi::OsString;

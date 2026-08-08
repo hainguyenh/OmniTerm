@@ -64,10 +64,11 @@ describe("release configuration", () => {
   it("builds the Tauri installer and publishes it from the real bundle path", () => {
     expect(workflow).toContain("pnpm install --frozen-lockfile");
     expect(workflow).toContain("pnpm build:tauri:nsis");
-    // The Rust project is at src-tauri/, so its target dir is src-tauri/target — not tauri/target.
-    expect(workflow).toContain("src-tauri/target/release/bundle/nsis");
+    // Where that bundle path is, and that every consumer agrees on it, is derived from the Cargo
+    // workspace in cargo-workspace-layout.test.ts — hardcoding it here is what let f4f0efa's
+    // target-dir move reach a release unnoticed.
     expect(workflow).not.toMatch(/[^-]\btauri\/target\//);
-    expect(workflow).toContain("Tauri NSIS artifact was not produced.");
+    expect(workflow).toContain("Tauri NSIS artifact was not produced");
     expect(workflow).toContain("name: OmniTerm-Tauri-Windows-nsis");
   });
 
