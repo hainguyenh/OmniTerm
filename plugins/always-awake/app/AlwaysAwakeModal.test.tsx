@@ -4,6 +4,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AlwaysAwakeModal from './AlwaysAwakeModal'
+import { durationFromExpiry } from './awakeSchedule'
 import { mockOmnitermAPI } from '../../../ui/testUtils'
 
 const status: AlwaysAwakeStatus = {
@@ -107,6 +108,55 @@ describe('AlwaysAwakeModal', () => {
     rerender(<AlwaysAwakeModal status={{ ...status, enabled: true, activeSessionCount: 1 }} onClose={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByText('Enabled, waiting')).toBeInTheDocument()
     expect(screen.getByText(/1 active session$/)).toBeInTheDocument()
+  })
+
+  it('states ON or OFF in its own right, not only as a colour', () => {
+    const { rerender } = render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent(/^OFF/)
+
+    rerender(<AlwaysAwakeModal status={{ ...status, enabled: true, keepingAwake: true }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('status')).toHaveTextContent(/^ON/)
+  })
+
+  it('opens on the schedule that is actually running, not always on 24 hours', () => {
+    // Reopening used to reset the group to its `24h` default, so the panel claimed a schedule the
+    // machine was not keeping.
+    const endOfToday = new Date()
+    endOfToday.setHours(23, 59, 59, 999)
+    render(
+      <AlwaysAwakeModal
+        status={{ ...status, enabled: true, expiresAtMs: endOfToday.getTime() }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: '24 hours' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('classifies a stored deadline back into the schedule that produced it', () => {
+    const endOfToday = new Date()
+    endOfToday.setHours(23, 59, 59, 999)
+    const nextMonday = new Date()
+    nextMonday.setDate(nextMonday.getDate() + (((1 - nextMonday.getDay() + 7) % 7) || 7))
+    nextMonday.setHours(8, 0, 0, 0)
+
+    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: endOfToday.getTime() })).toBe('today')
+    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: nextMonday.getTime() })).toBe('nextMonday')
+    // A rolling 24 hours is not an absolute instant, so it is the fallback rather than a match.
+    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: Date.now() + 86_400_000 })).toBe('24h')
+    expect(durationFromExpiry({ ...status, enabled: false, expiresAtMs: endOfToday.getTime() })).toBe('24h')
+    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: 0 })).toBe('24h')
+  })
+
+  it('shows the deadline each schedule resolves to, and updates it on selection', () => {
+    render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
+    const deadline = () => screen.getByText(/^Until /).textContent
+
+    const asDay = deadline()
+    fireEvent.click(screen.getByRole('button', { name: 'Mon 08:00' }))
+    expect(deadline()).not.toBe(asDay)
+    expect(screen.getByRole('button', { name: 'Mon 08:00' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('turns the feature off and reports unsupported platforms', async () => {
