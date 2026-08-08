@@ -3,6 +3,8 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { isMain } from './is-main.mjs'
+
 export const DEFAULT_LIMITS = Object.freeze({
   '.ts': 400,
   '.tsx': 500,
@@ -96,8 +98,7 @@ async function main() {
   if (result.violations.length > 0) process.exitCode = 1
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
-if (isMain) {
+if (isMain(import.meta.url)) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error)
     process.exitCode = 1

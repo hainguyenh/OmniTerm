@@ -18,3 +18,7 @@ pub enum SessionStatus {
 	/// only, so the renderer can hold it as a plain flag.
 	Activity { busy: bool },
 }
+
+#[cfg(test)]
+#[path = "session_status_tests.rs"]
+mod tests;

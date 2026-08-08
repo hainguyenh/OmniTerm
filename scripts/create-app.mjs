@@ -90,4 +90,4 @@ for (const [cmd] of steps) {
     process.exit(res.status ?? 1)
   }
 }
-console.log('\n✓ Build complete. The installer is under src-tauri/target/release/bundle/.\n')
+console.log('\n✓ Build complete. The installer is under target/release/bundle/.\n')
