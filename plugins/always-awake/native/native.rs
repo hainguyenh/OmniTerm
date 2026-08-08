@@ -1,3 +1,9 @@
+/// Take out or hand back the Windows sleep request.
+///
+/// **Thread-affine.** `SetThreadExecutionState` records the request against the calling thread, and
+/// only a call on that same thread releases it. Clearing from anywhere else returns success and
+/// changes nothing, so the machine stays awake while the caller believes it stopped. Every call must
+/// come from the Always Awake poller thread — see `always_awake::spawn_poller`.
 #[cfg(windows)]
 pub(super) fn apply_assertion(asserted: bool) -> Result<(), String> {
     use windows::Win32::System::Power::{
@@ -102,11 +108,39 @@ pub(super) fn jiggle_mouse() -> Result<(), String> {
     Err("Mouse jiggle is currently supported on Windows only.".to_string())
 }
 
+#[cfg(all(test, not(windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_shim_reports_itself_unsupported() {
+        // The commands surface these strings to the user, so they are part of the contract.
+        assert!(apply_assertion(true).is_err());
+        assert!(apply_assertion(false).is_err());
+        assert!(sleep_timeout_seconds().is_err());
+        assert!(idle_seconds().is_err());
+        assert!(jiggle_mouse().is_err());
+    }
+}
+
 #[cfg(all(test, windows))]
 mod tests {
     use super::jiggle_mouse;
     use windows::Win32::Foundation::POINT;
     use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+    #[test]
+    fn the_sleep_assertion_round_trips() {
+        super::apply_assertion(true).expect("Windows should accept sleep prevention");
+        super::apply_assertion(false).expect("Windows should clear sleep prevention");
+    }
+
+    #[test]
+    fn the_idle_time_and_sleep_timeout_are_readable() {
+        super::idle_seconds().expect("Windows should report user idle time");
+        // A machine configured never to sleep answers `Ok(None)`; both are fine, an Err is not.
+        super::sleep_timeout_seconds().expect("Windows should report the active sleep timeout");
+    }
 
     #[test]
     fn jiggle_restores_cursor_position() {

@@ -278,3 +278,56 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTestId('overlays')).toBeInTheDocument()
   })
 })
+
+describe('pane drag-and-drop reordering', () => {
+  /** jsdom has no DataTransfer, and fireEvent.drop will not synthesise one. */
+  const drop = (target: Element, payload: string) =>
+    fireEvent.drop(target, { dataTransfer: { getData: () => payload } })
+
+  const split = (overrides: Record<string, unknown> = {}) => model({
+    layoutMode: 2,
+    panes: ['t1', null],
+    activeTabs: [{ id: 't1', connId: 'local', name: 'Local' }],
+    ...overrides,
+  })
+
+  it('swaps a session into the empty pane it was dropped on', () => {
+    const swapPanes = vi.fn()
+    render(<MainLayoutView model={split({ swapPanes, dragPane: 0 })} />)
+
+    // Pane 1 is the empty frame; the payload is the index the header drag wrote.
+    drop(screen.getByTestId('waiting-1').closest('[style]') as Element, '0')
+    expect(swapPanes).toHaveBeenCalledWith(0, 1)
+  })
+
+  it('swaps two occupied panes', () => {
+    const swapPanes = vi.fn()
+    render(<MainLayoutView model={split({
+      swapPanes,
+      dragPane: 1,
+      panes: ['t1', 't2'],
+      activeTabs: [{ id: 't1', connId: 'local', name: 'Local' }, { id: 't2', connId: 'ssh', name: 'SSH' }],
+    })} />)
+
+    drop(screen.getByTestId('terminal-t1').closest('.absolute') as Element, '1')
+    expect(swapPanes).toHaveBeenCalledWith(1, 0)
+  })
+
+  it('ignores a foreign drop instead of swapping pane 0 into it', () => {
+    // `Number('')` is 0, so an unguarded parse turned a dropped file into "swap with pane 0".
+    const swapPanes = vi.fn()
+    const setDragPane = vi.fn()
+    render(<MainLayoutView model={split({ swapPanes, setDragPane, dragPane: null })} />)
+
+    const frame = screen.getByTestId('waiting-1').closest('[style]') as Element
+    drop(frame, '')
+    drop(frame, String.raw`C:\Users\me\notes.txt`)
+    expect(swapPanes).not.toHaveBeenCalled()
+    expect(setDragPane).toHaveBeenCalled()
+  })
+
+  it('marks the other panes as drop targets while a drag is in flight', () => {
+    const { container } = render(<MainLayoutView model={split({ dragPane: 0 })} />)
+    expect(container.querySelectorAll('.border-dashed').length).toBeGreaterThan(0)
+  })
+})

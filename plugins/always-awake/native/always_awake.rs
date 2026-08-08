@@ -1,57 +1,31 @@
-//! Always Awake state, scheduling, activity aggregation, and native keep-awake behavior.
+//! Always Awake runtime: persistence, the poller, and the three commands the plugin invokes.
+//!
+//! The decisions this applies — what counts as an active session, when a schedule has expired,
+//! whether the machine should be held awake — live in `awake_schedule.rs`.
 
-use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 #[path = "native.rs"]
 mod native;
+#[path = "awake_schedule.rs"]
+mod awake_schedule;
+#[path = "awake_poller.rs"]
+mod awake_poller;
+
+pub use awake_schedule::{AwakeMode, AwakeStatus, AwakeTarget};
+use awake_schedule::{active_session_count, is_expired, now_ms, should_keep_awake, StoredState};
+pub use awake_poller::spawn_poller;
+use awake_poller::ensure_poller;
 
 const TICK: Duration = Duration::from_millis(500);
 const JIGGLE_MIN_INTERVAL_MS: i64 = 30_000;
 const SLEEP_TIMEOUT_CACHE_MS: i64 = 60_000;
-
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Default)]
-#[serde(rename_all = "camelCase")]
-pub enum AwakeMode {
-    Always,
-    #[default]
-    ActiveOnly,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct StoredState {
-    enabled: bool,
-    mode: AwakeMode,
-    expires_at_ms: i64,
-}
-
-impl Default for StoredState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            mode: AwakeMode::ActiveOnly,
-            expires_at_ms: 0,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AwakeStatus {
-    pub enabled: bool,
-    pub mode: AwakeMode,
-    pub expires_at_ms: i64,
-    pub active_session_count: usize,
-    pub keeping_awake: bool,
-    pub supported: bool,
-    pub error: Option<String>,
-}
 
 pub struct AlwaysAwakeState {
     stored: Mutex<StoredState>,
@@ -60,7 +34,18 @@ pub struct AlwaysAwakeState {
     last_error: Mutex<Option<String>>,
     last_jiggle_ms: Mutex<i64>,
     sleep_timeout: Mutex<Option<(i64, Option<u64>)>>,
+    /// Set once `ensure_poller` has spawned the loop, so repeated `get_state` calls do not stack
+    /// pollers.
+    poller_started: AtomicBool,
+    /// The last status pushed to the frontend, so a tick that changed nothing stays silent.
+    last_emitted: Mutex<Option<EmittedKey>>,
+    /// Set from the app's exit event; the poller hands the sleep request back and stops.
+    shutting_down: AtomicBool,
 }
+
+/// Everything about a status the frontend can see: enabled, mode, deadline, active session count,
+/// whether the machine is actually being held awake, and the last error.
+type EmittedKey = (bool, AwakeMode, i64, usize, bool, Option<String>);
 
 impl AlwaysAwakeState {
     pub fn new() -> Self {
@@ -71,7 +56,19 @@ impl AlwaysAwakeState {
             last_error: Mutex::new(None),
             last_jiggle_ms: Mutex::new(0),
             sleep_timeout: Mutex::new(None),
+            poller_started: AtomicBool::new(false),
+            last_emitted: Mutex::new(None),
+            shutting_down: AtomicBool::new(false),
         }
+    }
+
+    /// Stop keeping the machine awake and end the poller.
+    ///
+    /// Called from the app's exit event. Waiting for the process to die would work on Windows — the
+    /// kernel drops a dead process's execution state — but only the poller thread can hand the
+    /// request back deliberately, so it is asked to before the app goes.
+    pub fn begin_shutdown(&self) {
+        self.shutting_down.store(true, Ordering::Release);
     }
 }
 
@@ -79,14 +76,6 @@ impl Default for AlwaysAwakeState {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-        .min(i64::MAX as u128) as i64
 }
 
 fn state_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
@@ -130,33 +119,16 @@ fn set_error(state: &AlwaysAwakeState, error: Option<String>) {
     }
 }
 
-fn session_is_active(session: &crate::pty::PtySession, table: &crate::proc_activity::ProcTable) -> bool {
-    // SSH is intentionally conservative: Windows OpenSSH exposes the transport process but not
-    // whether the remote shell is at a prompt, so any connected SSH PTY counts as active.
-    session.ssh
-        || session.launched_with_command
-        || session.pid.is_some_and(|pid| table.has_descendant(pid))
-}
-
-fn active_session_count(
-    manager: &crate::pty::PtyManager,
-    table: &crate::proc_activity::ProcTable,
-) -> usize {
+fn awake_targets(manager: &crate::pty::PtyManager) -> Vec<AwakeTarget> {
     manager
         .sessions
         .iter()
-        .filter(|entry| session_is_active(entry.value(), table))
-        .count()
-}
-
-fn should_keep_awake(stored: &StoredState, active_count: usize) -> bool {
-    stored.enabled
-        && (stored.mode == AwakeMode::Always || active_count > 0)
-        && cfg!(windows)
-}
-
-fn is_expired(stored: &StoredState, now: i64) -> bool {
-    stored.enabled && stored.expires_at_ms > 0 && stored.expires_at_ms <= now
+        .map(|entry| AwakeTarget {
+            ssh: entry.ssh,
+            launched_with_command: entry.launched_with_command,
+            pid: entry.pid,
+        })
+        .collect()
 }
 
 fn cached_sleep_timeout(state: &AlwaysAwakeState) -> Result<Option<u64>, String> {
@@ -201,10 +173,36 @@ fn status<R: Runtime>(
     })
 }
 
+fn emitted_key(value: &AwakeStatus) -> EmittedKey {
+    (
+        value.enabled,
+        value.mode,
+        value.expires_at_ms,
+        value.active_session_count,
+        value.keeping_awake,
+        value.error.clone(),
+    )
+}
+
+/// Push a status to the frontend, but only when it differs from the last one sent.
+///
+/// The poller ticks twice a second for the life of the app. Emitting unconditionally meant two IPC
+/// messages and two React renders per second forever, including on a machine where Always Awake was
+/// never switched on.
 fn emit_status<R: Runtime>(app: &AppHandle<R>, state: &AlwaysAwakeState, active_count: usize) {
-    if let Ok(value) = status(app, state, active_count) {
-        let _ = app.emit("always-awake:state", value);
+    let Ok(value) = status(app, state, active_count) else {
+        return;
+    };
+    let key = emitted_key(&value);
+    // A poisoned lock must not silence the feature: `if let` skips the check and emits, which is the
+    // safe way to be wrong here.
+    if let Ok(mut last) = state.last_emitted.lock() {
+        if last.as_ref() == Some(&key) {
+            return;
+        }
+        *last = Some(key);
     }
+    let _ = app.emit("always-awake:state", value);
 }
 
 fn reconcile<R: Runtime>(
@@ -215,7 +213,7 @@ fn reconcile<R: Runtime>(
     let Some(manager) = app.try_state::<crate::pty::PtyManager>() else {
         return;
     };
-    let active_count = active_session_count(&manager, table);
+    let active_count = active_session_count(&awake_targets(&manager), table);
     let mut stored = match state.stored.lock() {
         Ok(value) => value,
         Err(_) => return,
@@ -269,37 +267,13 @@ fn reconcile<R: Runtime>(
     emit_status(app, state, active_count);
 }
 
-pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) -> tauri::async_runtime::JoinHandle<()> {
-    tauri::async_runtime::spawn(async move {
-        let Some(state) = app.try_state::<AlwaysAwakeState>() else {
-            return;
-        };
-        let _ = load_state(&app, &state);
-        let mut system = System::new();
-        let mut ticker = tokio::time::interval(TICK);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        loop {
-            ticker.tick().await;
-            let Some(manager) = app.try_state::<crate::pty::PtyManager>() else {
-                return;
-            };
-            if manager.sessions.is_empty() {
-                let table = crate::proc_activity::ProcTable::default();
-                reconcile(&app, &state, &table);
-                continue;
-            }
-            let table = crate::proc_activity::ProcTable::snapshot(&mut system);
-            reconcile(&app, &state, &table);
-        }
-    })
-}
-
 #[tauri::command]
 pub async fn get_state<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, AlwaysAwakeState>,
 ) -> Result<AwakeStatus, String> {
     load_state(&app, &state)?;
+    ensure_poller(&app, &state);
     status(&app, &state, 0)
 }
 
@@ -341,52 +315,6 @@ pub async fn disable<R: Runtime>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "always_awake_tests.rs"]
+mod tests;
 
-    #[test]
-    fn active_only_waits_for_activity() {
-        let stored = StoredState {
-            enabled: true,
-            mode: AwakeMode::ActiveOnly,
-            expires_at_ms: 100,
-        };
-        assert!(!should_keep_awake(&stored, 0));
-        assert_eq!(should_keep_awake(&stored, 1), cfg!(windows));
-    }
-
-    #[test]
-    fn always_mode_does_not_require_a_session() {
-        let stored = StoredState {
-            enabled: true,
-            mode: AwakeMode::Always,
-            expires_at_ms: 100,
-        };
-        assert_eq!(should_keep_awake(&stored, 0), cfg!(windows));
-    }
-
-    #[test]
-    fn expiry_is_inclusive() {
-        let stored = StoredState {
-            enabled: true,
-            mode: AwakeMode::Always,
-            expires_at_ms: 100,
-        };
-        assert!(!is_expired(&stored, 99));
-        assert!(is_expired(&stored, 100));
-        assert!(is_expired(&stored, 101));
-    }
-
-    #[test]
-    fn mode_wire_names_are_stable() {
-        assert_eq!(serde_json::to_string(&AwakeMode::ActiveOnly).unwrap(), "\"activeOnly\"");
-        assert_eq!(serde_json::to_string(&AwakeMode::Always).unwrap(), "\"always\"");
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn windows_sleep_assertion_round_trips() {
-        native::apply_assertion(true).expect("Windows should accept sleep prevention");
-        native::apply_assertion(false).expect("Windows should clear sleep prevention");
-    }
-}
