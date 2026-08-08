@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Releases are recorded by a git tag alone and never commit back to `master`, which now requires pull
+  requests. `package.json` is a floor version; `next-release-version.mjs` resolves the next release
+  from the highest shipped tag.
+- Build & Release reuses the Test Gate run the commit already passed on `master` instead of re-running
+  all of it. `force_quality_gate` on a manual run restores the full re-check.
+- Test Gate consolidated from nine jobs to five, so checks that share a toolchain share its setup. The
+  required status checks in the branch ruleset are now `JS — Lint, Types & Security`,
+  `JS — Tests & Coverage`, `Rust — Clippy & Tests`, `Rust — Coverage (llvm-cov)`, and
+  `Coverage — full source 85%`.
+
+### Fixed
+- The security-gate symlink test no longer fails on Windows without Developer Mode; it skips with a
+  named reason there and still runs in full on Linux CI.
+
 ## [0.1.0] — 2026-07-31
 
 ### Added
