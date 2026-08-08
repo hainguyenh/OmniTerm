@@ -14,12 +14,21 @@ on:
         required: false
         default: ""
       version:
-        description: "Release version. Use 'auto' to read version from package.json (e.g. 1.0.2), or type exact version like 'v1.0.2'. Leave blank to build only."
+        description: "'auto' increments past the highest released tag. Or type an exact version like 'v1.0.2'. Leave blank to build only."
         required: false
         default: "auto"
+      bump:
+        description: "Which part 'auto' increments"
+        required: false
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 permissions:
-  contents: write # needed to create a Release and upload the installer
+  contents: write # needed to commit the version bump, push the tag, and create the Release
 
 concurrency:
   group: build-release-${{ github.ref }}
@@ -63,16 +72,18 @@ jobs:
         with:
           node-version: 24
 
+      # A manual run used to resolve its tag from package.json, so triggering with the defaults
+      # re-resolved the version that was already released and overwrote that release's assets instead
+      # of publishing a new one. 'auto' now means "move past the highest shipped tag".
       - name: Resolve release version
         id: semver
         shell: pwsh
         env:
           EVENT_NAME: ${{ github.event_name }}
-          INPUT_REF: ${{ inputs.git_ref }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUMP: ${{ inputs.bump }}
         run: |
           $event = $env:EVENT_NAME
-          $inputRef = $env:INPUT_REF
           $inputVersion = $env:INPUT_VERSION
           $refName = $env:GITHUB_REF_NAME
 
@@ -85,6 +96,8 @@ jobs:
           $skip = "false"
 
           if ($event -eq 'push') {
+              # The tag already exists and package.json was bumped in the commit it points at, so a
+              # tag push publishes exactly what is checked in and never bumps anything.
               $tag = $refName
               if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
                   throw "Tag push detected but '$tag' is not a valid release tag."
@@ -95,36 +108,31 @@ jobs:
               Write-Host "Tag push detected ($tag). package.json version matches."
           } else {
               $rawVersion = $inputVersion.Trim()
-              if ($rawVersion -eq 'auto') {
-                  $tag = $pkgTag
-                  Write-Host "auto version: using version from package.json: $tag"
-              } elseif (-not [string]::IsNullOrEmpty($rawVersion)) {
+              if ([string]::IsNullOrEmpty($rawVersion)) {
+                  $skip = "true"
+                  Write-Host "No version supplied — build-only run (no Release)."
+              } elseif ($rawVersion -eq 'auto') {
+                  $level = if ([string]::IsNullOrEmpty($env:INPUT_BUMP)) { 'patch' } else { $env:INPUT_BUMP }
+                  # Exit code first: on failure the output is empty, and calling .Trim() on it would
+                  # bury the script's own error message under a null-reference one.
+                  $bare = node scripts/next-release-version.mjs $level
+                  if ($LASTEXITCODE -ne 0) { throw "Could not resolve the next release version." }
+                  $tag = "v$($bare.Trim())"
+                  Write-Host "auto ($level): highest shipped tag increments to $tag"
+              } else {
                   if ($rawVersion -match '^v') { $rawVersion = $rawVersion.Substring(1) }
                   $rawVersion = $rawVersion.Trim()
                   if ($rawVersion -notmatch '^\d+\.\d+\.\d+$') {
                       throw "Version '$rawVersion' is not a valid semver (X.Y.Z)."
                   }
-                  $requestedTag = "v$rawVersion"
-                  if ($requestedTag -ne $pkgTag) {
-                      throw "Manual release version $requestedTag must match package.json version $pkgTag."
-                  }
-                  $tag = $requestedTag
-                  Write-Host "manual version: using package.json-matched $tag"
-              } else {
-                  if ($refName -match '^v\d+\.\d+\.\d+$') {
-                      $tag = $refName
-                      if ($tag -ne $pkgTag) {
-                          throw "Manual tag reference $tag must match package.json version $pkgTag."
-                      }
-                  } elseif ($inputRef -match '^v\d+\.\d+\.\d+$') {
-                      $tag = $inputRef
-                      if ($tag -ne $pkgTag) {
-                          throw "Manual tag reference $tag must match package.json version $pkgTag."
-                      }
-                  } else {
-                      $skip = "true"
-                      Write-Host "No version supplied and no tag reference detected — build-only run (no Release)."
-                  }
+                  $tag = "v$rawVersion"
+                  Write-Host "manual version: $tag"
+              }
+
+              # The exact failure this workflow was reported for: a run that resolves an already
+              # released tag silently replaces that release's assets rather than publishing a new one.
+              if ($skip -eq "false" -and (git tag --list $tag)) {
+                  throw "Tag $tag already exists. Releasing it again would overwrite the existing release's assets."
               }
           }
 
@@ -140,6 +148,20 @@ jobs:
               "tag=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
               "bare=" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
+
+      # A manual release commits the bump back to master, so it has to be building a commit that is
+      # already on master — otherwise the push would carry unrelated work along with the version.
+      - name: Guard — a manual release must build from master
+        if: github.event_name == 'workflow_dispatch' && steps.semver.outputs.skip != 'true'
+        shell: bash
+        run: |
+          git fetch --no-tags origin master
+          if git merge-base --is-ancestor HEAD FETCH_HEAD; then
+            echo "✅ Build commit is on master — proceeding."
+          else
+            echo "❌ Build commit is NOT on master, and a release commits its version bump to master."
+            exit 1
+          fi
 
   build-desktop-packages:
     name: Build Tauri release package
@@ -181,9 +203,17 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # package.json, tauri.conf.json and Cargo.toml each carry the version separately; a drift here
-      # ships an installer whose filename and metadata disagree and nothing else would catch it.
-      - name: Validate Tauri release metadata
+      # ships an installer whose filename and metadata disagree and nothing else would catch it. The
+      # release version is stamped into all three before the build so Tauri names the installer after
+      # the version actually being published — create-release-page commits the same three files.
+      - name: Stamp the release version
         if: needs.resolve-release-version.outputs.skip != 'true'
+        shell: pwsh
+        env:
+          BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
+        run: node scripts/sync-tauri-version.mjs write $env:BARE_VERSION
+
+      - name: Validate Tauri release metadata
         shell: pwsh
         env:
           BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
@@ -212,6 +242,36 @@ jobs:
           if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
           $nsis | Select-Object FullName, Length
 
+      - name: Build the Always Awake plugin
+        run: pnpm build:plugin plugins/always-awake
+
+      # The same functions the local wizard uses, so what ships is what `pnpm create:app` builds.
+      # The portable package reuses the executable the NSIS build already produced — no second compile.
+      - name: Package portable app and Always Awake plugin
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts'
+          $stage = Join-Path $repoRoot '.omniterm-build'
+          New-Item -ItemType Directory -Force -Path $artifacts, $stage | Out-Null
+
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $portable = New-PortablePackage `
+            -RepoRoot $repoRoot `
+            -Destination (Join-Path $artifacts 'portable') `
+            -ArchiveName "OmniTerm_${version}_x64-portable.zip"
+          $plugin = New-PluginPackage `
+            -PluginPath (Join-Path $repoRoot 'plugins/always-awake') `
+            -Destination (Join-Path $artifacts 'plugin-always-awake') `
+            -StageRoot $stage `
+            -Name 'always-awake'
+
+          foreach ($archive in @($portable, $plugin)) {
+            if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Missing $archive." }
+            Get-Item -LiteralPath $archive | Select-Object FullName, Length
+          }
+
       - name: Upload Tauri NSIS artifact
         uses: actions/upload-artifact@v6
         with:
@@ -219,15 +279,66 @@ jobs:
           path: target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Windows-portable
+          path: |
+            artifacts/portable/*.zip
+            artifacts/portable/*.zip.sha256
+          if-no-files-found: error
+
+      # Only the archive and its checksum: the manifest and README next to them are for reading during
+      # the build, not for attaching to the release page.
+      - name: Upload Always Awake plugin artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Plugin-always-awake
+          path: |
+            artifacts/plugin-always-awake/*.zip
+            artifacts/plugin-always-awake/*.zip.sha256
+          if-no-files-found: error
+
   create-release-page:
     needs: [resolve-release-version, build-desktop-packages]
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check out source code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref || github.ref }}
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      # Committed only after the build succeeded, so a failed run never leaves master claiming a
+      # version that was never published. `push origin HEAD:master` is not forced: if master moved
+      # under us the push is rejected and no tag is created.
+      #
+      # Pushing with GITHUB_TOKEN does not trigger workflows, so the tag created here cannot re-enter
+      # this workflow through its `push: tags` trigger.
+      - name: Commit the version bump and tag the release
+        if: github.event_name == 'workflow_dispatch' && needs.resolve-release-version.outputs.skip != 'true'
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve-release-version.outputs.tag }}
+          BARE: ${{ needs.resolve-release-version.outputs.bare }}
+        run: |
+          node scripts/sync-tauri-version.mjs write "$BARE"
+          git config user.name 'hainguyenh'
+          git config user.email '8667952+hainguyenh@users.noreply.github.com'
+          if git diff --quiet; then
+            echo "Version files already at $BARE — nothing to commit."
+          else
+            git commit -am "chore: release $TAG"
+          fi
+          git tag -a "$TAG" -m "$TAG"
+          git push origin HEAD:master
+          git push origin "$TAG"
 
       - name: Download desktop release artifacts
         uses: actions/download-artifact@v6
@@ -245,5 +356,7 @@ jobs:
           name: ${{ needs.resolve-release-version.outputs.tag }}
           files: |
             release-artifacts/**/*.exe
+            release-artifacts/**/*.zip
+            release-artifacts/**/*.zip.sha256
           fail_on_unmatched_files: true
           generate_release_notes: true
