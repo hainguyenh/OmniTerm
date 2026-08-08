@@ -16,7 +16,7 @@ import { PaneResizers } from './PaneResizers'
 import { Columns2, LayoutGrid, Loader2, Monitor, PanelLeft, RotateCw, Square, Terminal, Unplug } from 'lucide-react'
 import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
 import { paneIdentity } from '../paneIdentity'
-import { paneRect } from '../paneLayout'
+import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
@@ -34,6 +34,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     keepingAwake: false,
     supported: true,
     error: null,
+  }
+  /** Reorder only when the drop really came from a pane header; ignore anything else dropped here. */
+  const onPaneDrop = (event: React.DragEvent, target: number) => {
+    const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
+    if (source !== null) swapPanes(source, target)
+    setDragPane(null)
   }
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
@@ -302,7 +308,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       className="absolute z-10 p-0.5"
                       style={paneRect(i, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
-                      onDrop={(e) => { e.preventDefault(); swapPanes(Number(e.dataTransfer.getData('text/plain')), i); setDragPane(null) }}
+                      onDrop={(e) => { e.preventDefault(); onPaneDrop(e, i) }}
                     >
                       <div
                         onMouseDown={() => setFocusedPane(i)}
@@ -409,7 +415,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       key={tab.id}
                       onMouseDownCapture={() => { if (visible) setFocusedPane(paneIdx) }}
                       onDragOver={split ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
-                      onDrop={split ? (e) => { e.preventDefault(); swapPanes(Number(e.dataTransfer.getData('text/plain')), paneIdx); setDragPane(null) } : undefined}
+                      onDrop={split ? (e) => { e.preventDefault(); onPaneDrop(e, paneIdx) } : undefined}
                       // `pane-offscreen`, not Tailwind's `hidden`: `display: none` destroys an
                       // xterm pane's scroll position and forces a re-fit on every tab switch —
                       // see the rule's own comment in index.css.
