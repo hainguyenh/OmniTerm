@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { encodeIco } from './image/ico.mjs'
+import { isMain } from './is-main.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = resolve(root, 'assets/OmniTerm-Logo-Original.png')
@@ -84,8 +85,7 @@ export async function generateAppAssets() {
   )
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-if (isMain) {
+if (isMain(import.meta.url)) {
   generateAppAssets().catch((error) => {
     console.error(`[app-assets] ${error instanceof Error ? error.message : String(error)}`)
     process.exitCode = 1

@@ -32,7 +32,7 @@
     "test:security": "node scripts/check-no-password-persistence.mjs",
     "lint:eslint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "lint:loc": "node scripts/check-loc.mjs",
-    "test:quality": "node --test scripts/__tests__/check-loc.test.mjs scripts/__tests__/check-coverage.test.mjs scripts/__tests__/check-dead-code.test.mjs scripts/__tests__/app-assets.test.mjs scripts/__tests__/rust-coverage-runner.test.mjs scripts/__tests__/pre-push-check.test.mjs",
+    "test:quality": "node --test \"scripts/__tests__/*.test.mjs\"",
     "coverage:js": "pnpm assets:generate && vitest run --coverage",
     "lint:dead-code": "node scripts/check-dead-code.mjs",
     "assets:generate": "node scripts/generate-app-assets.mjs",
