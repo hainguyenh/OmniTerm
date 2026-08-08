@@ -113,11 +113,14 @@ test('the release workflow stamps the resolved version before building', () => {
   assert.ok(stamp < build, 'the version must be stamped before Tauri names the installer')
 })
 
-test('the bump is committed only after the build job succeeded', () => {
-  // A bump pushed before the build would leave master claiming a version that never shipped.
+test('the tag is pushed only after the build job succeeded, and master is never written to', () => {
+  // A tag pushed before the build would point at a version that never shipped. And master requires
+  // pull requests: a release that commits its version bump there is rejected by the branch ruleset,
+  // which is exactly how the first release under that ruleset failed.
   const releaseJob = workflow.slice(workflow.indexOf('  create-release-page:'))
-  assert.match(releaseJob, /git push origin HEAD:master/)
   assert.match(releaseJob, /git push origin "\$TAG"/)
+  assert.doesNotMatch(releaseJob, /HEAD:master/)
+  assert.doesNotMatch(releaseJob, /git commit/)
   assert.doesNotMatch(releaseJob, /push --force/)
   assert.match(workflow, /create-release-page:\n\s*needs: \[resolve-release-version, build-desktop-packages\]/)
 })
