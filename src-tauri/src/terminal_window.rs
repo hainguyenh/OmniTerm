@@ -134,6 +134,11 @@ pub async fn detach_terminal<R: Runtime>(
         .inner_size(900.0, 600.0)
         .min_inner_size(400.0, 200.0)
         .decorations(false)
+        // Matches `dragDropEnabled: false` on the main window in tauri.conf.json. Left on, the
+        // webview installs an OS drag-drop handler that swallows dragover/drop before the page sees
+        // them, and dragging a pane header does nothing. A detached window shows the same panes, so
+        // it needs the same answer.
+        .disable_drag_drop_handler()
         .build()
         .map_err(|e| format!("Could not open a window for this session: {e}"))?;
 
