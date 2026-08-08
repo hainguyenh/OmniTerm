@@ -1,5 +1,13 @@
 name: Test Gate
 
+# Five jobs, not one per command. Every extra job re-clones, re-installs pnpm dependencies, and — for
+# the Rust ones — starts from a cold cargo cache, so checks that share a toolchain are grouped and pay
+# that setup once. The job *names* are the required status checks in the branch ruleset; renaming one
+# means updating the ruleset in the same change or master becomes unmergeable.
+#
+# The `push: branches: [master]` trigger is not a duplicate of the pull_request run: a PR check is
+# recorded against the merge-commit SHA, while Build & Release looks up a green run for the SHA that
+# actually landed on master. Without this trigger a release has nothing to verify against.
 on:
   push:
     branches: [master]
@@ -18,8 +26,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  js-typecheck:
-    name: JS — TypeScript Check
+  js-static:
+    name: JS — Lint, Types & Security
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -32,12 +40,16 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm lint
+      # The zero-credential audit. It is also embedded in `pnpm test` for local runs, but CI states it
+      # as its own step so a failure reads as "a password can be persisted" rather than "tests broke".
+      - run: pnpm test:security
       # The pre-push hook runs these same checks locally. If that runner breaks, pushes stop being
       # screened and CI silently becomes the first line of defence again — so it is tested here.
       - run: node --test scripts/__tests__/pre-push-check.test.mjs
 
-  js-lint:
-    name: JS — Lint (ESLint + LOC)
+  js-tests:
+    name: JS — Tests & Coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,36 +61,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-
-  js-test:
-    name: JS — Unit Tests (Vitest)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test
-
-  js-coverage:
-    name: JS — Coverage (Vitest + v8)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      # The node:test suites over scripts/. `coverage:js` below is vitest only, so these would go
+      # unrun if they were not named here.
+      - run: pnpm test:quality
+      # Instrumented vitest covers exactly what a bare `vitest run` would, so running both is paying
+      # twice for one result.
       - name: Generate JavaScript and TypeScript coverage
         run: pnpm coverage:js
       - uses: actions/upload-artifact@v6
@@ -89,36 +76,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  rust-lint:
-    name: Rust — Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm assets:generate
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: .
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-
-  rust-test:
-    name: Rust — Unit Tests
+  # Clippy and the test suite share a toolchain and a target directory, so running them in one job
+  # lets `cargo test` reuse what `clippy --all-targets` already built instead of compiling the
+  # workspace from a cold cache on a second runner.
+  rust-checks:
+    name: Rust — Clippy & Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -135,10 +97,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
+      - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
   rust-coverage:
@@ -159,7 +126,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev xvfb xauth
-      # LLVM branch instrumentation is nightly-only. Lint and tests remain on stable above.
+      # LLVM branch instrumentation is nightly-only, and a nightly build cannot share the stable
+      # cache, so this stays a separate job from `rust-checks`.
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
@@ -182,8 +150,8 @@ jobs:
 
   coverage-gate:
     name: Coverage — full source 85%
-    needs: [js-coverage, rust-coverage]
-    if: ${{ !cancelled() && needs.js-coverage.result == 'success' && needs.rust-coverage.result == 'success' }}
+    needs: [js-tests, rust-coverage]
+    if: ${{ !cancelled() && needs.js-tests.result == 'success' && needs.rust-coverage.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -214,17 +182,3 @@ jobs:
           path: coverage-final.json
           if-no-files-found: error
           retention-days: 7
-
-  security-check:
-    name: Security — Password Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.git_ref || github.ref }}
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm test:security

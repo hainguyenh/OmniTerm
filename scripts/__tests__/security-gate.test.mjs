@@ -51,6 +51,24 @@ async function plantScript(root) {
   return path.join(root, 'scripts', 'check-no-password-persistence.mjs')
 }
 
+/**
+ * Create a directory symlink, reporting whether the OS allowed it.
+ *
+ * Windows only permits this with Developer Mode on or SeCreateSymbolicLinkPrivilege held; without
+ * it the call throws EPERM before the behaviour under test is ever exercised, so it is the
+ * environment that failed, not the code. Only win32 gets that pass — on Linux, where CI runs, a
+ * refused symlink is a real failure and still throws.
+ */
+async function trySymlinkDir(target, link) {
+  try {
+    await symlink(target, link, 'dir')
+    return true
+  } catch (err) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES', 'UNKNOWN'].includes(err.code)) return false
+    throw err
+  }
+}
+
 test('the real repository passes, through the CLI', () => {
   const result = spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8' })
   assert.equal(result.status, 0, result.stderr)
@@ -164,14 +182,18 @@ test('the CLI exits 1 and prints the finding', async () => {
   assert.equal(result.stdout, '')
 })
 
-test('the CLI still runs when invoked through a symlinked path', async () => {
+test('the CLI still runs when invoked through a symlinked path', async (t) => {
   // `import.meta.url` arrives resolved through symlinks while `process.argv[1]` does not. Comparing
   // them raw made the audit exit 0 having scanned nothing — a gate that passes by not running.
   const root = await auditableCopy()
   const script = await plantScript(root)
 
   const linkRoot = `${root}-link`
-  await symlink(root, linkRoot, 'dir')
+  if (!(await trySymlinkDir(root, linkRoot))) {
+    // Named rather than passed over silently: a gate you believe ran and did not is worse than none.
+    t.skip('Windows refused to create a symlink (needs Developer Mode). Linux CI still runs this.')
+    return
+  }
   const result = spawnSync(
     process.execPath,
     [path.join(linkRoot, 'scripts', 'check-no-password-persistence.mjs')],
