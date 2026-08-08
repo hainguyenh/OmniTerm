@@ -96,10 +96,33 @@ describe("release configuration", () => {
     expect(workflow).toContain("fail_on_unmatched_files: true");
   });
 
-  it("fails releases when the requested version differs from the checked-in one", () => {
+  it("refuses to publish a version that disagrees with the one it builds", () => {
+    // A tag push publishes what is checked in, so the two must already agree.
     expect(workflow).toContain("does not match package.json version");
-    expect(workflow).toContain("must match package.json version");
+    // A manual run resolves the version itself and stamps it into all three files, so the check is
+    // that the stamp landed — not that the version was already written by hand.
+    expect(workflow).toMatch(/Stamp the release version[\s\S]*sync-tauri-version\.mjs write/);
     expect(workflow).toMatch(/Validate Tauri release metadata[\s\S]*sync-tauri-version\.mjs validate/);
+  });
+
+  it("refuses to re-publish a tag that has already shipped", () => {
+    // Without this, a run that resolves an already released tag makes action-gh-release replace that
+    // release's assets in place: the run goes green and no new release appears.
+    expect(workflow).toContain("Releasing it again would overwrite");
+    expect(workflow).toContain("next-release-version.mjs");
+  });
+
+  it("attaches the installer, the portable package and the plugin to the release", () => {
+    for (const name of [
+      "OmniTerm-Tauri-Windows-nsis",
+      "OmniTerm-Windows-portable",
+      "OmniTerm-Plugin-always-awake",
+    ]) {
+      expect(workflow, `${name} is never uploaded`).toContain(`name: ${name}`);
+    }
+    expect(workflow).toContain("release-artifacts/**/*.zip");
+    // download-artifact merges by this pattern; an upload named outside it is silently dropped.
+    expect(workflow).toContain("pattern: OmniTerm-*");
   });
 
   it("keeps every file that carries the release version in agreement", () => {

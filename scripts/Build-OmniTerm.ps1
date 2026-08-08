@@ -4,6 +4,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Portable and plugin packaging is shared with .github/workflows/build-release.yml so the package a
+# release ships is byte-for-byte the one this wizard builds.
+. (Join-Path $PSScriptRoot 'ReleasePackaging.ps1')
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $Artifacts = Join-Path $RepoRoot 'artifacts'
 $Stage = Join-Path $RepoRoot '.omniterm-build'
@@ -28,17 +31,6 @@ function Invoke-Step([string]$Label, [string]$File, [string[]]$Arguments) {
   Write-Host "`n  > $Label" -ForegroundColor Yellow
   & $File @Arguments
   if ($LASTEXITCODE -ne 0) { throw "$Label failed with exit code $LASTEXITCODE." }
-}
-
-function Remove-BuildTree([string]$Target, [string]$AllowedRoot) {
-  $targetFull = [IO.Path]::GetFullPath($Target)
-  $rootFull = [IO.Path]::GetFullPath($AllowedRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-  if (-not $targetFull.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
-    throw "Refusing to remove '$targetFull' because it is outside '$rootFull'."
-  }
-  if (Test-Path -LiteralPath $targetFull) {
-    Remove-Item -LiteralPath $targetFull -Recurse -Force
-  }
 }
 
 function Select-Plugin {
@@ -67,85 +59,12 @@ function Initialize-AppArtifacts([string]$Destination) {
 }
 
 function Copy-PortableArtifacts([string]$Destination, $Plugin, [string]$Profile) {
-  $buildRoot = Join-Path $RepoRoot "target\$Profile"
-  $executable = Join-Path $buildRoot 'omniterm.exe'
-  if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
-    throw "Tauri did not create $executable."
-  }
-
-  $portable = Join-Path $Destination 'portable'
-  New-Item -ItemType Directory -Force -Path $portable | Out-Null
-  Copy-Item -LiteralPath $executable -Destination (Join-Path $portable 'OmniTerm.exe') -Force
-
-  foreach ($resourceName in @('builtinThemes', 'sidecar')) {
-    $resource = Join-Path $buildRoot $resourceName
-    if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
-      $resource = Join-Path $RepoRoot "src-tauri\$resourceName"
-      if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
-        throw "Could not find resource directory $resourceName."
-      }
-    }
-    Copy-Item -LiteralPath $resource -Destination $portable -Recurse -Force
-  }
-
-  if ($null -ne $Plugin) {
-    # Copy from the selected staging source, not target/release/plugins. That release directory may
-    # contain resources from an earlier build and Tauri flattens glob destinations, which made a
-    # Limited portable package indistinguishable from Basic or from the previously built variant.
-    $pluginTarget = Join-Path $portable "plugins\$($Plugin.Name)"
-    New-Item -ItemType Directory -Force -Path $pluginTarget | Out-Null
-    Copy-Item -LiteralPath (Join-Path $Plugin.Path 'package.json') -Destination $pluginTarget -Force
-    Copy-Item -LiteralPath (Join-Path $Plugin.Path 'dist') -Destination $pluginTarget -Recurse -Force
-  }
-
-  @'
-OmniTerm portable package
-
-Run OmniTerm.exe directly; no installer is required. Keep the executable and its
-resource folders together. Microsoft Edge WebView2 Runtime is still required.
-
-This is an install-free build, not a zero-footprint build. OmniTerm continues to
-store settings and application data in the normal Windows user profile.
-'@ | Set-Content -LiteralPath (Join-Path $portable 'README-PORTABLE.txt') -Encoding UTF8
-
-  $archive = Join-Path $Destination 'OmniTerm-portable.zip'
-  Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $archive -Force
-  (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash |
-    Set-Content -LiteralPath "$archive.sha256" -Encoding ASCII
-
-  $manifests = @(Get-ChildItem (Join-Path $portable 'plugins') -Filter package.json -Recurse -ErrorAction SilentlyContinue)
-  if ($null -eq $Plugin) {
-    if ($manifests.Count -ne 0) { throw 'Basic portable package unexpectedly contains a plugin.' }
-  } else {
-    $expected = (Get-Content (Join-Path $Plugin.Path 'package.json') -Raw | ConvertFrom-Json).name
-    if ($manifests.Count -ne 1) {
-      throw "Portable package must contain exactly one plugin; found $($manifests.Count)."
-    }
-    $actual = (Get-Content $manifests[0].FullName -Raw | ConvertFrom-Json).name
-    if ($actual -ne $expected) {
-      throw "Portable package contains '$actual' instead of '$expected'."
-    }
-    Write-Host "  [OK] Portable contains exactly $expected" -ForegroundColor Green
-  }
+  New-PortablePackage -RepoRoot $RepoRoot -Destination $Destination -BuildProfile $Profile -Plugin $Plugin | Out-Null
 }
 
 function Build-PluginPackage($Plugin, [string]$Destination) {
   Invoke-Step "Build $($Plugin.Name) plugin" 'pnpm' @('build:plugin', $Plugin.Path)
-  $package = Get-Content (Join-Path $Plugin.Path 'package.json') -Raw | ConvertFrom-Json
-  $temp = Join-Path $Stage ('package-' + $Plugin.Name)
-  Remove-BuildTree $temp $Stage
-  New-Item -ItemType Directory -Force -Path $temp | Out-Null
-  Copy-Item (Join-Path $Plugin.Path 'package.json') $temp
-  Copy-Item (Join-Path $Plugin.Path 'README.md') $temp
-  Copy-Item (Join-Path $Plugin.Path 'dist') $temp -Recurse
-  Remove-BuildTree $Destination $Artifacts
-  New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-  $zip = Join-Path $Destination "$($Plugin.Name)-$($package.version).zip"
-  if (Test-Path $zip) { Remove-Item -LiteralPath $zip -Force }
-  Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $zip
-  (Get-FileHash $zip -Algorithm SHA256).Hash | Set-Content "$zip.sha256"
-  Copy-Item (Join-Path $Plugin.Path 'package.json') (Join-Path $Destination 'manifest.json') -Force
-  Copy-Item (Join-Path $Plugin.Path 'README.md') (Join-Path $Destination 'README.md') -Force
+  New-PluginPackage -PluginPath $Plugin.Path -Destination $Destination -StageRoot $Stage -Name $Plugin.Name | Out-Null
 }
 
 Set-Location $RepoRoot

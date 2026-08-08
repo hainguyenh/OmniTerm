@@ -53,6 +53,7 @@ const TARGET_REFERENCE = /([\w./\\-]*?)target[/\\](release|debug|\$Profile|\$Bui
 const FILES_NAMING_TARGET_DIR = [
   ".github/workflows/build-release.yml",
   "scripts/Build-OmniTerm.ps1",
+  "scripts/ReleasePackaging.ps1",
   "scripts/create-app.mjs",
   "GUIDELINE.md",
 ];
