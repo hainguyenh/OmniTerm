@@ -75,9 +75,32 @@ describe("release configuration", () => {
   it("gates the build on the reusable renderer, Rust, lint, and coverage workflow", () => {
     expect(workflow).toMatch(/quality-gate:[\s\S]*uses:\s+\.\/\.github\/workflows\/test-gate\.yml/);
     expect(workflow).toMatch(
-      /build-desktop-packages:[\s\S]*needs:\s*\[quality-gate, resolve-release-version\]/,
+      /build-desktop-packages:[\s\S]*needs:\s*\[quality-gate, verify-commit-is-green, resolve-release-version\]/,
     );
     expect(workflow).not.toMatch(/\n {2}(?:test-gate|rust-test-gate):/);
+  });
+
+  it("still requires a green gate when it reuses the commit's existing run instead of re-running it", () => {
+    // The full gate is skipped for a commit master already validated. That saves nine jobs only as
+    // long as *something* still checks the commit was green — a lookup that silently passes when the
+    // run is missing would turn the whole gate off.
+    expect(workflow).toMatch(/verify-commit-is-green:[\s\S]*head_sha=\$\{SHA\}/);
+    expect(workflow).toContain('select(.conclusion == "success")');
+    expect(workflow).toContain("No successful Test Gate run recorded");
+    // Exactly one of the two runs, so the build cannot depend on both succeeding.
+    expect(workflow).toContain("if: ${{ inputs.force_quality_gate }}");
+    expect(workflow).toContain("if: ${{ !inputs.force_quality_gate }}");
+    expect(workflow).toMatch(
+      /needs\.quality-gate\.result == 'success' \|\| needs\.verify-commit-is-green\.result == 'success'/,
+    );
+  });
+
+  it("records a release with a tag and never writes to master", () => {
+    // master requires pull requests, so a release that pushes a version-bump commit to it is
+    // rejected outright. Tags are the record; package.json is only a floor.
+    expect(workflow).not.toContain("HEAD:master");
+    expect(workflow).not.toContain("chore: release");
+    expect(workflow).toMatch(/Tag the release commit[\s\S]*git push origin "\$TAG"/);
   });
 
   it("enforces an 85% coverage threshold across JS and Rust plus their combined total", () => {
@@ -97,8 +120,9 @@ describe("release configuration", () => {
   });
 
   it("refuses to publish a version that disagrees with the one it builds", () => {
-    // A tag push publishes what is checked in, so the two must already agree.
-    expect(workflow).toContain("does not match package.json version");
+    // A tag push publishes the tag itself. package.json trails the shipped tags by design now, so
+    // the check is that the tag is not *below* it — a release older than the declared floor.
+    expect(workflow).toContain("it is below the package.json floor version");
     // A manual run resolves the version itself and stamps it into all three files, so the check is
     // that the stamp landed — not that the version was already written by hand.
     expect(workflow).toMatch(/Stamp the release version[\s\S]*sync-tauri-version\.mjs write/);

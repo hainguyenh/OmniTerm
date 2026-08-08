@@ -3,6 +3,13 @@ name: Build & Release
 # Trigger on pushing tags with format v*.*.* (e.g. v1.0.0, v2.1.3) from the main branch only.
 # Tags pushed from any other branch are rejected by the 'check-branch' guard step.
 # Or manually via workflow_dispatch.
+#
+# Tags are the record of what shipped; master is never written to. A release used to commit the
+# version bump back to master, which stopped working the moment master required pull requests — and
+# a release opening its own PR would drag the whole gate through a second time. So the version is
+# stamped into the artifacts at build time and the tag is what marks the commit. `package.json` is
+# therefore a *floor*, not the released version: scripts/next-release-version.mjs resolves the next
+# release from the highest shipped tag and only defers to package.json when it is higher still.
 on:
   push:
     tags:
@@ -26,6 +33,11 @@ on:
           - minor
           - major
         default: patch
+      force_quality_gate:
+        description: "Run the full Test Gate instead of reusing the target commit's existing green run"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write # needed to commit the version bump, push the tag, and create the Release
@@ -35,11 +47,45 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Only when explicitly asked for: releasing a ref that never landed on master, or re-validating
+  # after something outside the tree changed.
   quality-gate:
     name: Run full lint, test, LOC, and coverage gate
+    if: ${{ inputs.force_quality_gate }}
     uses: ./.github/workflows/test-gate.yml
     with:
       git_ref: ${{ inputs.git_ref || github.ref }}
+
+  # The commit being released has already been through the Test Gate — that is what the `push: master`
+  # trigger in test-gate.yml is for. Re-running the whole gate, nightly llvm-cov and all, proves
+  # nothing new about a tree that has not changed, so the release asks GitHub whether that run exists
+  # and was green instead of paying for it a second time.
+  verify-commit-is-green:
+    name: Verify the target commit already passed the Test Gate
+    if: ${{ !inputs.force_quality_gate }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref || github.ref }}
+
+      - name: Require a successful Test Gate run for this exact SHA
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA=$(git rev-parse HEAD)
+          RUNS=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/test-gate.yml/runs?head_sha=${SHA}&status=completed" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')
+          if [ "$RUNS" -eq 0 ]; then
+            echo "❌ No successful Test Gate run recorded for ${SHA}."
+            echo "Release a commit that is on master and green, or re-run with force_quality_gate."
+            exit 1
+          fi
+          echo "✅ Test Gate is green for ${SHA} (${RUNS} successful run(s))."
 
   resolve-release-version:
     runs-on: windows-latest
@@ -96,16 +142,18 @@ jobs:
           $skip = "false"
 
           if ($event -eq 'push') {
-              # The tag already exists and package.json was bumped in the commit it points at, so a
-              # tag push publishes exactly what is checked in and never bumps anything.
+              # A tag push publishes exactly the tag that was pushed. package.json is only a floor —
+              # releases no longer write back to master, so it stays behind the shipped tags by
+              # design. What must not happen is releasing *below* the floor, which would ship an
+              # installer older than a version someone deliberately raised the repo to.
               $tag = $refName
               if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
                   throw "Tag push detected but '$tag' is not a valid release tag."
               }
-              if ($tag -ne $pkgTag) {
-                  throw "Tag push detected ($tag) but it does not match package.json version $pkgTag."
+              if ([version]$tag.Substring(1) -lt [version]$pkgVersion) {
+                  throw "Tag push detected ($tag) but it is below the package.json floor version $pkgTag."
               }
-              Write-Host "Tag push detected ($tag). package.json version matches."
+              Write-Host "Tag push detected ($tag). At or above the package.json floor $pkgTag."
           } else {
               $rawVersion = $inputVersion.Trim()
               if ([string]::IsNullOrEmpty($rawVersion)) {
@@ -165,7 +213,13 @@ jobs:
 
   build-desktop-packages:
     name: Build Tauri release package
-    needs: [quality-gate, resolve-release-version]
+    # Exactly one of quality-gate / verify-commit-is-green runs; the other is skipped, and a skipped
+    # `needs` would otherwise skip this job too. So the gate is stated as "one of them succeeded".
+    needs: [quality-gate, verify-commit-is-green, resolve-release-version]
+    if: >-
+      ${{ !cancelled()
+          && needs.resolve-release-version.result == 'success'
+          && (needs.quality-gate.result == 'success' || needs.verify-commit-is-green.result == 'success') }}
     runs-on: windows-latest
 
     steps:
@@ -310,34 +364,22 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.git_ref || github.ref }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      # Committed only after the build succeeded, so a failed run never leaves master claiming a
-      # version that was never published. `push origin HEAD:master` is not forced: if master moved
-      # under us the push is rejected and no tag is created.
+      # Tagged only after the build succeeded, so a failed run never leaves a tag pointing at a
+      # version that was never published. Nothing is committed: master requires pull requests, and the
+      # version the release ships is already baked into the artifacts by the 'Stamp the release
+      # version' step above. The tag is the record.
       #
       # Pushing with GITHUB_TOKEN does not trigger workflows, so the tag created here cannot re-enter
       # this workflow through its `push: tags` trigger.
-      - name: Commit the version bump and tag the release
+      - name: Tag the release commit
         if: github.event_name == 'workflow_dispatch' && needs.resolve-release-version.outputs.skip != 'true'
         shell: bash
         env:
           TAG: ${{ needs.resolve-release-version.outputs.tag }}
-          BARE: ${{ needs.resolve-release-version.outputs.bare }}
         run: |
-          node scripts/sync-tauri-version.mjs write "$BARE"
           git config user.name 'hainguyenh'
           git config user.email '8667952+hainguyenh@users.noreply.github.com'
-          if git diff --quiet; then
-            echo "Version files already at $BARE — nothing to commit."
-          else
-            git commit -am "chore: release $TAG"
-          fi
           git tag -a "$TAG" -m "$TAG"
-          git push origin HEAD:master
           git push origin "$TAG"
 
       - name: Download desktop release artifacts
