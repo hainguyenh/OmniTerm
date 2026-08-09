@@ -1,3 +1,5 @@
+# Verify the locked GitHub identity and local-only commits before spending time on the Test Gate.
+node scripts/identity-guard.mjs pre-push "$1" "$2"
+
 # Refuse a push that would fail the Test Gate. See scripts/pre-push-check.mjs.
-# Bypass with `git push --no-verify` (CI still enforces the gate on the PR).
 node scripts/pre-push-check.mjs

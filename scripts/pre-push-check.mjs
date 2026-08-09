@@ -149,8 +149,8 @@ export function renderResult(result, { full }) {
     '',
     ...lines,
     '',
-    'Push again once it passes. To push anyway (CI will still enforce the gate, and',
-    'master will not let a red PR merge): git push --no-verify',
+    'Push again once it passes. Do not bypass hooks unless the repository owner',
+    'explicitly authorizes that exact push.',
     '',
   ].join('\n');
 }
