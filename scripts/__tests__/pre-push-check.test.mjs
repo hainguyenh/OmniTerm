@@ -77,13 +77,14 @@ test('isAvailable reports whether a tool answers --version', () => {
   assert.equal(isAvailable('cargo', () => ({ error: new Error('ENOENT') })), false)
 })
 
-test('a blocked push explains what failed, how to fix it, and how to override', () => {
+test('a blocked push explains what failed, how to fix it, and forbids implicit bypasses', () => {
   const result = runChecks(selectChecks(), { runner: fakeRunner({ failing: 'cargo' }), log: () => {} })
   const output = renderResult(result, { full: false })
   assert.match(output, /PUSH BLOCKED/)
   assert.match(output, /Failed: Rust — Clippy/)
   assert.match(output, /Fix it with: cargo clippy --workspace --all-targets -- -D warnings/)
-  assert.match(output, /git push --no-verify/)
+  assert.match(output, /Do not bypass hooks/)
+  assert.doesNotMatch(output, /git push --no-verify/)
 })
 
 test('a passing fast run still says the coverage jobs were not run', () => {

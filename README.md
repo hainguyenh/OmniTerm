@@ -84,7 +84,8 @@ of the default run because Rust coverage needs a nightly toolchain, `cargo-llvm-
 wall clock; anything skipped is named in the output rather than passed over silently. If `cargo` is
 not on PATH the Rust checks are reported as skipped, not as passing.
 
-To push past the hook — CI still enforces the gate, and master will not let a red PR merge:
+Hook bypasses hide both the Test Gate and repository identity checks. Do not use one unless the
+person responsible for the repository explicitly authorizes that exact push:
 
 ```
 git push --no-verify

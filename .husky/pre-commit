@@ -1,0 +1,2 @@
+# Refuse commits whose effective author or committer differs from the repository-local lock.
+node scripts/identity-guard.mjs pre-commit
