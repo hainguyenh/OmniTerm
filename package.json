@@ -39,6 +39,8 @@
     "typecheck": "pnpm assets:generate && tsc -b",
     "prepare": "husky || true",
     "check:push": "node scripts/pre-push-check.mjs",
+    "identity:setup": "node scripts/identity-setup.mjs",
+    "github": "node scripts/github.mjs",
     "bump:version": "node scripts/bump-version.mjs",
     "version:sync": "node scripts/sync-tauri-version.mjs write",
     "version:validate": "node scripts/sync-tauri-version.mjs validate"
