@@ -3,7 +3,7 @@
   "description": "OmniTerm: an offline multi-window SSH/RDP/local terminal and connection manager for Windows and macOS.",
   "author": "OmniTerm Contributors",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "packageManager": "pnpm@11.9.0",
   "engines": {
@@ -38,7 +38,10 @@
     "assets:generate": "node scripts/generate-app-assets.mjs",
     "typecheck": "pnpm assets:generate && tsc -b",
     "prepare": "husky || true",
-    "check:push": "node scripts/pre-push-check.mjs"
+    "check:push": "node scripts/pre-push-check.mjs",
+    "bump:version": "node scripts/bump-version.mjs",
+    "version:sync": "node scripts/sync-tauri-version.mjs write",
+    "version:validate": "node scripts/sync-tauri-version.mjs validate"
   },
   "dependencies": {
     "@omniterm/contract": "workspace:*",

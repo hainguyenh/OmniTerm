@@ -1,21 +1,29 @@
 # Changelog
 
-## Unreleased
+## [v0.1.1] — 2026-08-08
 
-### Changed
-- Releases are recorded by a git tag alone and never commit back to `master`, which now requires pull
-  requests. `package.json` is a floor version; `next-release-version.mjs` resolves the next release
-  from the highest shipped tag.
-- Build & Release reuses the Test Gate run the commit already passed on `master` instead of re-running
-  all of it. `force_quality_gate` on a manual run restores the full re-check.
-- Test Gate consolidated from nine jobs to five, so checks that share a toolchain share its setup. The
-  required status checks in the branch ruleset are now `JS — Lint, Types & Security`,
-  `JS — Tests & Coverage`, `Rust — Clippy & Tests`, `Rust — Coverage (llvm-cov)`, and
-  `Coverage — full source 85%`.
+### Added
+- feat: rebuild Theme Remix around a live two-mode preview (dark + light side-by-side)
 
 ### Fixed
-- The security-gate symlink test no longer fails on Windows without Developer Mode; it skips with a
-  named reason there and still runs in full on Linux CI.
+- fix: make Always Awake an actual plugin contribution instead of a built-in
+- fix: give the Always Awake modal its stylesheet back and pin its icon to Settings
+- fix: silence two dead_code warnings in the protocol crate's test fixtures
+- fix: unflake a connections test and make the theme-root scan testable
+- The security-gate symlink test no longer fails on Windows without Developer Mode; it skips with a named reason there and still runs in full on Linux CI.
+
+### Refactored
+- refactor: split Rust into workspace crates (crates/app-core, crates/app-protocol) and rename frontend to ui/
+- refactor: migrate the light-mode and Always Awake work onto the new layout
+
+### Tests
+- test: cover the frontend and plugin rejection paths (137 new tests, JS/TS branch coverage 88.4% → 91.3%)
+
+### CI
+- ci: boot the Rust coverage smoke run under a virtual display (Xvfb)
+
+### Plugins
+- plugin(ME): pull latest markdown-explorer
 
 ## [0.1.0] — 2026-07-31
 
