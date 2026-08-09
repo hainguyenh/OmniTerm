@@ -145,7 +145,10 @@ mod tests {
     #[test]
     fn jiggle_restores_cursor_position() {
         let mut before = POINT::default();
-        unsafe { GetCursorPos(&mut before).expect("cursor position should be readable") };
+        if unsafe { GetCursorPos(&mut before) }.is_err() {
+            // Non-interactive desktop session (e.g. CI runner or headless service) has no desktop access for GetCursorPos.
+            return;
+        }
         jiggle_mouse().expect("mouse jiggle should complete");
         let mut after = POINT::default();
         unsafe { GetCursorPos(&mut after).expect("cursor position should be readable") };
