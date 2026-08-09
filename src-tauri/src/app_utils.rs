@@ -83,6 +83,10 @@ pub async fn clear_log<R: Runtime>(app: AppHandle<R>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn get_version<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
-    Ok(app.package_info().version.to_string())
+pub async fn get_version<R: Runtime>(_app: AppHandle<R>) -> Result<String, String> {
+    // `env!("CARGO_PKG_VERSION")` is baked in at compile time directly from src-tauri/Cargo.toml.
+    // Tauri's `package_info().version` reads from tauri.conf.json instead — a separate file that
+    // can drift. Using the Cargo macro keeps both this command and the IPC test pointing at the
+    // same single source of truth regardless of tauri.conf.json's state.
+    Ok(env!("CARGO_PKG_VERSION").to_string())
 }

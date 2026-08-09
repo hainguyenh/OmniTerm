@@ -1,6 +1,6 @@
 {
   "name": "@omniterm/full-connection-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Full OmniTerm remote connection suite with metadata-only profiles.",
   "type": "commonjs",

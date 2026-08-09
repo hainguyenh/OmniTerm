@@ -1,10 +1,13 @@
 /**
  * The release version-drift guard.
  *
- * package.json, src-tauri/tauri.conf.json and src-tauri/Cargo.toml each carry the version
- * separately, and the release workflow reads the tag from one of them while Tauri stamps the
- * installer from another. A drift ships an installer whose filename and metadata disagree, and this
- * script is the only thing that notices — so it needs its own tests.
+ * Five files each carry the version separately — package.json,
+ * src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
+ * crates/app-core/Cargo.toml, and crates/app-protocol/Cargo.toml —
+ * and the release workflow reads the tag from one of them while Tauri stamps
+ * the installer from another. A drift ships an installer whose filename and
+ * metadata disagree, and this script is the only thing that notices — so it
+ * needs its own tests.
  */
 
 import assert from 'node:assert/strict'
@@ -19,27 +22,37 @@ import { DEFAULT_ROOT, currentVersions, validate, write } from '../sync-tauri-ve
 
 const SCRIPT = path.join(DEFAULT_ROOT, 'scripts', 'sync-tauri-version.mjs')
 
-/** A throwaway repo carrying only the three files the script reads. */
-async function fixture({ pkg = '0.1.0', conf = '0.1.0', cargo = '0.1.0' } = {}) {
+const CARGO_CONTENT = (ver) => [
+  '[package]',
+  'name = "omniterm"',
+  `version = "${ver}"`,
+  '',
+  '[dependencies]',
+  '# Load-bearing comment a TOML round-trip would drop.',
+  'tauri = { version = "2", features = ["protocol-asset"] }',
+  'serde = "1"',
+  'version = "9.9.9"',
+  '',
+].join('\n')
+
+/** A throwaway repo carrying all 5 version-bearing files the script reads. */
+async function fixture({
+  pkg = '0.1.0',
+  conf = '0.1.0',
+  cargo = '0.1.0',
+  crateCore = '0.1.0',
+  crateProtocol = '0.1.0',
+} = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'omniterm-version-'))
   await mkdir(path.join(root, 'src-tauri'))
+  await mkdir(path.join(root, 'crates', 'app-core'), { recursive: true })
+  await mkdir(path.join(root, 'crates', 'app-protocol'), { recursive: true })
+
   await writeFile(path.join(root, 'package.json'), `${JSON.stringify({ name: 'omniterm', version: pkg }, null, 2)}\n`)
   await writeFile(path.join(root, 'src-tauri', 'tauri.conf.json'), `${JSON.stringify({ productName: 'OmniTerm', version: conf }, null, 2)}\n`)
-  await writeFile(
-    path.join(root, 'src-tauri', 'Cargo.toml'),
-    [
-      '[package]',
-      'name = "omniterm"',
-      `version = "${cargo}"`,
-      '',
-      '[dependencies]',
-      '# Load-bearing comment a TOML round-trip would drop.',
-      'tauri = { version = "2", features = ["protocol-asset"] }',
-      'serde = "1"',
-      'version = "9.9.9"',
-      '',
-    ].join('\n'),
-  )
+  await writeFile(path.join(root, 'src-tauri', 'Cargo.toml'), CARGO_CONTENT(cargo))
+  await writeFile(path.join(root, 'crates', 'app-core', 'Cargo.toml'), CARGO_CONTENT(crateCore))
+  await writeFile(path.join(root, 'crates', 'app-protocol', 'Cargo.toml'), CARGO_CONTENT(crateProtocol))
   return root
 }
 
@@ -76,22 +89,30 @@ test('validate reports every file when only one has drifted', async () => {
   })
 })
 
-test('validate rejects a prerelease even when all three agree', async () => {
+test('validate rejects a prerelease even when all five files agree', async () => {
   // Tauri accepts `0.1.0-rc.1`; the workflow's tag resolver does not, so it must never get that far.
-  const root = await fixture({ pkg: '0.1.0-rc.1', conf: '0.1.0-rc.1', cargo: '0.1.0-rc.1' })
+  const root = await fixture({
+    pkg: '0.1.0-rc.1',
+    conf: '0.1.0-rc.1',
+    cargo: '0.1.0-rc.1',
+    crateCore: '0.1.0-rc.1',
+    crateProtocol: '0.1.0-rc.1',
+  })
   assert.throws(() => validate(undefined, root), /is not a bare semver/)
 })
 
-test('currentVersions reads the package version, not a dependency version', async () => {
+test('currentVersions reads all 5 version files', async () => {
   const root = await fixture()
   assert.deepEqual(currentVersions(root), {
     'package.json': '0.1.0',
     'src-tauri/tauri.conf.json': '0.1.0',
     'src-tauri/Cargo.toml': '0.1.0',
+    'crates/app-core/Cargo.toml': '0.1.0',
+    'crates/app-protocol/Cargo.toml': '0.1.0',
   })
 })
 
-test('write updates all three files and preserves Cargo.toml comments', async () => {
+test('write updates all 5 files and preserves Cargo.toml comments', async () => {
   const root = await fixture()
 
   write('1.2.3', root)
@@ -100,6 +121,8 @@ test('write updates all three files and preserves Cargo.toml comments', async ()
     'package.json': '1.2.3',
     'src-tauri/tauri.conf.json': '1.2.3',
     'src-tauri/Cargo.toml': '1.2.3',
+    'crates/app-core/Cargo.toml': '1.2.3',
+    'crates/app-protocol/Cargo.toml': '1.2.3',
   })
 
   const cargo = await readFile(path.join(root, 'src-tauri', 'Cargo.toml'), 'utf8')
@@ -120,6 +143,8 @@ test('write refuses a partial version and leaves every file untouched', async ()
     'package.json': '0.1.0',
     'src-tauri/tauri.conf.json': '0.1.0',
     'src-tauri/Cargo.toml': '0.1.0',
+    'crates/app-core/Cargo.toml': '0.1.0',
+    'crates/app-protocol/Cargo.toml': '0.1.0',
   })
 })
 

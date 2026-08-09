@@ -119,6 +119,8 @@ mod posix {
 
     #[test]
     fn default_prefers_zsh_then_falls_back_to_bash() {
+        let _guard = crate::test_support::lock();
+        let previous = std::env::var_os("SHELL");
         std::env::remove_var("SHELL");
         assert_eq!(
             resolve_posix_shell(LocalShell::Default, |p| p == "/bin/zsh").unwrap(),
@@ -128,23 +130,38 @@ mod posix {
             resolve_posix_shell(LocalShell::Default, |p| p == "/bin/bash").unwrap(),
             "/bin/bash"
         );
+        if let Some(val) = previous {
+            std::env::set_var("SHELL", val);
+        }
     }
 
     #[test]
     fn default_honors_an_executable_shell_env_var() {
+        let _guard = crate::test_support::lock();
+        let previous = std::env::var_os("SHELL");
         std::env::set_var("SHELL", "/usr/local/bin/fish");
         let exe = resolve_posix_shell(LocalShell::Default, |p| p == "/usr/local/bin/fish").unwrap();
         assert_eq!(exe, "/usr/local/bin/fish");
-        std::env::remove_var("SHELL");
+        if let Some(val) = previous {
+            std::env::set_var("SHELL", val);
+        } else {
+            std::env::remove_var("SHELL");
+        }
     }
 
     /// A non-executable or relative `$SHELL` must not be spawned — fall back to the known-good list.
     #[test]
     fn default_ignores_an_unusable_shell_env_var() {
+        let _guard = crate::test_support::lock();
+        let previous = std::env::var_os("SHELL");
         std::env::set_var("SHELL", "not/absolute");
         let exe = resolve_posix_shell(LocalShell::Default, |p| p == "/bin/zsh").unwrap();
         assert_eq!(exe, "/bin/zsh");
-        std::env::remove_var("SHELL");
+        if let Some(val) = previous {
+            std::env::set_var("SHELL", val);
+        } else {
+            std::env::remove_var("SHELL");
+        }
     }
 }
 
