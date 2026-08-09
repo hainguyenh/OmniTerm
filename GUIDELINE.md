@@ -53,6 +53,18 @@ pnpm install
 
 Uses `pnpm-lock.yaml`. In CI, use `pnpm install --frozen-lockfile`.
 
+For a development checkout that will create commits, push branches, or change GitHub state, set up
+the repository-local GitHub identity lock once in an interactive terminal:
+
+```bash
+pnpm identity:setup
+```
+
+The setup verifies both the HTTPS credential and the selected `gh` account without changing the
+machine-wide active account. It supports GitHub.com HTTPS remotes only. Use
+`pnpm github -- <gh args>` for GitHub mutations so the locked account is used even when another
+account is active globally.
+
 ---
 
 ## Development
@@ -113,6 +125,12 @@ pnpm test:tauri
 
 # Security audit only (scans for credential leakage)
 pnpm test:security
+
+# Repository tooling and guard unit tests
+pnpm test:quality
+
+# Complete pre-push gate
+pnpm check:push
 ```
 
 ### Security Audit Details

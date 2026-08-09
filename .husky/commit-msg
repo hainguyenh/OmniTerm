@@ -1,0 +1,2 @@
+# Refuse AI attribution metadata while allowing AI to be discussed as actual product behavior.
+node scripts/identity-guard.mjs commit-msg "$1"
