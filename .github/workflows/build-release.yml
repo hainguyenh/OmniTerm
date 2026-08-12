@@ -301,7 +301,7 @@ jobs:
           workspaces: .
 
       - name: Build Tauri Windows setup installer
-        run: pnpm build:tauri:nsis -- --config .omniterm-build/tauri.bundle-plugin.json
+        run: pnpm build:tauri:nsis --config .omniterm-build/tauri.bundle-plugin.json
 
       - name: Confirm Tauri setup artifact exists
         shell: pwsh
