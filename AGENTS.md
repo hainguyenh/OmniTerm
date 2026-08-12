@@ -11,6 +11,16 @@ This file is the canonical repository instruction source. Keep tool-specific fil
 - `contract/`: shared TypeScript plugin contract.
 - `plugins/`: unsandboxed optional Node.js plugins.
 - `scripts/`: build, quality, release, and repository guard tooling.
+- `.agents/`: canonical agent rules, designs, and skills shared by every assistant.
+
+## Agent skills
+
+- `.agents/skills/<name>/SKILL.md` is the single source of truth for every repository skill.
+- Tool-specific entry points are pointers that read the canonical file; never duplicate the procedure:
+  - Claude Code: `.claude/skills/<name>/SKILL.md` (invoked as `/<name>`).
+  - GitHub Copilot: `.github/prompts/<name>.prompt.md` (invoked as `/<name>` in Copilot Chat).
+  - opencode: `.opencode/command/<name>.md` (invoked as `/<name>`).
+- When adding a skill, add all three pointers so the skill works in every assistant.
 
 ## Workflow
 
