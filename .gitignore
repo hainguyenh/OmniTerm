@@ -34,7 +34,9 @@ artifacts/
 **/.engram
 docs/superpowers/
 .impeccable/
-.opencode/
+.opencode/*
+# Shared opencode slash commands that point at .agents/skills are tracked.
+!.opencode/command/
 
 # Generated from assets/OmniTerm-Logo-Original.png by scripts/generate-app-assets.mjs
 ui/generated/

@@ -6,9 +6,25 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '../..')
 const read = (relativePath) => readFile(path.join(root, relativePath), 'utf8')
 
+// Checkouts with core.autocrlf=true rewrite LF to CRLF on disk, so compare normalized text.
+const readNormalized = async (relativePath) => (await read(relativePath)).replace(/\r\n/g, '\n')
+
 test('tool-specific memory files import the canonical AGENTS.md without duplicating it', async () => {
-  assert.equal(await read('CLAUDE.md'), '@AGENTS.md\n')
-  assert.equal(await read('GEMINI.md'), '@AGENTS.md\n')
+  assert.equal(await readNormalized('CLAUDE.md'), '@AGENTS.md\n')
+  assert.equal(await readNormalized('GEMINI.md'), '@AGENTS.md\n')
+})
+
+test('every agent skill exposes Claude Code, Copilot, and opencode pointers to the canonical SKILL.md', async () => {
+  const pointers = [
+    '.claude/skills/bump-version/SKILL.md',
+    '.github/prompts/bump-version.prompt.md',
+    '.opencode/command/bump-version.md',
+  ]
+  for (const pointer of pointers) {
+    const contents = await read(pointer)
+    assert.match(contents, /\.agents\/skills\/bump-version\/SKILL\.md/, `${pointer} must point at the canonical skill`)
+  }
+  assert.match(await readNormalized('.claude/skills/bump-version/SKILL.md'), /^---\nname: bump-version\n/)
 })
 
 test('AGENTS.md contains the required package, test, identity, and GitHub mutation rules', async () => {
