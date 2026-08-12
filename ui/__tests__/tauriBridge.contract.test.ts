@@ -202,13 +202,13 @@ describe('shells', () => {
     const record = { id: 'adhoc-9', name: 'PowerShell', type: 'LOCAL', shell: 'powershell' }
     invokeMock.mockResolvedValueOnce(record)
     await expect(api.shells.open('powershell')).resolves.toEqual(record)
-    expect(lastInvoke()).toEqual(['open_quick_shell', { shell: 'powershell' }])
+    expect(lastInvoke()).toEqual(['open_quick_shell', { shell: 'powershell', workspaceId: null }])
   })
 
   it('asks for the platform default when no shell is named', async () => {
     invokeMock.mockResolvedValueOnce(null)
     await api.shells.open()
-    expect(lastInvoke()).toEqual(['open_quick_shell', { shell: null }])
+    expect(lastInvoke()).toEqual(['open_quick_shell', { shell: null, workspaceId: null }])
   })
 
   /** The picker's contents are probed in the backend — the renderer cannot know what is installed. */

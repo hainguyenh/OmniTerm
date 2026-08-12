@@ -123,6 +123,27 @@ describe('ThemeRemixModal', () => {
     expect(x.saveSettings).toHaveBeenCalled()
   })
 
+  it('keeps the selected theme highlighted and supports moving and resizing the review', () => {
+    const x = setup()
+    const selected = screen.getByText('Custom Theme').closest('div.group') as HTMLElement
+    expect(selected).toHaveStyle({ backgroundColor: '' })
+    fireEvent.click(screen.getByText('Custom Theme'))
+    expect(screen.getByText('Custom Theme').closest('div.group')).toHaveStyle({ backgroundColor: 'var(--theme-hover-bg)' })
+
+    const modal = screen.getByText('Theme Remix').closest('.relative') as HTMLElement
+    const header = screen.getByText('Theme Remix').closest('div.border-b') as HTMLElement
+    fireEvent.pointerDown(header, { clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(window, { clientX: 140, clientY: 130 })
+    fireEvent.pointerUp(window)
+    expect(modal.style.transform).toBe('translate(40px, 30px)')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Resize Theme Remix' }), { clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(window, { clientX: 180, clientY: 160 })
+    fireEvent.pointerUp(window)
+    expect(modal.style.width).toBe('1280px')
+    x.unmount()
+  })
+
   it('keeps edits in the draft until Save is pressed', async () => {
     const x = setup()
     expect(screen.getByText('Save')).toBeDisabled()

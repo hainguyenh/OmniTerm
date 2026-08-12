@@ -50,6 +50,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   hasConnectionProvider = false,
   connectionsRevision,
   revealRequest,
+  onWorkspaceAdded,
 }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -149,6 +150,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     const added = await window.omnitermAPI.workspace.add()
     if (added) {
       await refresh()
+      await onWorkspaceAdded?.()
       setExpandedId(added.id)
       void scanOnce(added.id)
     }

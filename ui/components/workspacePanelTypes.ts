@@ -27,6 +27,8 @@ export interface WorkspacePanelProps {
   connectionsRevision?: number
   /** Request expansion, scrolling, and highlighting for one workspace file. */
   revealRequest?: RevealRequest | null
+  /** Notify the main layout so workspace selectors refresh immediately after adding a workspace. */
+  onWorkspaceAdded?: () => void | Promise<void>
 }
 
 /** Everything the connection form needs to know about where a connection is saved. */

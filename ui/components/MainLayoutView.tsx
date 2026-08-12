@@ -25,7 +25,7 @@ import MainLayoutOverlays from './MainLayoutOverlays'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, setActiveTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable } = model
   const alwaysAwake = awakeState ?? {
     enabled: false,
     mode: 'activeOnly' as const,
@@ -78,6 +78,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 }}
                 connectionsRevision={wsConnectionsRevision}
                 revealRequest={revealRequest}
+                onWorkspaceAdded={model.refreshWorkspaces}
               />
             ) : activeView === 'files' && activeSshId && activeSshName ? (
               <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
@@ -116,7 +117,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onPromote={keepTab}
                 onClose={closeTab}
                 onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
-                onNewSession={() => requestNewSession()}
+                onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
                 detachTabId={layoutMode === 1 ? activeTabId : null}
                 detachAction={layoutMode === 1 && activeTabId ? detachControl.stateOf(activeTabId) : null}
@@ -289,8 +290,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             {activeTabs.length === 0 ? (
               <WaitingPane
                 dark={!!appSettings.darkMode}
-                onNewSession={() => requestNewSession()}
+                onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+                workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
                 customArtUrl={idleArtUrl}
               />
             ) : (
@@ -328,9 +330,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             compact
                             paneIndex={i}
                             openSessionCount={activeTabs.length}
-                            onNewSession={() => { setFocusedPane(i); requestNewSession() }}
+                            onNewSession={() => { setFocusedPane(i); requestNewSession(undefined, model.selectedWorkspaceId) }}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
-                            onChooseSession={() => setPanePicker(i)}
+                            workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
+                            onChooseSession={(rect) => { setPanePickerAnchor(rect); setPanePicker(i) }}
                             customArtUrl={idleArtUrl}
                           />
                         </div>
@@ -393,10 +396,15 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       // A hidden pane keeps its layout box, so it can no longer infer this from its
                       // own size — it has to be told. Drives focus and the scroll-tail restore.
                       active={visible}
+                      layoutEpoch={`${layoutMode}:${paneIdx}`}
                       darkMode={appSettings.darkMode}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}
+                      onTitleChange={(title) => {
+                        const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)
+                        if (clean) setActiveTabs(previous => previous.map(item => item.id === tab.id ? { ...item, name: clean } : item))
+                      }}
                       // A run-to-completion pane has nothing left once its shell exits, so it takes its
                       // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
                       onExit={(code) => { if (closesOnExit(conn, code)) closeTabs([tab.id], true) }}

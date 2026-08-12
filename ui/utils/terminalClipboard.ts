@@ -11,7 +11,7 @@ import type { Terminal } from '@xterm/xterm'
 
 export interface TerminalClipboard {
   paste: () => Promise<void>
-  copySelection: () => void
+  copySelection: () => Promise<void>
   /** Detach the selection listener. */
   dispose: () => void
 }
@@ -22,12 +22,17 @@ export interface TerminalClipboard {
  *                      `OutputHighlighter.noteLocalEcho`.
  */
 export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => void): TerminalClipboard => {
-  const copySelection = () => {
+  const copySelection = async () => {
     const sel = term.getSelection()
-    if (sel) window.omnitermAPI.clipboard.writeText(sel)
+    if (!sel) return
+    try {
+      await window.omnitermAPI.clipboard.writeText(sel)
+    } catch {
+      await navigator.clipboard?.writeText(sel)
+    }
   }
 
-  const selectionDisposable = term.onSelectionChange(copySelection)
+  const selectionDisposable = term.onSelectionChange(() => { void copySelection() })
 
   return {
     // Routed through `term.paste` (CRLF→CR + DECSET-2004 bracketing), not the session's raw input
