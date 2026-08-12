@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.1.2] — 2026-08-12
+
+### Added
+- feat(tooling): guard GitHub identity
+
+### Fixed
+- fix(GHA): remove redundant `--` in build command
+- fix: stabilize terminal and workspace UI
+
+### Changed
+- docs: add code writing rules
+
+### Other
+- Merge pull request #24 from hainguyenh/fix/fix-release-workflow
+- Merge pull request #23 from hainguyenh/fix/release-page-skip-propagation
+- Merge pull request #22 from hainguyenh/fix/release-page-skip-propagation
+- Merge branch 'master' into fix/release-page-skip-propagation
+- Merge pull request #21 from hainguyenh/feat/enhance-bump-version-stuff
+
+
 ## [v0.1.1] — 2026-08-08
 
 ### Added
