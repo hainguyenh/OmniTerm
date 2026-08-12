@@ -108,7 +108,7 @@ test('the release workflow refuses to republish a tag that already exists', () =
 test('the release workflow stamps the resolved version before building', () => {
   // Tauri names the installer from tauri.conf.json, so the stamp has to precede the build.
   const stamp = workflow.indexOf('sync-tauri-version.mjs write')
-  const build = workflow.indexOf('pnpm build:tauri:nsis')
+    const build = Math.max(workflow.indexOf('pnpm build:tauri:nsis'), workflow.indexOf('pnpm tauri build --bundles nsis'))
   assert.ok(stamp > -1 && build > -1)
   assert.ok(stamp < build, 'the version must be stamped before Tauri names the installer')
 })

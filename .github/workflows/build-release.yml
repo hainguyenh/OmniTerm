@@ -273,6 +273,26 @@ jobs:
           BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
         run: node scripts/sync-tauri-version.mjs validate $env:BARE_VERSION
 
+      # Build the bundled Always Awake plugin before Tauri so both installer and portable artifacts
+      # contain the same plugin resources.
+      - name: Build bundled Always Awake plugin
+        run: pnpm build:plugin plugins/always-awake
+
+      - name: Stage bundled plugin resources
+        shell: pwsh
+        run: |
+          $stage = Join-Path (Get-Location) '.omniterm-build/plugins/always-awake'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item plugins/always-awake/package.json $stage -Force
+          Copy-Item plugins/always-awake/dist $stage -Recurse -Force
+          $config = @{ bundle = @{ resources = @{
+            'builtinThemes/*' = 'builtinThemes/'
+            'sidecar/*.cjs' = 'sidecar/'
+            '../.omniterm-build/plugins/always-awake/package.json' = 'plugins/always-awake/package.json'
+            '../.omniterm-build/plugins/always-awake/dist/*' = 'plugins/always-awake/dist/'
+          } } }
+          $config | ConvertTo-Json -Depth 8 | Set-Content (Join-Path (Get-Location) '.omniterm-build/tauri.bundle-plugin.json')
+
       # `src-tauri` is a member of the root Cargo workspace, so cargo — and therefore Tauri's
       # bundler — writes to the workspace-root `target/`, not `src-tauri/target/`.
       - name: Cache cargo build
@@ -281,7 +301,7 @@ jobs:
           workspaces: .
 
       - name: Build Tauri Windows setup installer
-        run: pnpm build:tauri:nsis
+        run: pnpm build:tauri:nsis -- --config .omniterm-build/tauri.bundle-plugin.json
 
       - name: Confirm Tauri setup artifact exists
         shell: pwsh
@@ -314,7 +334,8 @@ jobs:
           $portable = New-PortablePackage `
             -RepoRoot $repoRoot `
             -Destination (Join-Path $artifacts 'portable') `
-            -ArchiveName "OmniTerm_${version}_x64-portable.zip"
+            -ArchiveName "OmniTerm_${version}_x64-portable.zip" `
+            -Plugin @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') }
           $plugin = New-PluginPackage `
             -PluginPath (Join-Path $repoRoot 'plugins/always-awake') `
             -Destination (Join-Path $artifacts 'plugin-always-awake') `

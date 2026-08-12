@@ -12,6 +12,7 @@ import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
 import { createTerminalClipboard } from '../utils/terminalClipboard'
 import { attachTerminalStream } from '../utils/terminalStream'
+import { activateTerminalLink, registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
 import { Connection, SessionStatus } from './MainLayout'
 import { TerminalTheme, TOKYO_NIGHT } from '../themes'
@@ -29,6 +30,8 @@ interface TerminalViewProps {
    * host), and only under the Tauri backend — elsewhere it simply never fires.
    */
   onActivity?: (busy: boolean) => void
+  /** Receives OSC title updates emitted by shells and interactive agents. */
+  onTitleChange?: (title: string) => void
   /**
    * The pane's process ended, carrying its exit status. Separate from `onStatus('closed')` because the
    * status alone cannot tell a script that finished from one that failed — see sessionExit.ts.
@@ -63,6 +66,8 @@ interface TerminalViewProps {
    * single always-visible pane (DetachedTerminalWindow).
    */
   active?: boolean
+  /** Changes when the pane geometry changes without changing session visibility. */
+  layoutEpoch?: string
   shortcuts?: ShortcutBindings
   /**
    * What Shift+Enter and Ctrl+Enter send. xterm collapses both to a bare `\r`, so AI agents cannot
@@ -71,7 +76,7 @@ interface TerminalViewProps {
   enterModes?: EnterModes
 }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, shortcuts, enterModes }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
@@ -80,6 +85,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // if it was — a user who had scrolled up to read history must not be yanked to the bottom.
   const wasAtBottomRef = useRef(true)
   const wasActiveRef = useRef(active)
+  const layoutEpochRef = useRef(layoutEpoch)
   // Set by the main effect. Lets the visibility effect keep this pane at the front of the shared
   // WebGL budget without re-running the main effect.
   const touchRendererRef = useRef<() => void>(() => {})
@@ -99,6 +105,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
+
+  const onTitleChangeRef = useRef(onTitleChange)
+  onTitleChangeRef.current = onTitleChange
 
   const onExitRef = useRef(onExit)
   onExitRef.current = onExit
@@ -150,6 +159,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const term = new Terminal(createTerminalOptions({
       isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
+    // xterm handles OSC 8 links itself; this validates the URL and requires the platform's normal
+    // modifier click before opening it. Plain URLs are supplied by the provider below.
+    term.options.linkHandler = { activate: activateTerminalLink }
 
     termRef.current = term
 
@@ -158,6 +170,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
+    const titleDisposable = typeof term.onTitleChange === 'function'
+      ? term.onTitleChange(title => onTitleChangeRef.current?.(title))
+      : { dispose: () => {} }
+    const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
     term.loadAddon(new Unicode11Addon())
@@ -238,11 +254,17 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
       term.focus()
-      void clipboard.paste()
+      const hasSelection = typeof term.hasSelection === 'function' && term.hasSelection()
+      if (hasSelection) void clipboard.copySelection()
+      else void clipboard.paste()
     }
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
+    const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
+    termEl.addEventListener('mouseup', onMouseUp)
 
     // There is no sudo-password helper. It typed a *stored* credential into the pane, and this app
     // stores none — the user types their own password at the prompt, which is also the only way it
@@ -315,7 +337,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         e.preventDefault()
         e.stopPropagation()
         if (clip === 'paste') void clipboard.paste()
-        else clipboard.copySelection()
+        else void clipboard.copySelection()
         return false
       }
 
@@ -370,7 +392,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       remeasureCoalescer.cancel()
       ro.disconnect()
       clipboard.dispose()
+      plainLinkDisposable.dispose()
+      titleDisposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
+      termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
@@ -394,19 +419,27 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     if (!term) return
     const buffer = term.buffer?.active
     const becameActive = active && !wasActiveRef.current
+    const layoutChanged = active && layoutEpochRef.current !== layoutEpoch
     wasActiveRef.current = active
+    layoutEpochRef.current = layoutEpoch
     if (!active) {
-      if (buffer) wasAtBottomRef.current = buffer.viewportY >= buffer.baseY
+      if (buffer) wasAtBottomRef.current = buffer.viewportY == null || buffer.baseY == null || buffer.viewportY >= buffer.baseY
       return
     }
     term.focus()
     // The pane the user is looking at must be the last to lose hardware rendering.
     touchRendererRef.current()
-    if (becameActive) safeFitRef.current()
+    if (becameActive || layoutChanged) safeFitRef.current()
     // Belt and braces for the scroll bug the `.pane-offscreen` rule fixes: even if some future
     // change collapses the pane again, a tab the user left at the live tail comes back to it.
-    if (wasAtBottomRef.current) term.scrollToBottom?.()
-  }, [active])
+    // xterm queues writes; wait for the queue before restoring a pane that was at the live tail.
+    if ((becameActive || layoutChanged) && wasAtBottomRef.current) {
+      term.scrollToBottom?.()
+      term.write('', () => term.scrollToBottom?.())
+    } else if (wasAtBottomRef.current) {
+      term.scrollToBottom?.()
+    }
+  }, [active, layoutEpoch])
 
   return (
     <div

@@ -39,7 +39,7 @@ describe("styling regression check", () => {
 
     expect(content).toMatch(/\.pane-offscreen\s*\{[^}]*visibility:\s*hidden/);
     expect(content).not.toMatch(/\.pane-offscreen\s*\{[^}]*display:\s*none/);
-    expect(content).toMatch(/\.pane-offscreen\s*\{[^}]*transform:\s*translateX\(-200vw\)/);
+    expect(content).not.toMatch(/\.pane-offscreen\s*\{[^}]*transform:\s*translateX\(-200vw\)/);
   });
 
   // A renderer component that Tailwind does not scan still renders — with none of its classes defined.
