@@ -1,5 +1,5 @@
 import React from 'react'
-import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Minimize2 } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { STATUS_DOT } from '../tabVisuals'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
@@ -45,6 +45,8 @@ interface PaneHeaderProps {
   onTogglePicker: () => void
   onAssign: (tabId: string) => void
   onClear: () => void
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
   /** Close this pane's session tab, using the main layout's normal confirmation policy. */
   onClose?: () => void
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
@@ -61,7 +63,7 @@ interface PaneHeaderProps {
 const PaneHeader: React.FC<PaneHeaderProps> = ({
   paneIndex, conn, sessionTitle, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, onClose, appearance,
+  onAssign, onClear, onClose, fullscreen, onToggleFullscreen, appearance,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -121,6 +123,17 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               aria-label={detachTitle(detach, 'pane')}
             >
               {detach === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+            </button>
+          )}
+          {conn && onToggleFullscreen && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggleFullscreen() }}
+              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+              title={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
+              aria-label={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
+            >
+              {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
             </button>
           )}
           {conn && sessionId && onClose && (

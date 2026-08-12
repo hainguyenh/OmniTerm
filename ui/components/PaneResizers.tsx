@@ -1,11 +1,11 @@
 import { useCallback, useRef } from 'react'
 import type { LayoutMode } from '../themes'
 import {
-  fractionFromPointer, paneDividers, type SplitRatios,
+  fractionFromPointer, paneDividers, setDividerRatio, type PaneDividerKey, type SplitRatios,
 } from '../paneLayout'
 
 /**
- * Drag handles for the boundaries between panes (2- and 3-pane layouts only).
+ * Drag handles for the boundaries between panes in every multi-pane layout.
  *
  * Rendered above the pane frames but below their content, and only 7px wide, so the terminals keep
  * their full area and a drag cannot be mistaken for a click inside a pane. Pointer capture means the
@@ -38,9 +38,11 @@ export function PaneResizers({
 
   const startDrag = useCallback((
     e: React.PointerEvent<HTMLDivElement>,
-    key: keyof SplitRatios,
+    key: PaneDividerKey,
     axis: 'x' | 'y',
     invert: boolean,
+    minFraction?: number,
+    maxFraction?: number,
   ) => {
     e.preventDefault()
     const handle = e.currentTarget
@@ -51,9 +53,9 @@ export function PaneResizers({
 
     const move = (ev: PointerEvent) => {
       const next = axis === 'x'
-        ? fractionFromPointer(ev.clientX, area.left, area.width, invert)
-        : fractionFromPointer(ev.clientY, area.top, area.height, invert)
-      onChange({ ...latest.current, [key]: next })
+        ? fractionFromPointer(ev.clientX, area.left, area.width, invert, minFraction, maxFraction)
+        : fractionFromPointer(ev.clientY, area.top, area.height, invert, minFraction, maxFraction)
+      onChange(setDividerRatio(latest.current, mode, key, next))
     }
     const end = () => {
       handle.removeEventListener('pointermove', move)
@@ -64,7 +66,7 @@ export function PaneResizers({
     handle.addEventListener('pointermove', move)
     handle.addEventListener('pointerup', end)
     handle.addEventListener('pointercancel', end)
-  }, [onChange, onCommit])
+  }, [mode, onChange, onCommit])
 
   return (
     <>
@@ -77,8 +79,8 @@ export function PaneResizers({
             key={divider.key}
             role="separator"
             aria-orientation={vertical ? 'vertical' : 'horizontal'}
-            aria-label={divider.key === 'main' ? 'Resize panes' : 'Resize stacked panes'}
-            onPointerDown={(e) => startDrag(e, divider.key, divider.axis, invert)}
+            aria-label={divider.key.startsWith('column-') ? 'Resize columns' : divider.key.startsWith('row-') ? 'Resize rows' : divider.key === 'main' ? 'Resize panes' : 'Resize stacked panes'}
+            onPointerDown={(e) => startDrag(e, divider.key, divider.axis, invert, divider.minFraction, divider.maxFraction)}
             className={`absolute z-20 group ${vertical ? 'cursor-col-resize' : 'cursor-row-resize'}`}
             style={{
               ...divider.style,

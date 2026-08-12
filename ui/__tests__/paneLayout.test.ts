@@ -63,17 +63,12 @@ describe('paneRect', () => {
     expect(num(paneRect(1, 3, 'right', 'columns', ratios).left)).toBeCloseTo(0)
   })
 
-  /** The dense grids stay evenly divided — ratios must not leak into them. */
-  it.each([4, 6, 8] as LayoutMode[])('keeps the %i-pane grid evenly divided', mode => {
-    const skewed = { main: 0.2, cross: 0.8 }
+  it.each([4, 6, 8] as LayoutMode[])('supports custom boundaries in the %i-pane grid', mode => {
+    const skewed = { main: 0.2, cross: 0.8, columns: mode === 4 ? [0.3] : mode === 6 ? [0.2, 0.7] : [0.2, 0.5, 0.8], rows: [0.65] }
     const rects = Array.from({ length: mode }, (_, i) => paneRect(i, mode, 'left', 'columns', skewed))
-    const widths = new Set(rects.map(r => r.width))
-    const heights = new Set(rects.map(r => r.height))
-    expect(widths.size).toBe(1)
-    expect(heights.size).toBe(1)
-    // 0 decimal places: thirds cannot be written exactly as a percentage, so the 3-column grid leaves
-    // a 0.001% seam. Sub-pixel at any real window size.
     expect(rects.reduce((s, r) => s + num(r.width) * num(r.height), 0)).toBeCloseTo(100 * 100, 0)
+    expect(num(rects[0].width)).toBeCloseTo(mode === 4 ? 30 : 20)
+    expect(num(rects[0].height)).toBeCloseTo(65)
   })
 })
 
@@ -110,10 +105,11 @@ describe('paneDividers', () => {
     expect(paneDividers(3, 'left', 'columns').map(d => d.key)).toEqual(['main', 'cross'])
   })
 
-  it('offers none for the fixed grids', () => {
-    for (const mode of [1, 4, 6, 8] as LayoutMode[]) {
-      expect(paneDividers(mode)).toEqual([])
-    }
+  it('offers no divider for a single pane and all boundaries for grids', () => {
+    expect(paneDividers(1)).toEqual([])
+    expect(paneDividers(4).map(d => d.key)).toEqual(['column-1', 'row-1'])
+    expect(paneDividers(6).map(d => d.key)).toEqual(['column-1', 'column-2', 'row-1'])
+    expect(paneDividers(8).map(d => d.key)).toEqual(['column-1', 'column-2', 'column-3', 'row-1'])
   })
 
   it('orients the boundary along the split', () => {
@@ -134,6 +130,14 @@ describe('paneDividers', () => {
     const [, mirrored] = paneDividers(3, 'right', 'columns', { main: 0.6, cross: 0.5 })
     expect(num(mirrored.style.left)).toBeCloseTo(0)
     expect(num(mirrored.style.width)).toBeCloseTo(40)
+  })
+
+  it('keeps grid dividers inside the minimum size of neighboring panes', () => {
+    const [first, second] = paneDividers(6, 'left', 'columns', { main: .5, cross: .5, columns: [.2, .7], rows: [.6] })
+    expect(first.minFraction).toBeCloseTo(MIN_FRACTION)
+    expect(first.maxFraction).toBeCloseTo(.55)
+    expect(second.minFraction).toBeCloseTo(.35)
+    expect(second.maxFraction).toBeCloseTo(1 - MIN_FRACTION)
   })
 })
 

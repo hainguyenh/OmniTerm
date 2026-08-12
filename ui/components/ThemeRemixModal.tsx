@@ -6,6 +6,7 @@ import { useEscToClose } from '../hooks/useEscToClose'
 import { useThemeDraft } from './themeRemix/useThemeDraft'
 import { AppColorFields, LayoutFields, TerminalColorFields } from './themeRemix/ThemeEditorFields'
 import ThemePreview from './themeRemix/ThemePreview'
+import ConfirmDialog from './ConfirmDialog'
 
 /** Preview modes: one at full width, or both side by side for comparing a colour across them. */
 type PreviewMode = ThemeMode | 'both'
@@ -182,7 +183,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {dirty && <span className="text-[11px] font-semibold text-theme-warning">Unsaved changes</span>}
+            {dirty && <span className="sr-only" aria-live="polite">Unsaved changes</span>}
             <button
               type="button"
               onClick={() => { void handleResetToDefault() }}
@@ -240,30 +241,6 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
             </button>
           </div>
         </div>
-
-        {confirmDiscard && (
-          <div className="flex items-center justify-between gap-3 border-b border-theme-border px-4 py-2 text-xs"
-            style={{ backgroundColor: 'var(--theme-hover-bg)' }}
-          >
-            <span className="text-theme-fg">This theme has unsaved changes.</span>
-            <span className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmDiscard(false)}
-                className="rounded-lg border border-theme-border px-2.5 py-1 text-theme-dim hover:text-theme-fg"
-              >
-                Keep editing
-              </button>
-              <button
-                type="button"
-                onClick={() => { revert(); setConfirmDiscard(false); onClose() }}
-                className="rounded-lg px-2.5 py-1 font-semibold text-theme-error hover:bg-theme-hover"
-              >
-                Discard changes
-              </button>
-            </span>
-          </div>
-        )}
 
         {/* Body: theme list │ editor │ preview */}
         <div className="flex min-h-0 flex-1">
@@ -407,6 +384,16 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
           }}
         >↘</button>
       </div>
+      {confirmDiscard && (
+        <ConfirmDialog
+          title="Discard theme changes?"
+          message="This theme has unsaved changes."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          onCancel={() => setConfirmDiscard(false)}
+          onConfirm={() => { revert(); setConfirmDiscard(false); onClose() }}
+        />
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import MainLayout from './components/MainLayout'
 import DetachedTerminalWindow from './components/DetachedTerminalWindow'
 import { TitleBar } from './components/TitleBar'
@@ -6,6 +6,7 @@ import { ThemeRemixModal } from './components/ThemeRemixModal'
 import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { applyThemeVars, themeCssVars } from './utils/themeVars'
+import { diag } from './diag'
 
 interface AppSettings {
   themeId: string
@@ -19,6 +20,7 @@ interface AppSettings {
   defaultShell?: string
   shortcuts?: ShortcutBindings
   zoomFactor?: number
+  blurInactiveWindow?: number
 }
 
 function App() {
@@ -43,6 +45,15 @@ function App() {
   const [tabAppearance, setTabAppearance] = useState<Record<string, TerminalAppearance>>({})
   // Which terminal the TitleBar's theme/font controls target — reported up by MainLayout.
   const [activeTerminal, setActiveTerminal] = useState<{ id: string; connId: string } | null>(null)
+  const [windowActive, setWindowActive] = useState(true)
+  const startupUpdateChecked = useRef(false)
+  useEffect(() => {
+    const onFocus = () => setWindowActive(true)
+    const onBlur = () => setWindowActive(false)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur) }
+  }, [])
 
   useEffect(() => {
     const unsub = window.omnitermAPI.updates.onState((s) => {
@@ -57,6 +68,14 @@ function App() {
   useEffect(() => {
     window.omnitermAPI.updates.getVersion().then(setAppVersion)
   }, [])
+
+  useEffect(() => {
+    if (!appSettings.checkUpdatesOnStartup || startupUpdateChecked.current) return
+    startupUpdateChecked.current = true
+    void window.omnitermAPI.updates.check()
+      .then(setUpdateState)
+      .catch((error: unknown) => diag.warn('[updates] startup check failed', error))
+  }, [appSettings.checkUpdatesOnStartup])
 
   // Settings can be saved from any window (a popped-out terminal writes the connection's
   // appearance). The backend broadcasts each save, so re-read here and both windows stay in sync
@@ -289,7 +308,8 @@ function App() {
         onApplyToAll={applyFontSizeToAll}
       />
       <div className="flex-1 min-h-0 relative">
-        <MainLayout
+        <div className="h-full w-full" style={{ filter: !windowActive && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
+          <MainLayout
           appSettings={appSettings}
           setAppSettings={setAppSettings}
           currentTheme={currentTheme}
@@ -307,7 +327,8 @@ function App() {
           onFontSizeChange={changeFontSize}
           onThemeApply={applyTheme}
           onSettingsReload={handleSettingsReload}
-        />
+          />
+        </div>
       </div>
       <ThemeRemixModal
         isOpen={themeRemixOpen}

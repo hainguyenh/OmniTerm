@@ -176,10 +176,13 @@ test('every job downstream of the skipped gate re-states the condition, not just
   }
 })
 
-test('the release publishes the installer, the portable package and the plugin', () => {
-  for (const name of ['OmniTerm-Tauri-Windows-nsis', 'OmniTerm-Windows-portable', 'OmniTerm-Plugin-always-awake']) {
+test('the release publishes the installer and portable package with the bundled plugin', () => {
+  for (const name of ['OmniTerm-Tauri-Windows-nsis', 'OmniTerm-Windows-portable']) {
     assert.match(workflow, new RegExp(`name: ${name}\\b`), `${name} is never uploaded`)
   }
+  assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-always-awake\\b/)
+  assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-blur\\b/)
+  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'/)
 
   const publish = workflow.slice(workflow.indexOf('Publish GitHub release'))
   for (const glob of ['release-artifacts/**/*.exe', 'release-artifacts/**/*.zip']) {
@@ -193,10 +196,22 @@ test('the release publishes the installer, the portable package and the plugin',
 test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(workflow, /\. \.\/scripts\/ReleasePackaging\.ps1/)
   assert.match(workflow, /New-PortablePackage/)
-  assert.match(workflow, /New-PluginPackage/)
+  assert.doesNotMatch(workflow, /New-PluginPackage/)
 
   const wizard = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'Build-OmniTerm.ps1'), 'utf8')
   assert.match(wizard, /ReleasePackaging\.ps1/)
   assert.match(wizard, /New-PortablePackage/)
   assert.match(wizard, /New-PluginPackage/)
+  assert.match(wizard, /Get-DefaultPortablePlugins/)
+  assert.match(wizard, /Copy-PortableArtifacts[\s\S]*PortablePlugins/)
+  assert.match(wizard, /Blur \(inactive-window privacy filter\)/)
+})
+
+test('portable packaging verifies the bundled plugin is present in the archive', () => {
+  const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
+  assert.match(packaging, /System\.IO\.Compression\.FileSystem/)
+  assert.match(packaging, /Portable archive is missing bundled plugin entry/)
+  assert.match(packaging, /dist\/index\.js/)
+  assert.match(packaging, /plugins\\always-awake/)
+  assert.match(packaging, /plugins\\blur/)
 })

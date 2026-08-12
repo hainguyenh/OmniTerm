@@ -52,6 +52,13 @@ fn ignores_kill_errors_for_sessions_that_already_exited() {
     assert!(!is_process_gone_error(&other));
 }
 
+#[cfg(windows)]
+#[test]
+fn ignores_windows_invalid_handle_from_an_already_exited_session() {
+    let invalid_handle = std::io::Error::from_raw_os_error(6);
+    assert!(is_process_gone_error(&invalid_handle));
+}
+
 #[test]
 fn colorfgbg_matches_the_terminal_appearance() {
     assert_eq!(colorfgbg_for_dark_mode(Some(true)), Some("15;0"));

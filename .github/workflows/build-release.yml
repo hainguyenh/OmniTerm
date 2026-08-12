@@ -273,24 +273,32 @@ jobs:
           BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
         run: node scripts/sync-tauri-version.mjs validate $env:BARE_VERSION
 
-      # Build the bundled Always Awake plugin before Tauri so both installer and portable artifacts
-      # contain the same plugin resources.
-      - name: Build bundled Always Awake plugin
-        run: pnpm build:plugin plugins/always-awake
+      # Build bundled plugins before Tauri so installer and portable artifacts contain the same
+      # plugin resources.
+      - name: Build bundled plugins
+        run: |
+          pnpm build:plugin plugins/always-awake
+          pnpm build:plugin plugins/blur
 
       - name: Stage bundled plugin resources
         shell: pwsh
         run: |
-          $stage = Join-Path (Get-Location) '.omniterm-build/plugins/always-awake'
-          New-Item -ItemType Directory -Force -Path $stage | Out-Null
-          Copy-Item plugins/always-awake/package.json $stage -Force
-          Copy-Item plugins/always-awake/dist $stage -Recurse -Force
-          $config = @{ bundle = @{ resources = @{
+          $pluginNames = @('always-awake', 'blur')
+          foreach ($pluginName in $pluginNames) {
+            $stage = Join-Path (Get-Location) ".omniterm-build/plugins/$pluginName"
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
+            Copy-Item "plugins/$pluginName/package.json" $stage -Force
+            Copy-Item "plugins/$pluginName/dist" $stage -Recurse -Force
+          }
+          $resources = @{
             'builtinThemes/*' = 'builtinThemes/'
             'sidecar/*.cjs' = 'sidecar/'
-            '../.omniterm-build/plugins/always-awake/package.json' = 'plugins/always-awake/package.json'
-            '../.omniterm-build/plugins/always-awake/dist/*' = 'plugins/always-awake/dist/'
-          } } }
+          }
+          foreach ($pluginName in $pluginNames) {
+            $resources["../.omniterm-build/plugins/$pluginName/package.json"] = "plugins/$pluginName/package.json"
+            $resources["../.omniterm-build/plugins/$pluginName/dist/*"] = "plugins/$pluginName/dist/"
+          }
+          $config = @{ bundle = @{ resources = $resources } }
           $config | ConvertTo-Json -Depth 8 | Set-Content (Join-Path (Get-Location) '.omniterm-build/tauri.bundle-plugin.json')
 
       # `src-tauri` is a member of the root Cargo workspace, so cargo — and therefore Tauri's
@@ -316,12 +324,9 @@ jobs:
           if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
           $nsis | Select-Object FullName, Length
 
-      - name: Build the Always Awake plugin
-        run: pnpm build:plugin plugins/always-awake
-
-      # The same functions the local wizard uses, so what ships is what `pnpm create:app` builds.
-      # The portable package reuses the executable the NSIS build already produced — no second compile.
-      - name: Package portable app and Always Awake plugin
+      # The same function the local wizard uses, so the portable package contains the bundled plugin
+      # rather than requiring a second, user-installed plugin archive.
+      - name: Package portable app with bundled plugins
         shell: pwsh
         run: |
           . ./scripts/ReleasePackaging.ps1
@@ -335,17 +340,12 @@ jobs:
             -RepoRoot $repoRoot `
             -Destination (Join-Path $artifacts 'portable') `
             -ArchiveName "OmniTerm_${version}_x64-portable.zip" `
-            -Plugin @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') }
-          $plugin = New-PluginPackage `
-            -PluginPath (Join-Path $repoRoot 'plugins/always-awake') `
-            -Destination (Join-Path $artifacts 'plugin-always-awake') `
-            -StageRoot $stage `
-            -Name 'always-awake'
-
-          foreach ($archive in @($portable, $plugin)) {
-            if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Missing $archive." }
-            Get-Item -LiteralPath $archive | Select-Object FullName, Length
-          }
+            -Plugins @(
+              @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') },
+              @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') }
+            )
+          if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
+          Get-Item -LiteralPath $portable | Select-Object FullName, Length
 
       - name: Upload Tauri NSIS artifact
         uses: actions/upload-artifact@v6
@@ -361,17 +361,6 @@ jobs:
           path: |
             artifacts/portable/*.zip
             artifacts/portable/*.zip.sha256
-          if-no-files-found: error
-
-      # Only the archive and its checksum: the manifest and README next to them are for reading during
-      # the build, not for attaching to the release page.
-      - name: Upload Always Awake plugin artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: OmniTerm-Plugin-always-awake
-          path: |
-            artifacts/plugin-always-awake/*.zip
-            artifacts/plugin-always-awake/*.zip.sha256
           if-no-files-found: error
 
   create-release-page:

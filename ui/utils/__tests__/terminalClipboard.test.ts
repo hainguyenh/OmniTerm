@@ -25,4 +25,24 @@ describe('terminal clipboard', () => {
     expect(browserWrite).toHaveBeenCalledWith('agent output')
     clipboard.dispose()
   })
+
+  it('only sends one paste when clipboard reads overlap', async () => {
+    let resolveRead: ((text: string) => void) | undefined
+    const readText = vi.fn(() => new Promise<string>(resolve => { resolveRead = resolve }))
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText: vi.fn(), readText } }
+
+    const clipboard = createTerminalClipboard(term)
+    const first = clipboard.paste()
+    const second = clipboard.paste()
+    resolveRead?.('once')
+    await Promise.all([first, second])
+
+    expect(readText).toHaveBeenCalledTimes(1)
+    expect(term.paste).toHaveBeenCalledTimes(1)
+    clipboard.dispose()
+  })
 })

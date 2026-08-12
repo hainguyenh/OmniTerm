@@ -6,17 +6,33 @@ import { useDetachControl } from '../hooks/useDetachControl'
 import { editorTabId, useScriptRuns } from '../hooks/useScriptRuns'
 import { mintSessionId } from './mainLayoutShared'
 import type { useMainLayoutBase } from './useMainLayoutBase'
+import { DEFAULT_VIEW_GROUP_ID } from '../viewGroups'
+import { diag } from '../diag'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
-  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, setReconnectKeys, setLatencies, detached, setDetached, poppedOut, setPoppedOut, setResumeMode, setMetrics, setConnectedAt, setStatus, setActivity, activity, connById, toggleDetach, canDetachWindow, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, showAlert, showConfirm, dataMenuOpen, activeView, setActiveView, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef } = base
+  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs, setActiveTabs, tabGroups = {}, setTabGroups = () => {}, viewGroups = [], activeGroupId = DEFAULT_VIEW_GROUP_ID, switchViewGroup = () => {}, createNewViewGroup = () => DEFAULT_VIEW_GROUP_ID, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane = null, setFullscreenPane = () => {}, activeTabId, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, setReconnectKeys, setLatencies, detached, setDetached, poppedOut, setPoppedOut, setResumeMode, setMetrics, setConnectedAt, setStatus, setActivity, activity, connById, toggleDetach, canDetachWindow, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, showAlert, showConfirm, dataMenuOpen, activeView, setActiveView, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef } = base
   useEffect(() => {
       const tab = activeTabs.find(item => item.id === activeTabId);
       const conn = connById(tab?.connId);
       onActiveTerminalChange?.(tab && conn ? { id: tab.id, connId: tab.connId } : null);
   }, [activeTabId, activeTabs, connById, onActiveTerminalChange]);
-  const showTab = (id: string, opts?: {
-      autoFillOnly?: boolean;
-  }) => {
+  const setTabGroup = (id: string, groupId: string) => {
+      setTabGroups(prev => {
+          const next = { ...prev };
+          if (groupId === DEFAULT_VIEW_GROUP_ID) delete next[id];
+          else next[id] = groupId;
+          return next;
+      });
+  };
+  const showTab = (id: string, opts?: { autoFillOnly?: boolean; newTab?: boolean }) => {
+      const existingGroupId = tabGroups[id] ?? DEFAULT_VIEW_GROUP_ID
+      if (!opts?.newTab && existingGroupId !== activeGroupId) {
+          switchViewGroup(existingGroupId)
+          const existingGroup = viewGroups.find(group => group.id === existingGroupId)
+          const existingPane = existingGroup?.panes.findIndex(p => p === id) ?? -1
+          if (existingPane >= 0) setFocusedPane(existingPane)
+          return
+      }
       const visibleIdx = panes.findIndex((p, i) => p === id && i < layoutMode);
       if (visibleIdx !== -1) {
           setFocusedPane(visibleIdx);
@@ -24,14 +40,28 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       }
       const emptyIdx = panes.findIndex((p, i) => p === null && i < layoutMode);
       if (emptyIdx !== -1) {
+          setTabGroup(id, activeGroupId)
           setPanes(prev => prev.map((p, i) => (i === emptyIdx ? id : (p === id ? null : p))));
           setFocusedPane(emptyIdx);
           return;
+      }
+      if (opts?.newTab) {
+          const nextGroupId = createNewViewGroup()
+          setTabGroup(id, nextGroupId)
+          // The new-tab path is a deliberate single-view reset. Do not derive this
+          // update from the previous pane array: the group reset above is queued in
+          // the same event and a stale functional update can retain panes from the
+          // previous group. Those stale panes are then incorrectly pulled into the
+          // next multi-view group, leaving the newly created terminal hidden.
+          setPanes([id, ...Array(7).fill(null)])
+          setFocusedPane(0)
+          return
       }
       if (opts?.autoFillOnly && layoutMode > 1) {
           setPanes(prev => prev.map(p => (p === id ? null : p)));
           return;
       }
+      setTabGroup(id, activeGroupId)
       setPanes(prev => prev.map((p, i) => (i === focusedPane ? id : (p === id ? null : p))));
   };
   const removeFromPanes = (id: string, remaining: {
@@ -47,45 +77,54 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       });
   };
   const changeLayoutMode = useCallback((n: LayoutMode) => {
-      if (focusedPane >= n) {
-          setPanes(prev => {
-              const next = [...prev];
-              const tmp = next[n - 1];
-              next[n - 1] = next[focusedPane];
-              next[focusedPane] = tmp;
-              return next;
-          });
-          setFocusedPane(n - 1);
+      const visiblePaneCount = layoutMode
+      const currentVisible = panes.slice(0, visiblePaneCount)
+      const currentFocusedId = focusedPane < visiblePaneCount ? currentVisible[focusedPane] : null
+      const next = [...panes]
+      // Never carry hidden/stale pane slots into a new layout. They belong to another group's
+      // saved state and were the source of phantom groups when the mode changed repeatedly.
+      for (let i = 0; i < next.length; i++) next[i] = i < n ? next[i] : null
+      const overflowIds: string[] = currentVisible.slice(n).filter((id): id is string => id !== null)
+
+      if (currentFocusedId && focusedPane >= n) {
+          const displaced = next[n - 1]
+          next[n - 1] = currentFocusedId
+          if (displaced && displaced !== currentFocusedId) overflowIds.push(displaced)
       }
+
       if (n > layoutMode) {
-          setPanes(prev => {
-              const next = [...prev];
-              const activeIds = activeTabs.map(t => t.id);
-              const emptyIndices = [];
-              for (let i = 0; i < n; i++) {
-                  if (!next[i])
-                      emptyIndices.push(i);
-              }
-              if (emptyIndices.length > 0) {
-                  const unassignedTabs = activeIds.filter(id => {
-                      for (let i = 0; i < n; i++)
-                          if (next[i] === id)
-                              return false;
-                      return true;
-                  });
-                  let tIdx = 0;
-                  for (const i of emptyIndices) {
-                      if (tIdx < unassignedTabs.length) {
-                          next[i] = unassignedTabs[tIdx++];
-                      }
-                  }
-              }
-              return next;
-          });
+          const currentGroup = viewGroups.find(group => group.id === activeGroupId)
+          const activeIds = activeGroupId === DEFAULT_VIEW_GROUP_ID
+            ? activeTabs.filter(tab => !tabGroups[tab.id]).map(tab => tab.id)
+            : currentGroup?.panes.filter((id): id is string => id !== null) ?? currentVisible.filter((id): id is string => id !== null)
+          for (const id of activeIds) {
+              if (next.slice(0, n).includes(id)) continue
+              const emptyIndex = next.findIndex((pane, index) => index < n && pane === null)
+              if (emptyIndex < 0) break
+              next[emptyIndex] = id
+          }
       }
+
+      const uniqueOverflowIds = [...new Set(overflowIds)].filter(id => !next.slice(0, n).includes(id))
+      if (uniqueOverflowIds.length > 0 && n > 1) {
+          uniqueOverflowIds.forEach(id => createNewViewGroup(id, false))
+      }
+      if (n !== layoutMode || next.some((pane, index) => pane !== panes[index])) {
+          diag.debug('[Layout] changed view mode', {
+              from: layoutMode,
+              to: n,
+              activeGroupId,
+              focusedPane,
+              kept: next.slice(0, n).filter(Boolean),
+              overflow: uniqueOverflowIds,
+          })
+          setPanes(next)
+      }
+      setFullscreenPane(null)
       setLayoutMode(n);
+      setFocusedPane(Math.min(currentFocusedId && focusedPane < n ? focusedPane : n - 1, n - 1))
       localStorage.setItem('cc.layoutMode', String(n));
-  }, [focusedPane, layoutMode, setLayoutMode, activeTabs]);
+  }, [createNewViewGroup, focusedPane, layoutMode, panes, setLayoutMode, setFullscreenPane, activeTabs, tabGroups, viewGroups, activeGroupId]);
   useEffect(() => {
       const handleLayoutChange = (e: Event) => {
           const mode = (e as CustomEvent).detail.mode as LayoutMode;
@@ -122,16 +161,18 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           const instanceCount = activeTabs.filter(t => t.connId === conn.id).length;
           const name = instanceCount > 0 ? `${conn.name} (${instanceCount + 1})` : conn.name;
           setActiveTabs(prev => [...prev, { id: sessionId, connId: conn.id, name }]);
-          showTab(sessionId, { autoFillOnly: true });
+          showTab(sessionId, { autoFillOnly: true, newTab: true });
           return;
       }
       const alreadyOpen = !!activeTabs.find(t => t.connId === conn.id);
       if (!alreadyOpen) {
           setActiveTabs(prev => [...prev, { id: conn.id, connId: conn.id, name: conn.name }]);
       }
-      showTab(conn.id, { autoFillOnly: !alreadyOpen });
+      showTab(conn.id, { autoFillOnly: !alreadyOpen, newTab: !alreadyOpen });
   };
   const pairRunWithEditor = (terminalId: string, editorId: string) => {
+      if (layoutMode < 2)
+          changeLayoutMode(2)
       setPanes(prev => {
           const next = prev.map(p => (p === terminalId || p === editorId ? null : p));
           next[0] = terminalId;
@@ -142,8 +183,6 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       if (appSettings.split2Style === 'rows') {
           setAppSettings({ ...appSettings, split2Style: 'columns' });
       }
-      if (layoutMode < 2)
-          changeLayoutMode(2);
   };
   const scriptRuns = useScriptRuns({
       isEditorOpen: (editorId) => !!editorTabs[editorId],
@@ -165,7 +204,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       if (stalePane !== -1)
           assignToPane(stalePane, id);
       else
-          showTab(id, { autoFillOnly: true });
+          showTab(id, { autoFillOnly: true, newTab: true });
       scriptRuns.pairWithRun(script.path, id);
   };
   handleConnectRef.current = handleConnect;
@@ -241,6 +280,11 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       const closing = activeTabs.filter(t => idSet.has(t.id));
       const remaining = activeTabs.filter(t => !idSet.has(t.id));
       setActiveTabs(remaining);
+      setTabGroups(prev => {
+          const next = { ...prev };
+          for (const id of sessionIds) delete next[id];
+          return next;
+      });
       if (previewTabId && idSet.has(previewTabId))
           setPreviewTabId(null);
       for (const t of closing) {
@@ -360,7 +404,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           onThemeApply: (themeId: string) => onThemeApply(themeId, target),
           onFontSizeChange: (delta: number) => onFontSizeChange(delta, target),
       } : undefined;
-      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} appearance={appearance}/>;
+      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={() => setPanePicker(p => (p === paneIndex ? null : paneIndex))} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance}/>;
   };
   return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
 }

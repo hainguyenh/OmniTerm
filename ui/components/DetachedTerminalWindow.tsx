@@ -47,6 +47,14 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [meta, setMeta] = useState<Meta | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
+  const [windowActive, setWindowActive] = useState(true)
+  useEffect(() => {
+    const onFocus = () => setWindowActive(true)
+    const onBlur = () => setWindowActive(false)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur) }
+  }, [])
   useEffect(() => {
     window.omnitermAPI.terminalWindow.bootstrap().then((m) => {
       if (m?.sessionId) {
@@ -144,7 +152,15 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
           </button>
         </div>
       </div>
-      <div className="flex-1 min-h-0 relative">
+      <div
+        className="flex-1 min-h-0 relative"
+        style={{
+          filter: !windowActive && (appSettings.blurInactiveWindow ?? 0) > 0
+            ? `blur(${appSettings.blurInactiveWindow}px)`
+            : 'none',
+          transition: 'filter 120ms ease-out',
+        }}
+      >
         {missing ? (
           <div className="h-full w-full flex items-center justify-center text-sm text-theme-error select-none">
             This session is no longer available.
@@ -157,7 +173,11 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             onStatus={setStatus}
             onTitleChange={(title) => {
               const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)
-              if (clean) setMeta(previous => previous ? { ...previous, name: clean, connection: { ...previous.connection, name: clean } } : previous)
+              if (clean) {
+                setMeta(previous => previous && previous.name !== clean
+                  ? { ...previous, name: clean }
+                  : previous)
+              }
             }}
             darkMode={appSettings.darkMode}
             theme={terminalTheme}
