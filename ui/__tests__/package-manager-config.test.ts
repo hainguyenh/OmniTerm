@@ -136,14 +136,16 @@ describe("release configuration", () => {
     expect(workflow).toContain("next-release-version.mjs");
   });
 
-  it("attaches the installer, the portable package and the plugin to the release", () => {
+  it("attaches the installer and portable package with the bundled plugin", () => {
     for (const name of [
       "OmniTerm-Tauri-Windows-nsis",
       "OmniTerm-Windows-portable",
-      "OmniTerm-Plugin-always-awake",
     ]) {
       expect(workflow, `${name} is never uploaded`).toContain(`name: ${name}`);
     }
+    expect(workflow).toMatch(/-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'/);
+    expect(workflow).not.toContain("name: OmniTerm-Plugin-always-awake");
+    expect(workflow).not.toContain("name: OmniTerm-Plugin-blur");
     expect(workflow).toContain("release-artifacts/**/*.zip");
     // download-artifact merges by this pattern; an upload named outside it is silently dropped.
     expect(workflow).toContain("pattern: OmniTerm-*");

@@ -269,9 +269,17 @@ describe('complete Tauri bridge behavior', () => {
     await api.workspace.saveConnections('w1', [{ id: 'c1' }])
     await api.workspace.deleteConnection('w1', 'c1')
 
-    await expect(api.updates.check()).resolves.toBeNull()
-    await expect(api.updates.state()).resolves.toBeNull()
-    await expect(api.updates.skip(null)).resolves.toBeUndefined()
+    state.invoke.mockImplementation((command: string) =>
+      command === 'get_version' ? Promise.resolve('0.1.2') : Promise.resolve(undefined))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      tag_name: 'v0.1.2',
+      html_url: 'https://example.test/release',
+      assets: [],
+    }), { status: 200 })))
+    await expect(api.updates.check()).resolves.toMatchObject({ current: '0.1.2', latest: '0.1.2' })
+    await expect(api.updates.state()).resolves.toMatchObject({ current: '0.1.2' })
+    await expect(api.updates.skip(null)).resolves.toMatchObject({ skippedVersion: null })
+    vi.unstubAllGlobals()
     await api.updates.getVersion()
     await expect(api.updates.showSaveDialog('x')).resolves.toBeNull()
     await expect(api.updates.downloadPortable('/x')).resolves.toBeUndefined()

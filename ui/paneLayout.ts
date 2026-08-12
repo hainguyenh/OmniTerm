@@ -4,9 +4,8 @@
  * Panes are absolutely positioned with percentage rects rather than a CSS grid, which is what makes
  * them draggable: the split positions are plain numbers in state, so a divider drag is one setState.
  *
- * Only the 2- and 3-pane layouts are adjustable. The dense grids (4/6/8) stay evenly divided — with
- * eight panes there is no useful drag, and every extra divider is another way to nudge a terminal into
- * an unreadable width.
+ * The 2- and 3-pane layouts keep their legacy `main`/`cross` ratios. Dense grids also retain their
+ * divider positions as normalized cumulative boundaries, so every multi-pane layout can be tuned.
  */
 
 import type { CSSProperties } from 'react'
@@ -18,7 +17,13 @@ export interface SplitRatios {
   main: number
   /** The secondary split: where the two stacked panes of a 3-pane layout meet. */
   cross: number
+  /** Cumulative vertical boundaries for the 4/6/8-pane grids. */
+  columns?: number[]
+  /** Cumulative horizontal boundaries for the 4/6/8-pane grids. */
+  rows?: number[]
 }
+
+export type PaneDividerKey = 'main' | 'cross' | `column-${number}` | `row-${number}`
 
 export const DEFAULT_RATIOS: SplitRatios = { main: 0.5, cross: 0.5 }
 
@@ -35,10 +40,48 @@ export function clampFraction(value: number): number {
 
 /** Normalize whatever came out of persisted settings — an older build wrote no ratios at all. */
 export function toRatios(saved?: Partial<SplitRatios> | null): SplitRatios {
-  return {
+  const normalized: SplitRatios = {
     main: clampFraction(saved?.main ?? DEFAULT_RATIOS.main),
     cross: clampFraction(saved?.cross ?? DEFAULT_RATIOS.cross),
   }
+  const columns = normalizeBoundaries(saved?.columns)
+  const rows = normalizeBoundaries(saved?.rows)
+  if (columns) normalized.columns = columns
+  if (rows) normalized.rows = rows
+  return normalized
+}
+
+function normalizeBoundaries(saved: unknown): number[] | undefined {
+  if (!Array.isArray(saved) || saved.length < 1 || saved.length > 3) return undefined
+  const count = saved.length + 1
+  const result: number[] = []
+  for (let index = 0; index < saved.length; index += 1) {
+    const value = typeof saved[index] === 'number' ? saved[index] : Number.NaN
+    const lower = (result[index - 1] ?? 0) + MIN_FRACTION
+    const upper = 1 - MIN_FRACTION * (count - index - 1)
+    if (!Number.isFinite(value)) return undefined
+    result.push(Math.min(upper, Math.max(lower, value)))
+  }
+  return result
+}
+
+function gridColumnCount(mode: LayoutMode): number {
+  return mode === 4 ? 2 : mode === 6 ? 3 : 4
+}
+
+function evenBoundaries(count: number): number[] {
+  return Array.from({ length: count - 1 }, (_, index) => (index + 1) / count)
+}
+
+export function gridBoundaries(mode: LayoutMode, ratios: SplitRatios): { columns: number[]; rows: number[] } {
+  const columnsCount = gridColumnCount(mode)
+  const columns = normalizeBoundaries(ratios.columns)?.length === columnsCount - 1
+    ? normalizeBoundaries(ratios.columns)!
+    : evenBoundaries(columnsCount)
+  const rows = normalizeBoundaries(ratios.rows)?.length === 1
+    ? normalizeBoundaries(ratios.rows)!
+    : [0.5]
+  return { columns, rows }
 }
 
 const pct = (fraction: number): string => `${(fraction * 100).toFixed(3)}%`
@@ -93,25 +136,23 @@ export function paneRect(
     return { left: stackLeft, top: pct(cross), width: stackWidth, height: pct(1 - cross) }
   }
 
-  if (mode === 4) {
-    return { left: pct((i % 2) * 0.5), top: pct(Math.floor(i / 2) * 0.5), width: '50%', height: '50%' }
-  }
-  if (mode === 6) {
-    return {
-      left: pct((i % 3) / 3),
-      top: pct(Math.floor(i / 3) * 0.5),
-      width: '33.333%',
-      height: '50%',
-    }
-  }
-  // mode === 8 → 4 columns × 2 rows
-  return { left: pct((i % 4) * 0.25), top: pct(Math.floor(i / 4) * 0.5), width: '25%', height: '50%' }
+  const { columns, rows } = gridBoundaries(mode, ratios)
+  const columnCount = columns.length + 1
+  const row = Math.floor(i / columnCount)
+  const column = i % columnCount
+  const left = column === 0 ? 0 : columns[column - 1]
+  const right = columns[column] ?? 1
+  const top = row === 0 ? 0 : rows[row - 1]
+  const bottom = rows[row] ?? 1
+  return { left: pct(left), top: pct(top), width: pct(right - left), height: pct(bottom - top) }
 }
 
 /** A draggable boundary: which ratio it moves, which way it moves, and where to draw it. */
 export interface PaneDivider {
-  key: keyof SplitRatios
+  key: PaneDividerKey
   axis: 'x' | 'y'
+  minFraction?: number
+  maxFraction?: number
   /** Position and extent of the *track* the handle is drawn on, as CSS percentages. */
   style: CSSProperties
 }
@@ -119,8 +160,8 @@ export interface PaneDivider {
 /**
  * The dividers for `mode`, or an empty list when the layout is not adjustable.
  *
- * `main` is always the outer boundary; `cross` splits the stacked pair, so its track spans only that
- * pair's half of the area — dragging it must not look like it could move the outer split.
+ * `main` is the outer boundary in the 2/3-pane layouts; `cross` splits the stacked pair, so its track
+ * spans only that pair's half of the area. Grid dividers span the full pane area.
  */
 export function paneDividers(
   mode: LayoutMode,
@@ -163,7 +204,50 @@ export function paneDividers(
     ]
   }
 
-  return []
+  if (mode === 1) return []
+
+  const { columns, rows } = gridBoundaries(mode, ratios)
+  const dividers: PaneDivider[] = columns.map((position, index) => ({
+    key: `column-${index + 1}` as PaneDividerKey,
+    axis: 'x',
+    style: { left: pct(position), top: '0%', height: '100%' },
+    minFraction: boundaryMin(columns, index),
+    maxFraction: boundaryMax(columns, index),
+  }))
+  rows.forEach((position, index) => {
+    dividers.push({
+      key: `row-${index + 1}` as PaneDividerKey,
+      axis: 'y',
+      style: { left: '0%', top: pct(position), width: '100%' },
+      minFraction: boundaryMin(rows, index),
+      maxFraction: boundaryMax(rows, index),
+    })
+  })
+  return dividers
+}
+
+function boundaryMin(boundaries: number[], index: number): number {
+  return (boundaries[index - 1] ?? 0) + MIN_FRACTION
+}
+
+function boundaryMax(boundaries: number[], index: number): number {
+  return (boundaries[index + 1] ?? 1) - MIN_FRACTION
+}
+
+export function setDividerRatio(
+  ratios: SplitRatios,
+  mode: LayoutMode,
+  key: PaneDividerKey,
+  value: number,
+): SplitRatios {
+  if (key === 'main' || key === 'cross') return { ...ratios, [key]: value }
+  const { columns, rows } = gridBoundaries(mode, ratios)
+  const target = key.startsWith('column-') ? columns : rows
+  const index = Number(key.slice(key.indexOf('-') + 1)) - 1
+  if (!Number.isInteger(index) || index < 0 || index >= target.length) return ratios
+  const next = [...target]
+  next[index] = Math.min(boundaryMax(target, index), Math.max(boundaryMin(target, index), value))
+  return key.startsWith('column-') ? { ...ratios, columns: next } : { ...ratios, rows: next }
 }
 
 /**
@@ -177,10 +261,13 @@ export function fractionFromPointer(
   origin: number,
   size: number,
   invert = false,
+  minimum = MIN_FRACTION,
+  maximum = 1 - MIN_FRACTION,
 ): number {
   if (size <= 0) return 0.5
   const raw = (position - origin) / size
-  return clampFraction(invert ? 1 - raw : raw)
+  const fraction = invert ? 1 - raw : raw
+  return Math.min(maximum, Math.max(minimum, fraction))
 }
 
 /**

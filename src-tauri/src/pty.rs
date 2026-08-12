@@ -356,9 +356,19 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
 }
 
 /// A shell can exit between the detached window's close event and its cleanup call. Treat the
-/// resulting not-found error as successful cleanup; the session was already gone.
+/// resulting not-found/invalid-handle errors as successful cleanup; the session was already gone.
 fn is_process_gone_error(error: &std::io::Error) -> bool {
-    error.kind() == std::io::ErrorKind::NotFound
+    if error.kind() == std::io::ErrorKind::NotFound {
+        return true;
+    }
+    // Windows reports a stale PTY process handle as ERROR_INVALID_HANDLE (6) when the
+    // child exited between removal from the registry and the kill request. Cleanup is
+    // already complete in that case, so do not surface it as a session failure.
+    #[cfg(windows)]
+    if error.raw_os_error() == Some(6) {
+        return true;
+    }
+    false
 }
 
 #[tauri::command]

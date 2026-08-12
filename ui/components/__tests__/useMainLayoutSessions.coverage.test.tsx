@@ -8,6 +8,8 @@ import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contr
 import { TOKYO_NIGHT, type LayoutMode } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import { useMainLayoutSessions } from '../useMainLayoutSessions'
+import { createDefaultViewGroup, createViewGroup, DEFAULT_VIEW_GROUP_ID } from '../../viewGroups'
+import { useViewGroups } from '../../hooks/useViewGroups'
 
 const pairWithRun = vi.fn()
 const noteShellOpen = vi.fn()
@@ -63,6 +65,7 @@ interface Initial {
   dataMenuOpen?: boolean
   panePicker?: number | null
   dragPane?: number | null
+  useActualGroups?: boolean
 }
 
 function useHarness(initial: Initial = {}) {
@@ -72,6 +75,14 @@ function useHarness(initial: Initial = {}) {
   const [ephemeralConns, setEphemeralConns] = useState<Connection[]>(initial.conns ?? [local, ssh, rdp])
   const [panes, setPanes] = useState<(string | null)[]>(initial.panes ?? Array(8).fill(null))
   const [focusedPane, setFocusedPane] = useState(initial.focusedPane ?? 0)
+  const [mockViewGroups, setMockViewGroups] = useState<ReturnType<typeof createViewGroup>[]>(() => [{ ...createDefaultViewGroup(layoutMode), panes: [...(initial.panes ?? Array(8).fill(null))] }])
+  const [mockActiveGroupId, setMockActiveGroupId] = useState(DEFAULT_VIEW_GROUP_ID)
+  const [mockTabGroups, setMockTabGroups] = useState<Record<string, string>>({})
+  const actualGroups = useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane })
+  const viewGroups = initial.useActualGroups ? actualGroups.viewGroups : mockViewGroups
+  const activeGroupId = initial.useActualGroups ? actualGroups.activeGroupId : mockActiveGroupId
+  const tabGroups = initial.useActualGroups ? actualGroups.tabGroups : mockTabGroups
+  const setTabGroups = initial.useActualGroups ? actualGroups.setTabGroups : setMockTabGroups
   const activeTabId = panes[focusedPane] ?? null
   const [panePicker, setPanePicker] = useState<number | null>(initial.panePicker ?? null)
   const panePickerRef = useRef<HTMLDivElement>(null)
@@ -94,10 +105,27 @@ function useHarness(initial: Initial = {}) {
   const handleConnectRef = useRef<(conn: Connection) => void>(() => undefined)
   const setStatus = useCallback((id: string, status: SessionStatus) => setStatuses(p => ({ ...p, [id]: status })), [])
   const connById = useCallback((id?: string) => ephemeralConns.find(c => c.id === id), [ephemeralConns])
+  const switchMockViewGroup = useCallback((id: string) => {
+    const group = viewGroups.find(item => item.id === id)
+    if (!group) return
+    setMockActiveGroupId(id); setLayoutMode(group.layoutMode); setPanes(group.panes); setFocusedPane(group.focusedPane)
+  }, [viewGroups])
+  const createMockViewGroup = useCallback((_tabId?: string, activate = true) => {
+    if (activate && !_tabId) {
+      setMockActiveGroupId(DEFAULT_VIEW_GROUP_ID); setLayoutMode(1); setPanes(Array(8).fill(null)); setFocusedPane(0)
+      return DEFAULT_VIEW_GROUP_ID
+    }
+    const id = `view-${viewGroups.length + 1}`
+    setMockViewGroups(prev => [...prev, { ...createViewGroup(id, prev.length), panes: _tabId ? [_tabId, ...Array(7).fill(null)] : Array(8).fill(null) }])
+    if (activate) { setMockActiveGroupId(id); setLayoutMode(1); setPanes(Array(8).fill(null)); setFocusedPane(0) }
+    return id
+  }, [viewGroups.length])
+  const switchViewGroup = initial.useActualGroups ? actualGroups.switchViewGroup : switchMockViewGroup
+  const createNewViewGroup = initial.useActualGroups ? actualGroups.createNewViewGroup : createMockViewGroup
   const base: any = {
     appSettings, setAppSettings, themes: [TOKYO_NIGHT], resolveAppearance: vi.fn(() => ({ themeId: TOKYO_NIGHT.id, fontSize: 17 })),
     onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen: initial.settingsOpen ?? false,
-    activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId,
+    activeTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId,
     setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerRef, dragPane, setDragPane,
     statuses, setStatuses, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut,
     resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, activity, setActivity,
@@ -163,6 +191,51 @@ describe('useMainLayoutSessions complete behavior', () => {
     expect(setItem).toHaveBeenCalledWith('cc.layoutMode', '4')
   })
 
+  it('preserves the focused terminal when shrinking a multi-pane layout', () => {
+    const tabs = [
+      { id: 'a', connId: 'local', name: 'A' },
+      { id: 'b', connId: 'ssh', name: 'B' },
+      { id: 'c', connId: 'rdp', name: 'C' },
+      { id: 'd', connId: 'local', name: 'D' },
+    ]
+    const { result } = renderHook(() => useHarness({
+      tabs,
+      panes: ['a', 'b', 'c', 'd', null, null, null, null],
+      layoutMode: 4,
+      focusedPane: 3,
+    }))
+
+    act(() => result.current.sessions.changeLayoutMode(2))
+
+    expect(result.current.base.panes.slice(0, 2)).toEqual(['a', 'd'])
+    expect(result.current.base.focusedPane).toBe(1)
+    expect(result.current.base.activeTabs.map((tab: { id: string }) => tab.id)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('keeps tabs and the active group through repeated multi-view changes', () => {
+    const tabs = [
+      { id: 'a', connId: 'local', name: 'A' },
+      { id: 'b', connId: 'ssh', name: 'B' },
+      { id: 'c', connId: 'rdp', name: 'C' },
+      { id: 'd', connId: 'local', name: 'D' },
+    ]
+    const { result } = renderHook(() => useHarness({
+      useActualGroups: true,
+      tabs,
+      panes: ['a', 'b', 'c', 'd', null, null, null, null],
+      layoutMode: 4,
+      focusedPane: 0,
+    }))
+
+    act(() => result.current.sessions.changeLayoutMode(2))
+    act(() => result.current.sessions.changeLayoutMode(3))
+    act(() => result.current.sessions.changeLayoutMode(1))
+
+    expect(result.current.base.activeTabs.map((tab: { id: string }) => tab.id)).toEqual(['a', 'b', 'c', 'd'])
+    expect(result.current.base.panes[0]).toBe('a')
+    expect(result.current.base.viewGroups.length).toBeGreaterThan(0)
+  })
+
   it('opens repeatable local sessions, single remote sessions, and shell events', async () => {
     const { result, unmount } = renderHook(() => useHarness())
     act(() => result.current.sessions.handleConnect(local))
@@ -178,6 +251,96 @@ describe('useMainLayoutSessions complete behavior', () => {
     expect(result.current.base.ephemeralConns.some((c: Connection) => c.id === 'event-shell')).toBe(true)
     unmount()
     expect(shellCleanup).toHaveBeenCalled()
+  })
+
+  it('keeps a newly created terminal when switching from single view to a two-pane group', () => {
+    const existing = { id: 'existing', connId: 'local', name: 'Existing' }
+    type TestTab = { id: string; connId: string; name: string }
+    const { result } = renderHook(() => useHarness({
+      useActualGroups: true,
+      tabs: [existing],
+      panes: [existing.id, null, null, null, null, null, null, null],
+      layoutMode: 1,
+    }))
+
+    act(() => result.current.sessions.handleConnect(local))
+    const newTabId = result.current.base.activeTabs.find((tab: TestTab) => tab.id !== existing.id)?.id
+    expect(newTabId).toBe('local_12345678')
+    expect(result.current.base.panes).toEqual([newTabId, ...Array(7).fill(null)])
+
+    act(() => result.current.sessions.changeLayoutMode(2))
+
+    expect(result.current.base.activeTabs.map((tab: TestTab) => tab.id)).toEqual([existing.id, newTabId])
+    expect(result.current.base.panes.slice(0, 2)).toEqual([newTabId, existing.id])
+    expect(result.current.base.viewGroups.filter((group: ReturnType<typeof createViewGroup>) => group.id !== DEFAULT_VIEW_GROUP_ID)).toHaveLength(1)
+    expect(result.current.base.activeGroupId).not.toBe(DEFAULT_VIEW_GROUP_ID)
+  })
+
+  it('creates a visible group for the first terminal when two-pane mode is selected', () => {
+    const { result } = renderHook(() => useHarness({ useActualGroups: true }))
+
+    act(() => result.current.sessions.handleConnect(local))
+    act(() => result.current.sessions.changeLayoutMode(2))
+
+    expect(result.current.base.activeTabs).toHaveLength(1)
+    expect(result.current.base.panes[0]).toBe(result.current.base.activeTabs[0].id)
+    expect(result.current.base.panes[1]).toBeNull()
+    expect(result.current.base.viewGroups.filter((group: ReturnType<typeof createViewGroup>) => group.id !== DEFAULT_VIEW_GROUP_ID)).toHaveLength(1)
+    expect(result.current.base.activeGroupId).not.toBe(DEFAULT_VIEW_GROUP_ID)
+  })
+
+  it('opens a standalone single view when every pane in the active view is occupied', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 'a', connId: 'local', name: 'A' }, { id: 'b', connId: 'ssh', name: 'B' }],
+      panes: ['a', 'b', null, null, null, null, null, null],
+      layoutMode: 2,
+    }))
+
+    act(() => result.current.base.setTabGroups({ a: 'old-group', b: 'old-group' }))
+    act(() => result.current.sessions.handleConnect(local))
+
+    expect(result.current.base.activeTabs).toHaveLength(3)
+    expect(result.current.base.viewGroups).toHaveLength(1)
+    expect(result.current.base.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
+    expect(result.current.base.panes[0]).toMatch(/^local_/)
+    expect(result.current.base.panes.slice(1)).toEqual(Array(7).fill(null))
+  })
+
+  it('keeps the explicit group available when a new tab opens from a full group', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 'a', connId: 'local', name: 'A' }, { id: 'b', connId: 'ssh', name: 'B' }],
+      panes: ['a', 'b', null, null, null, null, null, null],
+      layoutMode: 2,
+    }))
+    let groupId = ''
+    act(() => { groupId = result.current.base.createNewViewGroup('a', false) })
+    act(() => {
+      result.current.base.switchViewGroup(groupId)
+      result.current.base.setPanes(['a', 'b', null, null, null, null, null, null])
+      result.current.base.setTabGroups({ a: groupId, b: groupId })
+      result.current.base.setLayoutMode(2)
+    })
+
+    act(() => result.current.sessions.handleConnect(local))
+
+    expect(result.current.base.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
+    expect(result.current.base.viewGroups.some((group: ReturnType<typeof createViewGroup>) => group.id === groupId)).toBe(true)
+    expect(result.current.base.panes[0]).toMatch(/^local_/)
+  })
+
+  it('expands only the active group instead of borrowing tabs from another group', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 'a', connId: 'local', name: 'A' }, { id: 'b', connId: 'ssh', name: 'B' }],
+      panes: ['a', 'b', null, null, null, null, null, null],
+      layoutMode: 2,
+    }))
+
+    act(() => result.current.base.setTabGroups({ a: 'old-group', b: 'old-group' }))
+    act(() => result.current.sessions.handleConnect(local))
+    act(() => result.current.sessions.changeLayoutMode(2))
+
+    expect(result.current.base.panes[0]).toMatch(/^local_/)
+    expect(result.current.base.panes[1]).toBeNull()
   })
 
   it('pairs editor runs, converts row layout, reuses editors, and replaces stale previews', () => {

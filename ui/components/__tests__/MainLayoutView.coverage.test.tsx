@@ -131,6 +131,20 @@ describe('MainLayoutView coverage', () => {
     expect(single.detachControl.toggle).toHaveBeenCalledWith('local-tab')
   })
 
+  it('keeps session views mounted while group tabs settle after a layout change', () => {
+    const m = model({
+      activeTabs: [{ id: 'group-tab', connId: 'local', name: 'Grouped terminal' }],
+      visibleTabs: [],
+      panes: ['group-tab'],
+      connById: (id?: string) => id === 'local' ? local : undefined,
+    })
+
+    render(<MainLayoutView model={m} />)
+
+    expect(screen.getByTestId('terminal-group-tab')).toBeInTheDocument()
+    expect(screen.getByTestId('waiting')).toBeInTheDocument()
+  })
+
   it('renders active footer variants and invokes every footer action', () => {
     const m = model({
       activeTabs: [{ id: 'ssh-tab', connId: 'ssh', name: 'SSH' }], panes: ['ssh-tab', null], layoutMode: 2,
@@ -181,6 +195,23 @@ describe('MainLayoutView coverage', () => {
     expect(m.setSplitRatios).toHaveBeenCalledWith({ main: .4, cross: .6 })
     expect(m.persistRatios).toHaveBeenCalled()
     expect(container.querySelector('.border-dashed')).toBeInTheDocument()
+  })
+
+  it('renders a restore control while a split pane is focused full screen', () => {
+    const setFullscreenPane = vi.fn()
+    const m = model({
+      layoutMode: 2,
+      activeTabs: [{ id: 'a', connId: 'local', name: 'Alpha' }, { id: 'b', connId: 'ssh', name: 'Beta' }],
+      panes: ['a', 'b'],
+      fullscreenPane: 1,
+      setFullscreenPane,
+    })
+    render(<MainLayoutView model={m} />)
+
+    expect(screen.getByRole('button', { name: 'Restore view mode' })).toBeInTheDocument()
+    expect(screen.getByText(/Restore view · Beta/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore view mode' }))
+    expect(setFullscreenPane).toHaveBeenCalledWith(null)
   })
 
   it('keeps the new-session and choose-session controls clickable around a launched pane', () => {

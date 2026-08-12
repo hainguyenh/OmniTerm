@@ -53,14 +53,15 @@ interface AppSettings {
   split3Style?: 'left' | 'right' | 'top'
   /** Split-2 orientation: side-by-side columns (default) or stacked top/bottom rows. */
   split2Style?: 'columns' | 'rows'
-  /** Where the draggable pane boundaries sit, as fractions (2- and 3-pane layouts). */
-  splitRatios?: { main: number; cross: number }
+  /** Where the draggable pane boundaries sit, as fractions for all multi-pane layouts. */
+  splitRatios?: { main: number; cross: number; columns?: number[]; rows?: number[] }
   /** Max size (MB) the built-in viewer/editor will open or save; the backend clamps the range. */
   maxOpenFileMb?: number
   /** Extensions the user chose to hide from the viewer, on top of the fixed system deny-list. */
   excludedViewableExts?: string[]
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
+  blurInactiveWindow?: number
   /**
    * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
    * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).

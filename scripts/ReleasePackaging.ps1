@@ -28,9 +28,44 @@ function Write-Sha256Sidecar {
     Set-Content -LiteralPath "$Path.sha256" -Encoding ASCII
 }
 
+function Get-DefaultPortablePlugins {
+  param([Parameter(Mandatory)][string]$RepoRoot)
+  @(
+    @{ Name = 'always-awake'; Path = (Join-Path $RepoRoot 'plugins\always-awake') }
+    @{ Name = 'blur'; Path = (Join-Path $RepoRoot 'plugins\blur') }
+  )
+}
+
+function Copy-PortablePlugin {
+  param(
+    [Parameter(Mandatory)]$Plugin,
+    [Parameter(Mandatory)][string]$Portable
+  )
+
+  $manifest = Join-Path $Plugin.Path 'package.json'
+  $dist = Join-Path $Plugin.Path 'dist'
+  if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
+    throw "Plugin '$($Plugin.Name)' is missing $manifest."
+  }
+  if (-not (Test-Path -LiteralPath (Join-Path $dist 'index.js') -PathType Leaf)) {
+    throw "Plugin '$($Plugin.Name)' is missing built output $dist\index.js."
+  }
+
+  $pluginTarget = Join-Path $Portable "plugins\$($Plugin.Name)"
+  $distTarget = Join-Path $pluginTarget 'dist'
+  New-Item -ItemType Directory -Force -Path $distTarget | Out-Null
+  Copy-Item -LiteralPath $manifest -Destination (Join-Path $pluginTarget 'package.json') -Force
+  Copy-Item -Path (Join-Path $dist '*') -Destination $distTarget -Recurse -Force
+
+  if (-not (Test-Path -LiteralPath (Join-Path $pluginTarget 'package.json') -PathType Leaf) -or
+      -not (Test-Path -LiteralPath (Join-Path $distTarget 'index.js') -PathType Leaf)) {
+    throw "Failed to stage portable plugin '$($Plugin.Name)'."
+  }
+}
+
 <#
 .SYNOPSIS
-Assemble the install-free package: the executable, its resource folders, and optionally one plugin.
+Assemble the install-free package: the executable, its resource folders, and optional plugins.
 
 .DESCRIPTION
 Emits <Destination>\<ArchiveName> plus a .sha256 sidecar, staged through <Destination>\portable.
@@ -42,7 +77,8 @@ function New-PortablePackage {
     [Parameter(Mandatory)][string]$Destination,
     [string]$BuildProfile = 'release',
     [string]$ArchiveName = 'OmniTerm-portable.zip',
-    $Plugin = $null
+    $Plugin = $null,
+    [object[]]$Plugins = @()
   )
 
   $buildRoot = Join-Path $RepoRoot "target\$BuildProfile"
@@ -67,14 +103,21 @@ function New-PortablePackage {
     Copy-Item -LiteralPath $resource -Destination $portable -Recurse -Force
   }
 
-  if ($null -ne $Plugin) {
-    # Copy from the selected staging source, not target/release/plugins. That release directory may
-    # contain resources from an earlier build and Tauri flattens glob destinations, which made a
-    # Limited portable package indistinguishable from Basic or from the previously built variant.
-    $pluginTarget = Join-Path $portable "plugins\$($Plugin.Name)"
-    New-Item -ItemType Directory -Force -Path $pluginTarget | Out-Null
-    Copy-Item -LiteralPath (Join-Path $Plugin.Path 'package.json') -Destination $pluginTarget -Force
-    Copy-Item -LiteralPath (Join-Path $Plugin.Path 'dist') -Destination $pluginTarget -Recurse -Force
+  $selectedPlugins = @()
+  if (@($Plugins).Count -gt 0) {
+    $selectedPlugins = @($Plugins)
+  } elseif ($null -ne $Plugin) {
+    $selectedPlugins = @($Plugin)
+  } else {
+    # Every portable download includes the two built-in renderer plugins. This keeps the local
+    # wizard and release workflow aligned and avoids a portable build silently losing UI features.
+    $selectedPlugins = @(Get-DefaultPortablePlugins -RepoRoot $RepoRoot)
+  }
+
+  foreach ($selectedPlugin in $selectedPlugins) {
+    # Copy from source plugin folders, not target/release/plugins. The release directory may contain
+    # resources from an earlier build and Tauri can flatten glob destinations.
+    Copy-PortablePlugin -Plugin $selectedPlugin -Portable $portable
   }
 
   @'
@@ -91,19 +134,39 @@ store settings and application data in the normal Windows user profile.
   Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $archive -Force
   Write-Sha256Sidecar $archive
 
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::OpenRead($archive)
+  try {
+    $entryNames = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+    foreach ($selectedPlugin in $selectedPlugins) {
+      $pluginPrefix = "plugins/$($selectedPlugin.Name)/"
+      foreach ($requiredEntry in @("${pluginPrefix}package.json", "${pluginPrefix}dist/index.js")) {
+        if ($entryNames -notcontains $requiredEntry) {
+          throw "Portable archive is missing bundled plugin entry '$requiredEntry'."
+        }
+      }
+    }
+  } finally {
+    $zip.Dispose()
+  }
+
   $manifests = @(Get-ChildItem (Join-Path $portable 'plugins') -Filter package.json -Recurse -ErrorAction SilentlyContinue)
-  if ($null -eq $Plugin) {
+  if ($selectedPlugins.Count -eq 0) {
     if ($manifests.Count -ne 0) { throw 'Basic portable package unexpectedly contains a plugin.' }
   } else {
-    $expected = (Get-Content (Join-Path $Plugin.Path 'package.json') -Raw | ConvertFrom-Json).name
-    if ($manifests.Count -ne 1) {
-      throw "Portable package must contain exactly one plugin; found $($manifests.Count)."
+    if ($manifests.Count -ne $selectedPlugins.Count) {
+      throw "Portable package must contain exactly $($selectedPlugins.Count) plugins; found $($manifests.Count)."
     }
-    $actual = (Get-Content $manifests[0].FullName -Raw | ConvertFrom-Json).name
-    if ($actual -ne $expected) {
-      throw "Portable package contains '$actual' instead of '$expected'."
+    $expectedNames = @($selectedPlugins | ForEach-Object {
+      (Get-Content (Join-Path $_.Path 'package.json') -Raw | ConvertFrom-Json).name
+    })
+    $actualNames = @($manifests | ForEach-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).name })
+    foreach ($expected in $expectedNames) {
+      if ($actualNames -notcontains $expected) {
+        throw "Portable package is missing plugin '$expected'."
+      }
+      Write-Host "  [OK] Portable contains exactly $expected" -ForegroundColor Green
     }
-    Write-Host "  [OK] Portable contains exactly $expected" -ForegroundColor Green
   }
 
   return $archive

@@ -73,6 +73,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('useMainLayoutBase complete behavior', () => {
+  it('restores the split layout when Escape exits pane focus mode', () => {
+    const { result } = renderHook(() => useMainLayoutBase(props()))
+    act(() => result.current.setFullscreenPane(1))
+    expect(result.current.fullscreenPane).toBe(1)
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+    expect(result.current.fullscreenPane).toBeNull()
+  })
+
   // Always Awake is contributed by a plugin, so a build without it must not offer the feature — and
   // must not subscribe to the native poller either.
   it('offers Always Awake only when the plugin answers, and subscribes to it only then', async () => {
