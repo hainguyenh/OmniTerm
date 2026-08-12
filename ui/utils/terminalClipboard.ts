@@ -22,6 +22,7 @@ export interface TerminalClipboard {
  *                      `OutputHighlighter.noteLocalEcho`.
  */
 export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => void): TerminalClipboard => {
+  let pasteInFlight = false
   const copySelection = async () => {
     const sel = term.getSelection()
     if (!sel) return
@@ -40,10 +41,16 @@ export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => vo
     // byte-identical output — sending raw text here is what made one paste route run the pasted
     // lines as commands.
     paste: async () => {
-      const text = await window.omnitermAPI.clipboard.readText()
-      if (!text) return
-      onBeforePaste?.()
-      term.paste(text)
+      if (pasteInFlight) return
+      pasteInFlight = true
+      try {
+        const text = await window.omnitermAPI.clipboard.readText()
+        if (!text) return
+        onBeforePaste?.()
+        term.paste(text)
+      } finally {
+        pasteInFlight = false
+      }
     },
     copySelection,
     dispose: () => selectionDisposable.dispose(),

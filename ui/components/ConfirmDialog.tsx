@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { AlertTriangle } from 'lucide-react'
 
 interface ConfirmDialogProps {
@@ -23,7 +23,12 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const previousFocus = useRef<HTMLElement | null>(null)
+
   useEffect(() => {
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    cancelRef.current?.focus()
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
@@ -31,7 +36,10 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       }
     }
     document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    return () => {
+      document.removeEventListener('keydown', handler)
+      previousFocus.current?.focus()
+    }
   }, [onCancel])
 
   const handleBackdrop = (e: React.MouseEvent) => {
@@ -42,10 +50,16 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]"
       onClick={handleBackdrop}
+      role="presentation"
     >
-      <div className="bg-theme-popup w-full max-w-xs rounded-2xl border border-theme-border shadow-2xl overflow-hidden">
+      <div
+        className="bg-theme-popup w-full max-w-xs rounded-2xl border border-theme-border shadow-2xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+      >
         <div className="p-5 space-y-2">
-          <h3 className="text-white font-bold flex items-center gap-2">
+          <h3 id="confirm-dialog-title" className="text-white font-bold flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-theme-warning" />
             {title}
           </h3>
@@ -54,7 +68,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <div className="flex gap-2 p-4 pt-0">
           <button
             type="button"
-            autoFocus
+            ref={cancelRef}
             onClick={onCancel}
             className="flex-1 py-2 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-white transition-colors text-sm font-semibold"
           >

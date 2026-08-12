@@ -176,11 +176,11 @@ describe('PaneResizers', () => {
     )
   }
 
-  it('renders no divider for fixed-grid layouts', () => {
+  it('renders no divider for a single pane and all dividers for a grid', () => {
     const { rerender } = render(<Harness mode={1} />)
     expect(screen.queryByRole('separator')).not.toBeInTheDocument()
     rerender(<Harness mode={4} />)
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
   })
 
   it('drags a vertical divider and commits the latest ratio', () => {
@@ -196,6 +196,21 @@ describe('PaneResizers', () => {
     fireEvent.pointerMove(divider, { pointerId: 7, clientX: 700 })
     fireEvent.pointerUp(divider, { pointerId: 7, clientX: 700 })
     expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ main: 0.7 }))
+  })
+
+  it('drags a grid divider and persists its cumulative boundary', () => {
+    const onCommit = vi.fn()
+    const { container } = render(<Harness mode={4} onCommit={onCommit} />)
+    const area = container.firstElementChild?.parentElement ?? container
+    vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, left: 0, top: 0, width: 1000, height: 600,
+      right: 1000, bottom: 600, toJSON: () => ({}),
+    })
+    const divider = screen.getByRole('separator', { name: 'Resize columns' })
+    fireEvent.pointerDown(divider, { pointerId: 9, clientX: 500 })
+    fireEvent.pointerMove(divider, { pointerId: 9, clientX: 700 })
+    fireEvent.pointerUp(divider, { pointerId: 9, clientX: 700 })
+    expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ columns: [0.7] }))
   })
 
   it('handles horizontal and mirrored three-pane dividers', () => {

@@ -251,6 +251,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
     const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
+    let suppressNativePasteUntil = 0
 
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault()
@@ -259,10 +260,22 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term.focus()
       const hasSelection = typeof term.hasSelection === 'function' && term.hasSelection()
       if (hasSelection) void clipboard.copySelection()
-      else void clipboard.paste()
+      else {
+        // Chromium/xterm can dispatch a native paste after the context-menu gesture. The custom
+        // route below is the single writer for right-click; keep the native event from duplicating it.
+        suppressNativePasteUntil = performance.now() + 250
+        void clipboard.paste()
+      }
+    }
+    const onNativePaste = (e: ClipboardEvent) => {
+      if (performance.now() > suppressNativePasteUntil) return
+      e.preventDefault()
+      e.stopPropagation()
+      e.stopImmediatePropagation()
     }
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
+    termEl.addEventListener('paste', onNativePaste, true)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
     termEl.addEventListener('mouseup', onMouseUp)
 
@@ -395,6 +408,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
+      termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)

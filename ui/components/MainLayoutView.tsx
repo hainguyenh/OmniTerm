@@ -22,10 +22,15 @@ import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { Grid6Icon, Grid8Icon } from './mainLayoutShared'
 import MainLayoutOverlays from './MainLayoutOverlays'
+import FullscreenRestoreControl from './FullscreenRestoreControl'
 import type { MainLayoutModel } from './useMainLayoutController'
+import ViewGroupTabs from './ViewGroupTabs'
+import BlurSettingsOverlay from './BlurSettingsOverlay'
+import { useBlurPlugin } from '../hooks/useBlurPlugin'
+import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
 
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, setActiveTabs, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {} } = model
   const alwaysAwake = awakeState ?? {
     enabled: false,
     mode: 'activeOnly' as const,
@@ -35,12 +40,28 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     supported: true,
     error: null,
   }
-  /** Reorder only when the drop really came from a pane header; ignore anything else dropped here. */
+  const { open: blurOpen, setOpen: setBlurOpen, available: blurAvailable } = useBlurPlugin()
+  const blurValue = appSettings.blurInactiveWindow ?? 0
+  const fullscreenTabId = fullscreenPane === null ? null : panes[fullscreenPane] ?? null
+  const ungroupedTabCount = activeTabs.filter(tab => !tabGroups[tab.id]).length
+  const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId)
+  const activeEditorWorkspace = activeTabId ? model.editorTabs[activeTabId]?.workspaceId : undefined
+  const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace)
+    ?? selectedWorkspace
   const onPaneDrop = (event: React.DragEvent, target: number) => {
     const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
     if (source !== null) swapPanes(source, target)
     setDragPane(null)
   }
+  const waitingPane = (
+    <WaitingPane
+      dark={!!appSettings.darkMode}
+      onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
+      onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+      workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
+      customArtUrl={idleArtUrl}
+    />
+  )
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -53,8 +74,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           alwaysAwakeEnabled={alwaysAwake.enabled}
           alwaysAwakeKeepingAwake={alwaysAwake.keepingAwake}
           onAlwaysAwakeClick={() => setAlwaysAwakeOpen(true)}
+          blurAvailable={blurAvailable}
+          blurEnabled={blurValue > 0}
+          onBlurClick={() => setBlurOpen(true)}
         />
-  
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
         {activeView !== null && (
           <div
@@ -87,7 +110,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             )}
           </div>
         )}
-  
         {/* ── Resize Handle ────────────────────────────────────────────────── */}
         {activeView !== null && sidebarVisible && (
           <div
@@ -95,19 +117,19 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             onMouseDown={handleResizeDragStart}
           />
         )}
-  
         {/* ── Main area ───────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Panel header — session tabs fill the full width, layout picker on the right.
               Keeping the tabs in this fixed header row (above the content area) means
               the embedded RDP desktop can never paint over them. */}
-          <div className="relative z-30 h-[40px] px-2.5 flex items-center gap-2 border-b border-[var(--theme-border)] flex-shrink-0">
-  
+          <div className="relative z-30 flex flex-col border-b border-[var(--theme-border)] flex-shrink-0">
+            {viewGroups.length > 0 && <ViewGroupTabs groups={viewGroups} activeGroupId={activeGroupId} totalTabCount={ungroupedTabCount} onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }} onUpdate={notifyViewGroupUpdate} onReorder={notifyViewGroupReorder} onUngroup={notifyViewGroupUngroup} />}
+            <div className="h-[40px] px-2.5 flex items-center gap-2">
             {/* Tab list — flex-1 so it fills all available space before the picker */}
             <div className="flex-1 min-w-0 overflow-hidden">
-            {activeTabs.length > 0 && (
+            {visibleTabs.length > 0 && (
               <SessionTabs
-                tabs={activeTabs} panes={panes} layoutMode={layoutMode} focusedPane={focusedPane}
+                tabs={visibleTabs} panes={panes} layoutMode={layoutMode} focusedPane={focusedPane}
                 statuses={statuses} activity={activity}
                 isEditor={(id) => !!editorTabs[id]}
                 isPreview={(id) => previewTabId === id}
@@ -176,6 +198,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               ))}
             </div>
   
+            </div>
           </div>
   
           {/* Active-session control bar — rendered as a FOOTER (order-last) so the
@@ -183,15 +206,22 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           {activeTabId && (() => {
             const activeConnId = activeTabs.find(t => t.id === activeTabId)?.connId
             const conn = connById(activeConnId)
-            if (!conn) return null
+            if (!conn) {
+              return (
+                <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
+                  <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+                  <span className="opacity-60">·</span>
+                  <span className="truncate">Editor active</span>
+                  {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
+                </div>
+              )
+            }
             const status = statuses[activeTabId] ?? 'connecting'
-            // Latency source differs by type: RDP has its own TCP probe; SSH carries it in metrics.
             const resolvedLatency = conn.type === 'RDP'
               ? (latencies[activeTabId] ?? null)
               : (metrics[activeTabId]?.latency ?? null)
             return (
               <div className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
-                {/* Which pane the footer is describing, in that pane's own shape + hue. */}
                 {layoutMode > 1 && (() => {
                   const identity = paneIdentity(focusedPane)
                   const Shape = identity.icon
@@ -203,6 +233,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     </span>
                   )
                 })()}
+                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspace?.path ?? 'No workspace selected'}>
+                  Workspace · {footerWorkspace?.name ?? 'No workspace'}
+                </span>
+                <span className="opacity-50">·</span>
                 {conn.type === 'RDP'
                   ? <Monitor className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
                   : <Terminal className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
@@ -277,30 +311,27 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               </div>
             )
           })()}
-  
-          {/* Session content. A small top gap keeps the embedded RDP desktop from butting up
-              against (and visually obscuring) the Sessions header / tabs above it.
-  
-              Split view: a frame layer (borders + mini pane headers + empty-slot hints) is
-              drawn first, then each open session is positioned into its pane on top of the
-              frame. Sessions not in any visible pane stay mounted but hidden. In single view
-              (layoutMode === 1) no frames render and the session fills the area — identical
-              to the pre-split behavior. */}
+          {!activeTabId && (
+            <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
+              <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+              <span className="opacity-60">·</span>
+              <span>No active terminal</span>
+              {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
+            </div>
+          )}
+          {/* Session content; hidden panes remain mounted to preserve terminal scroll state. */}
           <div className="flex-1 relative isolate min-h-0 mt-1">
+            {fullscreenTabId && <FullscreenRestoreControl sessionName={activeTabs.find(tab => tab.id === fullscreenTabId)?.name} onRestore={() => setFullscreenPane(null)} />}
             {activeTabs.length === 0 ? (
-              <WaitingPane
-                dark={!!appSettings.darkMode}
-                onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
-                onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
-                workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
-                customArtUrl={idleArtUrl}
-              />
+              waitingPane
             ) : (
               <>
+                {/* Keep sessions mounted while the group index catches up after a layout change. */}
+                {visibleTabs.length === 0 && <div className="absolute inset-0 z-30">{waitingPane}</div>}
                 {/* Empty-pane frames (split view only). Filled panes draw their own chrome in
                     the session wrapper below (so the header sits above the native RDP window).
                     Each frame is a drop target and hosts a quick-pick to fill the slot. */}
-                {layoutMode > 1 && Array.from({ length: layoutMode }).map((_, i) => {
+                {layoutMode > 1 && !fullscreenTabId && Array.from({ length: layoutMode }).map((_, i) => {
                   if (panes[i]) return null
                   const isFocused = i === focusedPane
                   const isDropTarget = dragPane !== null && dragPane !== i
@@ -314,8 +345,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     >
                       <div
                         onMouseDown={() => setFocusedPane(i)}
-                        // The focused pane is outlined in its OWN hue, so it matches the tab that lives
-                        // in it rather than the one global accent.
                         style={isFocused && !isDropTarget ? { borderColor: paneIdentity(i).color } : undefined}
                         className={`h-full w-full flex flex-col rounded-lg border ${
                           isDropTarget ? 'border-dashed border-theme-accent' : isFocused ? '' : 'border-theme-border'
@@ -329,7 +358,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             dark={!!appSettings.darkMode}
                             compact
                             paneIndex={i}
-                            openSessionCount={activeTabs.length}
+                            openSessionCount={visibleTabs.length}
                             onNewSession={() => { setFocusedPane(i); requestNewSession(undefined, model.selectedWorkspaceId) }}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
                             workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
@@ -343,9 +372,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 })}
   
                 {/* Draggable boundaries. Above the frames, below the pane content. */}
-                <PaneResizers mode={layoutMode} ratios={splitRatios}
+                {!fullscreenTabId && <PaneResizers mode={layoutMode} ratios={splitRatios}
                   split3Style={appSettings.split3Style ?? 'left'} split2Style={appSettings.split2Style ?? 'columns'}
-                  onChange={setSplitRatios} onCommit={persistRatios} />
+                  onChange={setSplitRatios} onCommit={persistRatios} />}
   
                 {/* Session views — one per open tab, positioned into its pane (or hidden). */}
                 {activeTabs.map(tab => {
@@ -354,12 +383,15 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   const terminalTheme = themes.find(theme => theme.id === (appearance.themeId ?? appSettings.themeId)) ?? currentTheme
                   const terminalFontSize = appearance.fontSize ?? appSettings.fontSize
                   const terminalTarget = { id: tab.id, connId: tab.connId }
-                  const paneIdx = panes.findIndex((p, i) => p === tab.id && i < layoutMode)
-                  const visible = paneIdx !== -1
-                  const split = visible && layoutMode > 1
-                  const isFocused = paneIdx === focusedPane
+                  const sourcePaneIdx = panes.findIndex((p, i) => p === tab.id && i < layoutMode)
+                  const visible = fullscreenTabId ? tab.id === fullscreenTabId : sourcePaneIdx !== -1
+                  const paneIdx = fullscreenTabId ? 0 : sourcePaneIdx
+                  const split = !fullscreenTabId && visible && layoutMode > 1
+                  const isFocused = sourcePaneIdx === focusedPane
                   const isDropTarget = split && dragPane !== null && dragPane !== paneIdx
-                  const style: React.CSSProperties = visible && layoutMode > 1
+                  const style: React.CSSProperties = fullscreenTabId && visible
+                    ? { left: 0, top: 0, width: '100%', height: '100%' }
+                    : visible && layoutMode > 1
                     ? paneRect(paneIdx, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)
                     : { left: 0, top: 0, width: '100%', height: '100%' }
                   const editor = editorTabs[tab.id]
@@ -378,7 +410,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       id={tab.id}
                       connection={conn}
                       active={visible}
-                      paneEpoch={`${layoutMode}:${paneIdx}`}
+                      paneEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       overlayActive={isOverlayOpen}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onLatency={(ms: number | null) => setLatency(tab.id, ms)}
@@ -396,7 +428,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       // A hidden pane keeps its layout box, so it can no longer infer this from its
                       // own size — it has to be told. Drives focus and the scroll-tail restore.
                       active={visible}
-                      layoutEpoch={`${layoutMode}:${paneIdx}`}
+                      layoutEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       darkMode={appSettings.darkMode}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onMetrics={(m) => setMetric(tab.id, m)}
@@ -421,12 +453,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   return (
                     <div
                       key={tab.id}
-                      onMouseDownCapture={() => { if (visible) setFocusedPane(paneIdx) }}
+                      onMouseDownCapture={() => { if (visible && sourcePaneIdx >= 0) setFocusedPane(sourcePaneIdx) }}
                       onDragOver={split ? (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' } : undefined}
                       onDrop={split ? (e) => { e.preventDefault(); onPaneDrop(e, paneIdx) } : undefined}
                       // `pane-offscreen`, not Tailwind's `hidden`: `display: none` destroys an
-                      // xterm pane's scroll position and forces a re-fit on every tab switch —
-                      // see the rule's own comment in index.css.
+                      // xterm pane's scroll position and forces a re-fit on every tab switch — see the rule's own comment in index.css.
                       className={`absolute ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''}`}
                       style={style}
                     >
@@ -449,7 +480,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             )}
           </div>
         </div>
-  
         {/* ── Connection form modal ────────────────────────────────────────── */}
         {connFormOpen && connFormTarget && (
           <ConnectionForm
@@ -463,11 +493,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             onSave={handleSaveConnection}
           />
         )}
-  
-  
-  
-        {/* ── Settings modal (About + Backup + Updates + Shortcuts) ─────────── */}
-      <MainLayoutOverlays model={model} />
-    </div>
-  )
+        <MainLayoutOverlays model={model} />
+        {blurOpen && blurAvailable && <BlurSettingsOverlay value={blurValue} onChange={blurInactiveWindow => { const next = { ...appSettings, blurInactiveWindow }; setAppSettings(next); window.omnitermAPI.settings.save(next) }} onClose={() => setBlurOpen(false)} />}
+    </div>)
 }
