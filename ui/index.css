@@ -154,7 +154,6 @@ a {
 .pane-offscreen {
   visibility: hidden;
   pointer-events: none;
-  transform: translateX(-200vw);
 }
 
 /* Dynamic border-radius overrides */

@@ -153,6 +153,7 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
     let payload = tauri::async_runtime::block_on(open_quick_shell(
         handle.clone(),
         Some(native_shell().to_string()),
+        None,
     ))
     .unwrap();
     let direct_id = payload["id"].as_str().unwrap().to_string();
@@ -220,6 +221,7 @@ fn quick_shell_command_rejects_unsupported_renderer_input() {
     let result = tauri::async_runtime::block_on(open_quick_shell(
         app.handle().clone(),
         Some("../../evil".to_string()),
+        None,
     ));
     assert!(result.is_err());
 }

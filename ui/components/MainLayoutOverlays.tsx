@@ -16,7 +16,7 @@ import { CtxItem, DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen } = model
+  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen } = model
   return (
     <>
           {alwaysAwakeOpen && (
@@ -197,10 +197,17 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
                 style={{ left: shellMenu.x, top: shellMenu.y }}
                 onClick={(e) => e.stopPropagation()}
               >
+                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-theme-dim">Workspace</div>
+                <CtxItem label="None (default directory)" icon={<Terminal className="w-3.5 h-3.5" />} color={selectedWorkspaceId === null ? 'text-theme-accent' : 'text-theme-fg'} onClick={() => setSelectedWorkspaceId(null)} />
+                {workspaces.map(workspace => (
+                  <CtxItem key={workspace.id} label={workspace.name} icon={<Terminal className="w-3.5 h-3.5" />} color={workspace.id === selectedWorkspaceId ? 'text-theme-accent' : 'text-theme-fg'} onClick={() => setSelectedWorkspaceId(workspace.id)} />
+                ))}
+                <div className="h-px bg-theme-border my-1 mx-2" />
+                <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-theme-dim">Shell</div>
                 {/* Only shells the backend can really start. The old hardcoded list included "Git Bash",
                     which is not a LocalShell — clicking it failed with nothing shown to the user. */}
                 {shellOptions.map(opt => (
-                  <CtxItem key={opt.id} label={opt.label} icon={<Terminal className="w-3.5 h-3.5" />} color="text-theme-fg" onClick={() => { requestNewSession(opt.id); setShellMenu(null) }} />
+                  <CtxItem key={opt.id} label={opt.label} icon={<Terminal className="w-3.5 h-3.5" />} color="text-theme-fg" onClick={() => { selectedWorkspaceId === null ? requestNewSession(opt.id) : requestNewSession(opt.id, selectedWorkspaceId); setShellMenu(null) }} />
                 ))}
               </div>
             </div>

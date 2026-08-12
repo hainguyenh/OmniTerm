@@ -155,6 +155,10 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             connection={meta.connection}
             mode="attach"
             onStatus={setStatus}
+            onTitleChange={(title) => {
+              const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)
+              if (clean) setMeta(previous => previous ? { ...previous, name: clean, connection: { ...previous.connection, name: clean } } : previous)
+            }}
             darkMode={appSettings.darkMode}
             theme={terminalTheme}
             fontSize={fontSize}

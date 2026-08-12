@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Plus, Trash2, Copy, Check, Moon, Sun, FolderOpen, RefreshCw, RotateCcw, Save, Undo2 } from 'lucide-react'
 import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT } from '../themes'
 import type { ColorField, ThemeMode } from '../utils/themeVars'
@@ -37,9 +37,33 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [frame, setFrame] = useState({ x: 0, y: 0, width: 1200, height: 720 })
+  const interaction = useRef<{ kind: 'move' | 'resize'; x: number; y: number; frame: typeof frame } | null>(null)
+  const currentThemeRef = useRef(currentTheme.id)
+
+  useEffect(() => {
+    const move = (event: PointerEvent) => {
+      const current = interaction.current
+      if (!current) return
+      const dx = event.clientX - current.x
+      const dy = event.clientY - current.y
+      setFrame(current.kind === 'move'
+        ? { ...current.frame, x: current.frame.x + dx, y: current.frame.y + dy }
+        : { ...current.frame, width: Math.max(720, current.frame.width + dx), height: Math.max(480, current.frame.height + dy) })
+    }
+    const stop = () => { interaction.current = null }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', stop)
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', stop) }
+  }, [])
 
   const selectedTheme = themes.find(t => t.id === selectedThemeId) ?? currentTheme
   const { draft, dirty, setName, setColor, setUiField, revert, adoptPalette } = useThemeDraft(selectedTheme)
+  useEffect(() => {
+    const changedExternally = currentThemeRef.current !== currentTheme.id
+    currentThemeRef.current = currentTheme.id
+    if (isOpen && !dirty && (changedExternally || !themes.some(theme => theme.id === selectedThemeId))) setSelectedThemeId(currentTheme.id)
+  }, [currentTheme.id, dirty, isOpen, selectedThemeId, themes])
 
   const guardedClose = useCallback(() => (dirty ? setConfirmDiscard(true) : onClose()), [dirty, onClose])
   useEscToClose(dirty, onClose, () => setConfirmDiscard(true), isOpen && !confirmDiscard)
@@ -90,7 +114,10 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
     if (appSettings.themeId === theme.id) await persistSelection(fallbackId)
   }
 
-  const handleApply = () => persistSelection(draft.id)
+  const handleApply = async () => {
+    setSelectedThemeId(draft.id)
+    await persistSelection(draft.id)
+  }
 
   /** Write the draft to its JSON file. The applied theme picks the change up through the refreshed list. */
   const handleSave = async () => {
@@ -135,9 +162,18 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
       style={{ backgroundColor: 'var(--theme-overlay)' }}
     >
-      <div className="flex h-[92vh] w-[min(1500px,96vw)] flex-col overflow-hidden rounded-2xl border border-theme-border bg-theme-popup text-theme-fg shadow-2xl">
+      <div
+        className="relative flex max-h-[94vh] max-w-[96vw] flex-col overflow-hidden rounded-2xl border border-theme-border bg-theme-popup text-theme-fg shadow-2xl"
+        style={{ width: `${frame.width}px`, height: `${frame.height}px`, transform: `translate(${frame.x}px, ${frame.y}px)` }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 border-b border-theme-border px-4 py-3">
+        <div
+          className="flex cursor-move items-center justify-between gap-4 border-b border-theme-border px-4 py-3"
+          onPointerDown={(event) => {
+            if ((event.target as HTMLElement).closest('button, input')) return
+            interaction.current = { kind: 'move', x: event.clientX, y: event.clientY, frame }
+          }}
+        >
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-theme-fg">Theme Remix</h2>
             <p className="text-xs text-theme-dim">
@@ -361,6 +397,15 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
             </div>
           </section>
         </div>
+        <button
+          type="button"
+          aria-label="Resize Theme Remix"
+          className="absolute bottom-0 right-0 h-5 w-5 cursor-se-resize text-theme-dim/70 hover:text-theme-fg"
+          onPointerDown={(event) => {
+            event.preventDefault()
+            interaction.current = { kind: 'resize', x: event.clientX, y: event.clientY, frame }
+          }}
+        >↘</button>
       </div>
     </div>
   )

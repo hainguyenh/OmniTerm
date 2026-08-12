@@ -204,8 +204,19 @@ pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, Stri
 pub async fn open_quick_shell<R: Runtime>(
     app: AppHandle<R>,
     shell: Option<String>,
+    workspace_id: Option<String>,
 ) -> Result<Value, String> {
-    let req = quick_shell_request(shell.as_deref())?;
+    let mut req = quick_shell_request(shell.as_deref())?;
+    if let Some(id) = workspace_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
+        let workspace = crate::workspace::read_workspaces(&app)?
+            .into_iter()
+            .find(|workspace| workspace.id == id)
+            .ok_or_else(|| format!("Unknown workspace \"{id}\"."))?;
+        if !std::path::Path::new(&workspace.path).is_dir() {
+            return Err("Workspace path is invalid.".to_string());
+        }
+        req.cwd = Some(workspace.path);
+    }
     Ok(register(&app, req).1)
 }
 

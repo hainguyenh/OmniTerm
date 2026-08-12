@@ -20,6 +20,7 @@ interface PaneHeaderProps {
   paneIndex: number
   /** Null while the pane is empty. */
   conn: Connection | null
+  sessionTitle?: string
   focused: boolean
   sessionId: string | null
   tabs: SessionTabItem[]
@@ -30,6 +31,7 @@ interface PaneHeaderProps {
   pickerOpen: boolean
   /** Shared with MainLayout's outside-click handler, which closes whichever picker is open. */
   pickerRef: React.RefObject<HTMLDivElement>
+  pickerAnchor?: DOMRect | null
   /**
    * Direction of this pane's detach/attach button, or null to omit it (see detachControl.ts). Every
    * dock carries its own copy so a session can be popped out or folded back without first being made
@@ -57,8 +59,8 @@ interface PaneHeaderProps {
 }
 
 const PaneHeader: React.FC<PaneHeaderProps> = ({
-  paneIndex, conn, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
-  pickerOpen, pickerRef, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
+  paneIndex, conn, sessionTitle, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
+  pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
   onAssign, onClear, onClose, appearance,
 }) => {
   const identity = paneIdentity(paneIndex)
@@ -90,7 +92,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
             {conn.type === 'RDP'
               ? <Monitor className="w-3 h-3 flex-shrink-0" />
               : <Terminal className="w-3 h-3 flex-shrink-0" />}
-            <span className="truncate font-medium min-w-0 flex-1">{conn.name}</span>
+            <span className="truncate font-medium min-w-0 flex-1">{sessionTitle ?? conn.name}</span>
             {sessionId && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[statuses[sessionId] ?? 'connecting']}`} />}
           </>
         ) : (
@@ -145,7 +147,8 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
       {pickerOpen && (
         <div
           ref={pickerRef}
-          className="absolute top-full left-0 mt-0.5 z-50 bg-theme-popup border border-theme-border rounded-lg shadow-2xl py-1 min-w-[190px] max-h-[260px] overflow-y-auto no-scrollbar"
+          className="fixed z-50 bg-theme-popup border border-theme-border rounded-lg shadow-2xl py-1 min-w-[190px] max-h-[260px] overflow-y-auto no-scrollbar"
+          style={pickerAnchor ? { left: Math.max(8, Math.min(pickerAnchor.left, window.innerWidth - 205)), top: Math.min(pickerAnchor.bottom + 4, window.innerHeight - 270) } : undefined}
         >
           {panes[paneIndex] && (
             <button

@@ -137,7 +137,8 @@ describe('navigation and empty-session shell', () => {
         onChooseSession={onChooseSession}
       />,
     )
-    expect(screen.getByTitle('Pane 3 · violet hexagon')).toBeInTheDocument()
+    expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Terminal workspace' })).toBeInTheDocument()
     expect(screen.queryByText('Ctrl+N')).not.toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'asset://idle.png')
     expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })

@@ -104,7 +104,7 @@ describe('small UI shells', () => {
 
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ left: 2, bottom: 9 } as DOMRect)
     rerender(<WaitingPane dark compact paneIndex={1} openSessionCount={3} onNewSession={open} onPickShell={pick} onChooseSession={choose} />)
-    expect(screen.getByTitle(/Pane 2/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Terminal workspace' })).toBeInTheDocument()
     expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('New Terminal'))
     fireEvent.click(screen.getByTitle('Select Shell'))

@@ -1,7 +1,8 @@
 import React from 'react'
 import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
 import { DefaultIdleArt } from '../assets/defaultArt'
-import { paneIdentity } from '../paneIdentity'
+import WorkspaceSelect from './WorkspaceSelect'
+import type { Workspace } from '@omniterm/contract'
 
 /**
  * The "nothing here yet" page. Used both for the whole content area (no tabs at all) and inside every
@@ -14,9 +15,12 @@ interface WaitingPaneProps {
   /** Rendered inside a split pane: smaller art, no keyboard hint. */
   compact?: boolean
   onNewSession: () => void
+  workspaces?: Workspace[]
+  selectedWorkspaceId?: string | null
+  onWorkspaceChange?: (id: string | null) => void
   onPickShell: (rect: DOMRect) => void
   /** Omitted in single view, where there is no other pane to adopt a session from. */
-  onChooseSession?: () => void
+  onChooseSession?: (rect: DOMRect) => void
   /** Sessions currently open — shown on the adopt button so an empty strip is obvious. */
   openSessionCount?: number
   /** Set inside a split pane: names the pane in its own shape + hue (see paneIdentity.ts). */
@@ -26,7 +30,7 @@ interface WaitingPaneProps {
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
-  dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, paneIndex, customArtUrl,
+  dark, compact = false, onNewSession, onPickShell, onChooseSession, workspaces = [], selectedWorkspaceId = null, onWorkspaceChange = () => {}, openSessionCount = 0, customArtUrl,
 }) => (
   <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
     <div className={`min-h-full w-full flex flex-col items-center justify-center ${
@@ -59,17 +63,9 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         </div>
 
         <div className="text-center px-3 max-w-full flex-shrink-0">
-          {paneIndex !== undefined && (() => {
-            const identity = paneIdentity(paneIndex)
-            const Shape = identity.icon
-            return (
-              <p className="flex items-center justify-center gap-1 mb-1 text-[10px] font-bold uppercase tracking-wider"
-                style={{ color: identity.color }} title={`Pane ${paneIndex + 1} · ${identity.label}`}>
-                <Shape className="w-3 h-3" fill={identity.color} />
-                Pane {paneIndex + 1}
-              </p>
-            )
-          })()}
+          <div className="flex flex-col items-center gap-1 mb-2">
+            <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
+          </div>
           {!compact && (
             <p className="font-semibold text-[var(--theme-fg)] opacity-50 text-sm">
               Open a terminal
@@ -83,7 +79,8 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         </div>
 
         <div className="flex items-center justify-center flex-wrap gap-2.5 max-w-full flex-shrink-0">
-          <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
+          <div className="flex items-center gap-1">
+            <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
             <button
               type="button"
               onClick={onNewSession}
@@ -103,10 +100,11 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
           </div>
+          </div>
           {onChooseSession && (
             <button
               type="button"
-              onClick={onChooseSession}
+              onClick={(e) => onChooseSession(e.currentTarget.getBoundingClientRect())}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-theme-border text-theme-dim text-xs hover:text-theme-accent hover:border-theme-accent transition-colors"
             >
               <LayoutGrid className="w-3.5 h-3.5" />

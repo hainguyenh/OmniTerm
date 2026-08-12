@@ -19,7 +19,8 @@
 export async function openNewSession(
   shell: string,
   onConnect: (conn: any) => void,
+  workspaceId?: string | null,
 ): Promise<void> {
-  const conn = await window.omnitermAPI.shells.open(shell)
+  const conn = await window.omnitermAPI.shells.open(shell, workspaceId)
   if (conn) onConnect(conn)
 }
