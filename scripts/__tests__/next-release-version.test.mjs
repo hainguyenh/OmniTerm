@@ -113,6 +113,14 @@ test('the release workflow stamps the resolved version before building', () => {
   assert.ok(stamp < build, 'the version must be stamped before Tauri names the installer')
 })
 
+test('the release passes the bundle config through pnpm without an npm-style separator', () => {
+  assert.match(
+    workflow,
+    /run: pnpm build:tauri:nsis --config \.omniterm-build\/tauri\.bundle-plugin\.json/,
+  )
+  assert.doesNotMatch(workflow, /pnpm build:tauri:nsis -- --config/)
+})
+
 test('the tag is pushed only after the build job succeeded, and master is never written to', () => {
   // A tag pushed before the build would point at a version that never shipped. And master requires
   // pull requests: a release that commits its version bump there is rejected by the branch ruleset,
