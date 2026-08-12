@@ -20,6 +20,57 @@ This file is the canonical repository instruction source. Keep tool-specific fil
 - Use `pnpm` exclusively for JavaScript and TypeScript commands; do not use npm or yarn.
 - Do not commit or push unless the user explicitly asks.
 
+## Code writing rules
+
+### Source-size limits
+
+| File type | Maximum lines |
+|---|---:|
+| `.ts` | 400 |
+| `.tsx` | 500 |
+| `.js`, `.mjs`, `.cjs` | 350 |
+| `.css` | 600 |
+| `.rs` | 400 |
+
+- Limits apply to production and test code. Generated, vendored, submodule, coverage, and build output are exempt.
+- Split an oversized file by responsibility. Never compress code, remove useful whitespace, or combine unrelated statements to evade a limit.
+
+### Warnings, unused code, and suppressions
+
+- Treat every ESLint, TypeScript, Rust compiler, and Clippy warning as an error.
+- Remove unused imports, variables, parameters, exports, files, and modules.
+- Prefix a name with `_` only when a required callback signature or intentional destructuring leaves it unused. Do not use `_` to retain dead code.
+- Keep lint suppression scoped to the smallest expression or line, name the exact rule, and explain why the exception is safe. Do not add file-wide disables without an explicit requirement.
+
+### TypeScript, React, and JavaScript
+
+- Keep TypeScript strict. Prefer `unknown` plus narrowing over `any`, and never cast only to silence the compiler.
+- Validate external, persisted, versioned, plugin, and IPC data at its boundary. Keep requests, responses, and errors explicitly typed.
+- Format with two-space indentation, single quotes, no semicolons, trailing commas in multiline constructs, one statement per line, a final newline, and no trailing whitespace.
+- Group imports as external packages, workspace/internal modules, then relative modules, with a blank line between groups. Use `import type` for type-only dependencies.
+- Use ESM in the frontend, contract, and repository scripts. Use CommonJS only in packages or sidecars that explicitly declare it.
+- Use PascalCase for components and types, camelCase for functions and variables, `use*` for hooks, and UPPER_SNAKE_CASE for module-level constants.
+- Prefer named exports. Reserve default exports for framework or configuration entry points that require them.
+- Keep rendering pure where practical. Move domain transformations out of JSX and view components, derive values instead of mirroring them with effects, and clean up listeners, channels, subscriptions, and timers.
+- Do not use `console` outside the repository's existing diagnostics and test exceptions; route application diagnostics through `diag`.
+- Colocate single-use values. Extract genuinely shared or repeated domain values into focused modules instead of creating catch-all `constants.ts` or `enums.ts` files.
+- Prefer literal unions or `as const` maps over TypeScript `enum` unless runtime enum behavior is required.
+
+### Rust
+
+- Format new or changed Rust code with `rustfmt`; code must pass Clippy with warnings denied.
+- Follow Rust naming conventions and use the narrowest practical visibility.
+- Do not add `unwrap` or `expect` on reachable runtime or input paths. In tests or proven internal invariants, include a useful failure message.
+- Use `Result`, `?`, and meaningful error context for fallible operations. Do not panic for expected failures.
+- Do not hold a lock across `.await`; avoid needless clones, allocations, collections, and owned strings.
+- Preserve crate boundaries: protocol contains shared DTOs, core remains reusable and Tauri-free, and `src-tauri` stays a thin desktop adapter.
+
+### CSS and comments
+
+- Format CSS with two-space indentation and one declaration per line. Keep selectors shallow and specificity low.
+- Prefer existing design tokens and Tailwind utilities over repeated magic values. Avoid ID selectors and unexplained `!important` declarations.
+- Write comments for intent, invariants, security constraints, platform differences, or non-obvious tradeoffs. Do not narrate the code or leave TODOs without actionable context.
+
 ## Tests and quality gates
 
 - Every feature or functional behavior change requires unit tests. Every bug fix requires a regression test.

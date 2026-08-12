@@ -200,6 +200,17 @@ export const ThemePreview: React.FC<{ theme: AppTheme; mode: ThemeMode }> = ({ t
             </div>
           </Row>
 
+          <Row note="AI agent">
+            <div className="space-y-1 rounded-md p-1.5 font-mono text-[9px]" style={{ backgroundColor: termBg, color: termFg }}>
+              <div className="flex items-center gap-1" style={{ color: xterm.cyan }}>
+                <span className="font-bold" style={{ color: xterm.blue }}>agent</span>
+                <span style={{ color: xterm.brightBlack }}>›</span>
+                <span>Inspect terminal output</span>
+              </div>
+              <div style={{ color: xterm.green }}>✓ Ready to apply changes</div>
+            </div>
+          </Row>
+
           <Row note="radius / spacing">
             <div className="flex items-center gap-1">
               {(['sm', 'md', 'lg', 'xl'] as const).map((size) => (

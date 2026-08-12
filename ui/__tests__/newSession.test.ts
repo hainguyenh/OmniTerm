@@ -27,8 +27,15 @@ describe('openNewSession', () => {
 
     await openNewSession('powershell', (c) => connected.push(c))
 
-    expect(open).toHaveBeenCalledWith('powershell')
+    expect(open).toHaveBeenCalledWith('powershell', undefined)
     expect(connected).toEqual([record])
+  })
+
+  it('passes the selected workspace through to the backend', async () => {
+    const open = vi.fn().mockResolvedValue({ id: 'adhoc-8', type: 'LOCAL' })
+    setBridge({ open })
+    await openNewSession('powershell', vi.fn(), 'ws#1')
+    expect(open).toHaveBeenCalledWith('powershell', 'ws#1')
   })
 
   it('opens nothing when the backend returns no record', async () => {

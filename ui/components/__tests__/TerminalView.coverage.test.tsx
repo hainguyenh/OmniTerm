@@ -356,15 +356,11 @@ describe('TerminalView full lifecycle', () => {
     width.mockReturnValue(640)
   })
 
-  // A hidden pane keeps its layout box on purpose (index.css `.pane-offscreen`), so geometry cannot
-  // tell it whether it is on screen — `active` does. It drives keyboard focus, and it restores the
-  // live tail for a pane the user left at the bottom.
   it('focuses and re-pins to the tail only on the hidden→visible edge', () => {
     installApi()
     const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
     const { rerender } = render(<TerminalView id="vis" connection={localConnection} active={false} />)
     const term = xterm.terminals[0]
-    // Mounted hidden: it must not steal focus from whichever pane IS visible.
     expect(term.focus).not.toHaveBeenCalled()
     expect(term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon)).toHaveLength(0)
 
@@ -373,7 +369,6 @@ describe('TerminalView full lifecycle', () => {
     expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
     expect(term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon)).toHaveLength(1)
 
-    // Scrolled up to read history, then hidden and shown again: the position is left alone.
     term.buffer.active.baseY = 500
     rerender(<TerminalView id="vis" connection={localConnection} active={false} />)
     rerender(<TerminalView id="vis" connection={localConnection} active />)
@@ -381,15 +376,20 @@ describe('TerminalView full lifecycle', () => {
     width.mockReturnValue(640)
   })
 
-  // Reloading the renderer on each visibility edge rebuilt its texture atlas from empty, and painting
-  // from an empty atlas is what the white/black flash on a tab switch was. The addon is loaded once,
-  // when real dimensions first exist, and held until unmount; utils/webglPool.ts owns the browser's
-  // context budget instead.
+  it('refits and repaints when the layout mode changes while the pane stays visible', () => {
+    installApi()
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+    const { rerender } = render(<TerminalView id="layout-epoch" connection={localConnection} active layoutEpoch="1:0" />)
+    const fit = xterm.fits[0].fit
+    fit.mockClear()
+
+    rerender(<TerminalView id="layout-epoch" connection={localConnection} active layoutEpoch="2:0" />)
+
+    expect(fit).toHaveBeenCalled()
+  })
+
   it('loads the WebGL addon once and holds it across visibility changes', () => {
     installApi()
-    // Fake only setTimeout: the coalescer's trailing timeout needs to be controllable, but
-    // requestAnimationFrame must stay on the synchronous stub from beforeEach (the initial fit relies
-    // on it firing immediately on mount).
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
       const disposeSpy = vi.spyOn(WebglAddon.prototype, 'dispose')

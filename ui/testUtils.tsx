@@ -244,7 +244,7 @@ const defaults: Api = {
     ready: () => {},
     release: () => {},
     // Tauri-only: registers an unsaved shell and returns the record to open a pane with.
-    open: (shell?: string) =>
+    open: (shell?: string, _workspaceId?: string | null) =>
       Promise.resolve({ id: 'adhoc-test', name: 'PowerShell', type: 'LOCAL', shell: shell ?? 'default' }),
     // Tauri-only probe of the shells this machine can start. Read at call time so a test that
     // overrides `app.platform` gets that platform's shells, as the real backend would.
