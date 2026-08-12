@@ -65,4 +65,13 @@ describe('PaneHeader remaining behavior', () => {
     fireEvent.dragStart(header)
     expect(x.props.onDragStart).not.toHaveBeenCalled()
   })
+
+  it('toggles pane focus mode from the pane chrome', () => {
+    const onToggleFullscreen = vi.fn()
+    const x = setup({ fullscreen: false, onToggleFullscreen })
+    fireEvent.click(screen.getByRole('button', { name: 'Focus pane full screen' }))
+    expect(onToggleFullscreen).toHaveBeenCalled()
+    x.rerender(<PaneHeader {...x.props} fullscreen />)
+    expect(screen.getByRole('button', { name: 'Restore view mode' })).toBeInTheDocument()
+  })
 })

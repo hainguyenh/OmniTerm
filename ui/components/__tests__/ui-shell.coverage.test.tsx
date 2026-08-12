@@ -68,6 +68,27 @@ describe('small UI shells', () => {
     expect(onAlwaysAwakeClick).toHaveBeenCalled()
   })
 
+  it('pins Blur above Always Awake and reports its enabled state', () => {
+    const onBlurClick = vi.fn()
+    render(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        onViewChange={vi.fn()}
+        onSettingsClick={vi.fn()}
+        blurAvailable
+        blurEnabled
+        onBlurClick={onBlurClick}
+        alwaysAwakeAvailable
+      />,
+    )
+    const blur = screen.getByTitle('Blur inactive windows (on)')
+    const awake = screen.getByTitle('Always Awake')
+    expect(blur.nextElementSibling).toBe(awake)
+    fireEvent.click(blur)
+    expect(onBlurClick).toHaveBeenCalled()
+  })
+
   it('confirms and cancels closing from buttons, escape, checkbox, and backdrop', () => {
     const onConfirm = vi.fn()
     const onCancel = vi.fn()

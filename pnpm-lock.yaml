@@ -144,6 +144,15 @@ importers:
         specifier: ^5.2.2
         version: 5.9.3
 
+  plugins/blur:
+    devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.1.1
+      typescript:
+        specifier: ^5.2.2
+        version: 5.9.3
+
   plugins/full-connection-manager:
     devDependencies:
       '@types/node':

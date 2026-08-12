@@ -19,6 +19,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { attachSession, failSession, onSession, startSession } from './tauriSessions'
 import { diag } from './diag'
 import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
+import { createUpdateAPI } from './updateChecker'
 
 /**
  * Subscribe to a Tauri event, returning a synchronous unsubscribe.
@@ -84,6 +85,8 @@ function createTauriAPI(): any {
   // anchored, unlike a CSS `zoom` on <body>. Track the factor locally rather than re-reading it, and
   // fall back to the CSS property only if the native call is refused (e.g. zoom disabled by policy).
   let zoomFactor = 1
+
+  const updates = createUpdateAPI(() => invoke<string>('get_version'))
 
   return {
     connections: {
@@ -331,17 +334,7 @@ function createTauriAPI(): any {
         invoke('delete_workspace_connection', { workspaceId, connectionId }),
     },
 
-    // The updater is a later phase; these are the "no update available" values.
-    updates: {
-      check: () => Promise.resolve(null),
-      state: () => Promise.resolve(null),
-      skip: (_version: string | null) => Promise.resolve(undefined),
-      getVersion: () => invoke<string>('get_version'),
-      showSaveDialog: (_defaultName: string) => Promise.resolve(null),
-      downloadPortable: (_savePath: string) => Promise.resolve(),
-      downloadInstaller: (_installNow: boolean) => Promise.resolve(),
-      onState: (_cb: (state: any) => void) => (() => {}),
-    },
+    updates,
 
     themes: {
       list: () => invoke('list_themes'),

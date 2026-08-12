@@ -1,6 +1,6 @@
 [package]
 name = "omniterm-protocol"
-version = "0.1.2"
+version = "0.1.3"
 description = "Shared DTO types for OmniTerm — frontend ↔ Tauri commands ↔ sidecar."
 authors = ["OmniTerm Contributors"]
 license = "Apache-2.0"

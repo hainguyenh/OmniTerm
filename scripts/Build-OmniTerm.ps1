@@ -13,6 +13,7 @@ $Stage = Join-Path $RepoRoot '.omniterm-build'
 $FullPlugin = Join-Path $RepoRoot 'plugins\full-connection-manager'
 $LimitedPlugin = Join-Path $RepoRoot 'plugins\native-batch-connections'
 $AlwaysAwakePlugin = Join-Path $RepoRoot 'plugins\always-awake'
+$BlurPlugin = Join-Path $RepoRoot 'plugins\blur'
 
 function Write-Title([string]$Text) {
   Write-Host ''
@@ -37,14 +38,18 @@ function Select-Plugin {
   Write-Host '    1. Full Remote Suite (metadata only; never stores passwords)'
   Write-Host '    2. Limited Connections (OS launch scripts; never stores passwords)'
   Write-Host '    3. Always Awake (Windows sleep prevention)'
-  do { $choice = Read-Host '  Select plugin [1-3]' } until ($choice -in @('1', '2', '3'))
+  Write-Host '    4. Blur (inactive-window privacy filter)'
+  do { $choice = Read-Host '  Select plugin [1-4]' } until ($choice -in @('1', '2', '3', '4'))
   if ($choice -eq '1') {
     return @{ Name = 'full'; Path = $FullPlugin }
   }
   if ($choice -eq '2') {
     return @{ Name = 'limited'; Path = $LimitedPlugin }
   }
-  return @{ Name = 'always-awake'; Path = $AlwaysAwakePlugin }
+  if ($choice -eq '3') {
+    return @{ Name = 'always-awake'; Path = $AlwaysAwakePlugin }
+  }
+  return @{ Name = 'blur'; Path = $BlurPlugin }
 }
 
 function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {
@@ -58,8 +63,8 @@ function Initialize-AppArtifacts([string]$Destination) {
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 }
 
-function Copy-PortableArtifacts([string]$Destination, $Plugin, [string]$Profile) {
-  New-PortablePackage -RepoRoot $RepoRoot -Destination $Destination -BuildProfile $Profile -Plugin $Plugin | Out-Null
+function Copy-PortableArtifacts([string]$Destination, $Plugin, [string]$Profile, [object[]]$Plugins = @()) {
+  New-PortablePackage -RepoRoot $RepoRoot -Destination $Destination -BuildProfile $Profile -Plugin $Plugin -Plugins $Plugins | Out-Null
 }
 
 function Build-PluginPackage($Plugin, [string]$Destination) {
@@ -89,6 +94,13 @@ if ($Mode -in @('1', '3')) {
     '2' = 'portable'
     '3' = 'installer and portable'
   }[$outputChoice]
+}
+$PortablePlugins = @()
+if ($OutputFormat -in @('portable', 'installer and portable')) {
+  $PortablePlugins = @(Get-DefaultPortablePlugins -RepoRoot $RepoRoot)
+  if ($null -ne $Plugin -and @($PortablePlugins | Where-Object { $_.Name -eq $Plugin.Name }).Count -eq 0) {
+    $PortablePlugins += $Plugin
+  }
 }
 
 $BuildProfile = 'release'
@@ -147,8 +159,16 @@ if ($Mode -eq '2') {
   if ($BuildProfile -eq 'debug') { $configArgs += '--debug' }
   $buildRoot = Join-Path $RepoRoot "target\$BuildProfile"
   Remove-BuildTree (Join-Path $buildRoot 'plugins') $buildRoot
+  $pluginsToBuild = @()
+  if ($Mode -eq '3') { $pluginsToBuild += $Plugin }
+  $pluginsToBuild += $PortablePlugins
+  $builtPluginNames = @{}
+  foreach ($pluginToBuild in $pluginsToBuild) {
+    if ($builtPluginNames.ContainsKey($pluginToBuild.Name)) { continue }
+    Invoke-Step "Build $($pluginToBuild.Name) plugin" 'pnpm' @('build:plugin', $pluginToBuild.Path)
+    $builtPluginNames[$pluginToBuild.Name] = $true
+  }
   if ($Mode -eq '3') {
-    Invoke-Step "Build $($Plugin.Name) plugin" 'pnpm' @('build:plugin', $Plugin.Path)
     $pluginsStageRoot = Join-Path $Stage 'plugins'
     Remove-BuildTree $pluginsStageRoot $Stage
     $pluginStage = Join-Path $Stage "plugins\$($Plugin.Name)"
@@ -192,7 +212,7 @@ if ($Mode -eq '2') {
     Copy-BundleArtifacts $destination $BuildProfile
   }
   if ($OutputFormat -in @('portable', 'installer and portable')) {
-    Copy-PortableArtifacts $destination $(if ($Mode -eq '3') { $Plugin } else { $null }) $BuildProfile
+    Copy-PortableArtifacts $destination $null $BuildProfile $PortablePlugins
   }
 }
 

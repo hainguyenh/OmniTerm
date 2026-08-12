@@ -61,6 +61,13 @@ describe('DetachedTerminalWindow', () => {
     expect(terminalProps.connection).toEqual(connection)
     expect(terminalProps.smartColors).toBe(true)
 
+    // Title updates must not replace the connection object. TerminalView uses that object as
+    // part of its attach lifecycle; replacing it on every shell title/prompt update remounts the
+    // xterm canvas repeatedly and makes a detached window flash until it is re-attached.
+    act(() => terminalProps.onTitleChange('running command'))
+    expect(screen.getByText('running command')).toBeInTheDocument()
+    expect(terminalProps.connection).toBe(connection)
+
     act(() => terminalProps.onExit(0))
     expect(close).toHaveBeenCalledOnce()
 

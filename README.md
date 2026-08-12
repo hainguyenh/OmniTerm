@@ -43,6 +43,10 @@ Bundled providers:
 - `plugins/native-batch-connections` -- batch-launched SSH/RDP profiles via native client flows
 - `plugins/always-awake` -- Always Awake metadata/UI integration backed by the native Windows
   sleep-prevention capability
+- `plugins/blur` -- Blur inactive windows with an adjustable live-preview control
+
+Release installers and Windows portable archives include Always Awake and Blur automatically. No
+separate plugin installation is required for those distributions.
 
 ### Always Awake
 

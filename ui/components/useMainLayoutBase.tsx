@@ -9,6 +9,9 @@ import { loadShellOptions, pickShell, type ShellOption } from '../shellOptions'
 import { upsertWorkspaceConnection } from '../utils/workspaceConnections'
 import { diag } from '../diag'
 import { DEFAULT_SHORTCUTS, MAX_PLANES, type MainLayoutProps } from './mainLayoutShared'
+import { useViewGroups } from '../hooks/useViewGroups'
+import { useCustomArt } from '../hooks/useCustomArt'
+import { visibleTabsForGroup } from '../viewGroups'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
@@ -58,7 +61,18 @@ export function useMainLayoutBase({
   const [savedConnections, setSavedConnections] = useState<Connection[]>([]);
   const [panes, setPanes] = useState<(string | null)[]>(Array(MAX_PLANES).fill(null));
   const [focusedPane, setFocusedPane] = useState(0);
+  const [fullscreenPane, setFullscreenPane] = useState<number | null>(null)
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreenPane(null)
+    }
+    window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   const activeTabId = panes[focusedPane] ?? null;
+  const { viewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup } = useViewGroups({
+      layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane,
+  })
+  const visibleTabs = visibleTabsForGroup(activeTabs, tabGroups, activeGroupId)
   const [tabMenu, setTabMenu] = useState<{
       x: number;
       y: number;
@@ -82,20 +96,7 @@ export function useMainLayoutBase({
   const [resumeMode, setResumeMode] = useState<Record<string, boolean>>({});
   const [metrics, setMetrics] = useState<Record<string, SessionMetrics>>({});
   const [connectedAt, setConnectedAt] = useState<Record<string, number>>({});
-  // Custom pane art: user-uploaded images for idle and loading states (light and dark).
-  const [idleArtUrlLight, setIdleArtUrlLight] = useState<string | null>(null);
-  const [idleArtUrlDark, setIdleArtUrlDark] = useState<string | null>(null);
-  const [loadingArtUrlLight, setLoadingArtUrlLight] = useState<string | null>(null);
-  const [loadingArtUrlDark, setLoadingArtUrlDark] = useState<string | null>(null);
-  const refreshCustomArt = useCallback(() => {
-    window.omnitermAPI.customArt.get('idle-light').then(setIdleArtUrlLight).catch(() => setIdleArtUrlLight(null));
-    window.omnitermAPI.customArt.get('idle-dark').then(setIdleArtUrlDark).catch(() => setIdleArtUrlDark(null));
-    window.omnitermAPI.customArt.get('loading-light').then(setLoadingArtUrlLight).catch(() => setLoadingArtUrlLight(null));
-    window.omnitermAPI.customArt.get('loading-dark').then(setLoadingArtUrlDark).catch(() => setLoadingArtUrlDark(null));
-  }, []);
-  const idleArtUrl = appSettings.darkMode ? idleArtUrlDark : idleArtUrlLight;
-  const loadingArtUrl = appSettings.darkMode ? loadingArtUrlDark : loadingArtUrlLight;
-  useEffect(() => { refreshCustomArt() }, [refreshCustomArt]);
+  const { idleArtUrl, loadingArtUrl, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, refreshCustomArt } = useCustomArt(!!appSettings.darkMode)
   const setStatus = useCallback((id: string, status: SessionStatus) => {
       setStatuses(prev => (prev[id] === status ? prev : { ...prev, [id]: status }));
   }, []);
@@ -250,7 +251,6 @@ export function useMainLayoutBase({
       error: null,
   });
   const [alwaysAwakeOpen, setAlwaysAwakeOpen] = useState(false);
-  // Always Awake is a plugin contribution, so the app must not offer it unless the plugin is actually
   const [alwaysAwakeAvailable, setAlwaysAwakeAvailable] = useState(false);
   useEffect(() => {
       let unsubscribe: (() => void) | null = null;
@@ -496,5 +496,5 @@ export function useMainLayoutBase({
           await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
       }
   };
-  return { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, setActiveTabs, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, workspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
+  return { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, workspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
 }
