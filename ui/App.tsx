@@ -7,6 +7,7 @@ import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { applyThemeVars, themeCssVars } from './utils/themeVars'
 import { diag } from './diag'
+import { useBlurPlugin } from './hooks/useBlurPlugin'
 
 interface AppSettings {
   themeId: string
@@ -21,6 +22,9 @@ interface AppSettings {
   shortcuts?: ShortcutBindings
   zoomFactor?: number
   blurInactiveWindow?: number
+  blurInactiveDock?: boolean
+  blurEnabled?: boolean
+  shiftEnter?: 'esc-cr' | 'lf' | 'off'
 }
 
 function App() {
@@ -46,6 +50,7 @@ function App() {
   // Which terminal the TitleBar's theme/font controls target — reported up by MainLayout.
   const [activeTerminal, setActiveTerminal] = useState<{ id: string; connId: string } | null>(null)
   const [windowActive, setWindowActive] = useState(true)
+  const { available: blurAvailable } = useBlurPlugin()
   const startupUpdateChecked = useRef(false)
   useEffect(() => {
     const onFocus = () => setWindowActive(true)
@@ -308,7 +313,7 @@ function App() {
         onApplyToAll={applyFontSizeToAll}
       />
       <div className="flex-1 min-h-0 relative">
-        <div className="h-full w-full" style={{ filter: !windowActive && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
+        <div className="h-full w-full" style={{ filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
           <MainLayout
           appSettings={appSettings}
           setAppSettings={setAppSettings}

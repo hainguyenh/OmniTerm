@@ -62,6 +62,8 @@ interface AppSettings {
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
   blurInactiveWindow?: number
+  blurInactiveDock?: boolean
+  blurEnabled?: boolean
   /**
    * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
    * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).

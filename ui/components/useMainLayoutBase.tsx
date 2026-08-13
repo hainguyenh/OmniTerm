@@ -12,6 +12,7 @@ import { DEFAULT_SHORTCUTS, MAX_PLANES, type MainLayoutProps } from './mainLayou
 import { useViewGroups } from '../hooks/useViewGroups'
 import { useCustomArt } from '../hooks/useCustomArt'
 import { visibleTabsForGroup } from '../viewGroups'
+import { paneOrder } from '../paneLayout'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
@@ -27,30 +28,24 @@ export function useMainLayoutBase({
       try { return localStorage.getItem('omniterm:last-workspace') } catch { return null }
   })
   const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null) => {
-      const shell = requestedShell
-          ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
+      const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
       const workspaceId = requestedWorkspaceId === undefined ? selectedWorkspaceId : requestedWorkspaceId;
       void openNewSession(shell, (conn) => {
           try {
               if (workspaceId) localStorage.setItem('omniterm:last-workspace', workspaceId)
               else localStorage.removeItem('omniterm:last-workspace')
           } catch { /* storage is optional */ }
-          handleConnectRef.current(conn as Connection)
-      }, workspaceId)
-          .catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
+          handleConnectRef.current({ ...(conn as Connection), workspaceId: workspaceId ?? undefined })
+      }, workspaceId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
   }, [selectedWorkspaceId])
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
   const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
   useEffect(() => {
-      Promise.all([
-          window.omnitermAPI.plugin.list(),
-          window.omnitermAPI.plugin.connectionCapabilities(),
-      ])
+      Promise.all([window.omnitermAPI.plugin.list(), window.omnitermAPI.plugin.connectionCapabilities()])
           .then(([plugins, capabilities]) => {
-          setHasConnectionProvider(plugins.some(p => p.selectedConnectionProvider && p.enabled));
-          setConnectionCapabilities(capabilities);
-      })
-          .catch(diag.error);
+              setHasConnectionProvider(plugins.some(p => p.selectedConnectionProvider && p.enabled));
+              setConnectionCapabilities(capabilities);
+          }).catch(diag.error);
   }, []);
   const [activeTabs, setActiveTabs] = useState<{
       id: string;
@@ -70,18 +65,20 @@ export function useMainLayoutBase({
   }, [])
   const activeTabId = panes[focusedPane] ?? null;
   const { viewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup } = useViewGroups({
-      layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane,
+      layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane, activeTabs,
   })
-  const visibleTabs = visibleTabsForGroup(activeTabs, tabGroups, activeGroupId)
-  const [tabMenu, setTabMenu] = useState<{
-      x: number;
-      y: number;
-      tabId: string;
-  } | null>(null);
-  const [shellMenu, setShellMenu] = useState<{
-      x: number;
-      y: number;
-  } | null>(null);
+  const visibleTabsUnsorted = visibleTabsForGroup(activeTabs, tabGroups, activeGroupId)
+  const currentPaneOrder = paneOrder(layoutMode, appSettings.split3Style, appSettings.split2Style)
+  const visibleTabs = [...visibleTabsUnsorted].sort((a, b) => {
+    const idxA = panes.findIndex((p, i) => p === a.id && i < layoutMode)
+    const idxB = panes.findIndex((p, i) => p === b.id && i < layoutMode)
+    if (idxA !== -1 && idxB !== -1) return currentPaneOrder.indexOf(idxA) - currentPaneOrder.indexOf(idxB)
+    if (idxA !== -1) return -1
+    if (idxB !== -1) return 1
+    return 0
+  })
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
+  const [shellMenu, setShellMenu] = useState<{ x: number; y: number } | null>(null);
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null);
   const skipCloseConfirmRef = useRef(false);
   const [panePicker, setPanePicker] = useState<number | null>(null);
@@ -392,7 +389,7 @@ export function useMainLayoutBase({
       void (async () => {
           try {
               const workspaces = await window.omnitermAPI.workspace.list();
-              const lists = await Promise.all(workspaces.map(ws => window.omnitermAPI.workspace.loadConnections(ws.id)));
+              const lists = await Promise.all(workspaces.map(ws => window.omnitermAPI.workspace.loadConnections(ws.id).then(conns => conns.map(connection => ({ ...connection, workspaceId: ws.id })))));
               if (!cancelled)
                   setSavedConnections(lists.flat());
           }

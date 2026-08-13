@@ -2,10 +2,13 @@
  * @vitest-environment jsdom
  */
 import type { Terminal } from '@xterm/xterm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTerminalClipboard } from '../terminalClipboard'
 
 describe('terminal clipboard', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
   it('falls back to the browser clipboard when the Tauri bridge rejects', async () => {
     const writeText = vi.fn().mockRejectedValue(new Error('clipboard permission'))
     const browserWrite = vi.fn().mockResolvedValue(undefined)
@@ -43,6 +46,64 @@ describe('terminal clipboard', () => {
 
     expect(readText).toHaveBeenCalledTimes(1)
     expect(term.paste).toHaveBeenCalledTimes(1)
+    clipboard.dispose()
+  })
+
+  it('debounces onSelectionChange auto-copy so rapid drags write once', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    let selectionCb: (() => void) | undefined
+    let currentSelection = ''
+    const term = {
+      getSelection: vi.fn(() => currentSelection),
+      onSelectionChange: vi.fn((cb: () => void) => {
+        selectionCb = cb
+        return { dispose: vi.fn() }
+      }),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn() } }
+
+    const clipboard = createTerminalClipboard(term)
+
+    // Simulate a drag: selection changes rapidly
+    currentSelection = 'H'
+    selectionCb?.()
+    currentSelection = 'He'
+    selectionCb?.()
+    currentSelection = 'Hello World'
+    selectionCb?.()
+
+    // No write yet — debounce has not settled
+    expect(writeText).not.toHaveBeenCalled()
+
+    // Advance past the 80 ms debounce
+    await vi.advanceTimersByTimeAsync(80)
+
+    // Only one write with the final selection
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(writeText).toHaveBeenCalledWith('Hello World')
+
+    clipboard.dispose()
+  })
+
+  it('skips auto-copy when selection is cleared (empty string)', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    let selectionCb: (() => void) | undefined
+    const term = {
+      getSelection: vi.fn(() => ''),
+      onSelectionChange: vi.fn((cb: () => void) => {
+        selectionCb = cb
+        return { dispose: vi.fn() }
+      }),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn() } }
+
+    const clipboard = createTerminalClipboard(term)
+    selectionCb?.()
+    vi.advanceTimersByTime(200)
+
+    expect(writeText).not.toHaveBeenCalled()
     clipboard.dispose()
   })
 })

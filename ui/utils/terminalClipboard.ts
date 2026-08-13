@@ -23,17 +23,36 @@ export interface TerminalClipboard {
  */
 export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => void): TerminalClipboard => {
   let pasteInFlight = false
-  const copySelection = async () => {
-    const sel = term.getSelection()
-    if (!sel) return
+  let copyTimer = 0
+
+  const writeToClipboard = async (text: string) => {
     try {
-      await window.omnitermAPI.clipboard.writeText(sel)
+      await window.omnitermAPI.clipboard.writeText(text)
     } catch {
-      await navigator.clipboard?.writeText(sel)
+      await navigator.clipboard?.writeText(text)
     }
   }
 
-  const selectionDisposable = term.onSelectionChange(() => { void copySelection() })
+  const copySelection = async () => {
+    const sel = term.getSelection()
+    if (!sel) return
+    await writeToClipboard(sel)
+  }
+
+  // Debounced auto-copy: a drag fires onSelectionChange on every cell boundary, so dozens of
+  // concurrent async clipboard writes race and the final text can lose to an earlier partial.
+  // Capture the selection text synchronously (before streaming output can invalidate it), then
+  // coalesce into a single write after the drag settles.
+  const selectionDisposable = term.onSelectionChange(() => {
+    const sel = term.getSelection()
+    if (!sel) return
+    // Snapshot the text now; the deferred write will use whatever was last captured.
+    const captured = sel
+    window.clearTimeout(copyTimer)
+    copyTimer = window.setTimeout(() => {
+      void writeToClipboard(captured)
+    }, 80) as unknown as number
+  })
 
   return {
     // Routed through `term.paste` (CRLF→CR + DECSET-2004 bracketing), not the session's raw input
@@ -53,6 +72,9 @@ export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => vo
       }
     },
     copySelection,
-    dispose: () => selectionDisposable.dispose(),
+    dispose: () => {
+      window.clearTimeout(copyTimer)
+      selectionDisposable.dispose()
+    },
   }
 }

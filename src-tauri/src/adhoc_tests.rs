@@ -42,6 +42,12 @@ fn shell_is_emitted_as_its_wire_name_not_an_executable_path() {
 }
 
 #[test]
+fn workspace_shell_payload_preserves_workspace_identity() {
+    let payload = renderer_connection_for_workspace("adhoc-1", &request(), Some("ws-1"));
+    assert_eq!(payload["workspaceId"], json!("ws-1"));
+}
+
+#[test]
 fn queue_holds_payloads_until_the_renderer_is_ready() {
     let mut queue = PendingQueue::default();
     assert!(queue.push(json!({"id": "a"})));
@@ -172,8 +178,6 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
     assert!(app.state::<AdhocRegistry>().get(&direct_id).is_none());
     assert!(app.state::<AdhocRegistry>().get(&named).is_none());
 }
-
-
 #[test]
 fn poisoned_registry_lock_fails_closed_without_panicking() {
     use std::panic::{catch_unwind, AssertUnwindSafe};

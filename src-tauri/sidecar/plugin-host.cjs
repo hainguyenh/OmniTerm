@@ -258,14 +258,23 @@ protocol.onRequest(async (method, params) => {
 
     case 'plugin.invoke': {
       const { method: invokeMethod, args } = params || {}
+      // Invoke methods are namespaced per plugin; the first handler that answers owns the call.
+      // Handlers throw for methods they do not recognise, so keep trying until one responds and
+      // surface the first failure when none does.
+      let firstError = null
       for (const [id, desc] of registry.descriptors.entries()) {
         if (desc.enabled && desc.status === 'loaded') {
           const handler = registry.invokeHandlers.get(id)
           if (handler) {
-            return await handler(invokeMethod, ...(args || []))
+            try {
+              return await handler(invokeMethod, ...(args || []))
+            } catch (err) {
+              firstError ??= err
+            }
           }
         }
       }
+      if (firstError) throw firstError
       throw new Error(`No active plugin handled method "${invokeMethod}"`)
     }
 

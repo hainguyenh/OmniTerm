@@ -194,7 +194,7 @@ pub async fn run_script<R: Runtime>(
                 return Ok(true);
             }
             let request = script_run_request(&script.kind, &real, &script.name, &workspace.path);
-            adhoc::open_adhoc_shell(&app, request);
+            adhoc::open_adhoc_shell_in_workspace(&app, request, &workspace_id);
         }
         _ => {
             let (cwd, name) = match sub_path.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
@@ -208,7 +208,7 @@ pub async fn run_script<R: Runtime>(
                 }
                 None => (workspace.path.clone(), workspace.name.clone()),
             };
-            adhoc::open_adhoc_shell(
+            adhoc::open_adhoc_shell_in_workspace(
                 &app,
                 OpenShellRequest {
                     shell: default_shell(),
@@ -218,6 +218,7 @@ pub async fn run_script<R: Runtime>(
                     keep_open: true,
                     name,
                 },
+                &workspace_id,
             );
         }
     }

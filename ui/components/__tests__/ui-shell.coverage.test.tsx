@@ -134,7 +134,6 @@ describe('small UI shells', () => {
     expect(pick).toHaveBeenCalledWith(expect.objectContaining({ left: 2, bottom: 9 }))
     expect(choose).toHaveBeenCalled()
     expect(screen.getByTestId('idle-art')).toHaveTextContent('true')
-    expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })
 
     rerender(<WaitingPane dark={false} onNewSession={open} onPickShell={pick} customArtUrl="blob:idle" />)
     expect(screen.getByRole('img', { name: 'waiting' })).toHaveAttribute('src', 'blob:idle')

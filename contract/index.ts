@@ -25,6 +25,8 @@ export type Connection = {
   id: string
   name: string
   type: 'SSH' | 'RDP' | 'LOCAL'
+  /** Renderer-side workspace association for sessions opened from the Workspace view. */
+  workspaceId?: string
   host: string
   port: string
   user: string

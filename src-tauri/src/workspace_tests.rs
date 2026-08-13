@@ -94,8 +94,6 @@ fn read_workspaces_errors_on_corrupt_file() {
     let _ = std::fs::remove_file(&path);
 }
 
-
-
 #[test]
 fn max_open_bytes_returns_positive_cap() {
     let app = crate::test_support::mock_app();
@@ -142,7 +140,10 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
         }),
     ))
     .unwrap();
-    assert_eq!(max_open_bytes(app.handle()), crate::safepath::DEFAULT_MAX_VIEW_BYTES);
+    assert_eq!(
+        max_open_bytes(app.handle()),
+        crate::safepath::DEFAULT_MAX_VIEW_BYTES
+    );
     assert_eq!(excluded_viewable_exts(app.handle()), vec!["pem", "log"]);
 
     tauri::async_runtime::block_on(crate::settings::save_settings(
@@ -150,7 +151,10 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
         serde_json::json!({ "maxOpenFileMb": u64::MAX }),
     ))
     .unwrap();
-    assert_eq!(max_open_bytes(app.handle()), crate::safepath::MAX_VIEW_BYTES_CEILING);
+    assert_eq!(
+        max_open_bytes(app.handle()),
+        crate::safepath::MAX_VIEW_BYTES_CEILING
+    );
 
     tauri::async_runtime::block_on(crate::settings::save_settings(
         app.handle().clone(),
@@ -170,11 +174,9 @@ fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }
-    let workspace = tauri::async_runtime::block_on(add_workspace(
-        app.handle().clone(),
-        "/".to_string(),
-    ))
-    .unwrap();
+    let workspace =
+        tauri::async_runtime::block_on(add_workspace(app.handle().clone(), "/".to_string()))
+            .unwrap();
     assert_eq!(workspace.name, "/");
     assert_eq!(workspace.path, "/");
     if let Ok(path) = workspaces_file(app.handle()) {
