@@ -1,58 +1,66 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
-import WorkspaceRootRow from '../WorkspaceRootRow'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { Workspace } from '@omniterm/contract'
+import WorkspaceRootRow from '../WorkspaceRootRow'
 
-const ws: Workspace = { id: 'w1', name: 'My Project', path: 'F:\\proj' }
+const ws: Workspace = {
+  id: 'w1',
+  name: 'My Project',
+  folders: [{ id: 'f1', name: 'Project', path: 'F:\\proj' }],
+  order: 0,
+  pins: [],
+}
+
+const props = () => ({
+  workspace: ws,
+  expanded: false,
+  onToggle: vi.fn(),
+  onAddFolder: vi.fn(),
+  onMoveUp: vi.fn(),
+  onMoveDown: vi.fn(),
+  onRemove: vi.fn(),
+})
 
 describe('WorkspaceRootRow', () => {
-  it('renders the workspace name', () => {
-    render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={vi.fn()} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
+  it('renders the container name and single folder path tooltip', () => {
+    render(<WorkspaceRootRow {...props()} />)
     expect(screen.getByText('My Project')).toBeInTheDocument()
-  })
-
-  it('uses workspace.path as title', () => {
-    render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={vi.fn()} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByTitle('F:\\proj')).toBeInTheDocument()
   })
 
-  it('shows ChevronDown when expanded, ChevronRight when collapsed', () => {
-    const { rerender } = render(<WorkspaceRootRow workspace={ws} expanded connectionAction={null} onToggle={vi.fn()} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
-    expect(document.querySelector('.lucide-chevron-down')).toBeInTheDocument()
-    rerender(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={vi.fn()} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
-    expect(document.querySelector('.lucide-chevron-right')).toBeInTheDocument()
+  it('does not offer a terminal action on a synthetic workspace root', () => {
+    render(<WorkspaceRootRow {...props()} />)
+    expect(screen.queryByTitle('Open terminal here')).not.toBeInTheDocument()
   })
 
-  it('clicking the row calls onToggle', () => {
-    const onToggle = vi.fn()
-    const { container } = render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={onToggle} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
-    fireEvent.click(container.firstChild as HTMLElement)
-    expect(onToggle).toHaveBeenCalledTimes(1)
-  })
-
-  it('Open Terminal button click calls onOpenTerminal and stops propagation', () => {
-    const onToggle = vi.fn()
-    const onOpenTerminal = vi.fn()
-    render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={onToggle} onOpenTerminal={onOpenTerminal} onRemove={vi.fn()} />)
-    fireEvent.click(screen.getByTitle('Open terminal here'))
-    expect(onOpenTerminal).toHaveBeenCalledTimes(1)
-    expect(onToggle).not.toHaveBeenCalled()
-  })
-
-  it('Remove button click calls onRemove and stops propagation', () => {
-    const onToggle = vi.fn()
-    const onRemove = vi.fn()
-    render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={null} onToggle={onToggle} onOpenTerminal={vi.fn()} onRemove={onRemove} />)
+  it('invokes add and remove actions without toggling the row', () => {
+    const current = props()
+    render(<WorkspaceRootRow {...current} />)
+    fireEvent.click(screen.getByTitle('Add folder to workspace'))
     fireEvent.click(screen.getByTitle('Remove from workspaces'))
-    expect(onRemove).toHaveBeenCalledTimes(1)
-    expect(onToggle).not.toHaveBeenCalled()
+    expect(current.onAddFolder).toHaveBeenCalledOnce()
+    expect(current.onRemove).toHaveBeenCalledOnce()
+    expect(current.onToggle).not.toHaveBeenCalled()
   })
 
-  it('renders connectionAction ReactNode when provided', () => {
-    render(<WorkspaceRootRow workspace={ws} expanded={false} connectionAction={<button>Add Connection</button>} onToggle={vi.fn()} onOpenTerminal={vi.fn()} onRemove={vi.fn()} />)
-    expect(screen.getByText('Add Connection')).toBeInTheDocument()
+  it('clicking the row toggles expansion', () => {
+    const current = props()
+    const { container } = render(<WorkspaceRootRow {...current} />)
+    fireEvent.click(container.firstChild as HTMLElement)
+    expect(current.onToggle).toHaveBeenCalledOnce()
+  })
+
+  it('opens an inline text input on double click and submits on Enter', () => {
+    const onRename = vi.fn()
+    render(<WorkspaceRootRow {...props()} onRename={onRename} />)
+    const label = screen.getByText('My Project')
+    fireEvent.doubleClick(label)
+    const input = screen.getByDisplayValue('My Project')
+    fireEvent.change(input, { target: { value: 'Renamed Workspace' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onRename).toHaveBeenCalledWith('w1', 'Renamed Workspace')
   })
 })

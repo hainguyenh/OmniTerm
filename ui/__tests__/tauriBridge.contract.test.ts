@@ -126,7 +126,7 @@ describe('workspace', () => {
    */
   it('delegates a script run to the backend instead of emitting shell-open', async () => {
     invokeMock.mockResolvedValueOnce(true)
-    const script = { id: 'deploy.bat', name: 'deploy.bat', path: 'C:/proj/deploy.bat', kind: 'bat' }
+    const script = { id: 'folder#1/deploy.bat', name: 'deploy.bat', path: 'folder#1/deploy.bat', kind: 'bat' }
     await api.workspace.run({ workspaceId: 'ws#1', script })
 
     expect(lastInvoke()).toEqual([
@@ -138,30 +138,46 @@ describe('workspace', () => {
 
   it('passes a subPath through for "open a terminal here"', async () => {
     invokeMock.mockResolvedValueOnce(true)
-    await api.workspace.run({ workspaceId: 'ws#1', subPath: 'packages/app' })
+    await api.workspace.run({ workspaceId: 'ws#1', subPath: 'folder#1/packages/app' })
     expect(lastInvoke()[1]).toEqual({
-      workspaceId: 'ws#1', script: null, subPath: 'packages/app',
+      workspaceId: 'ws#1', script: null, subPath: 'folder#1/packages/app',
     })
   })
 
   /** The workspace id is what scopes the path check; dropping it would defeat the containment guard. */
   it('sends the workspace id with every script read and write', async () => {
     invokeMock.mockResolvedValueOnce('echo hi')
-    await api.workspace.readScript('ws#1', 'C:/proj/deploy.bat')
+    await api.workspace.readScript('ws#1', 'folder#1/deploy.bat')
     expect(lastInvoke()).toEqual([
-      'read_script', { workspaceId: 'ws#1', path: 'C:/proj/deploy.bat' },
+      'read_script', { workspaceId: 'ws#1', path: 'folder#1/deploy.bat' },
     ])
 
-    await api.workspace.writeScript('ws#1', 'C:/proj/deploy.bat', 'echo bye')
+    await api.workspace.writeScript('ws#1', 'folder#1/deploy.bat', 'echo bye')
     expect(lastInvoke()).toEqual([
       'write_script',
-      { workspaceId: 'ws#1', path: 'C:/proj/deploy.bat', content: 'echo bye' },
+      { workspaceId: 'ws#1', path: 'folder#1/deploy.bat', content: 'echo bye' },
     ])
+  })
+
+  it('normalizes workspaces whose older wire payload omits empty pins', async () => {
+    invokeMock.mockResolvedValueOnce([{
+      id: 'ws#1',
+      name: 'proj',
+      folders: [{ id: 'folder#1', name: 'proj', path: 'C:/proj' }],
+      order: 0,
+    }])
+    await expect(api.workspace.list()).resolves.toEqual([{
+      id: 'ws#1',
+      name: 'proj',
+      folders: [{ id: 'folder#1', name: 'proj', path: 'C:/proj' }],
+      order: 0,
+      pins: [],
+    }])
   })
 
   it('adds a workspace only after the user picks a folder', async () => {
     openMock.mockResolvedValueOnce('C:/proj')
-    invokeMock.mockResolvedValueOnce({ id: 'ws#1', name: 'proj', path: 'C:/proj' })
+    invokeMock.mockResolvedValueOnce({ id: 'ws#1', name: 'proj', folders: [{ id: 'folder#1', name: 'proj', path: 'C:/proj' }], order: 0, pins: [] })
     await api.workspace.add()
     expect(lastInvoke()).toEqual(['add_workspace', { path: 'C:/proj' }])
 
@@ -169,6 +185,27 @@ describe('workspace', () => {
     openMock.mockResolvedValueOnce(null)
     await expect(api.workspace.add()).resolves.toBeNull()
     expect(invokeMock).not.toHaveBeenCalled()
+  })
+
+  it('imports VS Code workspace files and exposes composite workspace mutations', async () => {
+    openMock.mockResolvedValueOnce('C:/team.code-workspace')
+    invokeMock.mockResolvedValueOnce({ id: 'ws#team' })
+    await api.workspace.importFile()
+    expect(openMock).toHaveBeenLastCalledWith({
+      multiple: false,
+      filters: [{ name: 'VS Code workspace', extensions: ['code-workspace', 'workspace'] }],
+    })
+    expect(lastInvoke()).toEqual(['import_workspace_file', { path: 'C:/team.code-workspace' }])
+
+    await api.workspace.move('ws#child', 'ws#parent', 2)
+    expect(lastInvoke()).toEqual([
+      'move_workspace', { workspaceId: 'ws#child', parentId: 'ws#parent', index: 2 },
+    ])
+    await api.workspace.setPinned('ws#team', 'folder#1', 'src/lib.rs', true)
+    expect(lastInvoke()).toEqual([
+      'set_workspace_entry_pinned',
+      { workspaceId: 'ws#team', folderId: 'folder#1', path: 'src/lib.rs', pinned: true },
+    ])
   })
 
   it('scans with the workspace id the backend expects', async () => {

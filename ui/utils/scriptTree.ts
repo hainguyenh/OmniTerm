@@ -1,4 +1,4 @@
-import type { Connection, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, WorkspaceEntry, WorkspacePin, WorkspaceScript } from '@omniterm/contract'
 import { isScriptEntry } from './workspaceFilter'
 
 /**
@@ -12,7 +12,7 @@ import { isScriptEntry } from './workspaceFilter'
 export interface WorkspaceTreeNode {
   /** Display name (folder name, file name, or connection name). */
   name: string
-  /** POSIX-relative path of this node; for a connection leaf, its connection id. */
+  /** Folder-namespaced logical path; for a connection leaf, its connection id. */
   path: string
   isDir: boolean
   /** Present on file nodes. */
@@ -36,12 +36,18 @@ function rank(node: WorkspaceTreeNode): number {
   return node.connection ? 1 : 2
 }
 
-function sortNodes(nodes: WorkspaceTreeNode[]): void {
+function sortNodes(nodes: WorkspaceTreeNode[], pinned: ReadonlySet<string>): void {
   nodes.sort((a, b) => {
+    const pinRank = Number(pinned.has(b.path)) - Number(pinned.has(a.path))
+    if (pinRank !== 0) return pinRank
     if (rank(a) !== rank(b)) return rank(a) - rank(b)
     return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   })
-  for (const n of nodes) if (n.isDir) sortNodes(n.children)
+  for (const node of nodes) if (node.isDir) sortNodes(node.children, pinned)
+}
+
+function logicalPinPath(pin: WorkspacePin): string {
+  return pin.path ? `${pin.folderId}/${pin.path}` : pin.folderId
 }
 
 /** The `WorkspaceScript` record shape both the run path and the viewer speak in. */
@@ -100,13 +106,14 @@ export function entryNode(entry: WorkspaceEntry): WorkspaceTreeNode {
 /**
  * Build the directory tree for one workspace from a flat entry list plus its saved connections.
  *
- * A connection's `parentId` holds the POSIX-relative path of the folder it belongs to (absent or
- * empty = the workspace root). A path that no longer exists — the folder was renamed or deleted since
- * the connection was saved — falls back to the root, so a connection can never become unreachable.
+ * A connection's `parentId` holds the folder-namespaced logical path it belongs to. The backend
+ * namespaces legacy one-folder root connections to that folder id before they reach this tree. A
+ * path that no longer exists falls back to the container root so the profile remains reachable.
  */
 export function buildWorkspaceTree(
   entries: WorkspaceEntry[],
   connections: Connection[] = [],
+  pins: WorkspacePin[] = [],
 ): WorkspaceTreeNode[] {
   const roots: WorkspaceTreeNode[] = []
   const dirs = new Map<string, WorkspaceTreeNode>()
@@ -130,12 +137,15 @@ export function buildWorkspaceTree(
     return slash === -1 ? '' : id.slice(0, slash)
   }
 
-  // Directories first so a file's parent is the scanned node (with its absolute path) rather than a
+  // Directories first so a file's parent is the scanned node (with its logical path) rather than a
   // placeholder synthesized from the file's own id.
   for (const entry of entries) {
     if (!entry.isDir) continue
     const node = ensureDir(entry.id)
-    if (node) node.entry = entry
+    if (node) {
+      node.name = entry.name
+      node.entry = entry
+    }
   }
 
   for (const entry of entries) {
@@ -157,7 +167,7 @@ export function buildWorkspaceTree(
     ;(parent ? parent.children : roots).push(leaf)
   }
 
-  sortNodes(roots)
+  sortNodes(roots, new Set(pins.map(logicalPinPath)))
   return roots
 }
 

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Folder, ChevronRight, ChevronDown, Terminal, Play, Plus, Cable, Loader2,
+  ChevronDown, ChevronRight, Folder, Loader2, Pin, PinOff, Play, Terminal,
 } from 'lucide-react'
 import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
 import { entryNode, type WorkspaceTreeNode } from '../utils/scriptTree'
@@ -9,36 +9,22 @@ import { fileKindMeta } from '../utils/fileKind'
 import { diag } from '../diag'
 import { useTreeReveal } from '../hooks/useTreeReveal'
 import { useWorkspaceScan } from '../hooks/useWorkspaceScan'
+import { useWorkspaceMutations } from '../hooks/useWorkspaceMutations'
 import WorkspaceFilterMenu from './WorkspaceFilterMenu'
 import WorkspaceShowMore from './WorkspaceShowMore'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
-import WorkspaceSearchBar from './WorkspaceSearchBar'
-import WorkspaceRootRow from './WorkspaceRootRow'
+import WorkspacePanelHeader from './WorkspacePanelHeader'
+import WorkspaceEmptyState from './WorkspaceEmptyState'
+import WorkspaceAddConnectionButton from './WorkspaceAddConnectionButton'
+import WorkspaceContainerList from './WorkspaceContainerList'
 import { buildWorkspacePanelView, collectDirKeys } from './workspacePanelView'
 import type { WorkspaceConnectionTarget, WorkspacePanelProps } from './workspacePanelTypes'
 
 export type { WorkspaceConnectionTarget } from './workspacePanelTypes'
 
 /**
- * The Workspace view — a left panel (Orca / Antigravity style) for pinning project folders, opening a
- * terminal rooted in one, and browsing what is inside it.
- *
- * A workspace is the *only* home for connections: there is no separate personal list. A saved
- * connection carries the POSIX-relative path of the folder it belongs to in `parentId`, so it renders
- * as a leaf of the tree right next to the scripts it goes with, and the `Cable` button on any folder
- * row creates one there.
- *
- * The tree shows every folder up front (folders are collapsed until clicked) plus, by default, the
- * runnable files; the filter menu opens that up to every file, a chosen set of types, or a chosen
- * set of files. A folder's files load when it is expanded, and a folder with more than a page of
- * files grows via its own "Show more" row — shown only by the two whole-tree filters ("All files",
- * "Selected types"), because the scripts and selected-file views are loaded completely instead.
- * Clicking a file opens it in the right-side dock (via `onOpenScript`); running is only ever
- * triggered by the explicit run icon.
- *
- * Pure host UI: it renders whatever the active WorkspaceProvider returns over the `workspace:*` IPC
- * bridge, so a plugin can change the data without touching this component.
+ * The Workspace view — left panel for pinning project folders, terminal access, and navigation.
  */
 const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   onOpenScript,
@@ -50,7 +36,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   hasConnectionProvider = false,
   connectionsRevision,
   revealRequest,
-  onWorkspaceAdded,
+  onWorkspacesChanged,
 }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -68,7 +54,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   // Workspace connections (loaded from .omniterm/connections.json).
   const [wsConnections, setWsConnections] = useState<Record<string, Connection[]>>({})
   const [query, setQuery] = useState('')
-  // Per workspace: in "selected" mode the filter holds workspace-relative file paths, so one shared
+  // Per workspace: in "selected" mode the filter holds folder-namespaced logical file paths, so one shared
   // filter would leak one project's selection into the next. Persisted to localStorage (matching
   // MainLayout's cc.* UI-state keys) so a chosen filter survives a reload instead of resetting to
   // "scripts only" every time the app opens.
@@ -146,28 +132,32 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     if (mode === 'scripts' || mode === 'selected' || flatView) void loadAll(expandedId)
   }, [expandedId, folders, filterOf, flatView, loadAll])
 
-  const addFolder = useCallback(async () => {
-    const added = await window.omnitermAPI.workspace.add()
-    if (added) {
-      await refresh()
-      await onWorkspaceAdded?.()
-      setExpandedId(added.id)
-      void scanOnce(added.id)
-    }
-  }, [refresh, scanOnce])
-
-  const removeFolder = useCallback(async (id: string) => {
-    await window.omnitermAPI.workspace.remove(id)
-    setExpandedId((prev) => (prev === id ? null : prev))
-    await refresh()
-  }, [refresh])
-
   /** Report a rejected launch instead of leaving it as an unhandled promise rejection. */
   const reportFailure = useCallback((err: unknown, title = 'Could not launch') => {
     const message = err instanceof Error ? err.message : String(err)
     if (showAlert) void showAlert(message, { title, tone: 'error' })
     else diag.error(`[WorkspacePanel] ${title}`, err)
   }, [showAlert])
+
+  const {
+    addFolderToWorkspace,
+    addWorkspace,
+    createWorkspace,
+    importWorkspace,
+    isPinned,
+    moveWorkspace,
+    removeWorkspace,
+    renameWorkspace,
+    togglePinned,
+  } = useWorkspaceMutations({
+    onWorkspacesChanged,
+    refresh,
+    rescan,
+    scanOnce,
+    reportFailure,
+    setExpandedId,
+    setWorkspaces,
+  })
 
   const openTerminal = useCallback((id: string, subPath?: string) => {
     void window.omnitermAPI.workspace
@@ -218,6 +208,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         workspaceId: wsId,
         entries: entriesOf(wsId),
         connections: wsConnections[wsId] ?? [],
+        pins: workspaces.find(workspace => workspace.id === wsId)?.pins ?? [],
+        rootFolders: workspaces.find(workspace => workspace.id === wsId)?.folders ?? [],
         filesByFolder: files[wsId] ?? {},
         filter: filterOf(wsId),
         query,
@@ -226,7 +218,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       cache.set(wsId, view)
       return view
     }
-  }, [entriesOf, folders, files, wsConnections, filterOf, query, expandedDirs])
+  }, [entriesOf, folders, files, wsConnections, workspaces, filterOf, query, expandedDirs])
 
   /**
    * Are all of this workspace's folders collapsed? `null` when the question does not apply — a flat
@@ -271,27 +263,19 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     rootLabel: ws.name,
   }), [viewOf])
 
-  /** The `Cable` action shared by the workspace root row and every folder row. */
-  const addConnectionButton = (ws: Workspace, parentPath: string) => {
+  /** The `Cable` action for a real workspace folder row. */
+  const addConnectionButton = (ws: Workspace, parentPath: string, parentLabel: string) => {
     if (!hasConnectionProvider || !onAddWorkspaceConnection) return null
-    return (
-      <button
-        type="button"
-        title={parentPath ? `Add connection in ${parentPath}` : `Add connection in ${ws.name}`}
-        aria-label={parentPath ? `Add connection in ${parentPath}` : `Add connection in ${ws.name}`}
-        onClick={(e) => { e.stopPropagation(); onAddWorkspaceConnection(targetFor(ws, parentPath)) }}
-        className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-      >
-        <Cable className="w-3.5 h-3.5" />
-      </button>
-    )
+    const label = `Add connection in ${parentLabel}`
+    return <WorkspaceAddConnectionButton label={label} onAdd={() => onAddWorkspaceConnection(targetFor(ws, parentPath))} />
   }
 
   /**
    * A single file row (tree + flat views); `label` differs (name vs full path). `openable` (a click
    * opens any viewable file) is wider than `script` (the Run icon); neither = dim and inert.
    */
-  const fileRow = (wsId: string, node: WorkspaceTreeNode, label: string, depth: number) => {
+  const fileRow = (ws: Workspace, node: WorkspaceTreeNode, label: string, depth: number) => {
+    const wsId = ws.id
     const meta = fileKindMeta(node.entry?.kind ?? '')
     const Icon = meta.icon
     const { script, openable } = node
@@ -311,6 +295,14 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       >
         <Icon className="w-4 h-4 flex-shrink-0" style={{ color: meta.color }} />
         <span className={`flex-1 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
+        <button
+          type="button"
+          title={isPinned(ws, node.path) ? 'Unpin item' : 'Pin item'}
+          onClick={event => { event.stopPropagation(); togglePinned(ws, node.path) }}
+          className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+        >
+          {isPinned(ws, node.path) ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+        </button>
         {script && (
           <button
             type="button"
@@ -338,7 +330,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         onDelete={(conn) => deleteConnection(ws.id, conn)}
       />
     )
-    if (!node.isDir) return fileRow(ws.id, node, node.name, depth)
+    if (!node.isDir) return fileRow(ws, node, node.name, depth)
     const key = `${ws.id}:${node.path}`
     const expanded = expandedDirs.has(key)
     const Chevron = expanded && loadingFolders.has(key) ? Loader2 : expanded ? ChevronDown : ChevronRight
@@ -354,13 +346,21 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           <span className="flex-1 truncate text-xs">{node.name}</span>
           <button
             type="button"
+            title={isPinned(ws, node.path) ? 'Unpin item' : 'Pin item'}
+            onClick={event => { event.stopPropagation(); togglePinned(ws, node.path) }}
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+          >
+            {isPinned(ws, node.path) ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            type="button"
             title="Open terminal here"
             onClick={(e) => { e.stopPropagation(); openTerminal(ws.id, node.path) }}
             className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
           >
             <Terminal className="w-3.5 h-3.5" />
           </button>
-          {addConnectionButton(ws, node.path)}
+          {addConnectionButton(ws, node.path, node.name)}
         </div>
         {expanded && <>
           {node.children.map((c) => renderNode(ws, c, depth + 1, node.path))}
@@ -417,71 +417,56 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         .filter((e) => !needle || e.id.toLowerCase().includes(needle))
         .sort((a, b) => a.id.localeCompare(b.id))
       // `entryNode`, not an inline object: an added node field must not reach only the tree view.
-      return <>{files.map((e) => fileRow(ws.id, entryNode(e), e.id, 1))}</>
+      return <>{files.map((e) => fileRow(ws, entryNode(e), e.id, 1))}</>
     }
     return <>{tree.map((node) => renderNode(ws, node, 1, ''))}{showMoreRow(ws.id, '')}</>
   }
 
   return (
     <div className="flex flex-col h-full text-[var(--theme-fg)] select-none">
-      <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--theme-border)]">
-        <WorkspaceSearchBar query={query} onChange={setQuery} />
-        <button
-          type="button"
-          title="Add workspace"
-          aria-label="Add workspace"
-          onClick={() => { void addFolder() }}
-          className="flex-shrink-0 p-1 rounded hover:bg-[var(--theme-hover-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-      </div>
+      <WorkspacePanelHeader
+        query={query}
+        onQueryChange={setQuery}
+        onImport={() => { void importWorkspace().catch(error => reportFailure(error, 'Could not import workspace')) }}
+        onCreate={name => { void createWorkspace(name).catch(error => reportFailure(error, 'Could not create workspace')) }}
+        onAdd={() => { void addWorkspace().catch(error => reportFailure(error, 'Could not add workspace')) }}
+      />
 
       <div className="flex-1 overflow-y-auto py-1">
         {workspaces.length === 0 && (
-          <button
-            type="button"
-            onClick={addFolder}
-            className="mx-3 mt-2 w-[calc(100%-1.5rem)] rounded-md border border-dashed border-[var(--theme-border)] px-3 py-4 text-xs text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:border-[var(--theme-accent)] transition-colors"
-          >
-            No project folders yet.
-            <br />Click to add one.
-          </button>
+          <WorkspaceEmptyState
+            onAdd={() => { void addWorkspace().catch(error => reportFailure(error, 'Could not add workspace')) }}
+          />
         )}
 
-        {workspaces.map((ws) => {
-          const expanded = expandedId === ws.id
-          return (
-            <div key={ws.id} className="flex flex-col">
-              <WorkspaceRootRow
-                workspace={ws}
-                expanded={expanded}
-                connectionAction={addConnectionButton(ws, '')}
-                onToggle={() => toggle(ws.id)}
-                onOpenTerminal={() => openTerminal(ws.id)}
-                onRemove={() => { void removeFolder(ws.id) }}
+        <WorkspaceContainerList
+          workspaces={workspaces}
+          expandedId={expandedId}
+          onToggle={toggle}
+          onAddFolder={id => {
+            void addFolderToWorkspace(id).catch(error => reportFailure(error, 'Could not add folder'))
+          }}
+          onRemove={id => { void removeWorkspace(id).catch(error => reportFailure(error, 'Could not remove workspace')) }}
+          onRename={(id, name) => { void renameWorkspace(id, name) }}
+          onMove={moveWorkspace}
+          renderExpanded={ws => (
+            <div className="ml-3 mr-1 mb-1">
+              <WorkspaceTreeToolbar
+                filter={filterOf(ws.id)}
+                fileCount={viewOf(ws.id).files.length}
+                onOpenFilterMenu={(anchor) => openFilterMenu(ws.id, anchor)}
+                filterMenuOpen={filterMenu?.workspaceId === ws.id}
+                allCollapsed={collapseStateOf(ws.id)}
+                onToggleCollapseAll={() => toggleCollapseAll(ws.id)}
+                flatView={flatView}
+                onToggleFlatView={() => setFlatView((value) => !value)}
+                scanning={scanning === ws.id || loadingAll === ws.id}
+                onRescan={() => void rescan(ws.id)}
               />
-
-              {expanded && (
-                <div className="ml-3 mr-1 mb-1">
-                  <WorkspaceTreeToolbar
-                    filter={filterOf(ws.id)}
-                    fileCount={viewOf(ws.id).files.length}
-                    onOpenFilterMenu={(anchor) => openFilterMenu(ws.id, anchor)}
-                    filterMenuOpen={filterMenu?.workspaceId === ws.id}
-                    allCollapsed={collapseStateOf(ws.id)}
-                    onToggleCollapseAll={() => toggleCollapseAll(ws.id)}
-                    flatView={flatView}
-                    onToggleFlatView={() => setFlatView((v) => !v)}
-                    scanning={scanning === ws.id || loadingAll === ws.id}
-                    onRescan={() => void rescan(ws.id)}
-                  />
-                  {renderTree(ws)}
-                </div>
-              )}
+              {renderTree(ws)}
             </div>
-          )
-        })}
+          )}
+        />
       </div>
 
       {filterMenu && (

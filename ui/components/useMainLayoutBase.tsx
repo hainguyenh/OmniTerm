@@ -12,6 +12,7 @@ import { DEFAULT_SHORTCUTS, MAX_PLANES, type MainLayoutProps } from './mainLayou
 import { useViewGroups } from '../hooks/useViewGroups'
 import { useCustomArt } from '../hooks/useCustomArt'
 import { visibleTabsForGroup } from '../viewGroups'
+import { terminalWorkspaceSelection } from '../utils/workspaceHierarchy'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
@@ -379,11 +380,8 @@ export function useMainLayoutBase({
   }, []);
   const refreshWorkspaces = useCallback(async () => {
       await window.omnitermAPI.workspace.list().then(list => {
-          const sorted = [...list].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id))
-          setWorkspaces(sorted)
-          setSelectedWorkspaceId(current => current && sorted.some(workspace => workspace.id === current)
-              ? current
-              : sorted[0]?.id ?? null)
+          setWorkspaces(list)
+          setSelectedWorkspaceId(current => terminalWorkspaceSelection(list, current))
       }).catch(() => setWorkspaces([]))
   }, [])
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
