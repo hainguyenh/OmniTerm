@@ -8,6 +8,8 @@ import {
   discoverAccounts,
   getLockedGhToken,
   parseGithubHttpsUrl,
+  parseGithubRemoteUrl,
+  parseGithubSshUrl,
   readIdentityLock,
   runCommand,
   validateLocalIdentity,
@@ -40,17 +42,64 @@ test('account discovery deduplicates GCM and gh accounts case-insensitively', ()
   assert.equal(accounts[1].ghActive, true)
 })
 
-test('GitHub URL parsing supports only repository-scoped GitHub.com HTTPS URLs', () => {
+test('GitHub HTTPS URL parsing supports only repository-scoped GitHub.com HTTPS URLs', () => {
   const parsed = parseGithubHttpsUrl('https://alice@github.com/owner/repo.git')
   assert.equal(parsed.username, 'alice')
   assert.equal(parsed.owner, 'owner')
   assert.equal(parsed.repository, 'repo')
+  assert.equal(parsed.isSSH, false)
   assert.equal(withGithubUsername('https://github.com/owner/repo', 'bob'), 'https://bob@github.com/owner/repo')
 
   assert.throws(() => parseGithubHttpsUrl('git@github.com:owner/repo.git'), /HTTPS/)
   assert.throws(() => parseGithubHttpsUrl('https://github.example.com/owner/repo'), /GitHub.com/)
   assert.throws(() => parseGithubHttpsUrl('https://github.com/owner/repo/extra'), /exactly one/)
   assert.throws(() => parseGithubHttpsUrl('https://alice:secret@github.com/owner/repo'), /must not contain/)
+})
+
+test('GitHub SSH URL parsing accepts git@ format and rejects non-matching strings', () => {
+  const parsed = parseGithubSshUrl('git@github.com:owner/repo.git')
+  assert.ok(parsed)
+  assert.equal(parsed.isSSH, true)
+  assert.equal(parsed.owner, 'owner')
+  assert.equal(parsed.repository, 'repo')
+  assert.equal(parsed.username, '')
+
+  // .git suffix is optional
+  const noDotGit = parseGithubSshUrl('git@github.com:owner/repo')
+  assert.ok(noDotGit)
+  assert.equal(noDotGit.repository, 'repo')
+
+  // Non-SSH strings return null instead of throwing
+  assert.equal(parseGithubSshUrl('https://github.com/owner/repo'), null)
+  assert.equal(parseGithubSshUrl('ssh://git@github.com/owner/repo'), null)
+  assert.equal(parseGithubSshUrl(''), null)
+})
+
+test('parseGithubRemoteUrl accepts both HTTPS and SSH, rejects unknown formats', () => {
+  const https = parseGithubRemoteUrl('https://github.com/owner/repo.git')
+  assert.equal(https.isSSH, false)
+  assert.equal(https.owner, 'owner')
+
+  const ssh = parseGithubRemoteUrl('git@github.com:owner/repo.git')
+  assert.equal(ssh.isSSH, true)
+  assert.equal(ssh.owner, 'owner')
+
+  assert.throws(() => parseGithubRemoteUrl('ftp://github.com/owner/repo'), /HTTPS/)
+})
+
+test('withGithubUsername returns SSH URL unchanged', () => {
+  const original = 'git@github.com:owner/repo.git'
+  assert.equal(withGithubUsername(original, 'alice'), original)
+})
+
+test('verifyGitCredential is a no-op for SSH remotes', () => {
+  let credentialCalled = false
+  const runner = (command, args) => {
+    if (args.includes('fill')) credentialCalled = true
+    return { status: 0, stdout: '', stderr: '' }
+  }
+  assert.doesNotThrow(() => verifyGitCredential('git@github.com:owner/repo.git', 'alice', { runner }))
+  assert.equal(credentialCalled, false)
 })
 
 test('HTTPS credential mismatch fails before network verification', () => {

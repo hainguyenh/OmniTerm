@@ -16,6 +16,7 @@ describe('workspace panel view model', () => {
     const view = buildWorkspacePanelView({
       workspaceId: 'ws',
       entries,
+      pins: [],
       connections: [{
         id: 'connection-1',
         name: 'Empty-folder host',
@@ -39,6 +40,7 @@ describe('workspace panel view model', () => {
     const view = buildWorkspacePanelView({
       workspaceId: 'ws',
       entries,
+      pins: [],
       connections: [],
       filesByFolder: {},
       filter: { mode: 'all', kinds: [], paths: [], showEmptyDirs: false },
@@ -54,6 +56,7 @@ describe('workspace panel view model', () => {
     const view = buildWorkspacePanelView({
       workspaceId: 'ws',
       entries,
+      pins: [],
       connections: [],
       filesByFolder: { tools: [entries[3], entries[4]] },
       filter: { mode: 'all', kinds: [], paths: [], showEmptyDirs: true },

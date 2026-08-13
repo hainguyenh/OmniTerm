@@ -21,7 +21,27 @@ const outputDir = path.join(root, 'coverage-rust')
 const IGNORED_FILENAME_REGEX = '(win_job|build)\\.rs$'
 const COVERAGE_BUILD_FLAGS = ['--branch', '--no-cfg-coverage', '--no-cfg-coverage-nightly']
 
+const VCVARS_CANDIDATES = [
+  'C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat',
+  'C:\\Program Files\\Microsoft Visual Studio\\18\\Community\\VC\\Auxiliary\\Build\\vcvarsall.bat',
+  'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat',
+  'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvarsall.bat',
+  'C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Auxiliary\\Build\\vcvarsall.bat',
+]
+
 function run(args) {
+  if (process.platform === 'win32' && !process.env.LIB) {
+    const vcvars = VCVARS_CANDIDATES.find((candidate) => fs.existsSync(candidate))
+    if (vcvars) {
+      const quoteArg = (arg) => (/[ \t\n\v"|&<>()^]/.test(arg) ? `"${arg.replaceAll('"', '\\"')}"` : arg)
+      const cargoCmd = `cargo +nightly-x86_64-pc-windows-msvc ${args.map(quoteArg).join(' ')}`
+      const cmdLine = `call "${vcvars}" x64 && ${cargoCmd}`
+      const result = spawnSync(cmdLine, { cwd: root, stdio: 'inherit', shell: true })
+      if (result.error) throw result.error
+      if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
+      return
+    }
+  }
   const result = spawnSync('cargo', args, { cwd: root, stdio: 'inherit', shell: false })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)

@@ -1,6 +1,6 @@
 use super::{connection, IpcApp};
 use serde_json::{json, Value};
-use std::{fs, path::Path};
+use std::fs;
 
 #[test]
 fn ipc_manages_workspaces_and_workspace_connections() {
@@ -22,6 +22,11 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         json!({ "path": workspace_dir.path().to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
+    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
+    let scripts_path = format!("{folder_id}/scripts");
+    let tools_path = format!("{folder_id}/scripts/tools");
+    let build_path = format!("{folder_id}/scripts/build.sh");
+    let notes_path = format!("{folder_id}/scripts/notes.txt");
     assert_eq!(
         fixture.ok(
             "add_workspace",
@@ -40,17 +45,13 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     let folders = folders.as_array().expect("workspace folders array");
     let scripts_folder = folders
         .iter()
-        .find(|item| item["id"] == "scripts")
+        .find(|item| item["id"] == scripts_path)
         .expect("scripts folder");
     assert_eq!(scripts_folder["name"], "scripts");
     assert_eq!(scripts_folder["kind"], "dir");
     assert_eq!(scripts_folder["isDir"], true);
-    let expected_scripts_path = workspace_dir.path().join("scripts");
-    assert_eq!(
-        scripts_folder["path"].as_str().map(Path::new).and_then(|p| std::fs::canonicalize(p).ok()),
-        std::fs::canonicalize(&expected_scripts_path).ok()
-    );
-    assert!(folders.iter().any(|item| item["id"] == "scripts/tools"));
+    assert_eq!(scripts_folder["path"], scripts_path);
+    assert!(folders.iter().any(|item| item["id"] == tools_path));
     assert!(!folders
         .iter()
         .any(|item| item["id"].as_str().is_some_and(|id| id.starts_with("node_modules"))));
@@ -58,12 +59,12 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         "scan_workspace_entries",
         json!({
             "workspaceId": workspace_id,
-            "folder": "scripts",
+            "folder": &scripts_path,
             "offset": 0,
             "limit": 20
         }),
     );
-    assert_eq!(entries["entries"][0]["id"], "scripts/build.sh");
+    assert_eq!(entries["entries"][0]["id"], build_path);
     assert_eq!(entries["total"], 2);
     assert_eq!(entries["hasMore"], false);
 
@@ -71,7 +72,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         "scan_workspace_entries",
         json!({
             "workspaceId": workspace_id,
-            "folder": "scripts",
+            "folder": &scripts_path,
             "offset": 0,
             "limit": 1
         }),
@@ -83,7 +84,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         "scan_workspace_entries",
         json!({
             "workspaceId": workspace_id,
-            "folder": "scripts",
+            "folder": &scripts_path,
             "offset": 1,
             "limit": 1
         }),
@@ -96,7 +97,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         fixture
             .ok(
                 "read_script",
-                json!({ "workspaceId": workspace_id, "path": "scripts/build.sh" }),
+                json!({ "workspaceId": workspace_id, "path": &build_path }),
             )
             .as_str(),
         Some("echo before\n")
@@ -106,7 +107,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
             "write_script",
             json!({
                 "workspaceId": workspace_id,
-                "path": "scripts/build.sh",
+                "path": &build_path,
                 "content": "echo after\n"
             }),
         ),
@@ -116,7 +117,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         fixture
             .ok(
                 "read_script",
-                json!({ "workspaceId": workspace_id, "path": "scripts/build.sh" }),
+                json!({ "workspaceId": workspace_id, "path": &build_path }),
             )
             .as_str(),
         Some("echo after\n")
@@ -125,7 +126,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     assert_eq!(
         fixture.ok(
             "run_script",
-            json!({ "workspaceId": workspace_id, "script": null, "subPath": "scripts" }),
+            json!({ "workspaceId": workspace_id, "script": null, "subPath": &scripts_path }),
         ),
         json!(true)
     );
@@ -135,9 +136,9 @@ fn ipc_manages_workspaces_and_workspace_connections() {
             json!({
                 "workspaceId": workspace_id,
                 "script": {
-                    "id": "scripts/build.sh",
+                    "id": &build_path,
                     "name": "Build",
-                    "path": "scripts/build.sh",
+                    "path": &build_path,
                     "kind": "sh",
                     "editable": true,
                     "viewable": true
@@ -150,16 +151,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     assert_eq!(
         fixture.ok(
             "run_script",
-            json!({
-                "workspaceId": workspace_id,
-                "script": {
-                    "id": "empty",
-                    "name": "Workspace shell",
-                    "path": "",
-                    "kind": "sh"
-                },
-                "subPath": "   "
-            }),
+            json!({ "workspaceId": workspace_id, "script": null, "subPath": &folder_id }),
         ),
         json!(true)
     );
@@ -169,9 +161,9 @@ fn ipc_manages_workspaces_and_workspace_connections() {
             json!({
                 "workspaceId": workspace_id,
                 "script": {
-                    "id": "scripts/notes.txt",
+                    "id": &notes_path,
                     "name": "Notes",
-                    "path": "scripts/notes.txt",
+                    "path": &notes_path,
                     "kind": "txt"
                 },
                 "subPath": null
@@ -185,21 +177,24 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     )
     .unwrap();
     #[cfg(target_os = "linux")]
-    assert!(fixture
-        .invoke(
-            "run_script",
-            json!({
-                "workspaceId": workspace_id,
-                "script": {
-                    "id": "scripts/remote.rdp",
-                    "name": "Remote",
-                    "path": "scripts/remote.rdp",
-                    "kind": "rdp"
-                },
-                "subPath": null
-            }),
-        )
-        .is_err());
+    {
+        let remote_path = format!("{folder_id}/scripts/remote.rdp");
+        assert!(fixture
+            .invoke(
+                "run_script",
+                json!({
+                    "workspaceId": workspace_id,
+                    "script": {
+                        "id": &remote_path,
+                        "name": "Remote",
+                        "path": &remote_path,
+                        "kind": "rdp"
+                    },
+                    "subPath": null
+                }),
+            )
+            .is_err());
+    }
 
     assert_eq!(
         fixture.ok(
@@ -290,4 +285,72 @@ fn ipc_rejects_operations_for_an_unknown_workspace() {
             "{command} returned the wrong error: {error}"
         );
     }
+}
+
+#[test]
+fn ipc_imports_composite_workspaces_and_persists_hierarchy_pins_and_order() {
+    let fixture = IpcApp::new();
+    let first = tempfile::tempdir().unwrap();
+    let second = tempfile::tempdir().unwrap();
+    fs::write(first.path().join("pinned.txt"), "pin me").unwrap();
+
+    let parent = fixture.ok(
+        "add_workspace",
+        json!({ "path": first.path().to_string_lossy() }),
+    );
+    let parent_id = parent["id"].as_str().expect("parent id");
+    let parent_folder_id = parent["folders"][0]["id"].as_str().expect("folder id");
+    let updated = fixture.ok(
+        "add_workspace_folder",
+        json!({ "workspaceId": parent_id, "path": second.path().to_string_lossy() }),
+    );
+    assert_eq!(updated["folders"].as_array().map(Vec::len), Some(2));
+
+    let pinned = fixture.ok(
+        "set_workspace_entry_pinned",
+        json!({
+            "workspaceId": parent_id,
+            "folderId": parent_folder_id,
+            "path": "pinned.txt",
+            "pinned": true
+        }),
+    );
+    assert_eq!(pinned["pins"][0]["folderId"], parent_folder_id);
+    assert_eq!(pinned["pins"][0]["path"], "pinned.txt");
+
+    let child = fixture.ok("create_workspace", json!({ "name": "Nested" }));
+    let child_id = child["id"].as_str().expect("child id");
+    let moved = fixture.ok(
+        "move_workspace",
+        json!({ "workspaceId": child_id, "parentId": parent_id, "index": 0 }),
+    );
+    let nested = moved
+        .as_array()
+        .and_then(|items| items.iter().find(|item| item["id"] == child_id))
+        .expect("nested workspace");
+    assert_eq!(nested["parentId"], parent_id);
+    assert_eq!(nested["order"], 0);
+
+    let import_root = tempfile::tempdir().unwrap();
+    let imported_folder = import_root.path().join("project");
+    fs::create_dir_all(&imported_folder).unwrap();
+    let workspace_file = import_root.path().join("Team.workspace");
+    fs::write(
+        &workspace_file,
+        serde_json::to_vec(&json!({
+            "folders": [{ "name": "Project", "path": "project" }],
+            "settings": { "editor.fontSize": 99 },
+            "extensions": { "recommendations": ["ignored.extension"] }
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    let imported = fixture.ok(
+        "import_workspace_file",
+        json!({ "path": workspace_file.to_string_lossy() }),
+    );
+    assert_eq!(imported["name"], "Team");
+    assert_eq!(imported["folders"].as_array().map(Vec::len), Some(1));
+    assert_eq!(imported["folders"][0]["name"], "Project");
+    assert!(imported.get("settings").is_none());
 }

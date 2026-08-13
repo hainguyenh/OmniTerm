@@ -196,7 +196,7 @@ test('the release publishes the installer and portable package with the bundled 
 test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(workflow, /\. \.\/scripts\/ReleasePackaging\.ps1/)
   assert.match(workflow, /New-PortablePackage/)
-  assert.doesNotMatch(workflow, /New-PluginPackage/)
+  assert.match(workflow, /New-PluginPackage/)
 
   const wizard = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'Build-OmniTerm.ps1'), 'utf8')
   assert.match(wizard, /ReleasePackaging\.ps1/)

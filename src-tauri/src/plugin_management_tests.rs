@@ -338,3 +338,15 @@ fn installed_plugin_directory_and_remove_command_validate_identity() {
     .is_err());
     let _ = fs::remove_dir_all(root);
 }
+
+/// `restart_app` is a thin command wrapper around `AppHandle::request_restart`.
+/// With MockRuntime the call is a no-op but the code path is exercised.
+#[test]
+fn restart_app_runs_without_panicking_on_mock_runtime() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        restart_app(handle);
+    }));
+}

@@ -134,6 +134,13 @@ store settings and application data in the normal Windows user profile.
   Compress-Archive -Path (Join-Path $portable '*') -DestinationPath $archive -Force
   Write-Sha256Sidecar $archive
 
+  $exeName = $ArchiveName -replace '\.zip$', '.exe'
+  if ($exeName -ne $ArchiveName) {
+    $portableExe = Join-Path $Destination $exeName
+    Copy-Item -LiteralPath (Join-Path $portable 'OmniTerm.exe') -Destination $portableExe -Force
+    Write-Sha256Sidecar $portableExe
+  }
+
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [IO.Compression.ZipFile]::OpenRead($archive)
   try {
