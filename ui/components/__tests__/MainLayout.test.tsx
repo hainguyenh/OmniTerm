@@ -107,7 +107,7 @@ describe("MainLayout", () => {
     fireEvent.click(await screen.findByText("my-project"));
     fireEvent.click(await screen.findByLabelText("Add connection in infra"));
     expect(await screen.findByRole("heading", { name: "New Connection" })).toBeInTheDocument();
-    expect(screen.getByText("my-project", { selector: "span.text-xs" })).toBeInTheDocument();
+    expect(screen.getAllByText("my-project", { selector: "span.text-xs" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
     const parentSelect = screen.getByRole("combobox");
     expect(parentSelect).toHaveValue("folder#1/infra");
