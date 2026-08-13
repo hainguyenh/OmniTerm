@@ -319,3 +319,25 @@ fn executable_and_path_probes_cover_positive_empty_and_missing_environment_cases
         std::env::set_var("PATH", previous);
     }
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn is_on_path_handles_empty_segments_and_missing_path() {
+    let _guard = crate::test_support::lock();
+    let dir = tempfile::tempdir().unwrap();
+    let probe = dir.path().join("omniterm-win-probe.exe");
+    std::fs::write(&probe, b"MZ").unwrap();
+
+    let previous = std::env::var_os("PATH");
+    std::env::set_var("PATH", format!(";{};", dir.path().display()));
+    assert!(is_on_path("omniterm-win-probe.exe"));
+    assert!(!is_on_path("omniterm-missing-probe.exe"));
+
+    std::env::remove_var("PATH");
+    assert!(!is_on_path("omniterm-win-probe.exe"));
+
+    if let Some(prev) = previous {
+        std::env::set_var("PATH", prev);
+    }
+}
+

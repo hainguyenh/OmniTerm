@@ -8,11 +8,13 @@ use std::path::{Path, PathBuf};
 #[path = "workspace_model_tests.rs"]
 mod tests;
 
+#[derive(Debug)]
 pub struct DecodedWorkspaces {
     pub workspaces: Vec<Workspace>,
     pub migrated: bool,
 }
 
+#[derive(Debug)]
 pub struct LogicalTarget<'a> {
     pub folder: &'a WorkspaceFolder,
     pub relative_path: String,
