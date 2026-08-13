@@ -1,0 +1,526 @@
+name: Manual Build & Package
+run-name: Manual Build • ${{ inputs.git_ref || github.ref_name }} • #${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Git branch, tag, or commit SHA to build (leave blank to use the ref selected in the Actions UI)"
+        required: false
+        default: ""
+      build_windows:
+        description: "Build Windows Desktop Package (.exe installer, portable .exe/.zip)"
+        required: false
+        type: boolean
+        default: true
+      build_linux:
+        description: "Build Linux Desktop Packages (.AppImage, .deb)"
+        required: false
+        type: boolean
+        default: true
+      build_macos:
+        description: "Build macOS Desktop Package (.dmg, Apple Silicon)"
+        required: false
+        type: boolean
+        default: true
+      build_plugins:
+        description: "Build standalone OmniTerm plugin packages (.zip)"
+        required: false
+        type: boolean
+        default: true
+
+# Manual builds only read repository contents and publish GitHub Actions artifacts.
+permissions:
+  contents: read
+
+jobs:
+  # Resolve the requested ref once so every platform builds the exact same commit, even if the
+  # selected branch advances while runners are being allocated. This job also creates a matrix that
+  # contains only the desktop platforms selected in workflow_dispatch. A job-level `if` cannot use
+  # `matrix.*` because GitHub evaluates jobs.<job_id>.if before strategy.matrix is applied.
+  plan:
+    name: Resolve build plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      source_short_sha: ${{ steps.source.outputs.short_sha }}
+      desktop_matrix: ${{ steps.targets.outputs.matrix }}
+      desktop_count: ${{ steps.targets.outputs.count }}
+
+    steps:
+      - name: Check out requested source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.git_ref || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js for planning
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate synchronized app versions
+        run: node scripts/sync-tauri-version.mjs validate
+
+      - name: Resolve exact source commit
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          short_sha="${sha:0:8}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Select desktop targets
+        id: targets
+        shell: bash
+        env:
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+          BUILD_LINUX: ${{ inputs.build_linux }}
+          BUILD_MACOS: ${{ inputs.build_macos }}
+          BUILD_PLUGINS: ${{ inputs.build_plugins }}
+        run: |
+          set -euo pipefail
+
+          entries=()
+          if [[ "$BUILD_WINDOWS" == "true" ]]; then
+            entries+=('{"id":"windows","name":"Windows","os":"windows-latest","target":"x86_64-pc-windows-msvc","bundle_root":"target/release/bundle","tauri_args":""}')
+          fi
+          if [[ "$BUILD_LINUX" == "true" ]]; then
+            entries+=('{"id":"linux","name":"Linux","os":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu","bundle_root":"target/release/bundle","tauri_args":""}')
+          fi
+          if [[ "$BUILD_MACOS" == "true" ]]; then
+            entries+=('{"id":"macos","name":"macOS Apple Silicon","os":"macos-latest","target":"aarch64-apple-darwin","bundle_root":"target/aarch64-apple-darwin/release/bundle","tauri_args":"--target aarch64-apple-darwin"}')
+          fi
+
+          count=${#entries[@]}
+          if [[ "$count" -eq 0 && "$BUILD_PLUGINS" != "true" ]]; then
+            echo "No build target selected. Enable at least one desktop platform or standalone plugins." >&2
+            exit 1
+          fi
+
+          joined=""
+          if [[ "$count" -gt 0 ]]; then
+            joined=$(IFS=,; echo "${entries[*]}")
+          fi
+          echo "matrix={\"include\":[${joined}]}" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Write build plan summary
+        shell: bash
+        env:
+          SOURCE_REF: ${{ inputs.git_ref || github.ref_name }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          SOURCE_SHORT_SHA: ${{ steps.source.outputs.short_sha }}
+          DESKTOP_COUNT: ${{ steps.targets.outputs.count }}
+          BUILD_WINDOWS: ${{ inputs.build_windows }}
+          BUILD_LINUX: ${{ inputs.build_linux }}
+          BUILD_MACOS: ${{ inputs.build_macos }}
+          BUILD_PLUGINS: ${{ inputs.build_plugins }}
+        run: |
+          {
+            echo "## Manual build plan"
+            echo
+            echo "- Ref: \`$SOURCE_REF\`"
+            echo "- Commit: \`$SOURCE_SHA\` (asset suffix: \`$SOURCE_SHORT_SHA\`)"
+            echo "- Desktop targets: $DESKTOP_COUNT"
+            echo "- Windows: $BUILD_WINDOWS"
+            echo "- Linux: $BUILD_LINUX"
+            echo "- macOS Apple Silicon: $BUILD_MACOS"
+            echo "- Standalone plugins: $BUILD_PLUGINS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build-desktop-packages:
+    name: Build Tauri Package (${{ matrix.name }})
+    needs: plan
+    # `needs` is available when job-level conditions are evaluated; `matrix` is not.
+    if: ${{ needs.plan.outputs.desktop_count != '0' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.desktop_matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Install Linux system dependencies
+        if: matrix.id == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libsoup-3.0-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            patchelf \
+            wget \
+            xdg-utils
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Verify MSVC linker
+        if: matrix.id == 'windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
+            throw 'MSVC link.exe was not found on the build runner.'
+          }
+          Get-Command link.exe
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build bundled plugins
+        run: |
+          pnpm build:plugin plugins/always-awake
+          pnpm build:plugin plugins/blur
+
+      - name: Stage bundled plugin resources
+        shell: pwsh
+        run: |
+          $pluginNames = @('always-awake', 'blur')
+          foreach ($pluginName in $pluginNames) {
+            $stage = Join-Path (Get-Location) ".omniterm-build/plugins/$pluginName"
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
+            Copy-Item "plugins/$pluginName/package.json" $stage -Force
+            Copy-Item "plugins/$pluginName/dist" $stage -Recurse -Force
+          }
+          $resources = @{
+            'builtinThemes/*' = 'builtinThemes/'
+            'sidecar/*.cjs' = 'sidecar/'
+          }
+          foreach ($pluginName in $pluginNames) {
+            $resources["../.omniterm-build/plugins/$pluginName/package.json"] = "plugins/$pluginName/package.json"
+            $resources["../.omniterm-build/plugins/$pluginName/dist/*"] = "plugins/$pluginName/dist/"
+          }
+          $config = @{ bundle = @{ resources = $resources } }
+          $config | ConvertTo-Json -Depth 8 | Set-Content (Join-Path (Get-Location) '.omniterm-build/tauri.bundle-plugin.json')
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Build Tauri Windows setup installer
+        if: matrix.id == 'windows'
+        run: pnpm build:tauri:nsis --config .omniterm-build/tauri.bundle-plugin.json
+
+      - name: Build Tauri Linux package
+        if: matrix.id == 'linux'
+        run: pnpm tauri:build --config .omniterm-build/tauri.bundle-plugin.json
+
+      - name: Build Tauri macOS package
+        if: matrix.id == 'macos'
+        run: pnpm tauri:build --config .omniterm-build/tauri.bundle-plugin.json ${{ matrix.tauri_args }}
+
+      - name: Confirm Tauri setup artifact exists
+        if: matrix.id == 'windows'
+        shell: pwsh
+        run: |
+          $bundle = '${{ matrix.bundle_root }}/nsis'
+          if (-not (Test-Path -LiteralPath $bundle -PathType Container)) {
+            throw "Tauri produced no NSIS bundle directory at $bundle."
+          }
+          $nsis = @(Get-ChildItem -LiteralPath $bundle -Filter *.exe -File)
+          if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
+          $nsis | Select-Object FullName, Length
+
+      - name: Package portable app with bundled plugins
+        if: matrix.id == 'windows'
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts'
+          $stage = Join-Path $repoRoot '.omniterm-build'
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'portable'), (Join-Path $artifacts 'plugins'), $stage | Out-Null
+
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $shortSha = '${{ needs.plan.outputs.source_short_sha }}'
+          $portable = New-PortablePackage `
+            -RepoRoot $repoRoot `
+            -Destination (Join-Path $artifacts 'portable') `
+            -ArchiveName "OmniTerm_${version}-${shortSha}_x64-portable.zip" `
+            -Plugins @(
+              @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') },
+              @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') }
+            )
+          if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
+          Get-Item -LiteralPath $portable | Select-Object FullName, Length
+
+      - name: Stage commit-labelled desktop assets
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $shortSha = '${{ needs.plan.outputs.source_short_sha }}'
+          $directRoot = Join-Path (Get-Location) 'artifacts/direct'
+
+          function Copy-SingleBuildAsset {
+            param(
+              [Parameter(Mandatory)][string]$SourceGlob,
+              [Parameter(Mandatory)][string]$DestinationDirectory,
+              [Parameter(Mandatory)][string]$DestinationName
+            )
+
+            $matches = @(Get-ChildItem -Path $SourceGlob -File -ErrorAction SilentlyContinue)
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one build asset matching '$SourceGlob'; found $($matches.Count)."
+            }
+            New-Item -ItemType Directory -Force -Path $DestinationDirectory | Out-Null
+            Copy-Item -LiteralPath $matches[0].FullName -Destination (Join-Path $DestinationDirectory $DestinationName) -Force
+          }
+
+          switch ('${{ matrix.id }}') {
+            'windows' {
+              Copy-SingleBuildAsset `
+                -SourceGlob '${{ matrix.bundle_root }}/nsis/*.exe' `
+                -DestinationDirectory (Join-Path $directRoot 'windows-installer') `
+                -DestinationName "OmniTerm_${version}-${shortSha}_x64-setup.exe"
+            }
+            'linux' {
+              Copy-SingleBuildAsset `
+                -SourceGlob '${{ matrix.bundle_root }}/appimage/*.AppImage' `
+                -DestinationDirectory (Join-Path $directRoot 'linux-appimage') `
+                -DestinationName "OmniTerm_${version}-${shortSha}_amd64.AppImage"
+              Copy-SingleBuildAsset `
+                -SourceGlob '${{ matrix.bundle_root }}/deb/*.deb' `
+                -DestinationDirectory (Join-Path $directRoot 'linux-deb') `
+                -DestinationName "OmniTerm_${version}-${shortSha}_amd64.deb"
+            }
+            'macos' {
+              Copy-SingleBuildAsset `
+                -SourceGlob '${{ matrix.bundle_root }}/dmg/*.dmg' `
+                -DestinationDirectory (Join-Path $directRoot 'macos-dmg') `
+                -DestinationName "OmniTerm_${version}-${shortSha}_aarch64.dmg"
+            }
+          }
+
+      # upload-artifact@v7 can upload one file without wrapping it in another ZIP.
+      # In unarchived mode GitHub intentionally uses the source file name as the artifact name.
+      - name: Upload Windows installer directly
+        if: matrix.id == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/direct/windows-installer/*.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows portable package directly
+        if: matrix.id == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/portable/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows portable checksum directly
+        if: matrix.id == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/portable/*.zip.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows portable executable directly
+        if: matrix.id == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/portable/*.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Windows portable executable checksum directly
+        if: matrix.id == 'windows'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/portable/*.exe.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Linux AppImage directly
+        if: matrix.id == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/direct/linux-appimage/*.AppImage
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Linux Debian package directly
+        if: matrix.id == 'linux'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/direct/linux-deb/*.deb
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload macOS DMG directly
+        if: matrix.id == 'macos'
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/direct/macos-dmg/*.dmg
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+  build-standalone-plugins:
+    name: Build Standalone Plugin Packages
+    needs: plan
+    if: ${{ inputs.build_plugins }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out exact source commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and package OmniTerm plugins
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts'
+          $stage = Join-Path $repoRoot '.omniterm-build'
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'plugins'), $stage | Out-Null
+
+          # plugins/ also contains non-OmniTerm workspaces. Only package directories that declare the
+          # host manifest expected by scripts/build-plugin.mjs and the runtime plugin loader.
+          $pluginDirs = @(
+            Get-ChildItem -Path (Join-Path $repoRoot 'plugins') -Directory | Where-Object {
+              $manifestPath = Join-Path $_.FullName 'package.json'
+              if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
+              $package = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+              return $null -ne $package.omnitermPlugin
+            }
+          )
+          if ($pluginDirs.Count -eq 0) { throw 'No OmniTerm plugin packages were found.' }
+
+          $shortSha = '${{ needs.plan.outputs.source_short_sha }}'
+          foreach ($dir in $pluginDirs) {
+            Write-Host "Building plugin: $($dir.Name)"
+            pnpm build:plugin $dir.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Plugin build failed: $($dir.Name)" }
+
+            $archive = New-PluginPackage -PluginPath $dir.FullName -Destination (Join-Path $artifacts "plugins/$($dir.Name)") -StageRoot $stage
+            $stem = [IO.Path]::GetFileNameWithoutExtension($archive)
+            $renamedArchive = Join-Path (Split-Path -Parent $archive) "$stem-$shortSha.zip"
+            Move-Item -LiteralPath $archive -Destination $renamedArchive -Force
+            Move-Item -LiteralPath "$archive.sha256" -Destination "$renamedArchive.sha256" -Force
+          }
+
+      - name: Upload Always Awake package directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/always-awake/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Always Awake checksum directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/always-awake/*.zip.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Blur package directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/blur/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Blur checksum directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/blur/*.zip.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Full Connection Manager package directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/full-connection-manager/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Full Connection Manager checksum directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/full-connection-manager/*.zip.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Native Batch Connections package directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/native-batch-connections/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload Native Batch Connections checksum directly
+        uses: actions/upload-artifact@v7
+        with:
+          path: artifacts/plugins/native-batch-connections/*.zip.sha256
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
