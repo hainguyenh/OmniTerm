@@ -40,6 +40,7 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
     checkForUpdates: vi.fn(), handleDownloadPortable: vi.fn(), handleDownloadInstaller: vi.fn(),
     skipThisVersion: vi.fn(), clearSkippedVersion: vi.fn(), handleConnect: vi.fn(), requestNewSession: vi.fn(), closeTabs: vi.fn(), closeTab: vi.fn(),
     refreshCustomArt: vi.fn(), idleArtUrlLight: null, idleArtUrlDark: null, loadingArtUrlLight: null, loadingArtUrlDark: null,
+    setSelectedWorkspaceId: vi.fn(),
     ...overrides,
   } as unknown as MainLayoutModel
 }

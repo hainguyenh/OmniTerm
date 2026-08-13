@@ -10,6 +10,7 @@ interface WorkspaceRootRowProps {
   depth?: number
   canMoveUp?: boolean
   canMoveDown?: boolean
+  connectionAction?: React.ReactNode
   onToggle: () => void
   onAddFolder: () => void
   onMoveUp?: () => void
@@ -25,6 +26,7 @@ export default function WorkspaceRootRow({
   workspace,
   expanded,
   depth = 0,
+  connectionAction,
   onToggle,
   onAddFolder,
   onRemove,
@@ -111,6 +113,7 @@ export default function WorkspaceRootRow({
           {workspace.name}
         </span>
       )}
+      {connectionAction}
       <button
         type="button"
         title="Add folder to workspace"

@@ -58,8 +58,9 @@ export function buildWorkspacePanelView({
   }
 
   const filtered = applyFilter(entries, filter, keep)
+  const tree = filterTreeByQuery(buildWorkspaceTree(filtered, connections, pins), query)
   return {
-    tree: filterTreeByQuery(buildWorkspaceTree(filtered, connections, pins), query),
+    tree,
     folders: entries.filter((entry) => entry.isDir).map((entry) => ({
       id: entry.id,
       name: entry.name,

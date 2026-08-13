@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { createEvent, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { Workspace } from '@omniterm/contract'
 import WorkspaceContainerList from '../WorkspaceContainerList'
@@ -45,6 +45,9 @@ describe('WorkspaceContainerList', () => {
   })
 
   it('reorders siblings via drag and drop', () => {
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => ({
+      top: 0, height: 40, bottom: 40, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}),
+    }))
     const onMove = renderList([
       workspace('a', 'Alpha', 0),
       workspace('b', 'Beta', 1),
@@ -52,13 +55,11 @@ describe('WorkspaceContainerList', () => {
 
     const alpha = screen.getByText('Alpha').closest('[data-workspace-id="a"]') as HTMLElement
     const beta = screen.getByText('Beta').closest('[data-workspace-id="b"]') as HTMLElement
-    Object.defineProperty(beta, 'getBoundingClientRect', {
-      value: () => ({ top: 0, height: 40, bottom: 40, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) }),
-    })
     const dataTransfer = { effectAllowed: '', setData: vi.fn(), getData: vi.fn(() => 'a') }
 
-    fireEvent.dragStart(alpha, { dataTransfer })
-    fireEvent.drop(beta, { dataTransfer, clientY: 5 })
+    const dropEvent = createEvent.drop(beta, { dataTransfer })
+    Object.defineProperty(dropEvent, 'clientY', { value: 5 })
+    fireEvent(beta, dropEvent)
 
     expect(onMove).toHaveBeenCalledWith('a', null, 0)
   })
@@ -70,8 +71,8 @@ describe('WorkspaceContainerList', () => {
     ])
     const alpha = screen.getByText('Alpha').closest('[data-workspace-id="a"]') as HTMLElement
     const beta = screen.getByText('Beta').closest('[data-workspace-id="b"]') as HTMLElement
-    Object.defineProperty(beta, 'getBoundingClientRect', {
-      value: () => ({ top: 0, height: 40, bottom: 40, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) }),
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: 0, height: 40, bottom: 40, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}),
     })
     const dataTransfer = { effectAllowed: '', setData: vi.fn(), getData: vi.fn(() => 'a') }
 

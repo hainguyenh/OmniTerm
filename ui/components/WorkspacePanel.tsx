@@ -442,6 +442,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         <WorkspaceContainerList
           workspaces={workspaces}
           expandedId={expandedId}
+          renderConnectionAction={ws => addConnectionButton(ws, '', ws.name)}
           onToggle={toggle}
           onAddFolder={id => {
             void addFolderToWorkspace(id).catch(error => reportFailure(error, 'Could not add folder'))
