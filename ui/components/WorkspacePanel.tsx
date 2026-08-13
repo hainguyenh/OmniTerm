@@ -104,8 +104,16 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   const scanOnce = useCallback(async (id: string) => {
     if (folders[id] !== undefined) return
     await scanEntries(id)
+    const ws = workspaces.find((w) => w.id === id)
+    if (ws) {
+      setExpandedDirs((prev) => {
+        const next = new Set(prev)
+        for (const f of ws.folders) next.add(`${id}:${f.id}`)
+        return next
+      })
+    }
     await reloadConnections(id)
-  }, [folders, scanEntries, reloadConnections])
+  }, [folders, scanEntries, reloadConnections, workspaces])
 
   /** Forced re-scan — the toolbar's rescan button, and a fresh workspace. */
   const rescan = useCallback(async (id: string) => {
