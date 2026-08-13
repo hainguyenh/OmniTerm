@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.1.3] — 2026-08-13
+
+### Added
+- feat: improve UI for blur and waiting pane, fix multiple bugs
+- feat(ui): add blur plugin and view groups
+- feat(tooling): expose agent skills to Claude Code, Copilot, and opencode
+- feat(tooling): guard GitHub identity
+
+### Fixed
+- fix(GHA): remove redundant `--` in build command
+- fix: stabilize terminal and workspace UI
+
+### Changed
+- chore: sync Cargo.lock with the v0.1.2 crate versions
+- docs: add code writing rules
+
+### Other
+- Merge pull request #24 from hainguyenh/fix/fix-release-workflow
+- Merge pull request #23 from hainguyenh/fix/release-page-skip-propagation
+- Merge pull request #22 from hainguyenh/fix/release-page-skip-propagation
+- Merge branch 'master' into fix/release-page-skip-propagation
+- Merge pull request #21 from hainguyenh/feat/enhance-bump-version-stuff
+
 ## [v0.1.2] — 2026-08-12
 
 ### Added
