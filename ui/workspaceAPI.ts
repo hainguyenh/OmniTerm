@@ -5,12 +5,13 @@ import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
 type WorkspaceWire = Omit<Workspace, 'pins'> & { pins?: Workspace['pins'] }
 
 /** Normalize versioned/persisted workspace payloads at the Tauri boundary. */
-function normalizeWorkspace(workspace: WorkspaceWire): Workspace {
+function normalizeWorkspace(workspace: WorkspaceWire | undefined | null): Workspace {
+  if (!workspace) return { id: '', name: '', folders: [], order: 0, pins: [] }
   return { ...workspace, pins: workspace.pins ?? [] }
 }
 
-function normalizeWorkspaces(workspaces: WorkspaceWire[]): Workspace[] {
-  return workspaces.map(normalizeWorkspace)
+function normalizeWorkspaces(workspaces: WorkspaceWire[] | undefined | null): Workspace[] {
+  return (workspaces ?? []).map(normalizeWorkspace)
 }
 
 /** Thin renderer adapter for composite-workspace commands and file pickers. */

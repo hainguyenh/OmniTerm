@@ -6,6 +6,7 @@ import WorkspaceRootRow from './WorkspaceRootRow'
 interface WorkspaceContainerListProps {
   workspaces: Workspace[]
   expandedId: string | null
+  renderConnectionAction?: (workspace: Workspace) => React.ReactNode
   onToggle: (workspaceId: string) => void
   onAddFolder: (workspaceId: string) => void
   onRemove: (workspaceId: string) => void
@@ -17,6 +18,7 @@ interface WorkspaceContainerListProps {
 export default function WorkspaceContainerList({
   workspaces,
   expandedId,
+  renderConnectionAction,
   onToggle,
   onAddFolder,
   onRemove,
@@ -37,6 +39,7 @@ export default function WorkspaceContainerList({
           workspace={workspace}
           expanded={expanded}
           depth={depth}
+          connectionAction={renderConnectionAction?.(workspace)}
           onToggle={() => onToggle(workspace.id)}
           onAddFolder={() => onAddFolder(workspace.id)}
           onRemove={() => onRemove(workspace.id)}
