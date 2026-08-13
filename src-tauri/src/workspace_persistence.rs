@@ -4,6 +4,10 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, Runtime};
 
+#[cfg(test)]
+#[path = "workspace_persistence_tests.rs"]
+mod tests;
+
 pub(crate) fn workspaces_file<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let app_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
     if !app_dir.exists() {

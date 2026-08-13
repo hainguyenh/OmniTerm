@@ -36,3 +36,8 @@ pub struct WorkspaceImport {
     pub name: String,
     pub folders: Vec<WorkspaceFolder>,
 }
+
+#[cfg(test)]
+#[path = "workspace_tests.rs"]
+mod tests;
+

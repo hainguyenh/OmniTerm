@@ -9,11 +9,9 @@
 //! `-D warnings` build. It is gated to match its only consumer rather than silenced with an
 //! `allow`, which would also hide a genuinely unused fixture added later.
 
-#[cfg(not(target_os = "windows"))]
 use std::sync::{Mutex, MutexGuard};
 
 /// Serializes every test that touches state the process shares.
-#[cfg(not(target_os = "windows"))]
 static GLOBAL: Mutex<()> = Mutex::new(());
 
 /// Take the global test lock, ignoring poisoning.
@@ -21,7 +19,6 @@ static GLOBAL: Mutex<()> = Mutex::new(());
 /// A failed assertion panics, which poisons the mutex; `unwrap()` would then turn one real failure
 /// into a cascade of `PoisonError`s in every test that ran after it, burying the actual cause. There
 /// is no invariant to protect here — each test restores what it changed.
-#[cfg(not(target_os = "windows"))]
 pub(crate) fn lock() -> MutexGuard<'static, ()> {
     GLOBAL
         .lock()

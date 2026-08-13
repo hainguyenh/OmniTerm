@@ -307,6 +307,14 @@ mod tests {
         fs::remove_file(&data_dir).unwrap();
         fs::create_dir_all(&data_dir).unwrap();
     }
+
+    #[test]
+    fn open_themes_folder_succeeds() {
+        let _guard = crate::test_support::lock();
+        let app = crate::test_support::mock_app();
+        let res = tauri::async_runtime::block_on(open_themes_folder(app.handle().clone()));
+        assert!(res.is_ok());
+    }
 }
 
 #[tauri::command]

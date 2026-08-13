@@ -258,3 +258,13 @@ fn safe_subdir_reports_a_file_blocking_directory_creation() {
         .expect_err("a file cannot be used as a parent directory");
     assert!(!error.is_empty());
 }
+
+#[test]
+fn human_bytes_formatting_and_sub_limits() {
+    let f = fixture();
+    let path = f.root.join("deploy.bat");
+    let err = read_viewable_excluding(&root_str(&f), &path.to_string_lossy(), 4, &[])
+        .expect_err("file exceeds 4 bytes");
+    assert!(err.contains("4 bytes"));
+}
+
