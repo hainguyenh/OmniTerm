@@ -56,11 +56,15 @@ pub(crate) async fn native_batch_launch<R: Runtime>(
     };
     let mut scopes = vec![serde_json::json!({ "kind": "personal" })];
     if let Ok(workspaces) = crate::workspace::read_workspaces(app) {
-        scopes.extend(workspaces.into_iter().map(|workspace| serde_json::json!({
-            "kind": "workspace",
-            "workspaceId": workspace.id,
-            "workspacePath": workspace.path,
-        })));
+        for workspace in workspaces {
+            for folder in workspace.folders {
+                scopes.push(serde_json::json!({
+                    "kind": "workspace",
+                    "workspaceId": &workspace.id,
+                    "workspacePath": &folder.path,
+                }));
+            }
+        }
     }
     for scope in scopes {
         let Some(spec) = host
@@ -240,17 +244,19 @@ async fn lookup_saved<R: Runtime>(
 
     let host = app.try_state::<crate::plugin_host::PluginHost>()?;
     for workspace in crate::workspace::read_workspaces(app).ok()? {
-        let scope = serde_json::json!({
-            "kind": "workspace",
-            "workspaceId": &workspace.id,
-            "workspacePath": &workspace.path,
-        });
-        if let Ok(Some(resolved)) = host
-            .resolve_scoped_connection(scope, conn_id.to_string())
-            .await
-        {
-            if let Ok(connection) = serde_json::from_value(resolved) {
-                return Some(connection);
+        for folder in workspace.folders {
+            let scope = serde_json::json!({
+                "kind": "workspace",
+                "workspaceId": &workspace.id,
+                "workspacePath": &folder.path,
+            });
+            if let Ok(Some(resolved)) = host
+                .resolve_scoped_connection(scope, conn_id.to_string())
+                .await
+            {
+                if let Ok(connection) = serde_json::from_value(resolved) {
+                    return Some(connection);
+                }
             }
         }
     }

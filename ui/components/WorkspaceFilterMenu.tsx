@@ -44,6 +44,8 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   const wrapRef = useRef<HTMLDivElement>(null)
   // Where the user dragged the dialog to; `null` = still where its trigger put it.
   const [dragged, setDragged] = useState<{ left: number; top: number } | null>(null)
+  const [typeSearch, setTypeSearch] = useState('')
+  const [fileSearch, setFileSearch] = useState('')
 
   // Same dismiss contract as the app's other popovers: click anywhere outside, or press Escape.
   useEffect(() => {
@@ -65,10 +67,24 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   useEffect(() => { setDragged(null) }, [anchor])
 
   const kinds = useMemo(() => discoverKinds(entries), [entries])
+  const visibleKinds = useMemo(() => {
+    const needle = typeSearch.trim().toLowerCase()
+    if (!needle) return kinds
+    return kinds.filter(kind => {
+      const meta = fileKindMeta(kind)
+      const extension = kind === 'file' ? 'no extension' : `.${kind}`
+      return `${extension} ${meta.label} ${kind}`.toLowerCase().includes(needle)
+    })
+  }, [kinds, typeSearch])
   // Hidden files exist only in "All files" mode, so the tick-tree and "Check all" must not offer
   // them — a ticked `.env` would select a file the tree cannot show.
   const selectable = useMemo(() => entries.filter(e => !isHiddenEntry(e)), [entries])
   const allFiles = useMemo(() => selectable.filter(e => !e.isDir).map(e => e.id), [selectable])
+  const visibleSelectable = useMemo(() => {
+    const needle = fileSearch.trim().toLowerCase()
+    if (!needle) return selectable
+    return selectable.filter(entry => !entry.isDir && `${entry.name} ${entry.id}`.toLowerCase().includes(needle))
+  }, [fileSearch, selectable])
 
   // Collapse state for the "Selected files" tree, lifted here so the toolbar can drive it.
   const [filterTreeCollapsed, setFilterTreeCollapsed] = useState<Set<string>>(new Set())
@@ -183,6 +199,14 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
 
         {filter.mode === 'types' && (
           <div className="mt-1.5 border-t border-[var(--theme-border)] pt-1.5">
+            <input
+              type="search"
+              aria-label="Search selected types"
+              placeholder="Search types…"
+              value={typeSearch}
+              onChange={event => setTypeSearch(event.target.value)}
+              className="mb-1 w-full rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-[10px] outline-none focus:border-[var(--theme-accent)]"
+            />
             <div className="mb-1 flex items-center justify-end gap-1">
               <button type="button" onClick={() => onChange({ ...filter, kinds })} className={smallButton}>
                 Check all
@@ -193,7 +217,9 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
             </div>
             {kinds.length === 0
               ? <p className="text-[10px] italic text-[var(--theme-dim)]">No files in this workspace.</p>
-              : kinds.map(kind => {
+              : visibleKinds.length === 0
+                ? <p className="text-[10px] italic text-[var(--theme-dim)]">No matching file types.</p>
+                : visibleKinds.map(kind => {
                 const meta = fileKindMeta(kind)
                 const Icon = meta.icon
                 const name = kind === 'file' ? 'No extension' : `.${kind}`
@@ -219,6 +245,14 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
 
         {filter.mode === 'selected' && (
           <div className="mt-1.5 border-t border-[var(--theme-border)] pt-1.5">
+            <input
+              type="search"
+              aria-label="Search selected files"
+              placeholder="Search files…"
+              value={fileSearch}
+              onChange={event => setFileSearch(event.target.value)}
+              className="mb-1 w-full rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-[10px] outline-none focus:border-[var(--theme-accent)]"
+            />
             <div className="mb-1 flex items-center justify-end gap-1">
               <button type="button" onClick={() => onChange({ ...filter, paths: allFiles })} className={smallButton}>
                 Check all
@@ -283,7 +317,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                 ? <p className="text-[10px] italic text-[var(--theme-dim)]">No files in this workspace.</p>
                 : (
                   <WorkspaceFilterTree
-                    entries={selectable}
+                    entries={visibleSelectable}
                     paths={filter.paths}
                     onChange={(paths) => onChange({ ...filter, paths })}
                     collapsed={filterTreeCollapsed}

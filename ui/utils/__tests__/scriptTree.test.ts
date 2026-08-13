@@ -25,6 +25,13 @@ describe('buildWorkspaceTree', () => {
     expect(tree[0].entry?.isDir).toBe(true)
   })
 
+  it('uses the scanned folder display name instead of the internal folder id', () => {
+    const root = buildWorkspaceTree([{
+      id: 'folder#1', name: 'Frontend', path: 'folder#1', isDir: true, kind: 'dir',
+    }])[0]
+    expect(root.name).toBe('Frontend')
+  })
+
   it('marks only runnable files with a script record', () => {
     const tree = buildWorkspaceTree([file('go.sh', 'sh'), file('notes.txt', 'txt')])
     const byName = Object.fromEntries(tree.map((n) => [n.name, n]))
@@ -57,6 +64,17 @@ describe('buildWorkspaceTree', () => {
       [conn('c1', 'mbox')],
     )
     expect(tree.map((n) => n.name)).toEqual(['lib', 'mbox', 'a.txt', 'z.sh'])
+  })
+
+
+  it('moves pinned siblings ahead of unpinned siblings without duplicating them', () => {
+    const root = buildWorkspaceTree(
+      [dir('folder#1'), dir('folder#1/lib'), file('folder#1/a.txt', 'txt'), file('folder#1/z.sh', 'sh')],
+      [],
+      [{ folderId: 'folder#1', path: 'z.sh' }],
+    )[0]
+    expect(root.children.map((node) => node.name)).toEqual(['z.sh', 'lib', 'a.txt'])
+    expect(root.children.filter(node => node.name === 'z.sh')).toHaveLength(1)
   })
 })
 

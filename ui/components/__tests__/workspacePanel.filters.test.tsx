@@ -96,7 +96,7 @@ describe('WorkspacePanel filters and connections', () => {
   })
 
   it('keeps each workspace on its own filter', async () => {
-    const WS2 = { id: 'ws#2', name: 'other-project', path: 'C:/other', pinned: false }
+    const WS2 = { id: 'ws#2', name: 'other-project', folders: [{ id: 'folder#2', name: 'other-project', path: 'C:/other' }], order: 1, pins: [] }
     mockOmnitermAPI({
       workspace: {
         list: async () => [WS, WS2],
@@ -114,7 +114,7 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.getByText('All files')).toBeInTheDocument()
 
-    // A path-based selection is workspace-relative, so the second workspace starts from the default.
+    // A path-based selection is workspace-scoped, so the second workspace starts from the default.
     fireEvent.click(screen.getByText('other-project'))
     await waitFor(() => expect(screen.getByText('Scripts')).toBeInTheDocument())
     expect(screen.queryByText('notes.txt')).not.toBeInTheDocument()

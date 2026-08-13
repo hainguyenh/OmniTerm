@@ -8,11 +8,11 @@ import ScriptViewer from '../ScriptViewer'
 
 // `viewable` mirrors what the backend scan now reports (safepath::is_viewable_kind): any text file is
 // viewable, `editable` stays limited to executable scripts, and a denied kind is neither.
-const BAT = { id: 'deploy.bat', name: 'deploy.bat', path: 'C:/proj/deploy.bat', kind: 'bat', shell: 'cmd' as const, editable: true, viewable: true }
-const TXT = { id: 'notes.txt', name: 'notes.txt', path: 'C:/proj/notes.txt', kind: 'txt', editable: false, viewable: true }
-const RDP = { id: 'server.rdp', name: 'server.rdp', path: 'C:/proj/server.rdp', kind: 'rdp', editable: false, viewable: true }
-const PEM = { id: 'id.pem', name: 'id.pem', path: 'C:/proj/id.pem', kind: 'pem', editable: false, viewable: false }
-const MD = { id: 'readme.md', name: 'readme.md', path: 'C:/proj/readme.md', kind: 'md', editable: false, viewable: true }
+const BAT = { id: 'deploy.bat', name: 'deploy.bat', path: 'folder#1/deploy.bat', kind: 'bat', shell: 'cmd' as const, editable: true, viewable: true }
+const TXT = { id: 'notes.txt', name: 'notes.txt', path: 'folder#1/notes.txt', kind: 'txt', editable: false, viewable: true }
+const RDP = { id: 'server.rdp', name: 'server.rdp', path: 'folder#1/server.rdp', kind: 'rdp', editable: false, viewable: true }
+const PEM = { id: 'id.pem', name: 'id.pem', path: 'folder#1/id.pem', kind: 'pem', editable: false, viewable: false }
+const MD = { id: 'readme.md', name: 'readme.md', path: 'folder#1/readme.md', kind: 'md', editable: false, viewable: true }
 
 describe('ScriptViewer', () => {
   beforeEach(() => localStorage.clear())
@@ -24,7 +24,7 @@ describe('ScriptViewer', () => {
 
     render(<ScriptViewer workspaceId="ws#1" script={BAT} onClose={vi.fn()} onRun={vi.fn()} />)
 
-    await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'C:/proj/deploy.bat'))
+    await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'folder#1/deploy.bat'))
 
     // Enter edit mode: the textarea is seeded with the loaded content.
     fireEvent.click(screen.getByTitle('Edit'))
@@ -33,7 +33,7 @@ describe('ScriptViewer', () => {
 
     fireEvent.change(textarea, { target: { value: 'echo world' } })
     fireEvent.click(screen.getByTitle('Save (Ctrl+S)'))
-    await waitFor(() => expect(writeScript).toHaveBeenCalledWith('ws#1', 'C:/proj/deploy.bat', 'echo world'))
+    await waitFor(() => expect(writeScript).toHaveBeenCalledWith('ws#1', 'folder#1/deploy.bat', 'echo world'))
   })
 
   /**
@@ -47,7 +47,7 @@ describe('ScriptViewer', () => {
     render(<ScriptViewer workspaceId="ws#1" script={TXT} onClose={vi.fn()} onRun={vi.fn()} />)
 
     expect(await screen.findByText('release checklist')).toBeInTheDocument()
-    await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'C:/proj/notes.txt'))
+    await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'folder#1/notes.txt'))
     // Read-only: no pencil, no save.
     expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
     expect(screen.queryByTitle('Save (Ctrl+S)')).not.toBeInTheDocument()
@@ -103,7 +103,7 @@ describe('ScriptViewer', () => {
   it('treats a legacy record with no viewable flag as viewable when editable', async () => {
     const readScript = vi.fn(async () => 'echo legacy')
     mockOmnitermAPI({ workspace: { readScript } })
-    const legacy = { id: 'a.bat', name: 'a.bat', path: 'C:/proj/a.bat', kind: 'bat', editable: true }
+    const legacy = { id: 'a.bat', name: 'a.bat', path: 'folder#1/a.bat', kind: 'bat', editable: true }
 
     const { container } = render(
       <ScriptViewer workspaceId="ws#1" script={legacy} onClose={vi.fn()} onRun={vi.fn()} />,

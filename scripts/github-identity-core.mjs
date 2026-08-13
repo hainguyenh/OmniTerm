@@ -159,6 +159,7 @@ export function parseGithubHttpsUrl(remoteUrl) {
   }
   return {
     url,
+    isSSH: false,
     username,
     owner: segments[0],
     repository: segments[1].replace(/\.git$/i, ''),
@@ -166,8 +167,39 @@ export function parseGithubHttpsUrl(remoteUrl) {
   }
 }
 
+/**
+ * Parses a GitHub SSH remote URL of the form git@github.com:owner/repo[.git].
+ * Returns null when the URL does not match the SSH pattern.
+ */
+export function parseGithubSshUrl(remoteUrl) {
+  const str = String(remoteUrl ?? '').trim()
+  const match = /^git@github\.com:([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/i.exec(str)
+  if (!match) return null
+  const [, owner, repository] = match
+  return {
+    url: str,
+    isSSH: true,
+    username: '',
+    owner,
+    repository,
+    credentialPath: `${owner}/${repository}`,
+  }
+}
+
+/**
+ * Parses either an HTTPS or SSH GitHub remote URL.
+ * Throws IdentityError when the URL matches neither supported format.
+ */
+export function parseGithubRemoteUrl(remoteUrl) {
+  const ssh = parseGithubSshUrl(remoteUrl)
+  if (ssh) return ssh
+  return parseGithubHttpsUrl(remoteUrl)
+}
+
 export function withGithubUsername(remoteUrl, account) {
-  const parsed = parseGithubHttpsUrl(remoteUrl)
+  const parsed = parseGithubRemoteUrl(remoteUrl)
+  // SSH URLs have no inline username; return the original URL unchanged.
+  if (parsed.isSSH) return remoteUrl
   parsed.url.username = validateAccount(account)
   parsed.url.password = ''
   return parsed.url.toString()
@@ -216,7 +248,7 @@ export function resolvePushRemote({ runner = runCommand, cwd = process.cwd() } =
   if (!remoteName) throw new IdentityError('Could not determine one effective push remote. Configure branch.pushRemote or remote.pushDefault and retry.')
   const result = runner('git', ['remote', 'get-url', '--push', remoteName], { cwd })
   const remoteUrl = requireSuccess(result, `Resolving push URL for remote ${remoteName}`)
-  parseGithubHttpsUrl(remoteUrl)
+  parseGithubRemoteUrl(remoteUrl)
   return { remoteName, remoteUrl }
 }
 
@@ -224,16 +256,23 @@ export function buildLocalConfigUpdates(lock, remoteName, remoteUrl) {
   const account = validateAccount(lock.account)
   const author = validateAuthor(lock)
   if (!remoteName || /[\0\r\n]/.test(remoteName)) throw new IdentityError('The push remote name is invalid.')
-  return [
+  const parsed = parseGithubRemoteUrl(remoteUrl)
+  const updates = [
     [LOCK_KEYS.account, account],
     [LOCK_KEYS.authorName, author.authorName],
     [LOCK_KEYS.authorEmail, author.authorEmail],
     ['user.name', author.authorName],
     ['user.email', author.authorEmail],
-    ['credential.username', account],
-    [`credential.https://${GITHUB_HOST}.useHttpPath`, 'true'],
-    [`remote.${remoteName}.pushurl`, withGithubUsername(remoteUrl, account)],
   ]
+  if (!parsed.isSSH) {
+    // HTTPS-only: embed the locked username in the credential store and push URL.
+    updates.push(
+      ['credential.username', account],
+      [`credential.https://${GITHUB_HOST}.useHttpPath`, 'true'],
+      [`remote.${remoteName}.pushurl`, withGithubUsername(remoteUrl, account)],
+    )
+  }
+  return updates
 }
 
 export function writeLocalIdentityConfig(lock, remoteName, remoteUrl, {
@@ -318,6 +357,10 @@ export function verifyTokenAccount(token, expectedAccount, { runner = runCommand
 }
 
 export function verifyGitCredential(remoteUrl, expectedAccount, { runner = runCommand, cwd = process.cwd() } = {}) {
+  // SSH remotes use key-based authentication; HTTPS credential verification is not applicable.
+  const parsed = parseGithubRemoteUrl(remoteUrl)
+  if (parsed.isSSH) return
+
   const result = runner('git', [
     '-c', `credential.username=${expectedAccount}`,
     '-c', `credential.https://${GITHUB_HOST}.useHttpPath=true`,
@@ -364,8 +407,6 @@ export function validateLocalIdentity({
   const expected = [
     ['user.name', lock.authorName, false],
     ['user.email', lock.authorEmail, false],
-    ['credential.username', lock.account, true],
-    [`credential.https://${GITHUB_HOST}.useHttpPath`, 'true', true],
   ]
   for (const [key, wanted, insensitive] of expected) {
     const actual = gitConfigGet(key, { runner, cwd })
@@ -381,9 +422,24 @@ export function validateLocalIdentity({
   } else {
     push = resolvePushRemote({ runner, cwd })
   }
-  const parsed = parseGithubHttpsUrl(push.remoteUrl)
-  if (normalizeAccount(parsed.username) !== normalizeAccount(lock.account)) {
-    throw new IdentityError(`The effective push URL must include the locked username ${lock.account}. Run \`pnpm identity:setup\` to repair it.`)
+  const parsed = parseGithubRemoteUrl(push.remoteUrl)
+  if (!parsed.isSSH) {
+    // HTTPS: the locked username must be embedded in the push URL.
+    if (normalizeAccount(parsed.username) !== normalizeAccount(lock.account)) {
+      throw new IdentityError(`The effective push URL must include the locked username ${lock.account}. Run \`pnpm identity:setup\` to repair it.`)
+    }
+    // HTTPS: verify credential store entries are present and correct.
+    const httpsExpected = [
+      ['credential.username', lock.account, true],
+      [`credential.https://${GITHUB_HOST}.useHttpPath`, 'true', true],
+    ]
+    for (const [key, wanted, insensitive] of httpsExpected) {
+      const actual = gitConfigGet(key, { runner, cwd })
+      const matches = insensitive
+        ? normalizeAccount(actual) === normalizeAccount(wanted)
+        : actual === wanted
+      if (!matches) throw new IdentityError(`Local Git config ${key} does not match the repository identity lock. Run \`pnpm identity:setup\` to repair it.`)
+    }
   }
   return { lock, ...push, remote: parsed }
 }

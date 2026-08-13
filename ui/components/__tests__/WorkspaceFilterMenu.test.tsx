@@ -239,6 +239,15 @@ describe('WorkspaceFilterMenu type picking', () => {
     expect(screen.getByLabelText('No extension')).toBeInTheDocument()
   })
 
+
+  it('searches the selected-type options without changing the selected kinds', () => {
+    const { onChange } = open({ mode: 'types', kinds: ['bat'] })
+    fireEvent.change(screen.getByLabelText('Search selected types'), { target: { value: 'PowerShell' } })
+    expect(screen.getByLabelText('.ps1')).toBeInTheDocument()
+    expect(screen.queryByLabelText('.bat')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('checks and unchecks every kind at once', () => {
     const { onChange } = open({ mode: 'types' })
     const section = screen.getByRole('group', { name: 'Workspace filter' })
@@ -265,6 +274,14 @@ describe('WorkspaceFilterMenu type picking', () => {
 })
 
 describe('WorkspaceFilterMenu file picking', () => {
+  it('searches selected-file options by file name or path without changing selection', () => {
+    const { onChange } = open({ mode: 'selected', paths: ['deploy.bat'] })
+    fireEvent.change(screen.getByLabelText('Search selected files'), { target: { value: 'deep/inner' } })
+    expect(screen.getByText('inner.ps1')).toBeInTheDocument()
+    expect(screen.queryByText('deploy.bat')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('checks and unchecks every selectable file, excluding hidden ones', () => {
     const { onChange } = open({ mode: 'selected' })
     const section = screen.getByRole('group', { name: 'Workspace filter' })
