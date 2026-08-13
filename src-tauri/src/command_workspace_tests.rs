@@ -31,23 +31,26 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     .unwrap();
     assert_eq!(duplicate.id, added.id);
     assert_eq!(block_on(workspace::list_workspaces(app.clone())).unwrap().len(), 1);
-    assert_eq!(workspace::find_workspace(&app, &added.id).unwrap().path, added.path);
+    assert_eq!(workspace::find_workspace(&app, &added.id).unwrap().folders, added.folders);
     assert!(workspace::find_workspace(&app, "missing").is_err());
 
+    let folder_id = added.folders[0].id.clone();
+    let logical = |path: &str| format!("{folder_id}/{path}");
     let scripts = block_on(workspace::scan_scripts(app.clone(), added.id.clone())).unwrap();
-    assert!(scripts.iter().any(|script| script.id == "run.sh"));
-    assert!(scripts.iter().any(|script| script.id == "nested/task.ps1"));
+    assert!(scripts.iter().any(|script| script.id == logical("run.sh")));
+    assert!(scripts.iter().any(|script| script.id == logical("nested/task.ps1")));
     let folders = block_on(workspace::scan_workspace_folders(
         app.clone(),
         added.id.clone(),
     ))
     .unwrap();
-    assert!(folders.iter().any(|folder| folder.id == "nested"));
+    assert!(folders.iter().any(|folder| folder.id == folder_id));
+    assert!(folders.iter().any(|folder| folder.id == logical("nested")));
 
     let first_page = block_on(workspace::scan_workspace_entries(
         app.clone(),
         added.id.clone(),
-        "".to_string(),
+        folder_id.clone(),
         Some(0),
         Some(1),
     ))
@@ -57,29 +60,23 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     let remainder = block_on(workspace::scan_workspace_entries(
         app.clone(),
         added.id.clone(),
-        "".to_string(),
+        folder_id.clone(),
         Some(1),
         Some(usize::MAX),
     ))
     .unwrap();
     assert!(!remainder.entries.is_empty());
 
-    // These commands take the absolute path the scan handed the renderer, not the relative id — see
-    // `ScannedScript::path`, and the `read_script`/`write_script` cases in tauriBridge.contract.test.ts.
-    let absolute = |name: &str| project.join(name).to_string_lossy().into_owned();
+    // Renderer-visible paths are logical `<folderId>/<relativePath>` values; the backend resolves
+    // them against the matching real folder root before applying the safepath policy.
     assert_eq!(
-        block_on(workspace::read_script(
-            app.clone(),
-            added.id.clone(),
-            absolute("notes.txt"),
-        ))
-        .unwrap(),
+        block_on(workspace::read_script(app.clone(), added.id.clone(), logical("notes.txt"))).unwrap(),
         "hello\n"
     );
     block_on(workspace::write_script(
         app.clone(),
         added.id.clone(),
-        absolute("run.sh"),
+        logical("run.sh"),
         "echo changed\n".to_string(),
     ))
     .unwrap();
@@ -87,18 +84,16 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     assert!(block_on(workspace::write_script(
         app.clone(),
         added.id.clone(),
-        absolute("notes.txt"),
+        logical("notes.txt"),
         "blocked".to_string(),
     ))
     .is_err());
 
-    // A real file, outside the workspace but inside the temp root, so this exercises the containment
-    // check rather than just failing to resolve a path that is not there.
     write_file(root.path().join("outside.txt"), b"nope\n");
     assert!(block_on(workspace::read_script(
         app.clone(),
         added.id.clone(),
-        root.path().join("outside.txt").to_string_lossy().into_owned(),
+        logical("../outside.txt"),
     ))
     .is_err());
 
@@ -106,10 +101,10 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
         app.clone(),
         added.id.clone(),
         None,
-        Some("nested".to_string()),
+        Some(logical("nested")),
     ))
     .unwrap());
-    block_on(workspace::remove_workspace(app.clone(), "not-there".to_string())).unwrap();
+    assert!(block_on(workspace::remove_workspace(app.clone(), "not-there".to_string())).is_err());
     block_on(workspace::remove_workspace(app.clone(), added.id)).unwrap();
     assert!(block_on(workspace::list_workspaces(app)).unwrap().is_empty());
 }

@@ -124,3 +124,22 @@ fn the_size_cap_is_enforced_before_the_directory_is_created() {
     assert!(!dir.join(".omniterm").exists());
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
+    let workspace = Workspace {
+        id: "ws#1".to_string(),
+        name: "Composite".to_string(),
+        folders: vec![
+            WorkspaceFolder { id: "folder#1".to_string(), name: "One".to_string(), path: "/one".to_string() },
+            WorkspaceFolder { id: "folder#2".to_string(), name: "Two".to_string(), path: "/two".to_string() },
+        ],
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+    let mut connection = conn("c1", "SSH");
+    connection.parent_id = Some("folder#missing/src".to_string());
+    let error = validate_connection_targets(&workspace, &[connection]).expect_err("unknown folder must fail");
+    assert!(error.contains("unknown workspace folder"), "{error}");
+}

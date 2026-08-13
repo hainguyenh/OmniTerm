@@ -197,6 +197,17 @@ pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, Stri
     })
 }
 
+
+fn quick_shell_workspace_folder(
+    workspace: &crate::workspace::Workspace,
+) -> Result<&crate::workspace::WorkspaceFolder, String> {
+    match workspace.folders.as_slice() {
+        [folder] => Ok(folder),
+        [] => Err("Add a folder to this workspace before opening a shell.".to_string()),
+        _ => Err("Choose a workspace folder before opening a shell.".to_string()),
+    }
+}
+
 /// Register an unsaved shell and return its Connection record, without going through the
 /// `shell-open` queue — the caller opens the pane itself. Nothing about the launch is decided in the
 /// webview: the renderer used to invent a `local-default-…` id that resolved to nothing here.
@@ -212,10 +223,11 @@ pub async fn open_quick_shell<R: Runtime>(
             .into_iter()
             .find(|workspace| workspace.id == id)
             .ok_or_else(|| format!("Unknown workspace \"{id}\"."))?;
-        if !std::path::Path::new(&workspace.path).is_dir() {
-            return Err("Workspace path is invalid.".to_string());
+        let folder = quick_shell_workspace_folder(&workspace)?;
+        if !std::path::Path::new(&folder.path).is_dir() {
+            return Err("Workspace folder is invalid.".to_string());
         }
-        req.cwd = Some(workspace.path);
+        req.cwd = Some(folder.path.clone());
     }
     Ok(register(&app, req).1)
 }

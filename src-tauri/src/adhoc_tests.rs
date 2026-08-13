@@ -115,6 +115,41 @@ fn quick_shell_defaults_when_no_shell_is_named() {
 /// Same property `parse_open_shell_args` protects: an arbitrary executable name must not survive
 /// the trip from the webview to the spawner.
 #[test]
+fn quick_shell_workspace_folder_requires_exactly_one_real_root() {
+    use crate::workspace::{Workspace, WorkspaceFolder};
+
+    let folder = WorkspaceFolder {
+        id: "folder#one".to_string(),
+        name: "One".to_string(),
+        path: "/one".to_string(),
+    };
+    let make = |folders| Workspace {
+        id: "ws#one".to_string(),
+        name: "One".to_string(),
+        folders,
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+
+    assert_eq!(
+        quick_shell_workspace_folder(&make(Vec::new())).expect_err("empty workspace must fail"),
+        "Add a folder to this workspace before opening a shell."
+    );
+    assert_eq!(
+        quick_shell_workspace_folder(&make(vec![folder.clone(), folder.clone()]))
+            .expect_err("multi-root workspace must be explicit"),
+        "Choose a workspace folder before opening a shell."
+    );
+    assert_eq!(
+        quick_shell_workspace_folder(&make(vec![folder]))
+            .expect("single-root workspace is unambiguous")
+            .id,
+        "folder#one"
+    );
+}
+
+#[test]
 fn quick_shell_refuses_anything_outside_the_closed_set() {
     for hostile in [
         "C:\\Windows\\System32\\calc.exe",

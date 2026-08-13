@@ -8,21 +8,45 @@ fn workspaces_serialize_with_camel_case_fields() {
     let ws = Workspace {
         id: "ws#1".to_string(),
         name: "proj".to_string(),
-        path: "C:/proj".to_string(),
-        pinned: Some(true),
+        folders: vec![WorkspaceFolder {
+            id: "folder#1".to_string(),
+            name: "proj".to_string(),
+            path: "C:/proj".to_string(),
+        }],
+        parent_id: Some("ws#parent".to_string()),
+        order: 2,
+        pins: vec![WorkspacePin { folder_id: "folder#1".to_string(), path: "src".to_string() }],
     };
     let value = serde_json::to_value(&ws).unwrap();
     assert_eq!(value["id"], serde_json::json!("ws#1"));
-    assert_eq!(value["pinned"], serde_json::json!(true));
+    assert_eq!(value["parentId"], serde_json::json!("ws#parent"));
+    assert_eq!(value["folders"][0]["path"], serde_json::json!("C:/proj"));
+    assert_eq!(value["pins"][0]["folderId"], serde_json::json!("folder#1"));
 }
 
-/// `pinned` is optional in the file: a workspaces.json written before the field existed must still
-/// load rather than failing the whole list.
+/// Current records may omit optional hierarchy/pin fields and still decode with defaults.
 #[test]
-fn a_workspace_without_pinned_still_deserializes() {
-    let ws: Workspace =
-        serde_json::from_str(r#"{"id":"ws#1","name":"proj","path":"C:/proj"}"#).unwrap();
-    assert_eq!(ws.pinned, None);
+fn a_workspace_without_optional_fields_still_deserializes() {
+    let ws: Workspace = serde_json::from_str(
+        r#"{"id":"ws#1","name":"proj","folders":[{"id":"folder#1","name":"proj","path":"C:/proj"}],"order":0}"#,
+    )
+    .unwrap();
+    assert_eq!(ws.parent_id, None);
+    assert!(ws.pins.is_empty());
+}
+
+#[test]
+fn empty_workspace_pins_are_serialized_for_the_renderer_contract() {
+    let ws = Workspace {
+        id: "ws#1".to_string(),
+        name: "proj".to_string(),
+        folders: Vec::new(),
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+    let value = serde_json::to_value(&ws).unwrap();
+    assert_eq!(value["pins"], serde_json::json!([]));
 }
 
 // ── Persistence helpers ────────────────────────────────────────────────
@@ -54,8 +78,14 @@ fn write_and_read_workspaces_round_trip() {
     let ws = Workspace {
         id: "ws#test".to_string(),
         name: "My Project".to_string(),
-        path: "C:/proj".to_string(),
-        pinned: Some(true),
+        folders: vec![WorkspaceFolder {
+            id: "folder#test".to_string(),
+            name: "My Project".to_string(),
+            path: "C:/proj".to_string(),
+        }],
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
     };
     // Start from no file so the "one workspace" count below is this test's own write and not a
     // workspace another test left in the shared app-data directory.
@@ -80,6 +110,32 @@ fn write_and_read_workspaces_round_trip() {
     }
 }
 
+
+#[test]
+fn read_workspaces_migrates_legacy_single_folder_records_in_place() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = workspaces_file(app.handle()).expect("path");
+    let legacy = r#"[{"id":"ws#old","name":"Legacy","path":"C:/legacy","pinned":true}]"#;
+    if std::fs::write(&path, legacy).is_err() {
+        return;
+    }
+
+    let list = read_workspaces(app.handle()).expect("legacy workspace should migrate");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, "ws#old");
+    assert_eq!(list[0].name, "Legacy");
+    assert_eq!(list[0].order, 0);
+    assert_eq!(list[0].folders.len(), 1);
+    assert_eq!(list[0].folders[0].path, "C:/legacy");
+
+    let persisted = std::fs::read_to_string(&path).expect("migrated workspaces should be rewritten");
+    let value: serde_json::Value = serde_json::from_str(&persisted).expect("migrated json");
+    assert!(value[0].get("folders").is_some());
+    assert!(value[0].get("path").is_none());
+    let _ = std::fs::remove_file(path);
+}
+
 #[test]
 fn read_workspaces_errors_on_corrupt_file() {
     let _guard = crate::test_support::lock();
@@ -93,8 +149,6 @@ fn read_workspaces_errors_on_corrupt_file() {
     assert!(err.contains("workspaces.json is corrupt"), "got {err}");
     let _ = std::fs::remove_file(&path);
 }
-
-
 
 #[test]
 fn max_open_bytes_returns_positive_cap() {
@@ -176,7 +230,7 @@ fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
     ))
     .unwrap();
     assert_eq!(workspace.name, "/");
-    assert_eq!(workspace.path, "/");
+    assert_eq!(workspace.folders[0].path, "/");
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }

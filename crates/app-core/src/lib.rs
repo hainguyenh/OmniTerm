@@ -12,6 +12,7 @@ pub mod tree_validate;
 #[cfg(windows)]
 pub mod win_job;
 pub mod workspace_launch;
+pub mod workspace_model;
 pub mod workspace_scan;
 
 #[cfg(test)]
