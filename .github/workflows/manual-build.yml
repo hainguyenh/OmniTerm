@@ -1,0 +1,264 @@
+name: Manual Build & Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: "Git branch, tag, or commit SHA to build (e.g. master, feat/my-branch, 8a3f910)"
+        required: false
+        default: "master"
+      build_windows:
+        description: "Build Windows Desktop Package (.exe installer & portable zip)"
+        required: false
+        type: boolean
+        default: true
+      build_linux:
+        description: "Build Linux Desktop Packages (.AppImage, .deb)"
+        required: false
+        type: boolean
+        default: true
+      build_macos:
+        description: "Build macOS Desktop Package (.dmg)"
+        required: false
+        type: boolean
+        default: true
+      build_plugins:
+        description: "Build standalone plugin packages (.zip)"
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: manual-build-${{ inputs.git_ref || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-desktop-packages:
+    name: Build Tauri Package (${{ matrix.platform.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - id: windows
+            name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - id: linux
+            name: Linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - id: macos
+            name: macOS
+            os: macos-latest
+            target: aarch64-apple-darwin
+    if: >-
+      (matrix.platform.id == 'windows' && inputs.build_windows) ||
+      (matrix.platform.id == 'linux' && inputs.build_linux) ||
+      (matrix.platform.id == 'macos' && inputs.build_macos)
+    runs-on: ${{ matrix.platform.os }}
+
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
+
+      - name: Install Linux system dependencies
+        if: matrix.platform.id == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Verify MSVC linker
+        if: matrix.platform.id == 'windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
+            throw 'MSVC link.exe was not found on the build runner.'
+          }
+          Get-Command link.exe
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build bundled plugins
+        run: |
+          pnpm build:plugin plugins/always-awake
+          pnpm build:plugin plugins/blur
+
+      - name: Stage bundled plugin resources
+        shell: pwsh
+        run: |
+          $pluginNames = @('always-awake', 'blur')
+          foreach ($pluginName in $pluginNames) {
+            $stage = Join-Path (Get-Location) ".omniterm-build/plugins/$pluginName"
+            New-Item -ItemType Directory -Force -Path $stage | Out-Null
+            Copy-Item "plugins/$pluginName/package.json" $stage -Force
+            Copy-Item "plugins/$pluginName/dist" $stage -Recurse -Force
+          }
+          $resources = @{
+            'builtinThemes/*' = 'builtinThemes/'
+            'sidecar/*.cjs' = 'sidecar/'
+          }
+          foreach ($pluginName in $pluginNames) {
+            $resources["../.omniterm-build/plugins/$pluginName/package.json"] = "plugins/$pluginName/package.json"
+            $resources["../.omniterm-build/plugins/$pluginName/dist/*"] = "plugins/$pluginName/dist/"
+          }
+          $config = @{ bundle = @{ resources = $resources } }
+          $config | ConvertTo-Json -Depth 8 | Set-Content (Join-Path (Get-Location) '.omniterm-build/tauri.bundle-plugin.json')
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Build Tauri Windows setup installer
+        if: matrix.platform.id == 'windows'
+        run: pnpm build:tauri:nsis --config .omniterm-build/tauri.bundle-plugin.json
+
+      - name: Build Tauri Linux & macOS packages
+        if: matrix.platform.id != 'windows'
+        run: pnpm tauri:build --config .omniterm-build/tauri.bundle-plugin.json
+
+      - name: Confirm Tauri setup artifact exists
+        if: matrix.platform.id == 'windows'
+        shell: pwsh
+        run: |
+          $bundle = 'target/release/bundle/nsis'
+          if (-not (Test-Path -LiteralPath $bundle -PathType Container)) {
+            throw "Tauri produced no NSIS bundle directory at $bundle."
+          }
+          $nsis = @(Get-ChildItem -LiteralPath $bundle -Filter *.exe -File)
+          if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
+          $nsis | Select-Object FullName, Length
+
+      - name: Package portable app with bundled plugins
+        if: matrix.platform.id == 'windows'
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts'
+          $stage = Join-Path $repoRoot '.omniterm-build'
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'portable'), (Join-Path $artifacts 'plugins'), $stage | Out-Null
+
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $portable = New-PortablePackage `
+            -RepoRoot $repoRoot `
+            -Destination (Join-Path $artifacts 'portable') `
+            -ArchiveName "OmniTerm_${version}_x64-portable.zip" `
+            -Plugins @(
+              @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') },
+              @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') }
+            )
+          if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
+          Get-Item -LiteralPath $portable | Select-Object FullName, Length
+
+      - name: Upload Tauri NSIS artifact
+        if: matrix.platform.id == 'windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Windows-Installer
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Upload portable artifact
+        if: matrix.platform.id == 'windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Windows-Portable
+          path: |
+            artifacts/portable/*.exe
+            artifacts/portable/*.exe.sha256
+            artifacts/portable/*.zip
+            artifacts/portable/*.zip.sha256
+          if-no-files-found: error
+
+      - name: Upload Linux desktop packages
+        if: matrix.platform.id == 'linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Linux-Packages
+          path: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload macOS desktop packages
+        if: matrix.platform.id == 'macos'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-macOS-Package
+          path: target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  build-standalone-plugins:
+    name: Build Standalone Plugin Packages
+    if: ${{ inputs.build_plugins }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.git_ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.96.0
+
+      - name: Install project dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and package all plugins
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts'
+          $stage = Join-Path $repoRoot '.omniterm-build'
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'plugins'), $stage | Out-Null
+
+          $pluginDirs = Get-ChildItem -Path (Join-Path $repoRoot 'plugins') -Directory
+          foreach ($dir in $pluginDirs) {
+            Write-Host "Building plugin: $($dir.Name)"
+            pnpm build:plugin $dir.FullName
+            New-PluginPackage -PluginPath $dir.FullName -Destination (Join-Path $artifacts "plugins/$($dir.Name)") -StageRoot $stage
+          }
+
+      - name: Upload plugin packages
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Standalone-Plugins
+          path: |
+            artifacts/plugins/**/*.zip
+            artifacts/plugins/**/*.zip.sha256
+          if-no-files-found: error
