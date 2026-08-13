@@ -2,12 +2,12 @@ import { vi } from 'vitest'
 import type { WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
 import { mockOmnitermAPI } from '../../testUtils'
 
-export const WS = { id: 'ws#1', name: 'my-project', path: 'C:/proj', pinned: true }
+export const WS = { id: 'ws#1', name: 'my-project', folders: [{ id: 'folder#1', name: 'my-project', path: 'C:/proj' }], order: 0, pins: [] }
 
 export const dir = (id: string): WorkspaceEntry => ({
   id,
   name: id.split('/').pop()!,
-  path: `C:/proj/${id}`,
+  path: id,
   isDir: true,
   kind: 'dir',
 })
@@ -15,7 +15,7 @@ export const dir = (id: string): WorkspaceEntry => ({
 export const file = (id: string, kind: string, shell?: 'cmd' | 'powershell' | 'wsl'): WorkspaceEntry => ({
   id,
   name: id.split('/').pop()!,
-  path: `C:/proj/${id}`,
+  path: id,
   isDir: false,
   kind,
   ...(shell ? { shell } : {}),

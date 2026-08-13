@@ -28,13 +28,13 @@ export interface WorkspacePanelProps {
   /** Request expansion, scrolling, and highlighting for one workspace file. */
   revealRequest?: RevealRequest | null
   /** Notify the main layout so workspace selectors refresh immediately after adding a workspace. */
-  onWorkspaceAdded?: () => void | Promise<void>
+  onWorkspacesChanged?: () => void | Promise<void>
 }
 
 /** Everything the connection form needs to know about where a connection is saved. */
 export interface WorkspaceConnectionTarget {
   workspaceId: string
-  /** POSIX-relative path inside the workspace; empty means the workspace root. */
+  /** Folder-namespaced logical path; workspace actions always target a real folder/subfolder. */
   parentPath: string
   folders: ConnectionFolder[]
   rootLabel: string

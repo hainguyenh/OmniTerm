@@ -13,7 +13,7 @@ describe('WorkspacePanel', () => {
   it('shows the empty state when no workspaces exist', async () => {
     mockOmnitermAPI({ workspace: { list: async () => [] } })
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText(/No project folders yet/i)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument())
   })
 
   it('scans on expand and runs a script via the run icon', async () => {
@@ -67,15 +67,17 @@ describe('WorkspacePanel', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
-  it('opens a plain terminal (no script) via the row action', async () => {
+  it('opens a terminal only from a real workspace-folder row, not the container row', async () => {
     const run = vi.fn(async () => true)
-    mockScan([], [], run)
+    mockScan([dir('folder#1')], [], run)
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('my-project'))
+    await waitFor(() => expect(screen.getByText('folder#1')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByTitle('Open terminal here'))
-    expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1' })
+    fireEvent.click(within(screen.getByText('folder#1').parentElement as HTMLElement).getByTitle('Open terminal here'))
+    expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', subPath: 'folder#1' })
   })
 
   it('opens a terminal rooted in a subfolder via the folder row action (passes subPath)', async () => {

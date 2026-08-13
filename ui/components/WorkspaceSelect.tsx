@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
+import { orderedWorkspaceRows } from '../utils/workspaceHierarchy'
 
 interface WorkspaceSelectProps {
   workspaces: Workspace[]
@@ -12,7 +13,9 @@ interface WorkspaceSelectProps {
 export default function WorkspaceSelect({ workspaces, value, onChange, compact = false }: WorkspaceSelectProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
-  const label = workspaces.find(workspace => workspace.id === value)?.name ?? 'None'
+  const rows = orderedWorkspaceRows(workspaces)
+  const selected = rows.find(row => row.workspace.id === value)?.workspace
+  const label = selected?.folders.length === 1 ? selected.name : 'None'
   useEffect(() => {
     if (!open) return
     const closeOnOutside = (event: PointerEvent) => {
@@ -35,7 +38,22 @@ export default function WorkspaceSelect({ workspaces, value, onChange, compact =
         title={`Workspace for the next terminal: ${label}`}><span className="truncate">Workspace: {label}</span><ChevronDown className="h-3 w-3 flex-shrink-0" /></button>
       {open && <div role="listbox" className="absolute left-0 top-full z-50 mt-1 min-w-[170px] rounded-lg border border-[#bb9af7]/60 bg-theme-popup p-1 shadow-xl">
         <button type="button" className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-theme-bg" onClick={() => { onChange(null); setOpen(false) }}>None</button>
-        {workspaces.map(workspace => <button type="button" key={workspace.id} className="block w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-theme-bg" onClick={() => { onChange(workspace.id); setOpen(false) }}>{workspace.name}</button>)}
+        {rows.map(({ workspace, depth }) => {
+          const available = workspace.folders.length === 1
+          return (
+            <button
+              type="button"
+              key={workspace.id}
+              disabled={!available}
+              title={available ? undefined : 'Open a terminal from a folder in the Workspace panel'}
+              className="block w-full truncate rounded py-1 pr-2 text-left text-xs hover:bg-theme-bg disabled:cursor-not-allowed disabled:opacity-45"
+              style={{ paddingLeft: 8 + depth * 12 }}
+              onClick={() => { if (available) { onChange(workspace.id); setOpen(false) } }}
+            >
+              {workspace.name}
+            </button>
+          )
+        })}
       </div>}
     </div>
   )

@@ -1,49 +1,130 @@
-import type { ReactNode } from 'react'
-import { ChevronDown, ChevronRight, FolderGit2, Terminal, Trash2 } from 'lucide-react'
+import { useState, type DragEventHandler, type KeyboardEvent } from 'react'
+import {
+  ChevronDown, ChevronRight, FolderGit2, FolderPlus, GripVertical, Trash2,
+} from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
 
 interface WorkspaceRootRowProps {
   workspace: Workspace
   expanded: boolean
-  connectionAction: ReactNode
+  depth?: number
+  canMoveUp?: boolean
+  canMoveDown?: boolean
   onToggle: () => void
-  onOpenTerminal: () => void
+  onAddFolder: () => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
   onRemove: () => void
+  onRename?: (workspaceId: string, name: string) => void
+  onDragStart?: DragEventHandler<HTMLDivElement>
+  onDragOver?: DragEventHandler<HTMLDivElement>
+  onDrop?: DragEventHandler<HTMLDivElement>
 }
 
 export default function WorkspaceRootRow({
   workspace,
   expanded,
-  connectionAction,
+  depth = 0,
   onToggle,
-  onOpenTerminal,
+  onAddFolder,
   onRemove,
+  onRename,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }: WorkspaceRootRowProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingName, setEditingName] = useState(workspace.name)
+
+  const title = workspace.folders.length === 1
+    ? workspace.folders[0].path
+    : `${workspace.folders.length} folders`
+  const actionClass = 'opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition disabled:opacity-20 disabled:pointer-events-none'
+
+  const startRename = () => {
+    setIsEditing(true)
+    setEditingName(workspace.name)
+  }
+
+  const submitRename = () => {
+    const trimmed = editingName.trim()
+    setIsEditing(false)
+    if (trimmed && trimmed !== workspace.name) {
+      onRename?.(workspace.id, trimmed)
+    }
+  }
+
+  const cancelRename = () => {
+    setIsEditing(false)
+    setEditingName(workspace.name)
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      event.stopPropagation()
+      submitRename()
+    } else if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      cancelRename()
+    }
+  }
+
   return (
     <div
-      className="group flex items-center gap-1 px-2 py-1.5 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+      draggable={!isEditing}
+      data-workspace-id={workspace.id}
+      className="group flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+      style={{ paddingLeft: 8 + depth * 12 }}
       onClick={onToggle}
-      title={workspace.path}
+      onDragStart={isEditing ? undefined : onDragStart}
+      onDragOver={isEditing ? undefined : onDragOver}
+      onDrop={isEditing ? undefined : onDrop}
+      title={title}
     >
+      <GripVertical className="h-3 w-3 flex-shrink-0 text-[var(--theme-dim)] opacity-50" />
       {expanded
         ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />
         : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />}
       <FolderGit2 className="w-4 h-4 flex-shrink-0 text-[var(--theme-accent)]" />
-      <span className="flex-1 truncate text-sm">{workspace.name}</span>
+      {isEditing ? (
+        <input
+          type="text"
+          autoFocus
+          value={editingName}
+          onChange={event => setEditingName(event.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={submitRename}
+          onClick={event => event.stopPropagation()}
+          onDoubleClick={event => event.stopPropagation()}
+          className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-[var(--theme-bg)] text-[var(--theme-fg)] border border-[var(--theme-accent)] rounded outline-none"
+        />
+      ) : (
+        <span
+          className="flex-1 truncate text-sm"
+          onDoubleClick={event => {
+            event.stopPropagation()
+            startRename()
+          }}
+        >
+          {workspace.name}
+        </span>
+      )}
       <button
         type="button"
-        title="Open terminal here"
-        onClick={(event) => { event.stopPropagation(); onOpenTerminal() }}
-        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition"
+        title="Add folder to workspace"
+        aria-label="Add folder to workspace"
+        onClick={event => { event.stopPropagation(); onAddFolder() }}
+        className={actionClass}
       >
-        <Terminal className="w-3.5 h-3.5" />
+        <FolderPlus className="w-3.5 h-3.5" />
       </button>
-      {connectionAction}
       <button
         type="button"
         title="Remove from workspaces"
-        onClick={(event) => { event.stopPropagation(); onRemove() }}
-        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-red-400 transition"
+        onClick={event => { event.stopPropagation(); onRemove() }}
+        className={`${actionClass} hover:text-red-400`}
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

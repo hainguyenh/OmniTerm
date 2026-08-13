@@ -5,7 +5,7 @@ import { applyFilter, type TreeFilter } from '../utils/workspaceFilter'
 /** A one-shot request to expand, scroll to, and flash a file in the Workspace tree. */
 export interface RevealRequest {
   workspaceId: string
-  /** Workspace-relative path (a `WorkspaceScript.id`), matching `WorkspaceTreeNode.path`. */
+  /** Folder-namespaced logical path (a `WorkspaceScript.id`), matching `WorkspaceTreeNode.path`. */
   path: string
   /** Bumped on every request so revealing the same file twice in a row still fires. */
   nonce: number

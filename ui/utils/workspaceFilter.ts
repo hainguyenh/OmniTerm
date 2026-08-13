@@ -22,7 +22,7 @@ export interface TreeFilter {
    */
   kinds: string[]
   /**
-   * The files shown in `selected` mode, by workspace-relative entry id. Ignored otherwise.
+   * The files shown in `selected` mode, by folder-namespaced logical entry id. Ignored otherwise.
    *
    * Paths, not extensions: the menu lets the user tick real files in the workspace tree, which is
    * both easier to drive and able to express "these two scripts" — something a type list cannot.

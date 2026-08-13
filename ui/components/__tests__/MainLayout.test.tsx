@@ -81,27 +81,26 @@ describe("MainLayout", () => {
   /** A workspace is the only home for connections now — there is no separate personal section. */
   it("renders the empty sidebar state with no personal connections section", async () => {
     renderLayout();
-    await waitFor(() => expect(screen.getByText(/No project folders yet/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument());
     expect(screen.queryByLabelText("Personal Connections")).not.toBeInTheDocument();
     expect(screen.queryByTitle("New personal connection")).not.toBeInTheDocument();
   });
 
   it("opens the connection form against the workspace folder that asked for it", async () => {
-    const WS = { id: "ws#1", name: "my-project", path: "C:/proj", pinned: true };
+    const WS = { id: "ws#1", name: "my-project", folders: [{ id: "folder#1", name: "my-project", path: "C:/proj" }], order: 0, pins: [] };
     renderLayout({}, {
       workspace: {
         list: async () => [WS],
         scanFolders: async () => [
-          { id: "infra", name: "infra", path: "C:/proj/infra", isDir: true, kind: "dir" },
+          { id: "folder#1", name: "my-project", path: "folder#1", isDir: true, kind: "dir" },
+          { id: "folder#1/infra", name: "infra", path: "folder#1/infra", isDir: true, kind: "dir" },
         ],
-        scanFolderEntries: async () => ({
-          entries: [
-            // A script inside it, so the folder survives the default "no empty folders" filter.
-            { id: "infra/up.sh", name: "up.sh", path: "C:/proj/infra/up.sh", isDir: false, kind: "sh", editable: true },
-          ],
-          total: 1,
-          hasMore: false,
-        }),
+        scanFolderEntries: async (_workspaceId: string, folder: string) => {
+          const entries = folder === "folder#1/infra"
+            ? [{ id: "folder#1/infra/up.sh", name: "up.sh", path: "folder#1/infra/up.sh", isDir: false, kind: "sh", editable: true }]
+            : [];
+          return { entries, total: entries.length, hasMore: false };
+        },
         loadConnections: async () => [],
       },
     });
@@ -110,15 +109,17 @@ describe("MainLayout", () => {
     expect(await screen.findByRole("heading", { name: "New Connection" })).toBeInTheDocument();
     expect(screen.getByText("my-project", { selector: "span.text-xs" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
-    expect(screen.getByRole("combobox")).toHaveValue("infra");
-    expect(screen.getByRole("option", { name: "my-project" })).toBeInTheDocument();
+    const parentSelect = screen.getByRole("combobox");
+    expect(parentSelect).toHaveValue("folder#1/infra");
+    expect(screen.getByRole("option", { name: "my-project" })).toHaveValue("folder#1");
+    expect(Array.from((parentSelect as HTMLSelectElement).options).some(option => option.value === "")).toBe(false);
   });
 
   it("uses the Workspace header plus only to add a workspace", async () => {
     const add = vi.fn().mockResolvedValue(null);
     renderLayout({}, { workspace: { add } });
-    await waitFor(() => expect(screen.getByText(/No project folders yet/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText("Add workspace"));
+    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("Add workspace folder"));
     expect(add).toHaveBeenCalledOnce();
     expect(screen.queryByText("New connection")).not.toBeInTheDocument();
   });
