@@ -9,9 +9,10 @@ interface UseViewGroupsInput {
   setPanes: (panes: (string | null)[]) => void
   focusedPane: number
   setFocusedPane: (pane: number) => void
+  activeTabs?: { id: string }[]
 }
 
-export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane }: UseViewGroupsInput) {
+export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane, activeTabs = [] }: UseViewGroupsInput) {
   const [viewGroups, setViewGroups] = useState<ViewGroup[]>(() => [createDefaultViewGroup(layoutMode)])
   const [activeGroupId, setActiveGroupId] = useState(DEFAULT_VIEW_GROUP_ID)
   const [tabGroups, setTabGroups] = useState<Record<string, string>>({})
@@ -24,9 +25,10 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
       const next = prev
         .map(group => {
           if (group.id === activeGroupId) {
-            if (group.layoutMode === layoutMode && group.focusedPane === focusedPane
+            const nextLayoutMode = group.id === DEFAULT_VIEW_GROUP_ID ? 1 : layoutMode
+            if (group.layoutMode === nextLayoutMode && group.focusedPane === focusedPane
               && group.panes.length === panes.length && group.panes.every((id, index) => id === panes[index])) return group
-            return { ...group, layoutMode, panes: [...panes], focusedPane }
+            return { ...group, layoutMode: nextLayoutMode, panes: [...panes], focusedPane }
           }
           const nextPanes = activeGroupId === DEFAULT_VIEW_GROUP_ID
             ? group.panes
@@ -125,7 +127,14 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
       if (activeGroupId === groupId) {
         setActiveGroupId(DEFAULT_VIEW_GROUP_ID)
         setLayoutMode(1)
-        setPanes([...group.panes])
+        
+        const nextPanes = [...group.panes]
+        if (nextPanes[0] === null) {
+          const ungroupedTabs = activeTabs.filter(t => !tabGroups[t.id])
+          if (ungroupedTabs.length > 0) nextPanes[0] = ungroupedTabs[0].id
+        }
+        
+        setPanes(nextPanes)
         setFocusedPane(0)
       }
     }
@@ -137,10 +146,17 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
     const group = viewGroups.find(item => item.id === groupId)
     if (!group || group.id === activeGroupId) return
     setActiveGroupId(group.id)
-    setLayoutMode(group.layoutMode)
-    setPanes([...group.panes])
+    setLayoutMode(group.id === DEFAULT_VIEW_GROUP_ID ? 1 : group.layoutMode)
+    
+    const nextPanes = [...group.panes]
+    if (groupId === DEFAULT_VIEW_GROUP_ID && nextPanes[0] === null) {
+      const ungroupedTabs = activeTabs.filter(t => !tabGroups[t.id])
+      if (ungroupedTabs.length > 0) nextPanes[0] = ungroupedTabs[0].id
+    }
+    
+    setPanes(nextPanes)
     setFocusedPane(Math.min(group.focusedPane, group.layoutMode - 1))
-  }, [activeGroupId, setFocusedPane, setLayoutMode, setPanes, viewGroups])
+  }, [activeGroupId, setFocusedPane, setLayoutMode, setPanes, viewGroups, activeTabs, tabGroups])
 
   const createNewViewGroup = useCallback((tabId?: string, activate = true) => {
     if (activate && !tabId) {
@@ -161,7 +177,9 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
     if (activate) {
       setActiveGroupId(id)
       setLayoutMode(1)
-      setPanes(Array(8).fill(null))
+      const nextPanes = Array(8).fill(null)
+      if (tabId) nextPanes[0] = tabId
+      setPanes(nextPanes)
       setFocusedPane(0)
     }
     return id

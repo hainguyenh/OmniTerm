@@ -113,7 +113,7 @@ describe('useMainLayoutBase complete behavior', () => {
     const { result } = renderHook(() => useMainLayoutBase(props()))
     await waitFor(() => expect(result.current.hasConnectionProvider).toBe(true))
     expect(result.current.connectionCapabilities).toEqual({ sftp: true })
-    expect(result.current.savedConnections).toEqual([ssh])
+    expect(result.current.savedConnections).toEqual([{ ...ssh, workspaceId: 'w' }])
     expect(result.current.shellOptions).toEqual([{ id: 'powershell', label: 'PowerShell' }])
     expect(result.current.idleArtUrl).toBe('blob:idle-dark')
     expect(result.current.loadingArtUrl).toBe('blob:loading-dark')
@@ -345,6 +345,26 @@ describe('useMainLayoutBase complete behavior', () => {
     act(() => result.current.openConnectionForm({ workspaceId: 'w', folders: [], rootLabel: 'W' } as any))
     await act(() => result.current.handleSaveConnection(ssh))
     expect(showAlert).toHaveBeenCalledWith('Could not save the connection: read only', expect.anything())
+  })
+
+  it('sorts visible tabs according to the visual pane layout order', () => {
+    const { result } = renderHook(() => useMainLayoutBase(props({ layoutMode: 2 })))
+    act(() => {
+      result.current.setActiveTabs([
+        { id: 'tabA', connId: 'connA', name: 'A' },
+        { id: 'tabB', connId: 'connB', name: 'B' },
+      ])
+      result.current.setPanes(['tabB', 'tabA', null, null, null, null, null, null])
+    })
+
+    const order = result.current.visibleTabs.map(t => t.id)
+    expect(order).toEqual(['tabB', 'tabA'])
+    
+    act(() => {
+      result.current.setPanes(['tabA', 'tabB', null, null, null, null, null, null])
+    })
+    
+    expect(result.current.visibleTabs.map(t => t.id)).toEqual(['tabA', 'tabB'])
   })
 })
 

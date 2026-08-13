@@ -331,7 +331,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         key={node.connection.id}
         connection={node.connection}
         depth={depth}
-        onConnect={onConnectWorkspaceConnection}
+        onConnect={(connection) => onConnectWorkspaceConnection?.(connection, ws.id)}
         onEdit={onEditWorkspaceConnection
           ? (conn) => onEditWorkspaceConnection(targetFor(ws, parentPath), conn)
           : undefined}

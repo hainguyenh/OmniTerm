@@ -55,7 +55,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
           ) : (
             <>
               <Terminal className="absolute inset-0 h-full w-full opacity-[0.04]" strokeWidth={1.25} />
-              <div className="relative w-[75%] h-[75%]" data-testid="idle-art" style={{ transform: 'scale(2)' }}>
+              <div className="relative w-[75%] h-[75%]" data-testid="idle-art">
                 <DefaultIdleArt dark={dark} />
               </div>
             </>
@@ -63,9 +63,6 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         </div>
 
         <div className="text-center px-3 max-w-full flex-shrink-0">
-          <div className="flex flex-col items-center gap-1 mb-2">
-            <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
-          </div>
           {!compact && (
             <p className="font-semibold text-[var(--theme-fg)] opacity-50 text-sm">
               Open a terminal
@@ -78,8 +75,10 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
           )}
         </div>
 
-        <div className="flex items-center justify-center flex-wrap gap-2.5 max-w-full flex-shrink-0">
-          <div className="flex items-center gap-1">
+        <div className="flex flex-col items-center justify-center gap-3 max-w-full flex-shrink-0">
+          <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
+          <div className="flex items-center justify-center flex-wrap gap-2.5 w-full">
+            <div className="flex items-center gap-1">
             <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
             <button
               type="button"
@@ -111,6 +110,7 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
               Choose open session{openSessionCount > 0 ? ` (${openSessionCount})` : ''}
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>

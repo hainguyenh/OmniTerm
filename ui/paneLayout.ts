@@ -147,6 +147,22 @@ export function paneRect(
   return { left: pct(left), top: pct(top), width: pct(right - left), height: pct(bottom - top) }
 }
 
+/** Pane indices in the order a user sees them: top-to-bottom, then left-to-right. */
+export function paneOrder(
+  mode: LayoutMode,
+  split3Style: 'left' | 'right' | 'top' = 'left',
+  split2Style: 'columns' | 'rows' = 'columns',
+  ratios: SplitRatios = DEFAULT_RATIOS,
+): number[] {
+  return Array.from({ length: mode }, (_, index) => index).sort((a, b) => {
+    const aRect = paneRect(a, mode, split3Style, split2Style, ratios)
+    const bRect = paneRect(b, mode, split3Style, split2Style, ratios)
+    const topDelta = Number.parseFloat(String(aRect.top)) - Number.parseFloat(String(bRect.top))
+    if (topDelta !== 0) return topDelta
+    return Number.parseFloat(String(aRect.left)) - Number.parseFloat(String(bRect.left))
+  })
+}
+
 /** A draggable boundary: which ratio it moves, which way it moves, and where to draw it. */
 export interface PaneDivider {
   key: PaneDividerKey

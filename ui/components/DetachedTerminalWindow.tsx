@@ -7,6 +7,7 @@ import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
+import { useBlurPlugin } from '../hooks/useBlurPlugin'
 
 interface DetachedTerminalWindowProps {
   appSettings: AppSettings
@@ -48,6 +49,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
   const [windowActive, setWindowActive] = useState(true)
+  const { available: blurAvailable } = useBlurPlugin()
+
   useEffect(() => {
     const onFocus = () => setWindowActive(true)
     const onBlur = () => setWindowActive(false)
@@ -155,7 +158,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
       <div
         className="flex-1 min-h-0 relative"
         style={{
-          filter: !windowActive && (appSettings.blurInactiveWindow ?? 0) > 0
+          filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0
             ? `blur(${appSettings.blurInactiveWindow}px)`
             : 'none',
           transition: 'filter 120ms ease-out',
