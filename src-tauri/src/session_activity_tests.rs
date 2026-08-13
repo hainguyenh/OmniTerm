@@ -200,3 +200,42 @@ fn poller_exits_cleanly_when_no_pty_manager_is_registered() {
     tauri::async_runtime::block_on(task)
         .expect("poller task should stop without managed PTY state");
 }
+
+/// The command grace counts as busy even with no child process. This exercises the
+/// `busy = has_descendant || self.command_grace > 0` branch when `has_descendant` is false
+/// but `command_grace > 0`.
+#[test]
+fn command_grace_alone_counts_as_busy_while_active() {
+    let mut state = ActivityState::new(true);
+    // First observe: grace ticks count down, no child, still busy (grace > 0).
+    // Reported started as Some(true), so this should return None (no change).
+    assert_eq!(state.observe(false), None, "grace holds busy; no state change");
+}
+
+/// When no sessions have a status sink, `resolve_tick` with all targets having no pid
+/// must not panic and must return an empty change list.
+#[test]
+fn resolve_tick_with_empty_targets_prunes_stale_state() {
+    let mut states = HashMap::new();
+    // Pre-populate a stale entry.
+    states.insert("gone".to_string(), ActivityState::new(false));
+    let table = ProcTable::from_rows([(100u32, 1u32, 10u64, "sh")]);
+    let changes = resolve_tick(&table, &mut states, &[]);
+    assert!(changes.is_empty());
+    assert!(states.is_empty(), "stale state must be pruned");
+}
+
+/// When the observed state matches what was already reported, `observe` returns `None`.
+/// This covers the `self.reported == Some(next) → return None` branch when the session
+/// has been confirmed idle and the next tick is also idle.
+#[test]
+fn observe_returns_none_when_reported_state_already_matches() {
+    let mut state = ActivityState::new(false);
+    // Confirm idle: need IDLE_CONFIRM_TICKS observations.
+    for _ in 0..IDLE_CONFIRM_TICKS {
+        state.observe(false);
+    }
+    // State is now confirmed idle (Some(false)) and reported as idle.
+    // One more idle observation: already reported false, so must return None.
+    assert_eq!(state.observe(false), None);
+}

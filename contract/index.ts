@@ -55,16 +55,30 @@ export interface ConnectionTree {
 
 // ── Workspace domain types ────────────────────────────────────────────────────────────────────
 
+/** One real local folder root owned by a saved OmniTerm workspace container. */
+export interface WorkspaceFolder {
+  id: string
+  name: string
+  path: string
+}
+
+/** Structural presentation pin. Empty `path` means the folder root itself. */
+export interface WorkspacePin {
+  folderId: string
+  path: string
+}
+
 /**
- * A local project/workspace folder the user has pinned in the Workspace view. The host renders
- * whatever the active WorkspaceProvider returns, so plugins may source these from anywhere
- * (git repos, a monorepo config, a remote index) — not just the on-disk default.
+ * A saved workspace container. It may own many local folder roots and may be nested under another
+ * workspace by reference. `order` is the sibling position within `parentId` (or the root list).
  */
 export interface Workspace {
   id: string
   name: string
-  path: string
-  pinned?: boolean
+  folders: WorkspaceFolder[]
+  parentId?: string
+  order: number
+  pins: WorkspacePin[]
 }
 
 /**
@@ -74,6 +88,7 @@ export interface Workspace {
 export interface WorkspaceScript {
   id: string
   name: string
+  /** Logical path namespaced as `<workspaceFolderId>/<relativePath>`. */
   path: string
   kind: 'bat' | 'ps1' | 'sh' | 'rdp' | string
   /** Suggested shell to run the script under; the host falls back to a sensible default. */
@@ -98,11 +113,12 @@ export interface WorkspaceScript {
  */
 export interface WorkspaceEntry {
   /**
-   * POSIX-style path relative to the workspace root. Stable across scans, and the value a
-   * workspace-scoped `Connection` puts in `parentId` to say which folder it belongs to.
+   * Logical path namespaced as `<workspaceFolderId>/<relativePath>`. Stable across scans, and the
+   * value a workspace-scoped `Connection` puts in `parentId` to identify its real folder root.
    */
   id: string
   name: string
+  /** Same folder-namespaced logical path as `id`; never an absolute filesystem path. */
   path: string
   isDir: boolean
   /** `'dir'` for a directory; else the script kind, else the lowercased extension, else `'file'`. */

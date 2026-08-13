@@ -212,15 +212,26 @@ jobs:
           fi
 
   build-desktop-packages:
-    name: Build Tauri release package
-    # Exactly one of quality-gate / verify-commit-is-green runs; the other is skipped, and a skipped
-    # `needs` would otherwise skip this job too. So the gate is stated as "one of them succeeded".
+    name: Build Tauri release package (${{ matrix.platform.name }})
     needs: [quality-gate, verify-commit-is-green, resolve-release-version]
     if: >-
       ${{ !cancelled()
           && needs.resolve-release-version.result == 'success'
           && (needs.quality-gate.result == 'success' || needs.verify-commit-is-green.result == 'success') }}
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: Windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: Linux
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: macOS
+            os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.platform.os }}
 
     steps:
       - name: Check out source code
@@ -228,6 +239,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.git_ref || github.ref }}
+
+      - name: Install Linux system dependencies
+        if: matrix.platform.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -243,9 +260,10 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.96.0
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.platform.target }}
 
       - name: Verify MSVC linker
+        if: matrix.platform.os == 'windows-latest'
         shell: pwsh
         run: |
           if (-not (Get-Command link.exe -ErrorAction SilentlyContinue)) {
@@ -256,10 +274,6 @@ jobs:
       - name: Install project dependencies
         run: pnpm install --frozen-lockfile
 
-      # package.json, tauri.conf.json and Cargo.toml each carry the version separately; a drift here
-      # ships an installer whose filename and metadata disagree and nothing else would catch it. The
-      # release version is stamped into all three before the build so Tauri names the installer after
-      # the version actually being published — create-release-page commits the same three files.
       - name: Stamp the release version
         if: needs.resolve-release-version.outputs.skip != 'true'
         shell: pwsh
@@ -273,8 +287,6 @@ jobs:
           BARE_VERSION: ${{ needs.resolve-release-version.outputs.bare }}
         run: node scripts/sync-tauri-version.mjs validate $env:BARE_VERSION
 
-      # Build bundled plugins before Tauri so installer and portable artifacts contain the same
-      # plugin resources.
       - name: Build bundled plugins
         run: |
           pnpm build:plugin plugins/always-awake
@@ -301,22 +313,24 @@ jobs:
           $config = @{ bundle = @{ resources = $resources } }
           $config | ConvertTo-Json -Depth 8 | Set-Content (Join-Path (Get-Location) '.omniterm-build/tauri.bundle-plugin.json')
 
-      # `src-tauri` is a member of the root Cargo workspace, so cargo — and therefore Tauri's
-      # bundler — writes to the workspace-root `target/`, not `src-tauri/target/`.
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: .
 
       - name: Build Tauri Windows setup installer
+        if: matrix.platform.os == 'windows-latest'
         run: pnpm build:tauri:nsis --config .omniterm-build/tauri.bundle-plugin.json
 
+      - name: Build Tauri Linux & macOS packages
+        if: matrix.platform.os != 'windows-latest'
+        run: pnpm tauri:build --config .omniterm-build/tauri.bundle-plugin.json
+
       - name: Confirm Tauri setup artifact exists
+        if: matrix.platform.os == 'windows-latest'
         shell: pwsh
         run: |
           $bundle = 'target/release/bundle/nsis'
-          # Distinguish "bundler never ran" from "ran but emitted nothing" — the two failures have
-          # completely different causes and a shared message sent the last investigation the wrong way.
           if (-not (Test-Path -LiteralPath $bundle -PathType Container)) {
             throw "Tauri produced no NSIS bundle directory at $bundle."
           }
@@ -324,16 +338,15 @@ jobs:
           if ($nsis.Count -lt 1) { throw "Tauri NSIS artifact was not produced in $bundle." }
           $nsis | Select-Object FullName, Length
 
-      # The same function the local wizard uses, so the portable package contains the bundled plugin
-      # rather than requiring a second, user-installed plugin archive.
       - name: Package portable app with bundled plugins
+        if: matrix.platform.os == 'windows-latest'
         shell: pwsh
         run: |
           . ./scripts/ReleasePackaging.ps1
           $repoRoot = (Get-Location).Path
           $artifacts = Join-Path $repoRoot 'artifacts'
           $stage = Join-Path $repoRoot '.omniterm-build'
-          New-Item -ItemType Directory -Force -Path $artifacts, $stage | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'portable'), (Join-Path $artifacts 'plugins'), $stage | Out-Null
 
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $portable = New-PortablePackage `
@@ -347,7 +360,11 @@ jobs:
           if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
           Get-Item -LiteralPath $portable | Select-Object FullName, Length
 
+          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/always-awake') -Destination (Join-Path $artifacts 'plugins/always-awake') -StageRoot $stage
+          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/blur') -Destination (Join-Path $artifacts 'plugins/blur') -StageRoot $stage
+
       - name: Upload Tauri NSIS artifact
+        if: matrix.platform.os == 'windows-latest'
         uses: actions/upload-artifact@v6
         with:
           name: OmniTerm-Tauri-Windows-nsis
@@ -355,20 +372,47 @@ jobs:
           if-no-files-found: error
 
       - name: Upload portable artifact
+        if: matrix.platform.os == 'windows-latest'
         uses: actions/upload-artifact@v6
         with:
           name: OmniTerm-Windows-portable
           path: |
+            artifacts/portable/*.exe
+            artifacts/portable/*.exe.sha256
             artifacts/portable/*.zip
             artifacts/portable/*.zip.sha256
           if-no-files-found: error
 
+      - name: Upload plugin packages
+        if: matrix.platform.os == 'windows-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Plugins
+          path: |
+            artifacts/plugins/**/*.zip
+            artifacts/plugins/**/*.zip.sha256
+          if-no-files-found: error
+
+      - name: Upload Linux desktop packages
+        if: matrix.platform.os == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Linux-packages
+          path: |
+            target/release/bundle/appimage/*.AppImage
+            target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+      - name: Upload macOS desktop packages
+        if: matrix.platform.os == 'macos-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-macOS-packages
+          path: target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
   create-release-page:
     needs: [resolve-release-version, build-desktop-packages]
-    # `skipped` propagates down the whole graph, not just one level: quality-gate being skipped in
-    # favour of verify-commit-is-green skipped this job too, even though build-desktop-packages
-    # overrode it and succeeded. The run then reported success having published nothing — so the
-    # override has to be repeated by every job downstream of the branch, not only the first.
     if: >-
       ${{ !cancelled()
           && needs.resolve-release-version.result == 'success'
@@ -382,13 +426,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.git_ref || github.ref }}
 
-      # Tagged only after the build succeeded, so a failed run never leaves a tag pointing at a
-      # version that was never published. Nothing is committed: master requires pull requests, and the
-      # version the release ships is already baked into the artifacts by the 'Stamp the release
-      # version' step above. The tag is the record.
-      #
-      # Pushing with GITHUB_TOKEN does not trigger workflows, so the tag created here cannot re-enter
-      # this workflow through its `push: tags` trigger.
       - name: Tag the release commit
         if: github.event_name == 'workflow_dispatch' && needs.resolve-release-version.outputs.skip != 'true'
         shell: bash
@@ -407,16 +444,161 @@ jobs:
           path: release-artifacts
           merge-multiple: true
 
+      - name: Generate release notes table grouped by OS
+        shell: bash
+        env:
+          TAG: ${{ needs.resolve-release-version.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          cat << 'EOF' > generate-notes.mjs
+          import { readdirSync, statSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+          import { join, basename } from 'node:path';
+
+          const tag = process.env.TAG || 'v0.0.0';
+          const repo = process.env.REPO || 'hainguyenh/OmniTerm';
+          const baseUrl = `https://github.com/${repo}/releases/download/${tag}`;
+
+          function extractChangelogSection(targetTag) {
+            if (!existsSync('CHANGELOG.md')) return '';
+            const content = readFileSync('CHANGELOG.md', 'utf8');
+            const bareVersion = targetTag.replace(/^v/, '').trim();
+
+            const lines = content.split(/\r?\n/);
+            let capturing = false;
+            let sectionLines = [];
+
+            for (const line of lines) {
+              const match = /^##\s+\[(.*?)\]/.exec(line);
+              if (match) {
+                const headingVer = match[1].trim().replace(/^v/, '');
+                if (capturing) break;
+                if (headingVer === bareVersion || headingVer === targetTag || headingVer === 'Unreleased') {
+                  capturing = true;
+                  continue;
+                }
+              } else if (capturing) {
+                sectionLines.push(line);
+              }
+            }
+            return sectionLines.join('\n').trim();
+          }
+
+          function getFiles(dir) {
+            let results = [];
+            for (const item of readdirSync(dir, { withFileTypes: true })) {
+              const full = join(dir, item.name);
+              if (item.isDirectory()) {
+                results = results.concat(getFiles(full));
+              } else if (item.isFile() && !item.name.endsWith('.sha256')) {
+                results.push(full);
+              }
+            }
+            return results;
+          }
+
+          function formatSize(bytes) {
+            if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+            if (bytes >= 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+            return `${bytes} B`;
+          }
+
+          let md = '';
+          const changelog = extractChangelogSection(tag);
+          if (changelog) {
+            md += `## Changelog\n\n${changelog}\n\n`;
+          }
+
+          md += `## Downloads\n\n`;
+
+          const files = getFiles('release-artifacts');
+          const categorized = {
+            windows: [],
+            linux: [],
+            macos: [],
+            plugins: [],
+          };
+
+          for (const file of files) {
+            const name = basename(file);
+            const size = formatSize(statSync(file).size);
+            const url = `${baseUrl}/${encodeURIComponent(name)}`;
+            const link = `[\`${name}\`](${url})`;
+
+            if (name.endsWith('.exe') || (name.endsWith('.zip') && name.includes('portable'))) {
+              let desc = 'Windows Package';
+              if (name.includes('setup') || name.includes('nsis')) desc = 'Installer (.exe)';
+              else if (name.endsWith('.exe') && name.includes('portable')) desc = 'Portable (.exe)';
+              else if (name.endsWith('.zip') && name.includes('portable')) desc = 'Portable (.zip)';
+              categorized.windows.push({ link, desc, size });
+            } else if (name.endsWith('.AppImage') || name.endsWith('.deb')) {
+              let desc = name.endsWith('.AppImage') ? 'AppImage' : 'Debian / Ubuntu (.deb)';
+              categorized.linux.push({ link, desc, size });
+            } else if (name.endsWith('.dmg')) {
+              categorized.macos.push({ link, desc: 'Disk Image (.dmg)', size });
+            } else if (name.endsWith('.zip')) {
+              categorized.plugins.push({ link, desc: 'Plugin', size });
+            }
+          }
+
+          if (categorized.windows.length > 0) {
+            md += `### Windows\n\n`;
+            md += `| File | Description | Size |\n`;
+            md += `| :--- | :--- | :--- |\n`;
+            for (const item of categorized.windows) {
+              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
+            }
+            md += `\n`;
+          }
+
+          if (categorized.linux.length > 0) {
+            md += `### Linux\n\n`;
+            md += `| File | Description | Size |\n`;
+            md += `| :--- | :--- | :--- |\n`;
+            for (const item of categorized.linux) {
+              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
+            }
+            md += `\n`;
+          }
+
+          if (categorized.macos.length > 0) {
+            md += `### macOS\n\n`;
+            md += `| File | Description | Size |\n`;
+            md += `| :--- | :--- | :--- |\n`;
+            for (const item of categorized.macos) {
+              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
+            }
+            md += `\n`;
+          }
+
+          if (categorized.plugins.length > 0) {
+            md += `### Plugins\n\n`;
+            md += `| File | Description | Size |\n`;
+            md += `| :--- | :--- | :--- |\n`;
+            for (const item of categorized.plugins) {
+              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
+            }
+            md += `\n`;
+          }
+
+          writeFileSync('release_notes.md', md, 'utf8');
+          console.log('Generated release_notes.md:\n' + md);
+          EOF
+          node generate-notes.mjs
+
       - name: Publish GitHub release
-        # Only when a version was resolved (input wasn't blank).
         if: needs.resolve-release-version.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.resolve-release-version.outputs.tag }}
           name: ${{ needs.resolve-release-version.outputs.tag }}
+          body_path: release_notes.md
           files: |
             release-artifacts/**/*.exe
+            release-artifacts/**/*.exe.sha256
             release-artifacts/**/*.zip
             release-artifacts/**/*.zip.sha256
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.dmg
           fail_on_unmatched_files: true
-          generate_release_notes: true
+

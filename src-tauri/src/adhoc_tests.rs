@@ -115,6 +115,41 @@ fn quick_shell_defaults_when_no_shell_is_named() {
 /// Same property `parse_open_shell_args` protects: an arbitrary executable name must not survive
 /// the trip from the webview to the spawner.
 #[test]
+fn quick_shell_workspace_folder_requires_exactly_one_real_root() {
+    use crate::workspace::{Workspace, WorkspaceFolder};
+
+    let folder = WorkspaceFolder {
+        id: "folder#one".to_string(),
+        name: "One".to_string(),
+        path: "/one".to_string(),
+    };
+    let make = |folders| Workspace {
+        id: "ws#one".to_string(),
+        name: "One".to_string(),
+        folders,
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+
+    assert_eq!(
+        quick_shell_workspace_folder(&make(Vec::new())).expect_err("empty workspace must fail"),
+        "Add a folder to this workspace before opening a shell."
+    );
+    assert_eq!(
+        quick_shell_workspace_folder(&make(vec![folder.clone(), folder.clone()]))
+            .expect_err("multi-root workspace must be explicit"),
+        "Choose a workspace folder before opening a shell."
+    );
+    assert_eq!(
+        quick_shell_workspace_folder(&make(vec![folder]))
+            .expect("single-root workspace is unambiguous")
+            .id,
+        "folder#one"
+    );
+}
+
+#[test]
 fn quick_shell_refuses_anything_outside_the_closed_set() {
     for hostile in [
         "C:\\Windows\\System32\\calc.exe",
@@ -225,3 +260,72 @@ fn quick_shell_command_rejects_unsupported_renderer_input() {
     ));
     assert!(result.is_err());
 }
+
+#[test]
+fn quick_shell_with_workspace_and_queue_overflow_paths() {
+    use tauri::Manager;
+    use crate::workspace::{Workspace, WorkspaceFolder};
+
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle();
+
+    let temp = tempfile::tempdir().unwrap();
+    let valid_path = temp.path().to_string_lossy().into_owned();
+
+    let ws_valid = Workspace {
+        id: "ws#valid".to_string(),
+        name: "Valid".to_string(),
+        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone() }],
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+    let ws_empty = Workspace {
+        id: "ws#empty".to_string(),
+        name: "Empty".to_string(),
+        folders: Vec::new(),
+        parent_id: None,
+        order: 1,
+        pins: Vec::new(),
+    };
+    let ws_multi = Workspace {
+        id: "ws#multi".to_string(),
+        name: "Multi".to_string(),
+        folders: vec![
+            WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone() },
+            WorkspaceFolder { id: "f2".into(), name: "F2".into(), path: valid_path.clone() },
+        ],
+        parent_id: None,
+        order: 2,
+        pins: Vec::new(),
+    };
+    let ws_bad_dir = Workspace {
+        id: "ws#baddir".to_string(),
+        name: "Bad".to_string(),
+        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: "/missing/folder/nowhere".into() }],
+        parent_id: None,
+        order: 3,
+        pins: Vec::new(),
+    };
+
+    let _ = crate::workspace_persistence::write_workspaces(handle, &[ws_valid, ws_empty, ws_multi, ws_bad_dir]);
+
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#ghost".into()))).unwrap_err().contains("Unknown workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#empty".into()))).unwrap_err().contains("Add a folder"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#multi".into()))).unwrap_err().contains("Choose a workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#baddir".into()))).unwrap_err().contains("invalid"));
+
+    let res = tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#valid".into()))).unwrap();
+    assert_eq!(res["localCwd"], valid_path);
+
+    for _ in 0..MAX_PENDING_OPENS + 5 {
+        open_adhoc_shell(handle, request());
+    }
+
+    if let Ok(path) = crate::workspace_persistence::workspaces_file(handle) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+

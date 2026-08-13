@@ -8,21 +8,45 @@ fn workspaces_serialize_with_camel_case_fields() {
     let ws = Workspace {
         id: "ws#1".to_string(),
         name: "proj".to_string(),
-        path: "C:/proj".to_string(),
-        pinned: Some(true),
+        folders: vec![WorkspaceFolder {
+            id: "folder#1".to_string(),
+            name: "proj".to_string(),
+            path: "C:/proj".to_string(),
+        }],
+        parent_id: Some("ws#parent".to_string()),
+        order: 2,
+        pins: vec![WorkspacePin { folder_id: "folder#1".to_string(), path: "src".to_string() }],
     };
     let value = serde_json::to_value(&ws).unwrap();
     assert_eq!(value["id"], serde_json::json!("ws#1"));
-    assert_eq!(value["pinned"], serde_json::json!(true));
+    assert_eq!(value["parentId"], serde_json::json!("ws#parent"));
+    assert_eq!(value["folders"][0]["path"], serde_json::json!("C:/proj"));
+    assert_eq!(value["pins"][0]["folderId"], serde_json::json!("folder#1"));
 }
 
-/// `pinned` is optional in the file: a workspaces.json written before the field existed must still
-/// load rather than failing the whole list.
+/// Current records may omit optional hierarchy/pin fields and still decode with defaults.
 #[test]
-fn a_workspace_without_pinned_still_deserializes() {
-    let ws: Workspace =
-        serde_json::from_str(r#"{"id":"ws#1","name":"proj","path":"C:/proj"}"#).unwrap();
-    assert_eq!(ws.pinned, None);
+fn a_workspace_without_optional_fields_still_deserializes() {
+    let ws: Workspace = serde_json::from_str(
+        r#"{"id":"ws#1","name":"proj","folders":[{"id":"folder#1","name":"proj","path":"C:/proj"}],"order":0}"#,
+    )
+    .unwrap();
+    assert_eq!(ws.parent_id, None);
+    assert!(ws.pins.is_empty());
+}
+
+#[test]
+fn empty_workspace_pins_are_serialized_for_the_renderer_contract() {
+    let ws = Workspace {
+        id: "ws#1".to_string(),
+        name: "proj".to_string(),
+        folders: Vec::new(),
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+    };
+    let value = serde_json::to_value(&ws).unwrap();
+    assert_eq!(value["pins"], serde_json::json!([]));
 }
 
 // ── Persistence helpers ────────────────────────────────────────────────
@@ -54,8 +78,14 @@ fn write_and_read_workspaces_round_trip() {
     let ws = Workspace {
         id: "ws#test".to_string(),
         name: "My Project".to_string(),
-        path: "C:/proj".to_string(),
-        pinned: Some(true),
+        folders: vec![WorkspaceFolder {
+            id: "folder#test".to_string(),
+            name: "My Project".to_string(),
+            path: "C:/proj".to_string(),
+        }],
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
     };
     // Start from no file so the "one workspace" count below is this test's own write and not a
     // workspace another test left in the shared app-data directory.
@@ -80,6 +110,32 @@ fn write_and_read_workspaces_round_trip() {
     }
 }
 
+
+#[test]
+fn read_workspaces_migrates_legacy_single_folder_records_in_place() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = workspaces_file(app.handle()).expect("path");
+    let legacy = r#"[{"id":"ws#old","name":"Legacy","path":"C:/legacy","pinned":true}]"#;
+    if std::fs::write(&path, legacy).is_err() {
+        return;
+    }
+
+    let list = read_workspaces(app.handle()).expect("legacy workspace should migrate");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, "ws#old");
+    assert_eq!(list[0].name, "Legacy");
+    assert_eq!(list[0].order, 0);
+    assert_eq!(list[0].folders.len(), 1);
+    assert_eq!(list[0].folders[0].path, "C:/legacy");
+
+    let persisted = std::fs::read_to_string(&path).expect("migrated workspaces should be rewritten");
+    let value: serde_json::Value = serde_json::from_str(&persisted).expect("migrated json");
+    assert!(value[0].get("folders").is_some());
+    assert!(value[0].get("path").is_none());
+    let _ = std::fs::remove_file(path);
+}
+
 #[test]
 fn read_workspaces_errors_on_corrupt_file() {
     let _guard = crate::test_support::lock();
@@ -93,8 +149,6 @@ fn read_workspaces_errors_on_corrupt_file() {
     assert!(err.contains("workspaces.json is corrupt"), "got {err}");
     let _ = std::fs::remove_file(&path);
 }
-
-
 
 #[test]
 fn max_open_bytes_returns_positive_cap() {
@@ -162,6 +216,91 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
     let _ = std::fs::remove_dir_all(data_dir);
 }
 
+#[test]
+fn workspace_command_validations_and_edge_cases() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    if let Ok(path) = workspaces_file(app.handle()) {
+        let _ = std::fs::remove_file(path);
+    }
+    let handle = app.handle();
+
+    let empty_create = tauri::async_runtime::block_on(create_workspace(handle.clone(), "   ".into()));
+    assert!(empty_create.unwrap_err().contains("empty"));
+
+    let created = tauri::async_runtime::block_on(create_workspace(handle.clone(), "My Workspace".into())).unwrap();
+    assert_eq!(created.name, "My Workspace");
+    assert!(created.folders.is_empty());
+
+    let empty_rename = tauri::async_runtime::block_on(rename_workspace(handle.clone(), created.id.clone(), "".into()));
+    assert!(empty_rename.unwrap_err().contains("empty"));
+
+    let ghost_rename = tauri::async_runtime::block_on(rename_workspace(handle.clone(), "ws#ghost".into(), "New".into()));
+    assert!(ghost_rename.unwrap_err().contains("Unknown workspace"));
+
+    let renamed = tauri::async_runtime::block_on(rename_workspace(handle.clone(), created.id.clone(), "Renamed".into())).unwrap();
+    assert_eq!(renamed.name, "Renamed");
+
+    let bad_folder = tauri::async_runtime::block_on(add_workspace_folder(handle.clone(), created.id.clone(), "not-a-dir/missing".into()));
+    assert!(bad_folder.unwrap_err().contains("not a folder"));
+
+    let ghost_folder = tauri::async_runtime::block_on(add_workspace_folder(handle.clone(), "ws#ghost".into(), "/tmp".into()));
+    assert!(ghost_folder.is_err());
+
+    let empty_scan = tauri::async_runtime::block_on(scan_workspace_entries(handle.clone(), created.id.clone(), "".into(), None, None)).unwrap();
+    assert_eq!(empty_scan.total, 0);
+
+    let temp = tempfile::tempdir().unwrap();
+    let oversized = temp.path().join("huge.code-workspace");
+    std::fs::write(&oversized, vec![b' '; 1024 * 1024 + 10]).unwrap();
+    let import_err = tauri::async_runtime::block_on(import_workspace_file(handle.clone(), oversized.to_string_lossy().into())).unwrap_err();
+    assert!(import_err.contains("too large"));
+
+    let dup_add = tauri::async_runtime::block_on(add_workspace(handle.clone(), temp.path().to_string_lossy().into())).unwrap();
+    let dup_second = tauri::async_runtime::block_on(add_workspace(handle.clone(), temp.path().to_string_lossy().into())).unwrap();
+    assert_eq!(dup_add.id, dup_second.id);
+
+    let added_folder = tauri::async_runtime::block_on(add_workspace_folder(handle.clone(), dup_add.id.clone(), temp.path().to_string_lossy().into())).unwrap();
+    assert_eq!(added_folder.folders.len(), 1);
+
+    let file_path = temp.path().join("plain.txt");
+    std::fs::write(&file_path, b"hello").unwrap();
+    let file_add_err = tauri::async_runtime::block_on(add_workspace(handle.clone(), file_path.to_string_lossy().into())).unwrap_err();
+    assert!(file_add_err.contains("not a folder"));
+
+    let parent_ws = tauri::async_runtime::block_on(create_workspace(handle.clone(), "Parent".into())).unwrap();
+    let child_ws = tauri::async_runtime::block_on(create_workspace(handle.clone(), "Child".into())).unwrap();
+    let mut list = read_workspaces(handle).unwrap();
+    list.iter_mut().find(|w| w.id == child_ws.id).unwrap().parent_id = Some(parent_ws.id.clone());
+    write_workspaces(handle, &list).unwrap();
+    tauri::async_runtime::block_on(remove_workspace(handle.clone(), parent_ws.id)).unwrap();
+    let remaining = read_workspaces(handle).unwrap();
+    assert_eq!(remaining.iter().find(|w| w.id == child_ws.id).unwrap().parent_id, None);
+
+    let rdp_file = temp.path().join("test.rdp");
+    std::fs::write(&rdp_file, b"full address:s:1.2.3.4\n").unwrap();
+    let rdp_folder_id = added_folder.folders[0].id.clone();
+    let rdp_script = crate::workspace_scan::WorkspaceScript {
+        id: format!("{rdp_folder_id}/test.rdp"),
+        name: "test.rdp".into(),
+        path: format!("{rdp_folder_id}/test.rdp"),
+        kind: "rdp".into(),
+        shell: None,
+        editable: Some(false),
+        viewable: Some(true),
+    };
+    let rdp_res = tauri::async_runtime::block_on(run_script(handle.clone(), dup_add.id.clone(), Some(rdp_script), None));
+    if cfg!(any(target_os = "windows", target_os = "macos")) {
+        assert!(rdp_res.is_ok());
+    } else {
+        assert!(rdp_res.is_err());
+    }
+
+    if let Ok(path) = workspaces_file(app.handle()) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
@@ -176,8 +315,9 @@ fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
     ))
     .unwrap();
     assert_eq!(workspace.name, "/");
-    assert_eq!(workspace.path, "/");
+    assert_eq!(workspace.folders[0].path, "/");
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }
 }
+

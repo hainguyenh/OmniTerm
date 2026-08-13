@@ -40,6 +40,7 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
     checkForUpdates: vi.fn(), handleDownloadPortable: vi.fn(), handleDownloadInstaller: vi.fn(),
     skipThisVersion: vi.fn(), clearSkippedVersion: vi.fn(), handleConnect: vi.fn(), requestNewSession: vi.fn(), closeTabs: vi.fn(), closeTab: vi.fn(),
     refreshCustomArt: vi.fn(), idleArtUrlLight: null, idleArtUrlDark: null, loadingArtUrlLight: null, loadingArtUrlDark: null,
+    setSelectedWorkspaceId: vi.fn(),
     ...overrides,
   } as unknown as MainLayoutModel
 }
@@ -143,4 +144,19 @@ describe('MainLayoutOverlays', () => {
     expect(palette.handleConnect).toHaveBeenCalledWith(connection)
     expect(palette.setCommandPaletteOpen).toHaveBeenCalledWith(false)
   })
+  it('does not offer a composite workspace as an ambiguous quick-shell cwd', () => {
+    const one = { id: 'one', name: 'One', folders: [{ id: 'f1', name: 'One', path: 'C:/one' }], order: 1, pins: [] }
+    const multi = { id: 'multi', name: 'Multi', folders: [
+      { id: 'f2', name: 'A', path: 'C:/a' }, { id: 'f3', name: 'B', path: 'D:/b' },
+    ], order: 0, pins: [] }
+    const shell = model({ shellMenu: { x: 5, y: 6 }, workspaces: [one, multi] })
+    render(<MainLayoutOverlays model={shell} />)
+
+    expect(screen.queryByText('Multi')).not.toBeInTheDocument()
+    expect(screen.getByText(/Multi-folder workspaces/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText('One'))
+    expect(shell.setSelectedWorkspaceId).toHaveBeenCalledWith('one')
+    expect(shell.setShellMenu).toHaveBeenCalledWith(null)
+  })
+
 })

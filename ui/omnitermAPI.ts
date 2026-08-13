@@ -20,6 +20,7 @@ import { attachSession, failSession, onSession, startSession } from './tauriSess
 import { diag } from './diag'
 import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
 import { createUpdateAPI } from './updateChecker'
+import { createWorkspaceAPI } from './workspaceAPI'
 
 /**
  * Subscribe to a Tauri event, returning a synchronous unsubscribe.
@@ -296,43 +297,7 @@ function createTauriAPI(): any {
       systemExcludedViewExts: () => invoke<string[]>('system_excluded_view_exts'),
     },
 
-    workspace: {
-      list: () => invoke<Array<{ id: string; name: string; path: string; pinned?: boolean }>>('list_workspaces'),
-      add: async () => {
-        const path = await open({ directory: true, multiple: false })
-        return typeof path === 'string' ? invoke('add_workspace', { path }) : null
-      },
-      remove: (id: string) => invoke('remove_workspace', { id }),
-      scanScripts: (workspaceId: string) => invoke('scan_scripts', { workspaceId }),
-      // The whole folder skeleton — every directory, no files — so the panel can show all folders
-      // up front. Files are fetched per folder by `scanFolderEntries`, which keeps each payload
-      // bounded: `hasMore`/`total` drive that folder's "Show more" row.
-      scanFolders: (workspaceId: string) => invoke('scan_workspace_folders', { workspaceId }),
-      // One page of the files directly under `folder` ('' = the workspace root). Directory children
-      // are not included — the folder skeleton owns them.
-      scanFolderEntries: (workspaceId: string, folder = '', offset = 0, limit = 2000) =>
-        invoke('scan_workspace_entries', { workspaceId, folder, offset, limit }),
-      // The backend builds the shell + command for the script's kind, checks the path is inside the
-      // workspace, and registers the ad-hoc pane. Previously this file assembled the launch itself
-      // and emitted `shell-open` directly, bypassing both.
-      run: (payload: { workspaceId: string; script?: any; subPath?: string }) =>
-        invoke<boolean>('run_script', {
-          workspaceId: payload.workspaceId,
-          script: payload.script ?? null,
-          subPath: payload.subPath ?? null,
-        }),
-      readScript: (workspaceId: string, path: string) => invoke<string>('read_script', { workspaceId, path }),
-      writeScript: (workspaceId: string, path: string, content: string) => invoke('write_script', { workspaceId, path, content }),
-      // A read degrades to "this workspace has none", which is indistinguishable from the truth for a
-      // workspace that has none. A *write* must not: swallowing it told the user their connection was
-      // saved when the backend had refused it (bad path, over the size cap, unwritable folder).
-      loadConnections: (workspaceId: string) =>
-        invoke<any[]>('load_workspace_connections', { workspaceId }).catch(() => []),
-      saveConnections: (workspaceId: string, data: any[]) =>
-        invoke('save_workspace_connections', { workspaceId, data }),
-      deleteConnection: (workspaceId: string, connectionId: string) =>
-        invoke('delete_workspace_connection', { workspaceId, connectionId }),
-    },
+    workspace: createWorkspaceAPI(),
 
     updates,
 

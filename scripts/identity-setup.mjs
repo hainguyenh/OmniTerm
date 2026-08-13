@@ -7,6 +7,7 @@ import {
   getLockedGhToken,
   IdentityError,
   normalizeAccount,
+  parseGithubRemoteUrl,
   readIdentityLock,
   resolvePushRemote,
   validateAuthor,
@@ -95,7 +96,8 @@ export async function runIdentitySetup({
     const lock = { account, ...author }
 
     writeLine(output, '')
-    writeLine(output, `Verifying HTTPS and gh authentication for ${account}...`)
+    const authKind = parseGithubRemoteUrl(push.remoteUrl).isSSH ? 'SSH key and gh' : 'HTTPS and gh'
+    writeLine(output, `Verifying ${authKind} authentication for ${account}...`)
     verifyGitCredential(push.remoteUrl, account, commandOptions)
     getLockedGhToken(account, commandOptions)
 

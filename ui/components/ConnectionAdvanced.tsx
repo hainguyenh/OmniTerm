@@ -29,6 +29,8 @@ interface ConnectionAdvancedProps {
   onParentIdChange: (value: string) => void
   /** What the select calls "no folder" — the workspace's own name, not a generic "Root". */
   rootLabel: string
+  /** Whether an empty parent id is a real selectable root. */
+  showRootOption?: boolean
   /** Whether this provider supports opening an optional HTTPS password-help page. */
   showPasswordHelp: boolean
   passwordHelpUrl: string
@@ -54,6 +56,7 @@ const ConnectionAdvanced: React.FC<ConnectionAdvancedProps> = ({
   parentId,
   onParentIdChange,
   rootLabel,
+  showRootOption = true,
   showPasswordHelp,
   passwordHelpUrl,
   onPasswordHelpUrlChange,
@@ -116,7 +119,7 @@ const ConnectionAdvanced: React.FC<ConnectionAdvancedProps> = ({
               onChange={e => onParentIdChange(e.target.value)}
               className={`${inputClass} appearance-none`}
             >
-              <option value="">{rootLabel}</option>
+              {showRootOption && <option value="">{rootLabel}</option>}
               {folderOptions.map(o => (
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}

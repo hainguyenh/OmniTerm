@@ -6,6 +6,7 @@
 pub mod openshell;
 pub mod shell_spec;
 pub mod session_status;
+pub mod workspace;
 
 #[cfg(test)]
 mod test_support;

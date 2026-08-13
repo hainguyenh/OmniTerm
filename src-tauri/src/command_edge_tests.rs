@@ -17,29 +17,18 @@ fn workspace_commands_reject_deleted_roots_and_oversized_connection_files() {
     .unwrap();
 
     fs::remove_dir_all(&project).unwrap();
-    assert_eq!(
-        block_on(workspace::scan_scripts(app.clone(), workspace.id.clone())).unwrap_err(),
-        "Workspace path is invalid"
-    );
-    assert_eq!(
-        block_on(workspace::scan_workspace_folders(
-            app.clone(),
-            workspace.id.clone(),
-        ))
-        .unwrap_err(),
-        "Workspace path is invalid"
-    );
-    assert_eq!(
-        block_on(workspace::scan_workspace_entries(
-            app.clone(),
-            workspace.id.clone(),
-            String::new(),
-            None,
-            None,
-        ))
-        .unwrap_err(),
-        "Workspace path is invalid"
-    );
+    assert!(block_on(workspace::scan_scripts(app.clone(), workspace.id.clone())).unwrap().is_empty());
+    let folders = block_on(workspace::scan_workspace_folders(app.clone(), workspace.id.clone())).unwrap();
+    assert_eq!(folders.len(), 1, "the unavailable member still renders as a root row");
+    let error = block_on(workspace::scan_workspace_entries(
+        app.clone(),
+        workspace.id.clone(),
+        workspace.folders[0].id.clone(),
+        None,
+        None,
+    ))
+    .unwrap_err();
+    assert!(error.contains("is unavailable"), "{error}");
 
     fs::create_dir_all(&project).unwrap();
     let oversized = (0..20_000)
@@ -154,14 +143,14 @@ fn workspace_settings_change_file_limits_and_user_exclusions_immediately() {
     assert!(block_on(workspace::read_script(
         app.clone(),
         workspace.id.clone(),
-        root.path().join("visible.txt").to_string_lossy().into_owned(),
+        format!("{}/visible.txt", workspace.folders[0].id),
     ))
     .unwrap_err()
     .contains("cannot be viewed"));
     assert!(block_on(workspace::read_script(
         app.clone(),
         workspace.id.clone(),
-        root.path().join("hidden.pem").to_string_lossy().into_owned(),
+        format!("{}/hidden.pem", workspace.folders[0].id),
     ))
     .unwrap_err()
     .contains("cannot be viewed"));
@@ -175,7 +164,7 @@ fn workspace_settings_change_file_limits_and_user_exclusions_immediately() {
         block_on(workspace::read_script(
             app.clone(),
             workspace.id.clone(),
-            root.path().join("visible.txt").to_string_lossy().into_owned(),
+            format!("{}/visible.txt", workspace.folders[0].id),
         ))
         .unwrap(),
         "visible"
@@ -183,7 +172,7 @@ fn workspace_settings_change_file_limits_and_user_exclusions_immediately() {
     assert!(block_on(workspace::read_script(
         app,
         workspace.id,
-        root.path().join("large.txt").to_string_lossy().into_owned(),
+        format!("{}/large.txt", workspace.folders[0].id),
     ))
     .unwrap_err()
     .contains("viewer limit"));

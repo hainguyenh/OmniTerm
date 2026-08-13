@@ -1,5 +1,6 @@
 import type React from 'react'
 import type { SessionStatus } from '@omniterm/contract'
+import { workspaceLocationLabel } from '../utils/workspaceDisplay'
 import ActivityBar from './ActivityBar'
 import FileBrowser from './FileBrowser'
 import WorkspacePanel from './WorkspacePanel'
@@ -46,8 +47,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const ungroupedTabCount = activeTabs.filter(tab => !tabGroups[tab.id]).length
   const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId)
   const activeEditorWorkspace = activeTabId ? model.editorTabs[activeTabId]?.workspaceId : undefined
-  const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace)
-    ?? selectedWorkspace
+  const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? selectedWorkspace
+  const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
   const onPaneDrop = (event: React.DragEvent, target: number) => {
     const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
     if (source !== null) swapPanes(source, target)
@@ -101,7 +102,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 }}
                 connectionsRevision={wsConnectionsRevision}
                 revealRequest={revealRequest}
-                onWorkspaceAdded={model.refreshWorkspaces}
+                onWorkspacesChanged={model.refreshWorkspaces}
               />
             ) : activeView === 'files' && activeSshId && activeSshName ? (
               <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
@@ -209,7 +210,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             if (!conn) {
               return (
                 <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+                  <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
                   <span className="opacity-60">·</span>
                   <span className="truncate">Editor active</span>
                   {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -233,7 +234,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     </span>
                   )
                 })()}
-                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspace?.path ?? 'No workspace selected'}>
+                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspaceTitle}>
                   Workspace · {footerWorkspace?.name ?? 'No workspace'}
                 </span>
                 <span className="opacity-50">·</span>
@@ -313,7 +314,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           })()}
           {!activeTabId && (
             <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+              <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
               <span className="opacity-60">·</span>
               <span>No active terminal</span>
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -486,7 +487,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             folders={connFormTarget.folders}
             capabilities={connectionCapabilities}
             scopeLabel={connFormTarget.rootLabel}
-            rootLabel={connFormTarget.rootLabel}
+            rootLabel={connFormTarget.rootLabel} allowRootParent={false}
             initial={connFormInitial}
             defaultParentId={connFormTarget.parentPath || undefined}
             onClose={() => { setConnFormOpen(false); wsConnFormRef.current = null }}

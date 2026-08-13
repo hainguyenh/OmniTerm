@@ -17,6 +17,8 @@ interface ConnectionFormProps {
    * user picks between `MyProject` and a path inside it rather than an abstract "Root".
    */
   rootLabel?: string
+  /** False for composite workspaces, whose container is not a filesystem parent. */
+  allowRootParent?: boolean
   /** When present, form operates in edit mode (prefill + update). */
   initial?: Connection
   /** Pre-select a parent folder (e.g. when creating inside a folder). */
@@ -55,6 +57,7 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
   capabilities,
   scopeLabel = 'Personal',
   rootLabel = 'Root',
+  allowRootParent = true,
   initial,
   defaultParentId,
   onClose,
@@ -365,6 +368,7 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
             parentId={parentId}
             onParentIdChange={setParentId}
             rootLabel={rootLabel}
+            showRootOption={allowRootParent}
             showPasswordHelp={type !== 'LOCAL' && capabilities?.credentialPolicy === 'prompt-every-time'}
             passwordHelpUrl={passwordHelpUrl}
             onPasswordHelpUrlChange={setPasswordHelpUrl}
