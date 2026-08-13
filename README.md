@@ -7,8 +7,9 @@ detachable multi-window panes, and an optional plugin system for connection
 metadata, workspace content, and app-open auth gates.
 
 For installation, prerequisites, building, and development workflows, see
-[GUIDELINE.md](GUIDELINE.md). For engine details, security model, and tech
-stack, see [plugins/markdown-explorer/GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+[GUIDELINE.md](GUIDELINE.md). Current product behavior and navigation are routed from
+[docs/specs/README.md](docs/specs/README.md). For markdown-engine details, see
+[plugins/markdown-explorer/GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
 
 ---
 

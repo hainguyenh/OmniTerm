@@ -190,8 +190,8 @@ describe('MainLayoutView coverage', () => {
   it('shows the active terminal workspace instead of the selected workspace', () => {
     const m = model({
       workspaces: [
-        { id: 'selected', name: 'Selected project', path: 'C:/selected' },
-        { id: 'active', name: 'Active project', path: 'C:/active' },
+        { id: 'selected', name: 'Selected project', folders: [{ id: 'selected-root', name: 'Selected project', path: 'C:/selected' }], order: 0, pins: [] },
+        { id: 'active', name: 'Active project', folders: [{ id: 'active-root', name: 'Active project', path: 'C:/active' }], order: 1, pins: [] },
       ],
       selectedWorkspaceId: 'selected',
       activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }],

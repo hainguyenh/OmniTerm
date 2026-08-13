@@ -267,16 +267,22 @@ interface Window {
       onChanged: (cb: (s: AppSettings) => void) => () => void
       systemExcludedViewExts: () => Promise<string[]>
     }
-    // Workspace view: pinned project folders + a folder script scan; open/run as ephemeral panes.
+    // Workspace view: composite containers of real folder roots, nested by stable workspace id.
     workspace: {
       list: () => Promise<import('@omniterm/contract').Workspace[]>
+      create: (name: string) => Promise<import('@omniterm/contract').Workspace>
       add: () => Promise<import('@omniterm/contract').Workspace | null>
+      addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
+      importFile: () => Promise<import('@omniterm/contract').Workspace | null>
       remove: (id: string) => Promise<void>
+      rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
+      move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('@omniterm/contract').Workspace[]>
+      setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('@omniterm/contract').Workspace>
       scanScripts: (id: string) => Promise<import('@omniterm/contract').WorkspaceScript[]>
       // The whole directory skeleton of a workspace — every folder, no files — shown up front.
       scanFolders: (id: string) => Promise<import('@omniterm/contract').WorkspaceEntry[]>
-      // One page of the files directly under `folder` ('' = the workspace root); `total`/`hasMore`
-      // drive that folder's "Show more" row.
+      // One page directly under a logical `<folderId>/<relativePath>` location. An empty folder
+      // addresses the composite virtual root and therefore contains no filesystem entries.
       scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('@omniterm/contract').WorkspaceEntryPage>
       run: (payload: { workspaceId: string; script?: import('@omniterm/contract').WorkspaceScript; subPath?: string }) => Promise<boolean>
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>

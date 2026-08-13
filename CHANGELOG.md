@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Double-click workspace alias rename: inline text editing directly from the workspace tree panel backed by `rename_workspace` Rust Tauri IPC.
+- Multiplatform GitHub Actions release workflow for Windows portable `.exe`, Windows installer `.exe`, Linux `.AppImage`, Linux `.deb`, macOS `.dmg`, and standalone plugin zips with clean emoji-free tabular release notes.
+- Composite workspaces can contain multiple local folder roots and nested workspace references.
+- Import VS Code/VSCodium `.code-workspace` and `.workspace` files while importing only workspace/folder names and local paths.
+- Workspace files and folders can be pinned to the top of their sibling section.
+- Workspace hierarchy supports persisted drag/drop nesting, sibling reordering, and keyboard move controls.
+- Selected-types and selected-files filters now include search fields that do not alter saved selections.
+- `docs/specs/` now routes the current product surface through property-tagged software specifications.
+- Detailed spec source inventories trace every top-level renderer module and every public Rust/Tauri function.
+
+### Fixed
+- Launch debug output in `generate-app-assets.mjs` is silenced during normal dev/launch unless icons or assets actually change.
+- Workspace tree panel simplified by removing manual up/down arrow buttons in favor of direct drag-and-drop reordering.
+- Workspace IPC now always serializes `pins`, and the renderer normalizes older payloads that omit empty pins, preventing workspace-tree `.some()` crashes.
+- The Tauri workspace module no longer re-exports the test-only `workspaces_file` helper in normal builds, removing its unused-import warning.
+- Windows 16–48 px app icons now use a simplified front-terminal composition so taskbar/window icon slots remain crisp instead of downsampling the full three-window glow artwork.
+- Composite workspace Rust modules now import the protocol library by its declared crate name `app_protocol`, fixing the `omniterm_protocol` unresolved-crate build error.
+
+### Changed
+- Existing single-path workspace records auto-migrate to one-folder composite workspaces while preserving ID, name, and list order.
+- Workspace filesystem operations now use folder-scoped logical paths instead of treating the workspace container as one merged filesystem root.
+- Multi-folder workspaces require choosing a concrete folder for terminal and workspace-connection actions.
+- `docs/specs/` is decomposed into architecture, feature, component, contract, and design sub-folders; leaf specs document description, behavior, functionality, What/Why/How/When, state, errors, security, verification, and source ownership.
+
 ## [v0.1.3] — 2026-08-13
 
 ### Added

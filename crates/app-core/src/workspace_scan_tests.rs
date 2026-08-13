@@ -343,3 +343,34 @@ fn scan_dir_excluding_filters_specified_extensions() {
     }
 }
 
+#[test]
+fn extensionless_files_are_classified_as_kind_file() {
+    let (_d, root) = tree();
+    touch(&root.join("Makefile"));
+    touch(&root.join("deploy.bat"));
+    let entries = scan_entries_excluding(&root, &[]);
+    let makefile = entries.iter().find(|e| e.id == "Makefile").expect("Makefile must appear");
+    assert_eq!(makefile.kind, "file");
+    assert!(makefile.shell.is_none() && makefile.editable.is_none());
+    assert_eq!(makefile.viewable, Some(true));
+    let scripts = scan_dir(&root);
+    assert!(scripts.iter().all(|s| s.id != "Makefile"));
+    assert!(scripts.iter().any(|s| s.id == "deploy.bat"));
+}
+
+#[test]
+fn files_with_unknown_extensions_use_lowercase_extension_as_kind() {
+    let (_d, root) = tree();
+    touch(&root.join("doc.TXT"));
+    touch(&root.join("config.YAML"));
+    let entries = scan_entries_excluding(&root, &[]);
+    assert_eq!(entries.iter().find(|e| e.name == "doc.TXT").unwrap().kind, "txt");
+    assert_eq!(entries.iter().find(|e| e.name == "config.YAML").unwrap().kind, "yaml");
+}
+
+#[test]
+fn scan_entries_on_a_nonexistent_root_returns_empty_list() {
+    let ghost = std::path::Path::new(if cfg!(windows) { r"C:\this\does\not\exist\omniterm-test" } else { "/this/does/not/exist/omniterm-test" });
+    assert!(scan_entries_excluding(ghost, &[]).is_empty());
+    assert!(scan_folders(ghost).is_empty());
+}

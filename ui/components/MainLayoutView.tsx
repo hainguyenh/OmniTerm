@@ -1,8 +1,18 @@
 import type React from 'react'
 import type { SessionStatus } from '@omniterm/contract'
-import ActivityBar from './ActivityBar'; import FileBrowser from './FileBrowser'; import WorkspacePanel from './WorkspacePanel'; import ScriptViewer from './ScriptViewer'
-import TerminalView from './TerminalView'; import RDPView from './RDPView'; import ConnectingOverlay from './ConnectingOverlay'; import DetachedPlaceholder from './DetachedPlaceholder'
-import ConnectionForm from './ConnectionForm'; import MetricsChips from './SessionMetricsChips'; import SessionTabs from './SessionTabs'; import WaitingPane from './WaitingPane'
+import { workspaceLocationLabel } from '../utils/workspaceDisplay'
+import ActivityBar from './ActivityBar'
+import FileBrowser from './FileBrowser'
+import WorkspacePanel from './WorkspacePanel'
+import ScriptViewer from './ScriptViewer'
+import TerminalView from './TerminalView'
+import RDPView from './RDPView'
+import ConnectingOverlay from './ConnectingOverlay'
+import DetachedPlaceholder from './DetachedPlaceholder'
+import ConnectionForm from './ConnectionForm'
+import MetricsChips from './SessionMetricsChips'
+import SessionTabs from './SessionTabs'
+import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
 import { Columns2, LayoutGrid, Loader2, Monitor, PanelLeft, RotateCw, Square, Terminal, Unplug } from 'lucide-react'
 import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
@@ -21,7 +31,6 @@ import ViewGroupTabs from './ViewGroupTabs'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
-
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {} } = model
   const alwaysAwake = awakeState ?? {
@@ -37,6 +46,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const activeConnId = activeTabId ? activeTabs.find(tab => tab.id === activeTabId)?.connId : undefined
   const activeConnection = activeConnId ? connById(activeConnId) : undefined
   const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
+  const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
   const onPaneDrop = (event: React.DragEvent, target: number) => {
     const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
     if (source !== null) swapPanes(source, target)
@@ -82,7 +92,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 }}
                 connectionsRevision={wsConnectionsRevision}
                 revealRequest={revealRequest}
-                onWorkspaceAdded={model.refreshWorkspaces}
+                onWorkspacesChanged={model.refreshWorkspaces}
               />
             ) : activeView === 'files' && activeSshId && activeSshName ? (
               <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
@@ -201,7 +211,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             if (!conn) {
               return (
                 <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+                  <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
                   <span className="opacity-60">·</span>
                   <span className="truncate">Editor active</span>
                   {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -225,7 +235,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     </span>
                   )
                 })()}
-                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspace?.path ?? 'No workspace selected'}>
+                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspaceTitle}>
                   Workspace · {footerWorkspace?.name ?? 'No workspace'}
                 </span>
                 <span className="opacity-50">·</span>
@@ -234,7 +244,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   : <Terminal className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
                 }
                 <span className="text-xs font-medium text-[var(--theme-fg)] truncate min-w-0">{conn.name}</span>
-  
                 {/* Status pill — sits right after the name, with the shell's activity when we know it */}
                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0 rounded-full flex-shrink-0 ${STATUS_TEXT[status]} bg-theme-bg`}>
                   {status === 'connecting' ? (
@@ -251,7 +260,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     return word ? <span className="font-normal text-theme-dim">· {word}</span> : null
                   })()}
                 </span>
-  
                 {/* Live metrics: latency (SSH + RDP) + remote CPU/RAM/disk + uptime (SSH). */}
                 <MetricsChips
                   status={status}
@@ -305,7 +313,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           })()}
           {!activeTabId && (
             <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate" title={footerWorkspace?.path ?? 'No workspace selected'}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+              <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
               <span className="opacity-60">·</span>
               <span>No active terminal</span>
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -479,7 +487,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             folders={connFormTarget.folders}
             capabilities={connectionCapabilities}
             scopeLabel={connFormTarget.rootLabel}
-            rootLabel={connFormTarget.rootLabel}
+            rootLabel={connFormTarget.rootLabel} allowRootParent={false}
             initial={connFormInitial}
             defaultParentId={connFormTarget.parentPath || undefined}
             onClose={() => { setConnFormOpen(false); wsConnFormRef.current = null }}
