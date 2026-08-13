@@ -177,21 +177,24 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     )
     .unwrap();
     #[cfg(target_os = "linux")]
-    assert!(fixture
-        .invoke(
-            "run_script",
-            json!({
-                "workspaceId": workspace_id,
-                "script": {
-                    "id": &remote_path,
-                    "name": "Remote",
-                    "path": &remote_path,
-                    "kind": "rdp"
-                },
-                "subPath": null
-            }),
-        )
-        .is_err());
+    {
+        let remote_path = format!("{folder_id}/scripts/remote.rdp");
+        assert!(fixture
+            .invoke(
+                "run_script",
+                json!({
+                    "workspaceId": workspace_id,
+                    "script": {
+                        "id": &remote_path,
+                        "name": "Remote",
+                        "path": &remote_path,
+                        "kind": "rdp"
+                    },
+                    "subPath": null
+                }),
+            )
+            .is_err());
+    }
 
     assert_eq!(
         fixture.ok(

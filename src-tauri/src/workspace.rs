@@ -267,10 +267,10 @@ pub async fn scan_workspace_entries<R: Runtime>(
     offset: Option<usize>,
     limit: Option<usize>,
 ) -> Result<WorkspaceEntryPage, String> {
+    let workspace = find_workspace(&app, &workspace_id)?;
     if folder.trim().is_empty() {
         return Ok(WorkspaceEntryPage { entries: Vec::new(), total: 0, has_more: false });
     }
-    let workspace = find_workspace(&app, &workspace_id)?;
     let target = logical_target(&workspace, &folder)?;
     let root = Path::new(&target.folder.path);
     if !root.is_dir() {
