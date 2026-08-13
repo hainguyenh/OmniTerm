@@ -16,13 +16,15 @@ fn ipc_rejects_workspace_paths_that_escape_the_root() {
         json!({ "path": project.to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
+    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
+    let escape = format!("{folder_id}/../outside.sh");
 
     assert!(fixture
         .invoke(
             "scan_workspace_entries",
             json!({
                 "workspaceId": workspace_id,
-                "folder": "../",
+                "folder": format!("{folder_id}/.."),
                 "offset": 0,
                 "limit": 20
             }),
@@ -31,7 +33,7 @@ fn ipc_rejects_workspace_paths_that_escape_the_root() {
     assert!(fixture
         .invoke(
             "read_script",
-            json!({ "workspaceId": workspace_id, "path": "../outside.sh" }),
+            json!({ "workspaceId": workspace_id, "path": &escape }),
         )
         .is_err());
     assert!(fixture
@@ -39,7 +41,7 @@ fn ipc_rejects_workspace_paths_that_escape_the_root() {
             "write_script",
             json!({
                 "workspaceId": workspace_id,
-                "path": "../outside.sh",
+                "path": &escape,
                 "content": "overwritten"
             }),
         )
@@ -50,9 +52,9 @@ fn ipc_rejects_workspace_paths_that_escape_the_root() {
             json!({
                 "workspaceId": workspace_id,
                 "script": {
-                    "id": "../outside.sh",
+                    "id": &escape,
                     "name": "Outside",
-                    "path": "../outside.sh",
+                    "path": &escape,
                     "kind": "sh"
                 },
                 "subPath": null
@@ -77,23 +79,18 @@ fn ipc_reports_a_workspace_root_deleted_after_registration() {
         json!({ "path": project.to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
+    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
     fs::remove_dir_all(&project).unwrap();
 
-    assert!(fixture
-        .invoke("scan_scripts", json!({ "workspaceId": workspace_id }))
-        .is_err());
-    assert!(fixture
-        .invoke(
-            "scan_workspace_folders",
-            json!({ "workspaceId": workspace_id }),
-        )
-        .is_err());
+    assert_eq!(fixture.ok("scan_scripts", json!({ "workspaceId": workspace_id })), json!([]));
+    let folders = fixture.ok("scan_workspace_folders", json!({ "workspaceId": workspace_id }));
+    assert_eq!(folders.as_array().map(Vec::len), Some(1));
     assert!(fixture
         .invoke(
             "scan_workspace_entries",
             json!({
                 "workspaceId": workspace_id,
-                "folder": "",
+                "folder": &folder_id,
                 "offset": 0,
                 "limit": 20
             }),

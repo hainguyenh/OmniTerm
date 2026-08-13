@@ -36,6 +36,7 @@ pub use app_core::workspace_scan;
 pub mod shell_probe;
 pub mod terminal_window;
 pub mod workspace;
+mod workspace_persistence;
 pub mod workspace_connections;
 pub mod plugin_host;
 pub mod plugin_host_api;
@@ -219,8 +220,14 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         window_control::set_webview_zoom,
         // Workspace
         workspace::list_workspaces,
+        workspace::create_workspace,
         workspace::add_workspace,
+        workspace::add_workspace_folder,
+        workspace::import_workspace_file,
         workspace::remove_workspace,
+        workspace::rename_workspace,
+        workspace::move_workspace,
+        workspace::set_workspace_entry_pinned,
         workspace::scan_scripts,
         workspace::scan_workspace_folders,
         workspace::scan_workspace_entries,

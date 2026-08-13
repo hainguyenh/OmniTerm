@@ -281,12 +281,12 @@ fn malformed_or_declined_provider_results_fall_back_to_local_files() {
         handle.clone(), host.clone(), workspace.id.clone(), "delete-local".into(),
     ))
     .unwrap();
-    assert_eq!(workspace_connections::read_at(&workspace.path).unwrap().len(), 1);
+    assert_eq!(workspace_connections::read_at(&workspace.folders[0].path).unwrap().len(), 1);
     block_on(workspace_connections::save_workspace_connections(
         handle, host, workspace.id, vec![connection("disk-scoped-replaced")],
     ))
     .unwrap();
-    assert_eq!(workspace_connections::read_at(&workspace.path).unwrap()[0].id, "disk-scoped-replaced");
+    assert_eq!(workspace_connections::read_at(&workspace.folders[0].path).unwrap()[0].id, "disk-scoped-replaced");
 }
 
 
