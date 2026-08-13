@@ -27,7 +27,6 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     let tools_path = format!("{folder_id}/scripts/tools");
     let build_path = format!("{folder_id}/scripts/build.sh");
     let notes_path = format!("{folder_id}/scripts/notes.txt");
-    let remote_path = format!("{folder_id}/scripts/remote.rdp");
     assert_eq!(
         fixture.ok(
             "add_workspace",
