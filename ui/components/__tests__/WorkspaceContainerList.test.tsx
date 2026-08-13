@@ -53,7 +53,6 @@ describe('WorkspaceContainerList', () => {
       workspace('b', 'Beta', 1),
     ])
 
-    const alpha = screen.getByText('Alpha').closest('[data-workspace-id="a"]') as HTMLElement
     const beta = screen.getByText('Beta').closest('[data-workspace-id="b"]') as HTMLElement
     const dataTransfer = { effectAllowed: '', setData: vi.fn(), getData: vi.fn(() => 'a') }
 
