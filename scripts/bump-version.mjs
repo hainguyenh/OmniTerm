@@ -159,7 +159,7 @@ function prependChangelog(section) {
 }
 
 function stageFiles() {
-  // Stage the 5 version files + CHANGELOG
+  // Stage the 5 version files + CHANGELOG + Cargo.lock
   const versionFiles = [
     'package.json',
     'src-tauri/tauri.conf.json',
@@ -167,6 +167,7 @@ function stageFiles() {
     'crates/app-core/Cargo.toml',
     'crates/app-protocol/Cargo.toml',
     'CHANGELOG.md',
+    'Cargo.lock',
   ]
   git('add', ...versionFiles)
   console.log('[bump-version] Staged modified files')
