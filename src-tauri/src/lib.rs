@@ -1,5 +1,6 @@
 mod app_utils;
 mod launcher;
+mod os_actions;
 mod settings;
 mod themes;
 mod window_control;
@@ -36,6 +37,7 @@ pub use app_core::workspace_scan;
 pub mod shell_probe;
 pub mod terminal_window;
 pub mod workspace;
+pub mod workspace_appearance;
 mod workspace_persistence;
 pub mod workspace_connections;
 pub mod plugin_host;
@@ -69,6 +71,7 @@ pub fn run() {
         .manage(DetachRegistry::new())
         .manage(PluginHost::new())
         .manage(RdpSessionManager::new())
+        .manage(os_actions::ExternalLauncherState::system())
         .manage(AlwaysAwakeState::new())
         .setup(move |app| {
             // Logging is a development-only facility. `#[cfg]` (not `cfg!`) so the registration is
@@ -223,9 +226,12 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace::create_workspace,
         workspace::add_workspace,
         workspace::add_workspace_folder,
+        workspace::remove_workspace_folder,
         workspace::import_workspace_file,
         workspace::remove_workspace,
         workspace::rename_workspace,
+        workspace_appearance::set_workspace_appearance,
+        workspace_appearance::set_workspace_folder_color,
         workspace::move_workspace,
         workspace::set_workspace_entry_pinned,
         workspace::scan_scripts,

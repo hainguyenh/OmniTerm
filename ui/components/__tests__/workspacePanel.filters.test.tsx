@@ -86,7 +86,7 @@ describe('WorkspacePanel filters and connections', () => {
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
     const before = menu.style.left
 
-    fireEvent.mouseDown(screen.getByText('Filter'), { clientX: 100, clientY: 100, button: 0 })
+    fireEvent.mouseDown(screen.getByText('FILTER Workspace'), { clientX: 100, clientY: 100, button: 0 })
     fireEvent.mouseMove(window, { clientX: 400, clientY: 300 })
     fireEvent.mouseUp(window)
 
@@ -175,7 +175,7 @@ describe('WorkspacePanel filters and connections', () => {
     expect(within(infraBlock).getByText('prod-web')).toBeInTheDocument()
 
     fireEvent.click(within(screen.getByText('Staging RDP').parentElement as HTMLElement).getByTitle('Connect'))
-    expect(onConnect).toHaveBeenCalledWith(ROOT_CONN)
+    expect(onConnect).toHaveBeenCalledWith(ROOT_CONN, WS.id)
   })
 
   it('adds a connection in the folder whose Cable button was clicked', async () => {

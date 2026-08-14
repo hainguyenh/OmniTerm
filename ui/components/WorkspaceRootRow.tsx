@@ -1,8 +1,10 @@
 import { useState, type DragEventHandler, type KeyboardEvent } from 'react'
 import {
-  ChevronDown, ChevronRight, FolderGit2, FolderPlus, GripVertical, Trash2,
+  Briefcase, ChevronDown, ChevronRight, Code2, Folder, FolderGit2, FolderPlus, GripVertical, Layers3,
+  Pencil, Server, Star, Trash2,
 } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
+import { WORKSPACE_COLOR_VALUES } from '../utils/workspaceAppearance'
 
 interface WorkspaceRootRowProps {
   workspace: Workspace
@@ -20,6 +22,7 @@ interface WorkspaceRootRowProps {
   onDragStart?: DragEventHandler<HTMLDivElement>
   onDragOver?: DragEventHandler<HTMLDivElement>
   onDrop?: DragEventHandler<HTMLDivElement>
+  onContextMenu?: React.MouseEventHandler<HTMLDivElement>
 }
 
 export default function WorkspaceRootRow({
@@ -34,6 +37,7 @@ export default function WorkspaceRootRow({
   onDragStart,
   onDragOver,
   onDrop,
+  onContextMenu,
 }: WorkspaceRootRowProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editingName, setEditingName] = useState(workspace.name)
@@ -42,6 +46,14 @@ export default function WorkspaceRootRow({
     ? workspace.folders[0].path
     : `${workspace.folders.length} folders`
   const actionClass = 'opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition disabled:opacity-20 disabled:pointer-events-none'
+  const WorkspaceIcon = workspace.icon ? {
+    folder: Folder,
+    briefcase: Briefcase,
+    layers: Layers3,
+    code: Code2,
+    server: Server,
+    star: Star,
+  }[workspace.icon] : null
 
   const startRename = () => {
     setIsEditing(true)
@@ -83,13 +95,25 @@ export default function WorkspaceRootRow({
       onDragStart={isEditing ? undefined : onDragStart}
       onDragOver={isEditing ? undefined : onDragOver}
       onDrop={isEditing ? undefined : onDrop}
+      onContextMenu={isEditing ? undefined : onContextMenu}
       title={title}
     >
-      <GripVertical className="h-3 w-3 flex-shrink-0 text-[var(--theme-dim)] opacity-50" />
+      {WorkspaceIcon ? (
+        <WorkspaceIcon
+          className="h-4 w-4 flex-shrink-0"
+          style={{ color: workspace.color ? WORKSPACE_COLOR_VALUES[workspace.color] : 'var(--theme-accent)' }}
+          aria-label="Workspace custom icon"
+        />
+      ) : (
+        <GripVertical
+          className="h-3 w-3 flex-shrink-0 text-[var(--theme-dim)] opacity-50"
+          aria-label="Workspace drag handle"
+        />
+      )}
       {expanded
         ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />
         : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />}
-      <FolderGit2 className="w-4 h-4 flex-shrink-0 text-[var(--theme-accent)]" />
+      <FolderGit2 className="h-4 w-4 flex-shrink-0 text-[var(--theme-accent)]" aria-label="Workspace icon" />
       {isEditing ? (
         <input
           type="text"
@@ -114,6 +138,17 @@ export default function WorkspaceRootRow({
         </span>
       )}
       {connectionAction}
+      {onRename && (
+        <button
+          type="button"
+          title="Rename workspace"
+          aria-label="Rename workspace"
+          onClick={event => { event.stopPropagation(); startRename() }}
+          className={actionClass}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
       <button
         type="button"
         title="Add folder to workspace"

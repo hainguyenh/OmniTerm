@@ -57,6 +57,8 @@ fn write_workspaces_rejects_an_invalid_list() {
             parent_id: None,
             order: 0,
             pins: vec![],
+            color: None,
+            icon: None,
         },
         app_protocol::workspace::Workspace {
             id: "ws#dup".into(),
@@ -65,6 +67,8 @@ fn write_workspaces_rejects_an_invalid_list() {
             parent_id: None,
             order: 1,
             pins: vec![],
+            color: None,
+            icon: None,
         },
     ];
     let err = write_workspaces(app.handle(), &dup).unwrap_err();

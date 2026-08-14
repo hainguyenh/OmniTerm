@@ -31,6 +31,8 @@ export function createWorkspaceAPI() {
         ? invoke<WorkspaceWire>('add_workspace_folder', { workspaceId, path }).then(normalizeWorkspace)
         : null
     },
+    removeFolder: (workspaceId: string, folderId: string) =>
+      invoke<WorkspaceWire>('remove_workspace_folder', { workspaceId, folderId }).then(normalizeWorkspace),
     importFile: async () => {
       const path = await open({
         multiple: false,
@@ -43,6 +45,10 @@ export function createWorkspaceAPI() {
     remove: (id: string) => invoke<void>('remove_workspace', { id }),
     rename: (workspaceId: string, name: string) =>
       invoke<WorkspaceWire>('rename_workspace', { workspaceId, name }).then(normalizeWorkspace),
+    setAppearance: (workspaceId: string, color?: Workspace['color'], icon?: Workspace['icon']) =>
+      invoke<WorkspaceWire>('set_workspace_appearance', { workspaceId, color: color ?? null, icon: icon ?? null }).then(normalizeWorkspace),
+    setFolderColor: (workspaceId: string, folderId: string, color?: Workspace['folders'][number]['color']) =>
+      invoke<WorkspaceWire>('set_workspace_folder_color', { workspaceId, folderId, color: color ?? null }).then(normalizeWorkspace),
     move: (workspaceId: string, parentId: string | null, index: number) =>
       invoke<WorkspaceWire[]>('move_workspace', { workspaceId, parentId, index }).then(normalizeWorkspaces),
     setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) =>

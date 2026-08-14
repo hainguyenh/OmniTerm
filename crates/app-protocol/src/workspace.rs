@@ -6,6 +6,8 @@ pub struct WorkspaceFolder {
     pub id: String,
     pub name: String,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +31,10 @@ pub struct Workspace {
     pub order: usize,
     #[serde(default)]
     pub pins: Vec<WorkspacePin>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,4 +46,3 @@ pub struct WorkspaceImport {
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 mod tests;
-

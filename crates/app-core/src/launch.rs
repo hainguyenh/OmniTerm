@@ -86,13 +86,33 @@ impl LocalLaunch {
 
     /// Windows argv. Extra args go *before* the command switch so they still apply when a command is
     /// set (`cmd.exe /v:on /k build.bat`, `powershell.exe -NoLogo -NoProfile -Command "…"`).
+    ///
+    /// Interactive launches boot the console codepage to UTF-8 (65001). ConPTY interprets the
+    /// child's bytes — including the OSC window title it synthesizes from `SetConsoleTitleW` — in
+    /// the console output codepage, and the renderer decodes everything as UTF-8. On a Vietnamese
+    /// (or any non-UTF-8) system the default codepage made window titles mojibake in the tab strip
+    /// while the pane content stayed fine; `chcp 65001` is what Windows Terminal profiles use for
+    /// the same reason. ` >nul`/` >$null` swallows chcp's "Active code page" line.
     fn windows_args(&self, extra: Vec<String>, command: Option<String>) -> Vec<String> {
         match self.shell {
             LocalShell::Cmd => {
                 let mut args = extra;
                 if let Some(cmd) = command {
                     args.push(if self.keep_open { "/k" } else { "/c" }.to_string());
+                    // No `chcp` bootstrap here: it would have to chain into this same `/k` string
+                    // with `&&`, and cmd re-parses the command inside the string — a path with
+                    // spaces (a workspace `.bat` run) gets split and "is not recognized". The bare
+                    // command relies on the spawner quoting the argv entry exactly once.
                     args.push(cmd);
+                } else if !args
+                    .iter()
+                    .any(|a| a.eq_ignore_ascii_case("/k") || a.eq_ignore_ascii_case("/c"))
+                {
+                    // No saved command and no user-supplied command switch to chain into: cmd.exe
+                    // honours only the last `/k`, so a second one would break a quoted path in
+                    // extra args. A bare `/k` keeps the shell open after the bootstrap.
+                    args.push("/k".to_string());
+                    args.push("chcp 65001 >nul".to_string());
                 }
                 args
             }
@@ -105,7 +125,16 @@ impl LocalLaunch {
                         args.push("-NoExit".to_string());
                     }
                     args.push("-Command".to_string());
-                    args.push(cmd);
+                    // `.ps1` runs arrive as `& '<path>'`, and PowerShell parses the whole string as
+                    // one script, so a `;`-separated bootstrap is safe to prepend — unlike cmd's
+                    // `/k`, PowerShell keeps a quoted path intact after the statement separator.
+                    args.push(format!("chcp 65001 >$null; {cmd}"));
+                } else {
+                    // `-NoExit` keeps the session interactive after the bootstrap runs, so the
+                    // codepage is in place before the first prompt paints its window title.
+                    args.push("-NoExit".to_string());
+                    args.push("-Command".to_string());
+                    args.push("chcp 65001 >$null".to_string());
                 }
                 args
             }

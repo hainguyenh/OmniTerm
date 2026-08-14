@@ -134,11 +134,12 @@ describe('small UI shells', () => {
     expect(pick).toHaveBeenCalledWith(expect.objectContaining({ left: 2, bottom: 9 }))
     expect(choose).toHaveBeenCalled()
     expect(screen.getByTestId('idle-art')).toHaveTextContent('true')
-    expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })
 
     rerender(<WaitingPane dark={false} onNewSession={open} onPickShell={pick} customArtUrl="blob:idle" />)
     expect(screen.getByRole('img', { name: 'waiting' })).toHaveAttribute('src', 'blob:idle')
     expect(screen.getByText(/Ctrl\+N/)).toBeInTheDocument()
+    expect(screen.getByTestId('waiting-scroll-area')).toHaveClass('min-h-0', 'overflow-y-auto')
+    expect(screen.getByTestId('waiting-controls')).toHaveClass('shrink-0')
   })
 
   it('resizes horizontal, vertical, mirrored, and stacked pane dividers', () => {

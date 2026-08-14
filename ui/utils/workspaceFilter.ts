@@ -42,6 +42,19 @@ export const DEFAULT_TREE_FILTER: TreeFilter = {
   showEmptyDirs: false,
 }
 
+/** Root-folder filters start broad; an indicator is only needed once a folder is narrowed. */
+export const DEFAULT_FOLDER_FILTER: TreeFilter = {
+  mode: 'all',
+  kinds: [],
+  paths: [],
+  showEmptyDirs: false,
+}
+
+export function isDefaultFolderFilter(filter: TreeFilter): boolean {
+  return filter.mode === DEFAULT_FOLDER_FILTER.mode
+    && filter.showEmptyDirs === DEFAULT_FOLDER_FILTER.showEmptyDirs
+}
+
 /**
  * Every kind present in a scan, sorted — the checklist the "Selected types" mode offers.
  *

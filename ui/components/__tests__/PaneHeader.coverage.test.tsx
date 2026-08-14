@@ -40,7 +40,7 @@ describe('PaneHeader remaining behavior', () => {
     expect(x.props.onDragEnd).toHaveBeenCalled()
 
     fireEvent.click(screen.getByTitle('Choose session for this pane'))
-    expect(x.props.onTogglePicker).toHaveBeenCalled()
+    expect(x.props.onTogglePicker).toHaveBeenCalledWith(expect.anything())
     fireEvent.click(screen.getByText('Empty this pane'))
     expect(x.props.onClear).toHaveBeenCalled()
     fireEvent.click(screen.getByText('Desktop'))

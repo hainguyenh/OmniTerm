@@ -1,5 +1,5 @@
 import React from 'react'
-import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate, ExternalLink, Minimize2 } from 'lucide-react'
+import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate, ExternalLink, Minimize2, LayoutGrid } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { activityDot, tabClasses, tabPlacement, tabTitle, PLACEMENT_STRIPE, type TabFlags } from '../tabVisuals'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
@@ -49,6 +49,8 @@ interface SessionTabsProps {
   onContextMenu: (e: React.MouseEvent, tabId: string) => void
   onNewSession: () => void
   onPickShell: (rect: DOMRect) => void
+  /** Opens the picker for the currently focused dock when split view is active. */
+  onPickPane?: (rect: DOMRect) => void
   /** Single-view detach control is shown only on the active terminal tab. */
   detachTabId?: string | null
   detachAction?: DetachAction | null
@@ -64,7 +66,7 @@ interface SessionTabsProps {
 const SessionTabs: React.FC<SessionTabsProps> = ({
   tabs, panes, layoutMode, focusedPane, statuses, activity,
   isEditor, isPreview, isEphemeral, connType,
-  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, detachTabId, detachAction,
+  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, onPickPane, detachTabId, detachAction,
   onToggleDetach, onReveal,
 }) => (
   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
@@ -196,6 +198,17 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
         <ChevronDown className="w-3 h-3" />
       </button>
     </div>
+    {onPickPane && (
+      <button
+        type="button"
+        onClick={(e) => onPickPane(e.currentTarget.getBoundingClientRect())}
+        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors flex-shrink-0"
+        title="Choose tab for focused dock"
+        aria-label="Choose tab for focused dock"
+      >
+        <LayoutGrid className="w-3.5 h-3.5" />
+      </button>
+    )}
   </div>
 )
 

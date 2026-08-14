@@ -62,6 +62,8 @@ interface AppSettings {
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
   blurInactiveWindow?: number
+  blurInactiveDock?: boolean
+  blurEnabled?: boolean
   /**
    * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
    * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).
@@ -271,9 +273,12 @@ interface Window {
       create: (name: string) => Promise<import('@omniterm/contract').Workspace>
       add: () => Promise<import('@omniterm/contract').Workspace | null>
       addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
+      removeFolder: (workspaceId: string, folderId: string) => Promise<import('@omniterm/contract').Workspace>
       importFile: () => Promise<import('@omniterm/contract').Workspace | null>
       remove: (id: string) => Promise<void>
       rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
+      setAppearance: (workspaceId: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => Promise<import('@omniterm/contract').Workspace>
+      setFolderColor: (workspaceId: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => Promise<import('@omniterm/contract').Workspace>
       move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('@omniterm/contract').Workspace[]>
       setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('@omniterm/contract').Workspace>
       scanScripts: (id: string) => Promise<import('@omniterm/contract').WorkspaceScript[]>
@@ -326,7 +331,7 @@ interface Window {
        * Register an unsaved shell ("new session") and return the Connection record to open it with.
        * The Tauri backend validates and registers the shell before a pane can resolve it.
        */
-      open: (shell?: string, workspaceId?: string | null) => Promise<Record<string, unknown> | null>
+      open: (shell?: string, workspaceId?: string | null, folderId?: string | null) => Promise<Record<string, unknown> | null>
       /**
        * The shells installed on this machine.
        */

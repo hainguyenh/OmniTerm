@@ -144,7 +144,7 @@ describe('MainLayoutOverlays', () => {
     expect(palette.handleConnect).toHaveBeenCalledWith(connection)
     expect(palette.setCommandPaletteOpen).toHaveBeenCalledWith(false)
   })
-  it('does not offer a composite workspace as an ambiguous quick-shell cwd', () => {
+  it('offers each composite workspace root as a quick-shell cwd', () => {
     const one = { id: 'one', name: 'One', folders: [{ id: 'f1', name: 'One', path: 'C:/one' }], order: 1, pins: [] }
     const multi = { id: 'multi', name: 'Multi', folders: [
       { id: 'f2', name: 'A', path: 'C:/a' }, { id: 'f3', name: 'B', path: 'D:/b' },
@@ -152,11 +152,21 @@ describe('MainLayoutOverlays', () => {
     const shell = model({ shellMenu: { x: 5, y: 6 }, workspaces: [one, multi] })
     render(<MainLayoutOverlays model={shell} />)
 
-    expect(screen.queryByText('Multi')).not.toBeInTheDocument()
-    expect(screen.getByText(/Multi-folder workspaces/)).toBeInTheDocument()
-    fireEvent.click(screen.getByText('One'))
-    expect(shell.setSelectedWorkspaceId).toHaveBeenCalledWith('one')
+    expect(screen.getByText('Multi - A')).toBeInTheDocument()
+    expect(screen.getByText('Multi - B')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('One - One'))
+    expect(shell.setSelectedWorkspaceId).toHaveBeenCalledWith('one::f1')
     expect(shell.setShellMenu).toHaveBeenCalledWith(null)
+  })
+
+  it('keeps the shell options menu inside the viewport near the bottom edge', () => {
+    const shell = model({ shellMenu: { x: 900, y: 700 } })
+    render(<MainLayoutOverlays model={shell} />)
+
+    const menu = screen.getByText('Workspace').parentElement as HTMLElement
+    expect(menu).toHaveStyle({ bottom: '76px', maxHeight: '752px' })
+    expect(menu.style.top).toBe('')
+    expect(menu).toHaveClass('overflow-y-auto')
   })
 
 })

@@ -11,6 +11,7 @@ interface WorkspaceContainerListProps {
   onAddFolder: (workspaceId: string) => void
   onRemove: (workspaceId: string) => void
   onRename?: (workspaceId: string, name: string) => void
+  onContextMenu?: (workspaceId: string, event: React.MouseEvent<HTMLDivElement>) => void
   onMove: (workspaceId: string, parentId: string | null, index: number) => void
   renderExpanded: (workspace: Workspace) => ReactNode
 }
@@ -23,6 +24,7 @@ export default function WorkspaceContainerList({
   onAddFolder,
   onRemove,
   onRename,
+  onContextMenu,
   onMove,
   renderExpanded,
 }: WorkspaceContainerListProps) {
@@ -44,6 +46,7 @@ export default function WorkspaceContainerList({
           onAddFolder={() => onAddFolder(workspace.id)}
           onRemove={() => onRemove(workspace.id)}
           onRename={onRename}
+          onContextMenu={event => onContextMenu?.(workspace.id, event)}
           onDragStart={event => {
             event.dataTransfer.effectAllowed = 'move'
             event.dataTransfer.setData('text/plain', workspace.id)

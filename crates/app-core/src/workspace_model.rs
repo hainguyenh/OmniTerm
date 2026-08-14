@@ -1,7 +1,6 @@
 use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspaceImport, WorkspacePin};
 use serde::Deserialize;
 use std::collections::HashSet;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(test)]
@@ -71,10 +70,13 @@ pub fn decode_workspaces(content: &str) -> Result<DecodedWorkspaces, String> {
                     id: folder_id,
                     name: display_name_for_path(Path::new(&item.path), &item.path),
                     path: item.path,
+                    color: None,
                 }],
                 parent_id: None,
                 order,
                 pins: Vec::new(),
+                color: None,
+                icon: None,
             }
         })
         .collect::<Vec<_>>();
@@ -133,7 +135,7 @@ pub fn parse_workspace_import(file_path: &Path, content: &str) -> Result<Workspa
             continue;
         };
         let candidate = resolve_import_path(base, &raw_path);
-        let Ok(canonical) = fs::canonicalize(&candidate) else {
+        let Ok(canonical) = dunce::canonicalize(&candidate) else {
             continue;
         };
         if !canonical.is_dir() {
@@ -152,6 +154,7 @@ pub fn parse_workspace_import(file_path: &Path, content: &str) -> Result<Workspa
             id: format!("folder#{}", folders.len() + 1),
             name,
             path: normalized,
+            color: None,
         });
     }
     if folders.is_empty() {

@@ -41,6 +41,7 @@ pub(crate) fn mock_app() -> tauri::App<MockRuntime> {
     let mut context = tauri::test::mock_context(tauri::test::noop_assets());
     context.config_mut().identifier = "com.omniterm.tests".to_string();
     tauri::test::mock_builder()
+        .manage(crate::os_actions::ExternalLauncherState::test())
         .build(context)
         .expect("build a mock app")
 }

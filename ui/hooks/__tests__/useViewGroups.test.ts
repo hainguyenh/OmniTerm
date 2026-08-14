@@ -179,4 +179,48 @@ describe('useViewGroups', () => {
     expect(result.current.panes[0]).toBe('active-tab')
     expect(result.current.viewGroups.some(group => group.id === inactiveId)).toBe(false)
   })
+
+  it('forces single view layout mode when ungrouping the active group', () => {
+    const { result } = renderHook(() => useHarness())
+    // 1. Create a group
+    let groupId = ''
+    act(() => { groupId = result.current.createNewViewGroup('tab-1', true) })
+    
+    // 2. Change the layout mode while in the group (this simulates a user splitting the pane)
+    // The hook listens to changes in `layoutMode` and updates the group
+    act(() => {
+      result.current.setLayoutMode(4)
+      result.current.setPanes(['tab-1', null, null, null, null, null, null, null])
+    })
+    
+    // Validate the group actually took the layout mode
+    expect(result.current.viewGroups.find(g => g.id === groupId)?.layoutMode).toBe(4)
+    
+    // 3. Ungroup
+    act(() => window.dispatchEvent(new CustomEvent('omniterm:ungroup-view-group', { detail: { groupId } })))
+    
+    // 4. Verify it reverted to Ungrouped and forced layoutMode 1
+    expect(result.current.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
+    expect(result.current.layoutMode).toBe(1)
+  })
+
+  it('keeps ungrouped view mode as single view even if user switches to multi-view (creating a new group) and back', () => {
+    const { result } = renderHook(() => useHarness())
+    act(() => { result.current.setPanes(['tab', ...Array(7).fill(null)]) })
+    expect(result.current.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
+    
+    // Switch layout mode to multi-view
+    act(() => result.current.setLayoutMode(2))
+    
+    // Hook automatically creates a new group when multi-view is requested in ungrouped
+    const groupId = result.current.viewGroups.find(group => group.id !== DEFAULT_VIEW_GROUP_ID)?.id ?? ''
+    expect(result.current.activeGroupId).toBe(groupId)
+    
+    // Switch back to ungrouped view
+    act(() => result.current.switchViewGroup(DEFAULT_VIEW_GROUP_ID))
+    
+    // Verify ungrouped view mode is 1, not 2
+    expect(result.current.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
+    expect(result.current.layoutMode).toBe(1)
+  })
 })

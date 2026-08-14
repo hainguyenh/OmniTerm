@@ -12,10 +12,13 @@ fn workspaces_serialize_with_camel_case_fields() {
             id: "folder#1".to_string(),
             name: "proj".to_string(),
             path: "C:/proj".to_string(),
+            color: None,
         }],
         parent_id: Some("ws#parent".to_string()),
         order: 2,
         pins: vec![WorkspacePin { folder_id: "folder#1".to_string(), path: "src".to_string() }],
+        color: None,
+        icon: None,
     };
     let value = serde_json::to_value(&ws).unwrap();
     assert_eq!(value["id"], serde_json::json!("ws#1"));
@@ -44,6 +47,8 @@ fn empty_workspace_pins_are_serialized_for_the_renderer_contract() {
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let value = serde_json::to_value(&ws).unwrap();
     assert_eq!(value["pins"], serde_json::json!([]));
@@ -82,10 +87,13 @@ fn write_and_read_workspaces_round_trip() {
             id: "folder#test".to_string(),
             name: "My Project".to_string(),
             path: "C:/proj".to_string(),
+            color: None,
         }],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     // Start from no file so the "one workspace" count below is this test's own write and not a
     // workspace another test left in the shared app-data directory.
@@ -196,7 +204,10 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
         }),
     ))
     .unwrap();
-    assert_eq!(max_open_bytes(app.handle()), crate::safepath::DEFAULT_MAX_VIEW_BYTES);
+    assert_eq!(
+        max_open_bytes(app.handle()),
+        crate::safepath::DEFAULT_MAX_VIEW_BYTES
+    );
     assert_eq!(excluded_viewable_exts(app.handle()), vec!["pem", "log"]);
 
     tauri::async_runtime::block_on(crate::settings::save_settings(
@@ -204,7 +215,10 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
         serde_json::json!({ "maxOpenFileMb": u64::MAX }),
     ))
     .unwrap();
-    assert_eq!(max_open_bytes(app.handle()), crate::safepath::MAX_VIEW_BYTES_CEILING);
+    assert_eq!(
+        max_open_bytes(app.handle()),
+        crate::safepath::MAX_VIEW_BYTES_CEILING
+    );
 
     tauri::async_runtime::block_on(crate::settings::save_settings(
         app.handle().clone(),
@@ -223,6 +237,7 @@ fn workspace_command_validations_and_edge_cases() {
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }
+
     let handle = app.handle();
 
     let empty_create = tauri::async_runtime::block_on(create_workspace(handle.clone(), "   ".into()));
@@ -263,6 +278,40 @@ fn workspace_command_validations_and_edge_cases() {
     let added_folder = tauri::async_runtime::block_on(add_workspace_folder(handle.clone(), dup_add.id.clone(), temp.path().to_string_lossy().into())).unwrap();
     assert_eq!(added_folder.folders.len(), 1);
 
+    let unlink_path = temp.path().join("unlink-me");
+    std::fs::create_dir(&unlink_path).unwrap();
+    let unlink_folder = tauri::async_runtime::block_on(add_workspace_folder(
+        handle.clone(),
+        dup_add.id.clone(),
+        unlink_path.to_string_lossy().into(),
+    )).unwrap();
+    let folder_id = unlink_folder.folders.last()
+        .expect("unlink folder should be added")
+        .id
+        .clone();
+    let pinned = tauri::async_runtime::block_on(set_workspace_entry_pinned(
+        handle.clone(),
+        dup_add.id.clone(),
+        folder_id.clone(),
+        "scripts".into(),
+        true,
+    )).unwrap();
+    assert_eq!(pinned.pins.len(), 1);
+    let unlinked = tauri::async_runtime::block_on(remove_workspace_folder(
+        handle.clone(),
+        dup_add.id.clone(),
+        folder_id.clone(),
+    )).unwrap();
+    assert_eq!(unlinked.folders.len(), 1);
+    assert!(unlinked.folders.iter().all(|folder| folder.id != folder_id));
+    assert!(unlinked.pins.is_empty());
+    let missing_folder = tauri::async_runtime::block_on(remove_workspace_folder(
+        handle.clone(),
+        dup_add.id.clone(),
+        folder_id,
+    ));
+    assert!(missing_folder.unwrap_err().contains("Unknown workspace folder"));
+
     let file_path = temp.path().join("plain.txt");
     std::fs::write(&file_path, b"hello").unwrap();
     let file_add_err = tauri::async_runtime::block_on(add_workspace(handle.clone(), file_path.to_string_lossy().into())).unwrap_err();
@@ -301,6 +350,15 @@ fn workspace_command_validations_and_edge_cases() {
     }
 }
 
+#[test]
+fn workspace_paths_are_stored_without_windows_verbatim_prefix() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = canonical_dir(temp.path().to_string_lossy().as_ref()).unwrap();
+
+    assert_eq!(path, dunce::canonicalize(temp.path()).unwrap().to_string_lossy());
+    assert!(!path.starts_with(r"\\?\"));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
@@ -309,15 +367,12 @@ fn a_filesystem_root_workspace_uses_its_path_as_the_display_name() {
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }
-    let workspace = tauri::async_runtime::block_on(add_workspace(
-        app.handle().clone(),
-        "/".to_string(),
-    ))
-    .unwrap();
+    let workspace =
+        tauri::async_runtime::block_on(add_workspace(app.handle().clone(), "/".to_string()))
+            .unwrap();
     assert_eq!(workspace.name, "/");
     assert_eq!(workspace.folders[0].path, "/");
     if let Ok(path) = workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(path);
     }
 }
-

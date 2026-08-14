@@ -73,7 +73,7 @@ export default function PluginManager({
   }, [refresh, showAlert])
 
   const removePlugin = useCallback(async (plugin: PluginDescriptor) => {
-    if (activeSessionCount > 0) {
+    if (plugin.permissions.includes('connections') && activeSessionCount > 0) {
       await showAlert('Close all active sessions before removing a connection plugin.', {
         title: 'Plugin in use',
         tone: 'warning',

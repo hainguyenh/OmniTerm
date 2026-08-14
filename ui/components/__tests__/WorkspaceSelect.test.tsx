@@ -17,9 +17,10 @@ describe('WorkspaceSelect', () => {
     render(<WorkspaceSelect workspaces={workspaces} value="one" onChange={onChange} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Terminal workspace' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Two' }))
+    expect(screen.getByRole('listbox')).toHaveClass('bottom-full', 'overflow-y-auto')
+    fireEvent.click(screen.getByRole('button', { name: 'Two - Two' }))
 
-    expect(onChange).toHaveBeenCalledWith('two')
+    expect(onChange).toHaveBeenCalledWith('two::f2')
     expect(screen.queryByRole('button', { name: 'Two' })).not.toBeInTheDocument()
   })
 
@@ -32,7 +33,7 @@ describe('WorkspaceSelect', () => {
 
     expect(onChange).toHaveBeenCalledWith(null)
   })
-  it('keeps multi-folder containers visible but unavailable as an ambiguous terminal cwd', () => {
+  it('lists each root folder as a selectable terminal target', () => {
     const composite: Workspace = {
       id: 'multi', name: 'Composite', order: 0, pins: [],
       folders: [
@@ -44,11 +45,10 @@ describe('WorkspaceSelect', () => {
     render(<WorkspaceSelect workspaces={[composite, ...workspaces]} value={null} onChange={onChange} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Terminal workspace' }))
-    const option = screen.getByRole('button', { name: 'Composite' })
-    expect(option).toBeDisabled()
-    expect(option).toHaveAttribute('title', 'Open a terminal from a folder in the Workspace panel')
+    const option = screen.getByRole('button', { name: 'Composite - One' })
+    expect(option).not.toBeDisabled()
     fireEvent.click(option)
-    expect(onChange).not.toHaveBeenCalled()
+    expect(onChange).toHaveBeenCalledWith('multi::f1')
   })
 
 })

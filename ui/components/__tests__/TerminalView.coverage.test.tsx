@@ -189,7 +189,7 @@ describe('TerminalView full lifecycle', () => {
 
     term.selection = 'selected text'
     act(() => term.selectionHandler?.())
-    expect(window.omnitermAPI.clipboard.writeText).toHaveBeenCalledWith('selected text')
+    await waitFor(() => expect(window.omnitermAPI.clipboard.writeText).toHaveBeenCalledWith('selected text'))
     fireEvent.contextMenu(element)
     await waitFor(() => expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('local-session', 'pasted text'))
 

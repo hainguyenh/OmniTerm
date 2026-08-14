@@ -128,9 +128,16 @@ const defaults: Api = {
     create: async (name: string) => ({ id: 'ws#new', name, folders: [], order: 0, pins: [] }),
     add: async () => null,
     addFolder: async () => null,
+    removeFolder: async () => ({ id: 'ws#removed-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
     importFile: async () => null,
     remove: async () => {},
     rename: async (id: string, name: string) => ({ id, name, folders: [], order: 0, pins: [] }),
+    setAppearance: async (id: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => ({
+      id, name: 'workspace', folders: [], order: 0, pins: [], color, icon,
+    }),
+    setFolderColor: async (id: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => ({
+      id, name: 'workspace', folders: [{ id: folderId, name: 'folder', path: 'C:/workspace', color }], order: 0, pins: [],
+    }),
     move: async () => [],
     setPinned: async (workspaceId: string, folderId: string, path: string, pinned: boolean) => ({
       id: workspaceId,
@@ -256,7 +263,7 @@ const defaults: Api = {
     ready: () => {},
     release: () => {},
     // Tauri-only: registers an unsaved shell and returns the record to open a pane with.
-    open: (shell?: string, _workspaceId?: string | null) =>
+    open: (shell?: string, _workspaceId?: string | null, _folderId?: string | null) =>
       Promise.resolve({ id: 'adhoc-test', name: 'PowerShell', type: 'LOCAL', shell: shell ?? 'default' }),
     // Tauri-only probe of the shells this machine can start. Read at call time so a test that
     // overrides `app.platform` gets that platform's shells, as the real backend would.

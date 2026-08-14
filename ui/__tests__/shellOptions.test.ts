@@ -1,5 +1,6 @@
 /** @vitest-environment jsdom */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { diag } from '../diag'
 import { loadShellOptions, pickShell, shellLabel, staticShellOptions } from '../shellOptions'
 
 function setBridge(platform: string, list: () => Promise<Array<{ id: string; label: string }>>): void {
@@ -10,6 +11,10 @@ function setBridge(platform: string, list: () => Promise<Array<{ id: string; lab
 describe('shellOptions', () => {
   beforeEach(() => {
     delete (window as any).omnitermAPI
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('returns platform-appropriate static options', () => {
@@ -27,8 +32,10 @@ describe('shellOptions', () => {
     setBridge('win32', vi.fn().mockResolvedValue([]))
     await expect(loadShellOptions()).resolves.toEqual(staticShellOptions('win32'))
 
+    const warn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     setBridge('linux', vi.fn().mockRejectedValue(new Error('probe failed')))
     await expect(loadShellOptions()).resolves.toEqual(staticShellOptions('linux'))
+    expect(warn).toHaveBeenCalledWith('[shellOptions] could not probe available shells', expect.any(Error))
   })
 
   it('picks and labels known shells while degrading unknown values safely', () => {

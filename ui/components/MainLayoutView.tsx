@@ -21,48 +21,38 @@ import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
+import { workspaceForConnection } from '../utils/workspaceIdentity'
 import { Grid6Icon, Grid8Icon } from './mainLayoutShared'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import FullscreenRestoreControl from './FullscreenRestoreControl'
+import MainLayoutWaitingPane from './MainLayoutWaitingPane'
 import type { MainLayoutModel } from './useMainLayoutController'
 import ViewGroupTabs from './ViewGroupTabs'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
-
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {} } = model
   const alwaysAwake = awakeState ?? {
-    enabled: false,
-    mode: 'activeOnly' as const,
-    expiresAtMs: 0,
-    activeSessionCount: 0,
-    keepingAwake: false,
-    supported: true,
-    error: null,
+    enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
+    activeSessionCount: 0, keepingAwake: false, supported: true, error: null,
   }
   const { open: blurOpen, setOpen: setBlurOpen, available: blurAvailable } = useBlurPlugin()
   const blurValue = appSettings.blurInactiveWindow ?? 0
   const fullscreenTabId = fullscreenPane === null ? null : panes[fullscreenPane] ?? null
   const ungroupedTabCount = activeTabs.filter(tab => !tabGroups[tab.id]).length
-  const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId)
+  const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId?.split('::')[0])
   const activeEditorWorkspace = activeTabId ? model.editorTabs[activeTabId]?.workspaceId : undefined
-  const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? selectedWorkspace
+  const activeConnId = activeTabId ? activeTabs.find(tab => tab.id === activeTabId)?.connId : undefined
+  const activeConnection = activeConnId ? connById(activeConnId) : undefined
+  const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
   const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
   const onPaneDrop = (event: React.DragEvent, target: number) => {
     const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
     if (source !== null) swapPanes(source, target)
     setDragPane(null)
   }
-  const waitingPane = (
-    <WaitingPane
-      dark={!!appSettings.darkMode}
-      onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
-      onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
-      workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
-      customArtUrl={idleArtUrl}
-    />
-  )
+  const waitingPane = <MainLayoutWaitingPane model={model} customArtUrl={idleArtUrl} />
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
@@ -76,7 +66,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           alwaysAwakeKeepingAwake={alwaysAwake.keepingAwake}
           onAlwaysAwakeClick={() => setAlwaysAwakeOpen(true)}
           blurAvailable={blurAvailable}
-          blurEnabled={blurValue > 0}
+          blurEnabled={(appSettings.blurEnabled ?? true) && blurValue > 0}
           onBlurClick={() => setBlurOpen(true)}
         />
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
@@ -90,7 +80,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onOpenScript={openEditor}
                 onRunScript={scriptRuns.run}
                 showAlert={showAlert}
-                onConnectWorkspaceConnection={handleConnect}
+                onConnectWorkspaceConnection={(connection, workspaceId) => handleConnect({ ...connection, workspaceId })}
                 hasConnectionProvider={hasConnectionProvider}
                 onAddWorkspaceConnection={(target) => {
                   setConnFormInitial(undefined)
@@ -128,7 +118,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             <div className="h-[40px] px-2.5 flex items-center gap-2">
             {/* Tab list — flex-1 so it fills all available space before the picker */}
             <div className="flex-1 min-w-0 overflow-hidden">
-            {visibleTabs.length > 0 && (
               <SessionTabs
                 tabs={visibleTabs} panes={panes} layoutMode={layoutMode} focusedPane={focusedPane}
                 statuses={statuses} activity={activity}
@@ -142,12 +131,17 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
                 onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
+                onPickPane={layoutMode > 1
+                  ? (rect) => {
+                      setPanePickerAnchor(rect)
+                      setPanePicker(Math.min(focusedPane, layoutMode - 1))
+                    }
+                  : undefined}
                 detachTabId={layoutMode === 1 ? activeTabId : null}
                 detachAction={layoutMode === 1 && activeTabId ? detachControl.stateOf(activeTabId) : null}
                 onToggleDetach={() => { if (activeTabId) detachControl.toggle(activeTabId) }}
                 onReveal={revealInWorkspace}
               />
-            )}
             </div>
   
             {/* Layout picker — pinned to the right edge, slightly larger for prominence */}
@@ -159,16 +153,21 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 [4, LayoutGrid, 'Grid 4'],
                 [6, Grid6Icon, 'Grid 6'],
                 [8, Grid8Icon, 'Grid 8']
-              ] as const).map(([m, Icon, label]) => (
+              ] as const).map(([m, Icon, label]) => {
+                const disabled = m > 1 && activeGroupId === 'ungrouped' && visibleTabs.length === 0
+                return (
                 <button
                   key={m}
                   type="button"
+                  disabled={disabled}
                   title={
-                    m === 3 && layoutMode === 3 ? `${label} (${appSettings.split3Style || 'left'}) - Click to cycle`
+                    disabled ? 'Cannot select multi-view when ungrouped with no open tabs'
+                    : m === 3 && layoutMode === 3 ? `${label} (${appSettings.split3Style || 'left'}) - Click to cycle`
                     : m === 2 && layoutMode === 2 ? `${label} (${appSettings.split2Style || 'columns'}) - Click to toggle`
                     : label
                   }
                   onClick={() => {
+                    if (disabled) return
                     if (m === 3 && layoutMode === 3) {
                       const currentStyle = appSettings.split3Style || 'left'
                       const nextStyle = currentStyle === 'left' ? 'right' : currentStyle === 'right' ? 'top' : 'left'
@@ -182,10 +181,13 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       changeLayoutMode(m)
                     }
                   }}
-                  className={`relative inline-flex items-center justify-center w-6 h-6 transition-colors hover:bg-white/5 ${
-                    layoutMode === m
-                      ? 'bg-white/10 text-[var(--theme-accent)] font-bold'
-                      : 'text-inherit opacity-50 hover:opacity-100'
+                  className={`relative inline-flex items-center justify-center w-6 h-6 transition-colors ${
+                    disabled ? 'opacity-20 cursor-not-allowed'
+                    : `hover:bg-white/5 ${
+                        layoutMode === m
+                          ? 'bg-white/10 text-[var(--theme-accent)] font-bold'
+                          : 'text-inherit opacity-50 hover:opacity-100'
+                      }`
                   }`}
                 >
                   <Icon className={`w-4 h-4 ${m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows' ? 'rotate-90' : ''}`} />
@@ -196,7 +198,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
                   )}
                 </button>
-              ))}
+              )})}
             </div>
   
             </div>
@@ -205,12 +207,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           {/* Active-session control bar — rendered as a FOOTER (order-last) so the
               embedded RDP desktop filling the content area can never cover the controls. */}
           {activeTabId && (() => {
-            const activeConnId = activeTabs.find(t => t.id === activeTabId)?.connId
-            const conn = connById(activeConnId)
+            const conn = activeConnection
             if (!conn) {
               return (
                 <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+                  <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
                   <span className="opacity-60">·</span>
                   <span className="truncate">Editor active</span>
                   {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -235,7 +236,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   )
                 })()}
                 <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspaceTitle}>
-                  Workspace · {footerWorkspace?.name ?? 'No workspace'}
+                  {footerWorkspaceTitle}
                 </span>
                 <span className="opacity-50">·</span>
                 {conn.type === 'RDP'
@@ -243,7 +244,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   : <Terminal className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
                 }
                 <span className="text-xs font-medium text-[var(--theme-fg)] truncate min-w-0">{conn.name}</span>
-  
                 {/* Status pill — sits right after the name, with the shell's activity when we know it */}
                 <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0 rounded-full flex-shrink-0 ${STATUS_TEXT[status]} bg-theme-bg`}>
                   {status === 'connecting' ? (
@@ -260,7 +260,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     return word ? <span className="font-normal text-theme-dim">· {word}</span> : null
                   })()}
                 </span>
-  
                 {/* Live metrics: latency (SSH + RDP) + remote CPU/RAM/disk + uptime (SSH). */}
                 <MetricsChips
                   status={status}
@@ -314,7 +313,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           })()}
           {!activeTabId && (
             <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+              <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
               <span className="opacity-60">·</span>
               <span>No active terminal</span>
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -431,6 +430,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       active={visible}
                       layoutEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       darkMode={appSettings.darkMode}
+                      blurStrength={blurAvailable && (appSettings.blurEnabled ?? true) && appSettings.blurInactiveDock ? appSettings.blurInactiveWindow ?? 0 : 0}
                       onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}
@@ -495,6 +495,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           />
         )}
         <MainLayoutOverlays model={model} />
-        {blurOpen && blurAvailable && <BlurSettingsOverlay value={blurValue} onChange={blurInactiveWindow => { const next = { ...appSettings, blurInactiveWindow }; setAppSettings(next); window.omnitermAPI.settings.save(next) }} onClose={() => setBlurOpen(false)} />}
+        {blurOpen && blurAvailable && <BlurSettingsOverlay strength={appSettings.blurInactiveWindow ?? 0} blurDock={appSettings.blurInactiveDock ?? false} enabled={appSettings.blurEnabled ?? true} onSave={(blurInactiveWindow, blurInactiveDock, blurEnabled) => { const next = { ...appSettings, blurInactiveWindow, blurInactiveDock, blurEnabled }; setAppSettings(next); window.omnitermAPI.settings.save(next) }} onClose={() => setBlurOpen(false)} />}
     </div>)
 }

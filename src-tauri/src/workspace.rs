@@ -6,7 +6,6 @@
 
 use crate::adhoc;
 use crate::openshell::OpenShellRequest;
-use crate::rdp_launch;
 use crate::safepath;
 use crate::workspace_launch::{default_shell, script_run_request};
 use crate::workspace_scan::{WorkspaceEntry, WorkspaceEntryPage, WorkspaceScript};
@@ -17,19 +16,18 @@ use app_core::workspace_model::{
 pub use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
 use std::fs;
 use std::path::Path;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
 pub(crate) use crate::workspace_persistence::{read_workspaces, write_workspaces};
 #[cfg(test)]
 pub(crate) use crate::workspace_persistence::workspaces_file;
-
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 mod tests;
 
 fn canonical_dir(path: &str) -> Result<String, String> {
-    let canonical = fs::canonicalize(path).map_err(|_| "That path is not a folder.".to_string())?;
+    let canonical = dunce::canonicalize(path).map_err(|_| "That path is not a folder.".to_string())?;
     if !canonical.is_dir() {
         return Err("That path is not a folder.".to_string());
     }
@@ -57,6 +55,7 @@ fn new_folder(path: String, name: Option<String>) -> WorkspaceFolder {
         id: format!("folder#{}", Uuid::new_v4()),
         name: name.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| display_name(&path)),
         path,
+        color: None,
     }
 }
 
@@ -68,6 +67,8 @@ fn new_workspace(name: String, folders: Vec<WorkspaceFolder>, order: usize) -> W
         parent_id: None,
         order,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     }
 }
 
@@ -77,7 +78,6 @@ pub(crate) fn find_workspace<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result
         .find(|workspace| workspace.id == id)
         .ok_or_else(|| format!("Unknown workspace \"{id}\""))
 }
-
 #[tauri::command]
 pub async fn list_workspaces<R: Runtime>(app: AppHandle<R>) -> Result<Vec<Workspace>, String> {
     read_workspaces(&app)
@@ -120,6 +120,26 @@ pub async fn add_workspace_folder<R: Runtime>(app: AppHandle<R>, workspace_id: S
     if !workspace.folders.iter().any(|folder| folder.path == path) {
         workspace.folders.push(new_folder(path, None));
     }
+    let result = workspace.clone();
+    write_workspaces(&app, &list)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn remove_workspace_folder<R: Runtime>(
+    app: AppHandle<R>,
+    workspace_id: String,
+    folder_id: String,
+) -> Result<Workspace, String> {
+    let mut list = read_workspaces(&app)?;
+    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
+        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
+    let original_len = workspace.folders.len();
+    workspace.folders.retain(|folder| folder.id != folder_id);
+    if workspace.folders.len() == original_len {
+        return Err(format!("Unknown workspace folder \"{folder_id}\""));
+    }
+    workspace.pins.retain(|pin| pin.folder_id != folder_id);
     let result = workspace.clone();
     write_workspaces(&app, &list)?;
     Ok(result)
@@ -309,7 +329,8 @@ pub async fn run_script<R: Runtime>(
         let real = safepath::safe_runnable_path(&target.folder.path, &target.relative_path)?;
         let real = real.to_string_lossy().into_owned();
         if script.kind == "rdp" {
-            rdp_launch::launch_rdp(&real)?;
+            app.state::<crate::os_actions::ExternalLauncherState>()
+                .launch_rdp(&real)?;
             return Ok(true);
         }
         let request = script_run_request(&script.kind, &real, &script.name, &target.folder.path);

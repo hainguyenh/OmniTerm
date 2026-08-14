@@ -319,25 +319,8 @@ mod tests {
 
 #[tauri::command]
 pub async fn open_themes_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
-    let _themes_dir = get_themes_dir(&app)?;
-
-    #[cfg(not(test))]
-    {
-        // Try opening using opener crate
-        if let Err(e) = opener::open(&_themes_dir) {
-            // Fallback for missing opener or failure
-            #[cfg(target_os = "windows")]
-            std::process::Command::new("explorer").arg(&_themes_dir).spawn().map_err(|e| e.to_string())?;
-
-            #[cfg(target_os = "macos")]
-            std::process::Command::new("open").arg(&_themes_dir).spawn().map_err(|e| e.to_string())?;
-
-            #[cfg(target_os = "linux")]
-            std::process::Command::new("xdg-open").arg(&_themes_dir).spawn().map_err(|e| e.to_string())?;
-            
-            let _ = e;
-        }
-    }
-
+    let themes_dir = get_themes_dir(&app)?;
+    app.state::<crate::os_actions::ExternalLauncherState>()
+        .open_folder(&themes_dir)?;
     Ok(())
 }
