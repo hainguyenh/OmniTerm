@@ -65,12 +65,27 @@ function lastTag() {
 function changesSince(base) {
   const range = base ? `${base}..HEAD` : 'HEAD'
   const log = base
-    ? git('log', range, '--pretty=format:%s')
-    : git('log', '--pretty=format:%s')
+    ? git('log', range, '--pretty=format:%s|%b|%an%x00')
+    : git('log', '--pretty=format:%s|%b|%an%x00')
 
   return log
-    .split('\n')
-    .map((line) => line.trim())
+    .split('\0')
+    .map((commit) => commit.trim())
+    .filter(Boolean)
+    .map(commit => {
+      let [subject, body, author] = commit.split('|')
+      subject = (subject || '').trim()
+      body = (body || '').trim()
+      author = (author || '').trim()
+
+      if (subject.startsWith('Merge pull request #') && body) {
+        subject = body.split('\n')[0].trim()
+      } else if (subject.startsWith('Merge branch ')) {
+        return null // skip generic merge commits
+      }
+
+      return `${subject} (@${author})`
+    })
     .filter(Boolean)
     .filter((line) => !/^chore:\s+bump\s+version/i.test(line))
 }
