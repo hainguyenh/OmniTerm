@@ -1,5 +1,6 @@
 use super::*;
 use std::fs;
+use std::path::Path;
 use tempfile::TempDir;
 use tauri::Manager;
 
@@ -18,6 +19,21 @@ fn installed_plugin_detection_requires_a_child_package_manifest() {
     fs::create_dir_all(root.path().join("plugin-a")).unwrap();
     fs::write(root.path().join("plugin-a/package.json"), "{}").unwrap();
     assert!(contains_installed_plugin(root.path()));
+}
+
+#[test]
+fn portable_resource_lookup_finds_sidecar_beside_executable() {
+    let root = TempDir::new().unwrap();
+    let executable = root.path().join("OmniTerm.exe");
+    let sidecar = root.path().join("sidecar/plugin-host.cjs");
+    fs::write(&executable, b"").unwrap();
+    fs::create_dir_all(sidecar.parent().unwrap()).unwrap();
+    fs::write(&sidecar, b"").unwrap();
+
+    assert_eq!(
+        executable_adjacent_path_from(&executable, Path::new("sidecar/plugin-host.cjs")),
+        Some(sidecar)
+    );
 }
 
 #[test]
