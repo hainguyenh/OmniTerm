@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react'
+import { createPortal } from 'react-dom'
 import { ArrowLeft, ArrowRight, Terminal, Trash2, X, XCircle } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { CommandPalette } from './CommandPalette'
@@ -200,9 +201,10 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             </div>
           )}
     
-          {shellMenu && (
+          {shellMenu && createPortal(
             <div 
               className="fixed inset-0 z-50"
+              data-testid="shell-menu-backdrop"
               onClick={() => setShellMenu(null)}
               onContextMenu={(e) => { e.preventDefault(); setShellMenu(null) }}
             >
@@ -230,7 +232,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
                   <CtxItem key={opt.id} label={opt.label} icon={<Terminal className="w-3.5 h-3.5" />} color="text-theme-fg" onClick={() => { terminalSelection ? requestNewSession(opt.id, selectedWorkspaceId) : requestNewSession(opt.id); setShellMenu(null) }} />
                 ))}
               </div>
-            </div>
+            </div>, document.body
           )}
     
           {pendingCloseTabIds && (

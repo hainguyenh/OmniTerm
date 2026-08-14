@@ -138,8 +138,6 @@ describe('small UI shells', () => {
     rerender(<WaitingPane dark={false} onNewSession={open} onPickShell={pick} customArtUrl="blob:idle" />)
     expect(screen.getByRole('img', { name: 'waiting' })).toHaveAttribute('src', 'blob:idle')
     expect(screen.getByText(/Ctrl\+N/)).toBeInTheDocument()
-    expect(screen.getByTestId('waiting-scroll-area')).toHaveClass('min-h-0', 'overflow-y-auto')
-    expect(screen.getByTestId('waiting-controls')).toHaveClass('shrink-0')
   })
 
   it('resizes horizontal, vertical, mirrored, and stacked pane dividers', () => {

@@ -346,7 +346,7 @@ jobs:
           $repoRoot = (Get-Location).Path
           $artifacts = Join-Path $repoRoot 'artifacts'
           $stage = Join-Path $repoRoot '.omniterm-build'
-          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'portable'), (Join-Path $artifacts 'plugins'), $stage | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $artifacts 'portable'), $stage | Out-Null
 
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $portable = New-PortablePackage `
@@ -359,9 +359,6 @@ jobs:
             )
           if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
           Get-Item -LiteralPath $portable | Select-Object FullName, Length
-
-          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/always-awake') -Destination (Join-Path $artifacts 'plugins/always-awake') -StageRoot $stage
-          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/blur') -Destination (Join-Path $artifacts 'plugins/blur') -StageRoot $stage
 
       - name: Upload Tauri NSIS artifact
         if: matrix.platform.os == 'windows-latest'
@@ -381,16 +378,6 @@ jobs:
             artifacts/portable/*.exe.sha256
             artifacts/portable/*.zip
             artifacts/portable/*.zip.sha256
-          if-no-files-found: error
-
-      - name: Upload plugin packages
-        if: matrix.platform.os == 'windows-latest'
-        uses: actions/upload-artifact@v6
-        with:
-          name: OmniTerm-Plugins
-          path: |
-            artifacts/plugins/**/*.zip
-            artifacts/plugins/**/*.zip.sha256
           if-no-files-found: error
 
       - name: Upload Linux desktop packages
@@ -515,7 +502,6 @@ jobs:
             windows: [],
             linux: [],
             macos: [],
-            plugins: [],
           };
 
           for (const file of files) {
@@ -535,8 +521,6 @@ jobs:
               categorized.linux.push({ link, desc, size });
             } else if (name.endsWith('.dmg')) {
               categorized.macos.push({ link, desc: 'Disk Image (.dmg)', size });
-            } else if (name.endsWith('.zip')) {
-              categorized.plugins.push({ link, desc: 'Plugin', size });
             }
           }
 
@@ -569,17 +553,6 @@ jobs:
             }
             md += `\n`;
           }
-
-          if (categorized.plugins.length > 0) {
-            md += `### Plugins\n\n`;
-            md += `| File | Description | Size |\n`;
-            md += `| :--- | :--- | :--- |\n`;
-            for (const item of categorized.plugins) {
-              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
-            }
-            md += `\n`;
-          }
-
           writeFileSync('release_notes.md', md, 'utf8');
           console.log('Generated release_notes.md:\n' + md);
           EOF

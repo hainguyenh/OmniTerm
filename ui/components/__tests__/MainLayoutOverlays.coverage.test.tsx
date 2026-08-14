@@ -99,7 +99,7 @@ describe('MainLayoutOverlays', () => {
 
   it('dismisses menus, ignores left/right actions at boundaries, and dispatches shell selection', () => {
     const first = model({ tabMenu: { x: 1, y: 2, tabId: 'a' } })
-    const { rerender, container } = render(<MainLayoutOverlays model={first} />)
+    const { rerender } = render(<MainLayoutOverlays model={first} />)
     fireEvent.click(screen.getByText('Close to the Left'))
     expect(first.closeTabs).not.toHaveBeenCalled()
 
@@ -116,7 +116,7 @@ describe('MainLayoutOverlays', () => {
 
     const dismiss = model({ shellMenu: { x: 5, y: 6 } })
     rerender(<MainLayoutOverlays model={dismiss} />)
-    fireEvent.contextMenu(container.firstElementChild as Element)
+    fireEvent.contextMenu(screen.getByTestId('shell-menu-backdrop'))
     expect(dismiss.setShellMenu).toHaveBeenCalledWith(null)
   })
 
