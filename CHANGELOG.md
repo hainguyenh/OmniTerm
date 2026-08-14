@@ -1,5 +1,43 @@
 # Changelog
 
+## [v0.1.4] — 2026-08-14
+
+### Added
+- feat: enhance workspace tree UI, appearance customization, and OS actions (@hainguyenh)
+- feat(gha): add manual-build workflows for custom build on branch or commit (@the-long-ride)
+- feat(workspace): support VS Code workspace import, drag-and-drop reordering, and inline rename (@Hai Nguyen)
+- feat: improve UI for blur and waiting pane, fix multiple bugs (@hainguyenh)
+- feat(workspace): update UI workspace tree, drag-drop reordering, and double-click rename (@the-long-ride)
+- feat(workspace): add composite workspace Rust domain models and Tauri IPC (@the-long-ride)
+- feat(identity): support SSH remote URLs in identity core guard (@the-long-ride)
+
+### Fixed
+- fix: revert WaitingPane UI to inline controls (@Hai Nguyen)
+- fix: revert WaitingPane UI to inline controls (@hainguyenh)
+- fix(gha): coverage (@the-long-ride)
+- fix(rust): validate workspace ID existence before checking folder parameter in scan_workspace_entries (@the-long-ride)
+- fix(rust): remove unused remote_path variable in ipc_workspace_tests.rs (@the-long-ride)
+- fix(tests): auto-expand workspace root folders and fix MainLayout workspace label selector (@the-long-ride)
+- fix(tests): remove unused variable in WorkspaceContainerList.test.tsx (@the-long-ride)
+- fix(tests): resolve Vitest workspace panel and bridge contract suite regressions (@the-long-ride)
+- fix(icon): refine Windows taskbar and window icon composition (@the-long-ride)
+
+### Changed
+- build: include contributor and PR message in changelog (@hainguyenh)
+- chore: trigger PR checks (@hainguyenh)
+- chore: release v0.1.4 - workspace tree UI, custom appearance, and OS actions (@Hai Nguyen)
+- docs(specs): add property-tagged software specification docs and inventories (@the-long-ride)
+
+### CI
+- ci(release): enhance GHA multiplatform release workflow and packaging (@the-long-ride)
+
+### Other
+- enh(GHA): show link to download directly the built package with short SHA commit id. (@the-long-ride)
+- fix(gha) enhance manual build workflow (@the-long-ride)
+- merge: sync master into 0.1.4 (@hainguyenh)
+- update markdown explorer (@the-long-ride)
+
+
 ## [Unreleased]
 
 ### Added
