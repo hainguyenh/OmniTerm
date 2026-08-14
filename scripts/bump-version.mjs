@@ -84,7 +84,6 @@ function groupChanges(subjects) {
     Refactored: [],
     Tests: [],
     CI: [],
-    Plugins: [],
     Other: [],
   }
 
@@ -94,8 +93,7 @@ function groupChanges(subjects) {
     [/^refactor(\(.+\))?[!:]/, 'Refactored'],
     [/^test(\(.+\))?[!:]/, 'Tests'],
     [/^ci(\(.+\))?[!:]/, 'CI'],
-    [/^plugin(\(.+\))?[!:]/, 'Plugins'],
-    [/^(chore|build|docs|style|perf)(\(.+\))?[!:]/, 'Changed'],
+    [/^(plugin|chore|build|docs|style|perf)(\(.+\))?[!:]/, 'Changed'],
   ]
 
   for (const subject of subjects) {

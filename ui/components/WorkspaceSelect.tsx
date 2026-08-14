@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
 import { orderedWorkspaceRows } from '../utils/workspaceHierarchy'
@@ -15,6 +16,8 @@ interface WorkspaceSelectProps {
 export default function WorkspaceSelect({ workspaces, value, onChange, compact = false }: WorkspaceSelectProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
   const rows = orderedWorkspaceRows(workspaces)
   const selection = decodeWorkspaceSelection(value)
   const selected = rows.find(row => row.workspace.id === selection?.workspaceId)?.workspace
@@ -27,7 +30,7 @@ export default function WorkspaceSelect({ workspaces, value, onChange, compact =
   useEffect(() => {
     if (!open) return
     const closeOnOutside = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+      if (!rootRef.current?.contains(event.target as Node) && !dropdownRef.current?.contains(event.target as Node)) setOpen(false)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setOpen(false)
@@ -41,10 +44,15 @@ export default function WorkspaceSelect({ workspaces, value, onChange, compact =
   }, [open])
   return (
     <div ref={rootRef} className="relative">
-      <button type="button" aria-label="Terminal workspace" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)}
+      <button ref={buttonRef} type="button" aria-label="Terminal workspace" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(current => !current)}
         className={`inline-flex max-w-[180px] items-center gap-1 truncate rounded-lg border border-[#bb9af7]/60 bg-[#bb9af7]/15 px-2 text-[#bb9af7] hover:border-[#bb9af7] hover:bg-[#bb9af7]/25 ${compact ? 'h-7 text-[10px]' : 'h-8 text-xs'}`}
         title={`Workspace for the next terminal: ${label}`}><span className="truncate">Workspace: {label}</span><ChevronDown className="h-3 w-3 flex-shrink-0" /></button>
-      {open && <div role="listbox" className="absolute bottom-full left-0 z-50 mb-1 max-h-[50vh] min-w-[170px] max-w-[calc(100vw-1rem)] overflow-y-auto custom-scrollbar rounded-lg border border-[#bb9af7]/60 bg-theme-popup p-1 shadow-xl">
+      {open && createPortal(<div ref={dropdownRef} role="listbox" className="fixed z-50 mb-1 max-h-[50vh] min-w-[170px] max-w-[calc(100vw-1rem)] overflow-y-auto custom-scrollbar rounded-lg border border-[#bb9af7]/60 bg-theme-popup p-1 shadow-xl"
+        style={{
+          bottom: buttonRef.current ? window.innerHeight - buttonRef.current.getBoundingClientRect().top : '100%',
+          left: buttonRef.current ? buttonRef.current.getBoundingClientRect().left : 0,
+        }}
+      >
         <button type="button" className="block w-full rounded px-2 py-1 text-left text-xs hover:bg-theme-bg" onClick={() => { onChange(null); setOpen(false) }}>None</button>
         {rows.map(({ workspace, depth }) => {
           if (workspace.folders.length === 0) {
@@ -73,7 +81,7 @@ export default function WorkspaceSelect({ workspaces, value, onChange, compact =
             </button>
           ))
         })}
-      </div>}
+      </div>, document.body)}
     </div>
   )
 }

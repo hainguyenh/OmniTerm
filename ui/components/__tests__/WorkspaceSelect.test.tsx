@@ -17,7 +17,7 @@ describe('WorkspaceSelect', () => {
     render(<WorkspaceSelect workspaces={workspaces} value="one" onChange={onChange} />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Terminal workspace' }))
-    expect(screen.getByRole('listbox')).toHaveClass('bottom-full', 'overflow-y-auto')
+    expect(screen.getByRole('listbox')).toHaveClass('fixed', 'overflow-y-auto')
     fireEvent.click(screen.getByRole('button', { name: 'Two - Two' }))
 
     expect(onChange).toHaveBeenCalledWith('two::f2')
