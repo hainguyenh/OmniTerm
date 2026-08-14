@@ -94,13 +94,22 @@ function New-PortablePackage {
 
   foreach ($resourceName in @('builtinThemes', 'sidecar')) {
     $resource = Join-Path $buildRoot $resourceName
-    if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
+    $resourceComplete = Test-Path -LiteralPath $resource -PathType Container
+    if ($resourceName -eq 'sidecar') {
+      $resourceComplete = $resourceComplete -and
+        (Test-Path -LiteralPath (Join-Path $resource 'plugin-host.cjs') -PathType Leaf)
+    }
+    if (-not $resourceComplete) {
       $resource = Join-Path $RepoRoot "src-tauri\$resourceName"
       if (-not (Test-Path -LiteralPath $resource -PathType Container)) {
         throw "Could not find resource directory $resourceName."
       }
     }
     Copy-Item -LiteralPath $resource -Destination $portable -Recurse -Force
+  }
+
+  if (-not (Test-Path -LiteralPath (Join-Path $portable 'sidecar\plugin-host.cjs') -PathType Leaf)) {
+    throw "Portable package is missing sidecar\plugin-host.cjs."
   }
 
   $selectedPlugins = @()
@@ -145,6 +154,9 @@ store settings and application data in the normal Windows user profile.
   $zip = [IO.Compression.ZipFile]::OpenRead($archive)
   try {
     $entryNames = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+    if ($entryNames -notcontains 'sidecar/plugin-host.cjs') {
+      throw "Portable archive is missing required sidecar entry 'sidecar/plugin-host.cjs'."
+    }
     foreach ($selectedPlugin in $selectedPlugins) {
       $pluginPrefix = "plugins/$($selectedPlugin.Name)/"
       foreach ($requiredEntry in @("${pluginPrefix}package.json", "${pluginPrefix}dist/index.js")) {

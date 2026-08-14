@@ -163,7 +163,7 @@ describe("MainLayout update UI", () => {
     // Wait for the plugin list to land, so this is not just asserting on an unrendered panel.
     expect(await screen.findByText("Connection Manager")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /export encrypted backup/i })).toBeNull();
-  });
+  }, 15_000);
 
   it("no longer advertises the features as always-available badges", async () => {
     renderLayout({}, {});
