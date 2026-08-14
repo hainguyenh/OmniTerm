@@ -32,54 +32,58 @@ interface WaitingPaneProps {
 const WaitingPane: React.FC<WaitingPaneProps> = ({
   dark, compact = false, onNewSession, onPickShell, onChooseSession, workspaces = [], selectedWorkspaceId = null, onWorkspaceChange = () => {}, openSessionCount = 0, customArtUrl,
 }) => (
-  <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
-    <div className={`min-h-full w-full flex flex-col items-center justify-center ${
-      compact ? 'p-3' : 'p-4'
-    }`}>
-      <div className={`w-full max-w-[32rem] flex flex-col items-center ${
-        compact ? 'gap-2' : 'gap-5'
+  <div className="flex h-full min-h-0 w-full flex-col overflow-hidden text-[var(--theme-dim)] select-none">
+    <div data-testid="waiting-scroll-area" className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+      <div className={`min-h-full w-full flex flex-col items-center justify-center ${
+        compact ? 'p-3' : 'p-4'
       }`}>
-        {/* Art follows both pane dimensions so narrow and shallow split panes stay usable. */}
-        <div
-          className="relative flex-shrink-0 max-w-full max-h-full flex items-center justify-center pointer-events-none"
-          style={{
-            width: compact ? 'min(44%, 10rem)' : 'min(62%, 22rem)',
-            height: compact ? 'min(34%, 10rem)' : 'min(48%, 22rem)',
-          }}
-        >
-          {customArtUrl ? (
-            <img src={customArtUrl} alt="waiting"
-              data-testid="idle-art"
-              className="relative w-[85%] h-auto max-h-full opacity-90 object-contain"
-              style={{ transform: 'scale(2)' }} />
-          ) : (
-            <>
-              <Terminal className="absolute inset-0 h-full w-full opacity-[0.04]" strokeWidth={1.25} />
-              <div className="relative w-[75%] h-[75%]" data-testid="idle-art">
-                <DefaultIdleArt dark={dark} />
-              </div>
-            </>
-          )}
-        </div>
+        <div className={`w-full max-w-[32rem] flex flex-col items-center ${
+          compact ? 'gap-2' : 'gap-5'
+        }`}>
+          {/* Art follows both pane dimensions so narrow and shallow split panes stay usable. */}
+          <div
+            className="relative flex-shrink-0 max-w-full max-h-full flex items-center justify-center pointer-events-none"
+            style={{
+              width: compact ? 'min(44%, 10rem)' : 'min(62%, 22rem)',
+              height: compact ? 'min(34%, 10rem)' : 'min(48%, 22rem)',
+            }}
+          >
+            {customArtUrl ? (
+              <img src={customArtUrl} alt="waiting"
+                data-testid="idle-art"
+                className="relative w-[85%] h-auto max-h-full opacity-90 object-contain"
+                style={{ transform: 'scale(2)' }} />
+            ) : (
+              <>
+                <Terminal className="absolute inset-0 h-full w-full opacity-[0.04]" strokeWidth={1.25} />
+                <div className="relative w-[75%] h-[75%]" data-testid="idle-art">
+                  <DefaultIdleArt dark={dark} />
+                </div>
+              </>
+            )}
+          </div>
 
-        <div className="text-center px-3 max-w-full flex-shrink-0">
-          {!compact && (
-            <p className="font-semibold text-[var(--theme-fg)] opacity-50 text-sm">
-              Open a terminal
-            </p>
-          )}
-          {!compact && (
-            <p className="text-xs mt-1.5 opacity-30">
-              Press <kbd className="px-1.5 py-0.5 rounded border border-[var(--theme-border)] text-[10px] font-mono bg-[var(--theme-popup-bg)] mx-0.5">Ctrl+N</kbd> to open a new terminal tab.
-            </p>
-          )}
+          <div className="text-center px-3 max-w-full flex-shrink-0">
+            {!compact && (
+              <p className="font-semibold text-[var(--theme-fg)] opacity-50 text-sm">
+                Open a terminal
+              </p>
+            )}
+            {!compact && (
+              <p className="text-xs mt-1.5 opacity-30">
+                Press <kbd className="px-1.5 py-0.5 rounded border border-[var(--theme-border)] text-[10px] font-mono bg-[var(--theme-popup-bg)] mx-0.5">Ctrl+N</kbd> to open a new terminal tab.
+              </p>
+            )}
+          </div>
         </div>
+      </div>
+    </div>
 
-        <div className="flex flex-col items-center justify-center gap-3 max-w-full flex-shrink-0">
-          <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
-          <div className="flex items-center justify-center flex-wrap gap-2.5 w-full">
-            <div className="flex items-center gap-1">
-            <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
+    <div data-testid="waiting-controls" className="flex shrink-0 flex-col items-center gap-2 border-t border-theme-border/40 bg-theme-bg/95 px-3 py-2 backdrop-blur-sm">
+      <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
+      <div className="flex w-full max-w-[32rem] flex-wrap items-center justify-center gap-2.5">
+        <div className="flex items-center gap-1">
+          <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
             <button
               type="button"
               onClick={onNewSession}
@@ -99,19 +103,17 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
           </div>
-          </div>
-          {onChooseSession && (
-            <button
-              type="button"
-              onClick={(e) => onChooseSession(e.currentTarget.getBoundingClientRect())}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-theme-border text-theme-dim text-xs hover:text-theme-accent hover:border-theme-accent transition-colors"
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              Choose open session{openSessionCount > 0 ? ` (${openSessionCount})` : ''}
-            </button>
-          )}
-          </div>
         </div>
+        {onChooseSession && (
+          <button
+            type="button"
+            onClick={(e) => onChooseSession(e.currentTarget.getBoundingClientRect())}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-theme-border text-theme-dim text-xs hover:text-theme-accent hover:border-theme-accent transition-colors"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            Choose open session{openSessionCount > 0 ? ` (${openSessionCount})` : ''}
+          </button>
+        )}
       </div>
     </div>
   </div>

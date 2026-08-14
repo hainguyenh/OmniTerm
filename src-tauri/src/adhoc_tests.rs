@@ -128,6 +128,7 @@ fn quick_shell_workspace_folder_requires_exactly_one_real_root() {
         id: "folder#one".to_string(),
         name: "One".to_string(),
         path: "/one".to_string(),
+        color: None,
     };
     let make = |folders| Workspace {
         id: "ws#one".to_string(),
@@ -136,20 +137,28 @@ fn quick_shell_workspace_folder_requires_exactly_one_real_root() {
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
 
     assert_eq!(
-        quick_shell_workspace_folder(&make(Vec::new())).expect_err("empty workspace must fail"),
+        quick_shell_workspace_folder(&make(Vec::new()), None).expect_err("empty workspace must fail"),
         "Add a folder to this workspace before opening a shell."
     );
     assert_eq!(
-        quick_shell_workspace_folder(&make(vec![folder.clone(), folder.clone()]))
+        quick_shell_workspace_folder(&make(vec![folder.clone(), folder.clone()]), None)
             .expect_err("multi-root workspace must be explicit"),
         "Choose a workspace folder before opening a shell."
     );
     assert_eq!(
-        quick_shell_workspace_folder(&make(vec![folder]))
+        quick_shell_workspace_folder(&make(vec![folder.clone()]), None)
             .expect("single-root workspace is unambiguous")
+            .id,
+        "folder#one"
+    );
+    assert_eq!(
+        quick_shell_workspace_folder(&make(vec![folder.clone(), folder]), Some("folder#one"))
+            .expect("explicit root folder is unambiguous")
             .id,
         "folder#one"
     );
@@ -194,6 +203,7 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
     let payload = tauri::async_runtime::block_on(open_quick_shell(
         handle.clone(),
         Some(native_shell().to_string()),
+        None,
         None,
     ))
     .unwrap();
@@ -261,6 +271,7 @@ fn quick_shell_command_rejects_unsupported_renderer_input() {
         app.handle().clone(),
         Some("../../evil".to_string()),
         None,
+        None,
     ));
     assert!(result.is_err());
 }
@@ -276,15 +287,18 @@ fn quick_shell_with_workspace_and_queue_overflow_paths() {
     let handle = app.handle();
 
     let temp = tempfile::tempdir().unwrap();
-    let valid_path = temp.path().to_string_lossy().into_owned();
+    let valid_path = std::fs::canonicalize(temp.path()).unwrap().to_string_lossy().into_owned();
+    let normalized_path = dunce::canonicalize(temp.path()).unwrap().to_string_lossy().into_owned();
 
     let ws_valid = Workspace {
         id: "ws#valid".to_string(),
         name: "Valid".to_string(),
-        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone() }],
+        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone(), color: None }],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let ws_empty = Workspace {
         id: "ws#empty".to_string(),
@@ -293,36 +307,46 @@ fn quick_shell_with_workspace_and_queue_overflow_paths() {
         parent_id: None,
         order: 1,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let ws_multi = Workspace {
         id: "ws#multi".to_string(),
         name: "Multi".to_string(),
         folders: vec![
-            WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone() },
-            WorkspaceFolder { id: "f2".into(), name: "F2".into(), path: valid_path.clone() },
+            WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: valid_path.clone(), color: None },
+            WorkspaceFolder { id: "f2".into(), name: "F2".into(), path: valid_path.clone(), color: None },
         ],
         parent_id: None,
         order: 2,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let ws_bad_dir = Workspace {
         id: "ws#baddir".to_string(),
         name: "Bad".to_string(),
-        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: "/missing/folder/nowhere".into() }],
+        folders: vec![WorkspaceFolder { id: "f1".into(), name: "F1".into(), path: "/missing/folder/nowhere".into(), color: None }],
         parent_id: None,
         order: 3,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
 
     let _ = crate::workspace_persistence::write_workspaces(handle, &[ws_valid, ws_empty, ws_multi, ws_bad_dir]);
 
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#ghost".into()))).unwrap_err().contains("Unknown workspace"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#empty".into()))).unwrap_err().contains("Add a folder"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#multi".into()))).unwrap_err().contains("Choose a workspace"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#baddir".into()))).unwrap_err().contains("invalid"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#ghost".into()), None)).unwrap_err().contains("Unknown workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#empty".into()), None)).unwrap_err().contains("Add a folder"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#multi".into()), None)).unwrap_err().contains("Choose a workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#baddir".into()), None)).unwrap_err().contains("invalid"));
+    let selected = tauri::async_runtime::block_on(open_quick_shell(
+        handle.clone(), None, Some("ws#multi".into()), Some("f2".into()),
+    )).unwrap();
+    assert_eq!(selected["localCwd"], normalized_path);
 
-    let res = tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#valid".into()))).unwrap();
-    assert_eq!(res["localCwd"], valid_path);
+    let res = tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#valid".into()), None)).unwrap();
+    assert_eq!(res["localCwd"], normalized_path);
 
     for _ in 0..MAX_PENDING_OPENS + 5 {
         open_adhoc_shell(handle, request());
@@ -332,4 +356,3 @@ fn quick_shell_with_workspace_and_queue_overflow_paths() {
         let _ = std::fs::remove_file(path);
     }
 }
-

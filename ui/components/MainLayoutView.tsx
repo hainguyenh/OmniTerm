@@ -41,7 +41,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const blurValue = appSettings.blurInactiveWindow ?? 0
   const fullscreenTabId = fullscreenPane === null ? null : panes[fullscreenPane] ?? null
   const ungroupedTabCount = activeTabs.filter(tab => !tabGroups[tab.id]).length
-  const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId)
+  const selectedWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === model.selectedWorkspaceId?.split('::')[0])
   const activeEditorWorkspace = activeTabId ? model.editorTabs[activeTabId]?.workspaceId : undefined
   const activeConnId = activeTabId ? activeTabs.find(tab => tab.id === activeTabId)?.connId : undefined
   const activeConnection = activeConnId ? connById(activeConnId) : undefined
@@ -211,7 +211,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             if (!conn) {
               return (
                 <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+                  <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
                   <span className="opacity-60">·</span>
                   <span className="truncate">Editor active</span>
                   {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -236,7 +236,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   )
                 })()}
                 <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspaceTitle}>
-                  Workspace · {footerWorkspace?.name ?? 'No workspace'}
+                  {footerWorkspaceTitle}
                 </span>
                 <span className="opacity-50">·</span>
                 {conn.type === 'RDP'
@@ -313,7 +313,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           })()}
           {!activeTabId && (
             <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate" title={footerWorkspaceTitle}>Workspace · {footerWorkspace?.name ?? 'No workspace'}</span>
+              <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
               <span className="opacity-60">·</span>
               <span>No active terminal</span>
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}

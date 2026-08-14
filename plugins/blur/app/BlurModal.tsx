@@ -87,9 +87,31 @@ export default function BlurModal({ strength, blurDock, enabled, onSave, onClose
 
           <div data-testid="blur-preview" className="rounded-xl border border-theme-border bg-theme-bg p-3" aria-live="polite">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-theme-dim">Live preview</p>
-            <div data-testid="blur-preview-surface" className="rounded-lg border border-theme-accent/40 bg-theme-sidebar p-3 transition-[filter] duration-150" style={{ filter: !draftEnabled || draftStrength === 0 ? 'none' : `blur(${draftStrength}px)` }}>
-              <div className="mb-2 h-1.5 w-1/2 rounded-full bg-theme-accent/70" />
-              <div className="space-y-1.5"><div className="h-1 w-full rounded-full bg-theme-dim/50" /><div className="h-1 w-4/5 rounded-full bg-theme-dim/40" /><div className="h-1 w-3/5 rounded-full bg-theme-dim/30" /></div>
+            <div data-testid="blur-preview-surface" className="overflow-hidden rounded-lg border border-theme-accent/40 bg-theme-sidebar transition-[filter] duration-150" style={{ filter: !draftEnabled || draftStrength === 0 ? 'none' : `blur(${draftStrength}px)` }}>
+              <div className="flex items-center gap-2 border-b border-theme-border px-2.5 py-2">
+                <div className="flex gap-1" aria-hidden="true">
+                  <span className="h-1.5 w-1.5 rounded-full bg-theme-error" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-theme-warning" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-theme-success" />
+                </div>
+                <span className="truncate text-[10px] font-semibold text-theme-fg">OmniTerm — Local Shell</span>
+                <span className="ml-auto rounded bg-theme-hover px-1.5 py-0.5 text-[9px] text-theme-dim">Inactive</span>
+              </div>
+              <div className="flex items-center gap-2 border-b border-theme-border px-2.5 py-1.5 text-[9px]">
+                <span className="rounded bg-theme-accent/15 px-1.5 py-0.5 font-semibold text-theme-accent">Terminal</span>
+                <span className="text-theme-dim">Build workspace</span>
+              </div>
+              <div className="space-y-2 p-2.5 text-[10px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-theme-dim">App</span>
+                  <span className="font-semibold text-theme-fg">OmniTerm</span>
+                </div>
+                <div className="rounded bg-theme-bg/80 p-2 font-mono leading-relaxed text-theme-fg">
+                  <div><span className="text-theme-success">$</span> pnpm run build</div>
+                  <div className="text-theme-dim">Building frontend...</div>
+                  <div className="text-theme-success">Ready in 1.2s</div>
+                </div>
+              </div>
             </div>
           </div>
 

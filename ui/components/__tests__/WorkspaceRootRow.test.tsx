@@ -22,18 +22,31 @@ const props = () => ({
   onMoveUp: vi.fn(),
   onMoveDown: vi.fn(),
   onRemove: vi.fn(),
+  onRename: vi.fn(),
 })
 
 describe('WorkspaceRootRow', () => {
+  it('replaces the standard workspace icon with the custom icon at normal size', () => {
+    const { container } = render(<WorkspaceRootRow {...props()} workspace={{ ...ws, icon: 'star', color: 'purple' }} />)
+    const customIcon = screen.getByLabelText('Workspace custom icon')
+    expect(customIcon).toHaveClass('h-4', 'w-4')
+    expect(screen.getByLabelText('Workspace icon')).toHaveClass('h-4', 'w-4')
+    expect(screen.queryByLabelText('Workspace drag handle')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-workspace-id="w1"]')?.querySelector('svg')).toBe(customIcon)
+  })
+
   it('renders the container name and single folder path tooltip', () => {
     render(<WorkspaceRootRow {...props()} />)
     expect(screen.getByText('My Project')).toBeInTheDocument()
     expect(screen.getByTitle('F:\\proj')).toBeInTheDocument()
   })
 
-  it('does not offer a terminal action on a synthetic workspace root', () => {
-    render(<WorkspaceRootRow {...props()} />)
-    expect(screen.queryByTitle('Open terminal here')).not.toBeInTheDocument()
+  it('opens workspace rename from the action button without toggling the row', () => {
+    const current = props()
+    render(<WorkspaceRootRow {...current} />)
+    fireEvent.click(screen.getByTitle('Rename workspace'))
+    expect(screen.getByDisplayValue('My Project')).toBeInTheDocument()
+    expect(current.onToggle).not.toHaveBeenCalled()
   })
 
   it('invokes add and remove actions without toggling the row', () => {

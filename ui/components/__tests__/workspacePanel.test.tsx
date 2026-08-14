@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { mockOmnitermAPI } from '../../testUtils'
 import WorkspacePanel from '../WorkspacePanel'
 import { BAT, RDP, WS, dir, file, filterAs, mockScan, page, scriptOf } from './workspacePanelTestUtils'
@@ -14,6 +14,134 @@ describe('WorkspacePanel', () => {
     mockOmnitermAPI({ workspace: { list: async () => [] } })
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument())
+  })
+
+  it('suppresses the browser context menu outside supported workspace targets', async () => {
+    mockOmnitermAPI({ workspace: { list: async () => [WS] } })
+    const { container } = render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    await screen.findByText('my-project')
+    const panel = container.firstElementChild as HTMLElement
+    const event = createEvent.contextMenu(panel)
+    fireEvent(panel, event)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('confirms before removing a workspace', async () => {
+    const remove = vi.fn(async () => {})
+    mockOmnitermAPI({ workspace: { list: async () => [WS], remove } })
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
+    fireEvent.click(screen.getByTitle('Remove from workspaces'))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Remove "my-project" from workspaces?')
+    expect(remove).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(remove).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTitle('Remove from workspaces'))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await waitFor(() => expect(remove).toHaveBeenCalledWith('ws#1'))
+  })
+
+  it('confirms before unlinking a folder and keeps the folder on disk', async () => {
+    let unlinked = false
+    const removeFolder = vi.fn(async () => {
+      unlinked = true
+      return { ...WS, folders: [], pins: [] }
+    })
+    const scanFolders = vi.fn(async () => unlinked ? [] : [dir('folder#1')])
+    const scanFolderEntries = vi.fn(async () => page([]))
+    mockOmnitermAPI({
+      workspace: { list: async () => [WS], scanFolders, scanFolderEntries, removeFolder },
+    })
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('folder#1')
+
+    fireEvent.click(screen.getByTitle('Unlink folder from workspace'))
+    expect(screen.getByRole('dialog')).toHaveTextContent('The folder will not be deleted.')
+    expect(removeFolder).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(removeFolder).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTitle('Unlink folder from workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
+    await waitFor(() => expect(removeFolder).toHaveBeenCalledWith('ws#1', 'folder#1'))
+    await waitFor(() => expect(screen.queryByText('folder#1')).not.toBeInTheDocument())
+  })
+
+  it('keeps a pin marker visible for pinned folder rows', async () => {
+    const pinnedWorkspace = {
+      ...WS,
+      pins: [{ folderId: 'folder#1', path: '' }],
+    }
+    const setPinned = vi.fn(async () => ({ ...pinnedWorkspace, pins: [] }))
+    mockOmnitermAPI({
+      workspace: {
+        list: async () => [pinnedWorkspace],
+        scanFolders: async () => [dir('folder#1')],
+        scanFolderEntries: async () => page([]),
+        setPinned,
+      },
+    })
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    await screen.findByText('folder#1')
+
+    expect(screen.getByLabelText('Pinned folder')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin folder#1' }))
+    await waitFor(() => expect(setPinned).toHaveBeenCalledWith('ws#1', 'folder#1', '', false))
+    await waitFor(() => expect(screen.queryByLabelText('Pinned folder')).not.toBeInTheDocument())
+  })
+
+  it('filters a root folder from its context menu and marks the folder when narrowed', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({
+      'ws#1': { mode: 'all', kinds: [], paths: [], showEmptyDirs: false },
+    }))
+    mockScan([dir('folder#1')], [file('folder#1/readme.txt', 'txt')])
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+    const folder = await screen.findByText('folder#1')
+
+    fireEvent.contextMenu(folder)
+    const menu = screen.getByRole('group', { name: 'Folder filter' })
+    expect(menu).toHaveTextContent('FILTER my-project Folder')
+    expect(within(menu).getByLabelText('Same as workspace')).toBeChecked()
+    fireEvent.click(within(menu).getByLabelText('Scripts only'))
+
+    expect(screen.getByLabelText('Folder filter active')).toBeInTheDocument()
+    fireEvent.click(within(menu).getByLabelText('Close filter'))
+    fireEvent.contextMenu(folder)
+    fireEvent.click(within(screen.getByRole('group', { name: 'Folder filter' })).getByLabelText('Same as workspace'))
+    await waitFor(() => expect(screen.queryByLabelText('Folder filter active')).not.toBeInTheDocument())
+  })
+
+  it('opens workspace appearance controls from the workspace context menu', async () => {
+    const setAppearance = vi.fn(async (_id: string, color?: string, icon?: string) => ({
+      ...WS,
+      color,
+      icon,
+    }))
+    mockOmnitermAPI({ workspace: { list: async () => [WS], setAppearance } })
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    const workspace = await screen.findByText('my-project')
+    fireEvent.contextMenu(workspace)
+
+    const menu = screen.getByRole('group', { name: 'Workspace filter' })
+    expect(menu).toHaveTextContent('APPEARANCE my-project')
+    expect(within(menu).queryByLabelText('Scripts only')).not.toBeInTheDocument()
+    fireEvent.click(within(menu).getByLabelText('Set color purple'))
+    await waitFor(() => expect(setAppearance).toHaveBeenLastCalledWith('ws#1', 'purple', undefined))
+    fireEvent.click(within(menu).getByLabelText('Set workspace icon star'))
+
+    await waitFor(() => expect(setAppearance).toHaveBeenLastCalledWith('ws#1', 'purple', 'star'))
   })
 
   it('scans on expand and runs a script via the run icon', async () => {
@@ -67,7 +195,7 @@ describe('WorkspacePanel', () => {
     expect(run).not.toHaveBeenCalled()
   })
 
-  it('opens a terminal only from a real workspace-folder row, not the container row', async () => {
+  it('opens a terminal from workspace-folder rows', async () => {
     const run = vi.fn(async () => true)
     mockScan([dir('folder#1')], [], run)
 

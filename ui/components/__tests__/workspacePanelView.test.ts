@@ -73,4 +73,24 @@ describe('workspace panel view model', () => {
     expect(view.tree[0].path).toBe('tools')
     expect(view.tree[0].children.map((node) => node.path)).toContain('tools/notes.txt')
   })
+
+  it('lets a root folder override the workspace filter', () => {
+    const view = buildWorkspacePanelView({
+      workspaceId: 'ws',
+      entries,
+      pins: [],
+      connections: [],
+      rootFolders: [{ id: 'tools', name: 'tools' }],
+      filesByFolder: { tools: [entries[3], entries[4]] },
+      filter: DEFAULT_TREE_FILTER,
+      folderFilters: {
+        tools: { mode: 'all', kinds: [], paths: [], showEmptyDirs: false },
+      },
+      query: '',
+      expandedDirs: new Set(),
+    })
+
+    const tools = view.tree.find((node) => node.path === 'tools')
+    expect(tools?.children.map((node) => node.path)).toContain('tools/notes.txt')
+  })
 })

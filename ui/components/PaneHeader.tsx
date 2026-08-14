@@ -42,7 +42,7 @@ interface PaneHeaderProps {
   onFocus: () => void
   onDragStart: () => void
   onDragEnd: () => void
-  onTogglePicker: () => void
+  onTogglePicker: (anchor: DOMRect) => void
   onAssign: (tabId: string) => void
   onClear: () => void
   fullscreen?: boolean
@@ -68,6 +68,13 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
   const hue = focused ? identity.color : withAlpha(identity.color, 0.55)
+  const pickerMaxHeight = Math.min(260, Math.max(80, window.innerHeight - 16))
+  const pickerBelowTop = pickerAnchor ? pickerAnchor.bottom + 4 : 0
+  const pickerOpensAbove = pickerAnchor
+    ? pickerBelowTop <= window.innerHeight - pickerMaxHeight - 8
+      ? false
+      : true
+    : false
   return (
     <div className="relative flex-shrink-0">
       <div
@@ -149,7 +156,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
           )}
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); onTogglePicker() }}
+            onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
             className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
             title="Choose session for this pane"
           >
@@ -160,8 +167,14 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
       {pickerOpen && (
         <div
           ref={pickerRef}
-          className="fixed z-50 bg-theme-popup border border-theme-border rounded-lg shadow-2xl py-1 min-w-[190px] max-h-[260px] overflow-y-auto no-scrollbar"
-          style={pickerAnchor ? { left: Math.max(8, Math.min(pickerAnchor.left, window.innerWidth - 205)), top: Math.min(pickerAnchor.bottom + 4, window.innerHeight - 270) } : undefined}
+          className="fixed z-50 max-w-[calc(100vw-1rem)] bg-theme-popup border border-theme-border rounded-lg shadow-2xl py-1 min-w-[190px] overflow-y-auto custom-scrollbar"
+          style={pickerAnchor ? {
+            left: Math.max(8, Math.min(pickerAnchor.left, window.innerWidth - 205)),
+            ...(pickerOpensAbove
+              ? { bottom: window.innerHeight - pickerAnchor.top + 4 }
+              : { top: pickerBelowTop }),
+            maxHeight: pickerMaxHeight,
+          } : undefined}
         >
           {panes[paneIndex] && (
             <button
