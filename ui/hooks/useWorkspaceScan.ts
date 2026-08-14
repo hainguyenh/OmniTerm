@@ -49,8 +49,16 @@ export function useWorkspaceScan() {
         window.omnitermAPI.workspace.scanFolderEntries(id, '', 0, PAGE_SIZE),
       ])
       setFolders((prev) => ({ ...prev, [id]: dirs }))
-      setFiles((prev) => ({ ...prev, [id]: { '': root.entries } }))
-      setPageInfo((prev) => ({ ...prev, [id]: { '': { total: root.total, hasMore: root.hasMore } } }))
+      setFiles((prev) => {
+        const next = { ...prev }
+        next[id] = { '': root.entries }
+        return next
+      })
+      setPageInfo((prev) => {
+        const next = { ...prev }
+        next[id] = { '': { total: root.total, hasMore: root.hasMore } }
+        return next
+      })
     } finally {
       setScanning(null)
     }

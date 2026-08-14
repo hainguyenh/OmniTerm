@@ -235,9 +235,15 @@ pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, Stri
 }
 
 
-fn quick_shell_workspace_folder(
-    workspace: &crate::workspace::Workspace,
-) -> Result<&crate::workspace::WorkspaceFolder, String> {
+fn quick_shell_workspace_folder<'a>(
+    workspace: &'a crate::workspace::Workspace,
+    folder_id: Option<&str>,
+) -> Result<&'a crate::workspace::WorkspaceFolder, String> {
+    if let Some(folder_id) = folder_id.map(str::trim).filter(|id| !id.is_empty()) {
+        return workspace.folders.iter()
+            .find(|folder| folder.id == folder_id)
+            .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\"."));
+    }
     match workspace.folders.as_slice() {
         [folder] => Ok(folder),
         [] => Err("Add a folder to this workspace before opening a shell.".to_string()),
@@ -253,6 +259,7 @@ pub async fn open_quick_shell<R: Runtime>(
     app: AppHandle<R>,
     shell: Option<String>,
     workspace_id: Option<String>,
+    folder_id: Option<String>,
 ) -> Result<Value, String> {
     let mut req = quick_shell_request(shell.as_deref())?;
     if let Some(id) = workspace_id
@@ -264,11 +271,13 @@ pub async fn open_quick_shell<R: Runtime>(
             .into_iter()
             .find(|workspace| workspace.id == id)
             .ok_or_else(|| format!("Unknown workspace \"{id}\"."))?;
-        let folder = quick_shell_workspace_folder(&workspace)?;
-        if !std::path::Path::new(&folder.path).is_dir() {
+        let folder = quick_shell_workspace_folder(&workspace, folder_id.as_deref())?;
+        let cwd = crate::safepath::canonical(std::path::Path::new(&folder.path))
+            .map_err(|_| "Workspace folder is invalid.".to_string())?;
+        if !cwd.is_dir() {
             return Err("Workspace folder is invalid.".to_string());
         }
-        req.cwd = Some(folder.path.clone());
+        req.cwd = Some(cwd.to_string_lossy().into_owned());
     }
     Ok(
         if let Some(workspace_id) = workspace_id

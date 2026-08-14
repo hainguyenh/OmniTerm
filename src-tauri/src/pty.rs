@@ -143,6 +143,8 @@ pub async fn start_local_session<R: Runtime>(
         cmd.arg(arg);
     }
     if let Some(cwd) = &launch.cwd {
+        let cwd = dunce::canonicalize(cwd)
+            .map_err(|error| format!("Could not resolve working directory {cwd}: {error}"))?;
         cmd.cwd(cwd);
     }
     if let Some(path) = path_with_helper(&app) {

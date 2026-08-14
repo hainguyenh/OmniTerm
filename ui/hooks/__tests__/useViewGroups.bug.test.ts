@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, beforeAll } from 'vitest'
 import { useMainLayoutBase } from '../../components/useMainLayoutBase'
 import { useMainLayoutSessions } from '../../components/useMainLayoutSessions'
@@ -26,13 +26,14 @@ beforeAll(() => {
 })
 
 describe('bug', () => {
-  it('reproduces the bug', () => {
-    const { result: base } = renderHook(() => useMainLayoutBase({
+  it('reproduces the bug', async () => {
+    const { result: base, unmount: unmountBase } = renderHook(() => useMainLayoutBase({
       appSettings: {}, setAppSettings: () => {}, currentTheme: null as any, themes: [],
       layoutMode: 1, setLayoutMode: () => {}
     } as any))
     
-    const { result } = renderHook(() => useMainLayoutSessions(base.current))
+    const { result, unmount } = renderHook(() => useMainLayoutSessions(base.current))
+    await waitFor(() => expect(base.current.shellOptions).toHaveLength(3))
     
     // Setup initial state: 3 active tabs
     act(() => {
@@ -60,7 +61,6 @@ describe('bug', () => {
       base.current.createNewViewGroup('tab-3', true)
     })
     const view2Id = base.current.activeGroupId
-    console.log("view2Id in test:", view2Id)
     act(() => {
       base.current.setLayoutMode(2)
     })
@@ -88,5 +88,8 @@ describe('bug', () => {
     
     // The tab should now be ungrouped!
     expect(base.current.tabGroups['tab-3']).toBeUndefined()
+
+    unmount()
+    unmountBase()
   })
 })

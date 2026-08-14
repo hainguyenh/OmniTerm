@@ -1,10 +1,10 @@
 use super::*;
-use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
 use std::fs;
+use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
 use tempfile::TempDir;
 
 fn folder(id: &str, path: &str) -> WorkspaceFolder {
-    WorkspaceFolder { id: id.to_string(), name: id.to_string(), path: path.to_string() }
+    WorkspaceFolder { id: id.to_string(), name: id.to_string(), path: path.to_string(), color: None }
 }
 
 fn workspace(id: &str, parent_id: Option<&str>, order: usize) -> Workspace {
@@ -15,6 +15,8 @@ fn workspace(id: &str, parent_id: Option<&str>, order: usize) -> Workspace {
         parent_id: parent_id.map(str::to_string),
         order,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     }
 }
 
@@ -157,7 +159,7 @@ fn vscode_workspace_import_resolves_relative_paths_and_deduplicates_roots() {
     assert_eq!(imported.name, "team");
     assert_eq!(imported.folders.len(), 1);
     assert_eq!(imported.folders[0].name, "Project");
-    assert_eq!(imported.folders[0].path, fs::canonicalize(project).unwrap().to_string_lossy());
+    assert_eq!(imported.folders[0].path, dunce::canonicalize(project).unwrap().to_string_lossy());
 }
 
 #[test]

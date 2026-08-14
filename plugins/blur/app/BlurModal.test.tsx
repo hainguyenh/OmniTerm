@@ -17,6 +17,9 @@ describe('BlurModal', () => {
     fireEvent.change(slider, { target: { value: '8' } })
 
     expect(screen.getByTestId('blur-preview-surface')).toHaveStyle({ filter: 'blur(8px)' })
+    expect(screen.getByText('OmniTerm — Local Shell')).toBeInTheDocument()
+    expect(screen.getByText('Terminal')).toBeInTheDocument()
+    expect(screen.getByText('pnpm run build')).toBeInTheDocument()
 
     const saveBtn = screen.getByRole('button', { name: /Save Settings/ })
     fireEvent.click(saveBtn)

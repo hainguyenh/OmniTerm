@@ -242,6 +242,15 @@ describe('shells', () => {
     expect(lastInvoke()).toEqual(['open_quick_shell', { shell: 'powershell', workspaceId: null }])
   })
 
+  it('passes a selected workspace root folder to the shell launcher', async () => {
+    invokeMock.mockResolvedValueOnce({ id: 'adhoc-10', name: 'PowerShell', type: 'LOCAL', shell: 'powershell' })
+    await api.shells.open('powershell', 'ws#1', 'folder#2')
+    expect(lastInvoke()).toEqual([
+      'open_quick_shell',
+      { shell: 'powershell', workspaceId: 'ws#1', folderId: 'folder#2' },
+    ])
+  })
+
   it('asks for the platform default when no shell is named', async () => {
     invokeMock.mockResolvedValueOnce(null)
     await api.shells.open()

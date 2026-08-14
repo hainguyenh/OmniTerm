@@ -1,6 +1,6 @@
 import type { Connection, Folder, WorkspaceEntry, WorkspacePin } from '@omniterm/contract'
 import { buildWorkspaceTree, filterTreeByQuery, type WorkspaceTreeNode } from '../utils/scriptTree'
-import { applyFilter, dirsHoldingConnections, type TreeFilter } from '../utils/workspaceFilter'
+import { applyFilter, DEFAULT_FOLDER_FILTER, dirsHoldingConnections, type TreeFilter } from '../utils/workspaceFilter'
 
 export interface WorkspacePanelView {
   tree: WorkspaceTreeNode[]
@@ -16,6 +16,7 @@ interface BuildWorkspacePanelViewInput {
   rootFolders?: Folder[]
   filesByFolder: Record<string, WorkspaceEntry[]>
   filter: TreeFilter
+  folderFilters?: Record<string, TreeFilter>
   query: string
   expandedDirs: Set<string>
 }
@@ -39,6 +40,7 @@ export function buildWorkspacePanelView({
   rootFolders,
   filesByFolder,
   filter,
+  folderFilters = {},
   query,
   expandedDirs,
 }: BuildWorkspacePanelViewInput): WorkspacePanelView {
@@ -57,7 +59,24 @@ export function buildWorkspacePanelView({
     if (key.startsWith(`${workspaceId}:`)) keep.add(key.slice(workspaceId.length + 1))
   }
 
-  const filtered = applyFilter(entries, filter, keep)
+  const overriddenFolders = rootFolders?.filter(folder => folderFilters[folder.id] !== undefined) ?? []
+  const overriddenIds = new Set(overriddenFolders.map(folder => folder.id))
+  const belongsTo = (entry: WorkspaceEntry, folderId: string) =>
+    entry.id === folderId || entry.id.startsWith(`${folderId}/`)
+  const outsideOverrides = overriddenFolders.length === 0
+    ? entries
+    : entries.filter(entry => !overriddenFolders.some(folder => belongsTo(entry, folder.id)))
+  const filtered = overriddenFolders.length === 0
+    ? applyFilter(entries, filter, keep)
+    : [
+      ...applyFilter(outsideOverrides, filter, new Set([...keep].filter(id => !overriddenIds.has(id)))),
+      ...overriddenFolders.flatMap(folder => {
+        const subtree = entries.filter(entry => belongsTo(entry, folder.id))
+        const subtreeKeep = new Set([...keep].filter(id =>
+          id === folder.id || id.startsWith(`${folder.id}/`)))
+        return applyFilter(subtree, folderFilters[folder.id] ?? DEFAULT_FOLDER_FILTER, subtreeKeep)
+      }),
+    ]
   const tree = filterTreeByQuery(buildWorkspaceTree(filtered, connections, pins), query)
   return {
     tree,

@@ -86,7 +86,7 @@ describe('WorkspacePanel filters and connections', () => {
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
     const before = menu.style.left
 
-    fireEvent.mouseDown(screen.getByText('Filter'), { clientX: 100, clientY: 100, button: 0 })
+    fireEvent.mouseDown(screen.getByText('FILTER Workspace'), { clientX: 100, clientY: 100, button: 0 })
     fireEvent.mouseMove(window, { clientX: 400, clientY: 300 })
     fireEvent.mouseUp(window)
 

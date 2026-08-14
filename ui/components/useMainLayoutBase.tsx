@@ -13,7 +13,7 @@ import { useViewGroups } from '../hooks/useViewGroups'
 import { useCustomArt } from '../hooks/useCustomArt'
 import { visibleTabsForGroup } from '../viewGroups'
 import { paneOrder } from '../paneLayout'
-import { terminalWorkspaceSelection } from '../utils/workspaceHierarchy'
+import { decodeWorkspaceSelection, normalizeWorkspaceSelection } from '../utils/workspaceSelection'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
@@ -31,13 +31,16 @@ export function useMainLayoutBase({
   const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
       const workspaceId = requestedWorkspaceId === undefined ? selectedWorkspaceId : requestedWorkspaceId;
+      const selection = decodeWorkspaceSelection(workspaceId)
+      const targetWorkspaceId = selection?.workspaceId ?? null
+      const folderId = selection?.folderId ?? null
       void openNewSession(shell, (conn) => {
           try {
-              if (workspaceId) localStorage.setItem('omniterm:last-workspace', workspaceId)
+              if (targetWorkspaceId) localStorage.setItem('omniterm:last-workspace', workspaceId ?? targetWorkspaceId)
               else localStorage.removeItem('omniterm:last-workspace')
           } catch { /* storage is optional */ }
-          handleConnectRef.current({ ...(conn as Connection), workspaceId: workspaceId ?? undefined })
-      }, workspaceId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
+          handleConnectRef.current({ ...(conn as Connection), workspaceId: targetWorkspaceId ?? undefined })
+      }, targetWorkspaceId, folderId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
   }, [selectedWorkspaceId])
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
   const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
@@ -378,7 +381,7 @@ export function useMainLayoutBase({
   const refreshWorkspaces = useCallback(async () => {
       await window.omnitermAPI.workspace.list().then(list => {
           setWorkspaces(list)
-          setSelectedWorkspaceId(current => terminalWorkspaceSelection(list, current))
+          setSelectedWorkspaceId(current => normalizeWorkspaceSelection(list, current))
       }).catch(() => setWorkspaces([]))
   }, [])
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])

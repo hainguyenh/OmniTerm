@@ -92,4 +92,16 @@ describe("pane header appearance control", () => {
     fireEvent.click(screen.getByTitle("Increase font size"));
     expect(onTogglePicker).not.toHaveBeenCalled();
   });
+
+  it("opens the session picker upward when the trigger is near the bottom edge", () => {
+    renderHeader({
+      pickerOpen: true,
+      pickerAnchor: { left: 100, top: 700, bottom: 724 } as DOMRect,
+    });
+
+    const picker = screen.getByText("Empty this pane").parentElement as HTMLElement;
+    expect(picker).toHaveStyle({ bottom: "72px", maxHeight: "260px" });
+    expect(picker.style.top).toBe("");
+    expect(picker).toHaveClass("overflow-y-auto");
+  });
 });

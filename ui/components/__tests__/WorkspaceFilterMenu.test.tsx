@@ -14,8 +14,8 @@ import WorkspaceFilterMenu from '../WorkspaceFilterMenu'
 import { DEFAULT_TREE_FILTER, type TreeFilter } from '../../utils/workspaceFilter'
 import { dir, file } from './workspacePanelTestUtils'
 
-const anchor = (over: Partial<DOMRect> = {}) =>
-  ({ right: 400, bottom: 100, left: 200, top: 80, width: 200, height: 20 } as DOMRect & typeof over)
+const anchor = (_over: Partial<DOMRect> = {}) =>
+  ({ right: 400, bottom: 100, left: 200, top: 80, width: 200, height: 20 } as DOMRect & typeof _over)
 
 const ENTRIES = [
   dir('tools'),
@@ -46,6 +46,49 @@ function open(over: Partial<TreeFilter> = {}, props: Record<string, unknown> = {
 }
 
 describe('WorkspaceFilterMenu placement and dismissal', () => {
+  it('renders appearance controls without filter controls', () => {
+    const onColorChange = vi.fn()
+    const onIconChange = vi.fn()
+    open({}, {
+      appearanceOnly: true,
+      appearanceColor: 'blue',
+      appearanceIcon: 'folder',
+      onAppearanceColorChange: onColorChange,
+      onAppearanceIconChange: onIconChange,
+      title: 'APPEARANCE Workspace',
+    })
+
+    expect(screen.getByText('APPEARANCE Workspace')).toBeInTheDocument()
+    expect(screen.getByLabelText('Set color red')).toBeInTheDocument()
+    expect(screen.getByLabelText('Set workspace icon star')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear workspace icon' })).toHaveTextContent('None')
+    expect(screen.queryByLabelText('Scripts only')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Set color red'))
+    fireEvent.click(screen.getByLabelText('Set workspace icon star'))
+    expect(onColorChange).toHaveBeenCalledWith('red')
+    expect(onIconChange).toHaveBeenCalledWith('star')
+  })
+
+  it('offers folder color controls alongside the filter options', () => {
+    const onColorChange = vi.fn()
+    open({}, { appearanceColor: 'green', onAppearanceColorChange: onColorChange })
+
+    expect(screen.getByLabelText('Scripts only')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Set color yellow'))
+    expect(onColorChange).toHaveBeenCalledWith('yellow')
+  })
+
+  it('offers applying the workspace filter to a folder', () => {
+    const onApplySameAsWorkspace = vi.fn()
+    open({ mode: 'all' }, { inheritWorkspaceFilter: false, onApplySameAsWorkspace, title: 'FILTER tools Folder' })
+
+    const menu = screen.getByRole('group', { name: 'Folder filter' })
+    expect(menu).toHaveTextContent('FILTER tools Folder')
+    fireEvent.click(within(menu).getByLabelText('Same as workspace'))
+    expect(onApplySameAsWorkspace).toHaveBeenCalledTimes(1)
+  })
+
   it('renders nothing without an anchor', () => {
     const { container } = render(
       <WorkspaceFilterMenu

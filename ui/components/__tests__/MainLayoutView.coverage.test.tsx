@@ -190,8 +190,8 @@ describe('MainLayoutView coverage', () => {
   it('shows the active terminal workspace instead of the selected workspace', () => {
     const m = model({
       workspaces: [
-        { id: 'selected', name: 'Selected project', folders: [{ id: 'selected-root', name: 'Selected project', path: 'C:/selected' }], order: 0, pins: [] },
-        { id: 'active', name: 'Active project', folders: [{ id: 'active-root', name: 'Active project', path: 'C:/active' }], order: 1, pins: [] },
+        { id: 'selected', name: 'Selected project', folders: [{ id: 'selected-root', name: 'Selected root', path: 'C:/selected' }], order: 0, pins: [] },
+        { id: 'active', name: 'Active project', folders: [{ id: 'active-root', name: 'Active root', path: 'C:/active' }], order: 1, pins: [] },
       ],
       selectedWorkspaceId: 'selected',
       activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }],
@@ -204,8 +204,8 @@ describe('MainLayoutView coverage', () => {
 
     render(<MainLayoutView model={m} />)
 
-    expect(screen.getByText('Workspace · Active project')).toBeInTheDocument()
-    expect(screen.queryByText('Workspace · Selected project')).not.toBeInTheDocument()
+    expect(screen.getByText('Active project - Active root')).toBeInTheDocument()
+    expect(screen.queryByText('Selected project - Selected root')).not.toBeInTheDocument()
   })
 
   it('covers empty split panes, drag/drop, resizers, and pane-specific actions', () => {

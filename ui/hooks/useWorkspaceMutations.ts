@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type React from 'react'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace, WorkspaceColor, WorkspaceIcon } from '@omniterm/contract'
 import { workspacePinTarget } from '../utils/workspaceHierarchy'
 
 type FailureReporter = (error: unknown, title?: string) => void
@@ -54,6 +54,13 @@ export function useWorkspaceMutations({
     await onWorkspacesChanged?.()
   }, [onWorkspacesChanged, rescan, setWorkspaces])
 
+  const removeFolderFromWorkspace = useCallback(async (workspaceId: string, folderId: string) => {
+    const updated = await window.omnitermAPI.workspace.removeFolder(workspaceId, folderId)
+    setWorkspaces(previous => previous.map(workspace => workspace.id === updated.id ? updated : workspace))
+    await rescan(workspaceId)
+    await onWorkspacesChanged?.()
+  }, [onWorkspacesChanged, rescan, setWorkspaces])
+
   const removeWorkspace = useCallback(async (workspaceId: string) => {
     await window.omnitermAPI.workspace.remove(workspaceId)
     setExpandedId(previous => previous === workspaceId ? null : previous)
@@ -68,6 +75,34 @@ export function useWorkspaceMutations({
       await onWorkspacesChanged?.()
     } catch (error) {
       reportFailure(error, 'Could not rename workspace')
+    }
+  }, [onWorkspacesChanged, reportFailure, setWorkspaces])
+
+  const setWorkspaceAppearance = useCallback(async (
+    workspaceId: string,
+    color: WorkspaceColor | undefined,
+    icon: WorkspaceIcon | undefined,
+  ) => {
+    try {
+      const updated = await window.omnitermAPI.workspace.setAppearance(workspaceId, color, icon)
+      setWorkspaces(previous => previous.map(workspace => workspace.id === updated.id ? updated : workspace))
+      await onWorkspacesChanged?.()
+    } catch (error) {
+      reportFailure(error, 'Could not update workspace appearance')
+    }
+  }, [onWorkspacesChanged, reportFailure, setWorkspaces])
+
+  const setWorkspaceFolderColor = useCallback(async (
+    workspaceId: string,
+    folderId: string,
+    color: WorkspaceColor | undefined,
+  ) => {
+    try {
+      const updated = await window.omnitermAPI.workspace.setFolderColor(workspaceId, folderId, color)
+      setWorkspaces(previous => previous.map(workspace => workspace.id === updated.id ? updated : workspace))
+      await onWorkspacesChanged?.()
+    } catch (error) {
+      reportFailure(error, 'Could not update folder color')
     }
   }, [onWorkspacesChanged, reportFailure, setWorkspaces])
 
@@ -96,6 +131,7 @@ export function useWorkspaceMutations({
 
   return {
     addFolderToWorkspace,
+    removeFolderFromWorkspace,
     createWorkspace,
     addWorkspace,
     importWorkspace,
@@ -103,6 +139,8 @@ export function useWorkspaceMutations({
     moveWorkspace,
     removeWorkspace,
     renameWorkspace,
+    setWorkspaceAppearance,
+    setWorkspaceFolderColor,
     togglePinned,
   }
 }
