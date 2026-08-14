@@ -1,4 +1,5 @@
 import React from 'react'
+import { createPortal } from 'react-dom'
 import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { STATUS_DOT } from '../tabVisuals'
@@ -164,7 +165,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
           </button>
         </span>
       </div>
-      {pickerOpen && (
+      {pickerOpen && createPortal(
         <div
           ref={pickerRef}
           className="fixed z-50 max-w-[calc(100vw-1rem)] bg-theme-popup border border-theme-border rounded-lg shadow-2xl py-1 min-w-[190px] overflow-y-auto custom-scrollbar"
@@ -219,7 +220,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               )
             })
           )}
-        </div>
+        </div>, document.body
       )}
     </div>
   )
