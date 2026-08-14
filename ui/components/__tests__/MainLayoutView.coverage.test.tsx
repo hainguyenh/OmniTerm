@@ -13,7 +13,7 @@ import type { MainLayoutModel } from '../useMainLayoutController'
 vi.mock('../ActivityBar', () => ({ default: (p: any) => <div data-testid="activity"><button onClick={() => p.onViewChange('workspace')}>view</button><button onClick={p.onSettingsClick}>settings</button><span>{String(p.filesEnabled)}</span></div> }))
 vi.mock('../WorkspacePanel', () => ({ default: (p: any) => <div data-testid="workspace"><button onClick={() => p.onOpenScript?.('w', { path: '/x.ts' })}>open-script</button><button onClick={() => p.onRunScript?.('w', { path: '/x.ts' })}>run-script</button><button onClick={() => p.onAddWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' })}>add-conn</button><button onClick={() => p.onEditWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' }, { id: 'c' })}>edit-conn</button></div> }))
 vi.mock('../FileBrowser', () => ({ default: (p: any) => <div data-testid="files">{p.id}:{p.connectionName}:{String(p.active)}</div> }))
-vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
+vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onPickPane?.({ left: 6, bottom: 7 })}>pick-pane</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
 vi.mock('../WaitingPane', () => ({ default: (p: any) => <div data-testid={p.compact ? `waiting-${p.paneIndex}` : 'waiting'}><button onClick={p.onNewSession}>new-wait</button><button onClick={() => p.onPickShell({ left: 4, bottom: 5 })}>shell-wait</button>{p.onChooseSession && <button onClick={p.onChooseSession}>choose-wait</button>}</div> }))
 vi.mock('../ScriptViewer', () => ({ default: (p: any) => <div data-testid="editor"><button onClick={p.onRun}>run-editor</button><button onClick={p.onClose}>close-editor</button><button onClick={() => p.onDirtyChange(true)}>dirty-editor</button><button onClick={() => p.onDirtyChange(false)}>clean-editor</button></div> }))
 vi.mock('../TerminalView', () => ({ default: (p: any) => <div data-testid={`terminal-${p.id}`} data-mode={p.mode} data-font={p.fontSize}><button onClick={() => p.onStatus('connected')}>terminal-status</button><button onClick={() => p.onMetrics({ latency: 7 })}>terminal-metrics</button><button onClick={() => p.onActivity(true)}>terminal-busy</button><button onClick={() => p.onExit(0)}>terminal-exit</button>{p.onFontSizeChange && <button onClick={() => p.onFontSizeChange(p.fontSize + 2)}>terminal-font</button>}</div> }))
@@ -38,7 +38,7 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
     layoutMode: 1, setSettingsOpen: vi.fn(), hasConnectionProvider: true,
     connectionCapabilities: { sftp: true }, activeTabs: [], ephemeralConns: [], panes: [null],
     focusedPane: 0, setFocusedPane: vi.fn(), activeTabId: null, setTabMenu: vi.fn(), setShellMenu: vi.fn(),
-    setPanePicker: vi.fn(), dragPane: null, setDragPane: vi.fn(), statuses: {}, reconnectKeys: {}, latencies: {},
+    setPanePicker: vi.fn(), setPanePickerAnchor: vi.fn(), dragPane: null, setDragPane: vi.fn(), statuses: {}, reconnectKeys: {}, latencies: {},
     poppedOut: {}, resumeMode: {}, metrics: {}, connectedAt: {}, setStatus: vi.fn(), setLatency: vi.fn(),
     setMetric: vi.fn(), activity: {}, setBusy: vi.fn(), connById: (id?: string) => connections.find(c => c.id === id),
     updateFontSize: vi.fn(), reattachTerminal: vi.fn(), connFormOpen: false, setConnFormOpen: vi.fn(),
@@ -110,6 +110,17 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTitle('New Terminal (Ctrl+N)')).toBeInTheDocument()
     expect(screen.getByTitle('New Terminal (Ctrl+N)')).not.toBeDisabled()
 
+    const splitPick = model({
+      layoutMode: 2,
+      activeTabs: [{ id: 'dock-1', connId: 'local', name: 'Dock 1' }],
+      panes: ['dock-1', null],
+      focusedPane: 1,
+    })
+    rerender(<MainLayoutView model={splitPick} />)
+    fireEvent.click(screen.getByText('pick-pane'))
+    expect(splitPick.setPanePickerAnchor).toHaveBeenCalledWith({ left: 6, bottom: 7 })
+    expect(splitPick.setPanePicker).toHaveBeenCalledWith(1)
+
     const split2 = model({ layoutMode: 2, appSettings: { ...m.appSettings, split2Style: 'columns' }, activeTabs: [], panes: [null, null] })
     rerender(<MainLayoutView model={split2} />)
     fireEvent.click(screen.getByTitle(/Split 2 \(columns\)/))
@@ -174,6 +185,27 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByText('PowerShell')).toBeInTheDocument()
     expect(screen.queryByTitle('Increase font size')).not.toBeInTheDocument()
     expect(screen.queryByText('Disconnect')).not.toBeInTheDocument()
+  })
+
+  it('shows the active terminal workspace instead of the selected workspace', () => {
+    const m = model({
+      workspaces: [
+        { id: 'selected', name: 'Selected project', folders: [{ id: 'selected-root', name: 'Selected root', path: 'C:/selected' }], order: 0, pins: [] },
+        { id: 'active', name: 'Active project', folders: [{ id: 'active-root', name: 'Active root', path: 'C:/active' }], order: 1, pins: [] },
+      ],
+      selectedWorkspaceId: 'selected',
+      activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }],
+      panes: ['local-tab'],
+      activeTabId: 'local-tab',
+      connById: (id?: string) => id === 'local'
+        ? { ...local, workspaceId: 'active' }
+        : undefined,
+    })
+
+    render(<MainLayoutView model={m} />)
+
+    expect(screen.getByText('Active project - Active root')).toBeInTheDocument()
+    expect(screen.queryByText('Selected project - Selected root')).not.toBeInTheDocument()
   })
 
   it('covers empty split panes, drag/drop, resizers, and pane-specific actions', () => {

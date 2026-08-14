@@ -56,10 +56,8 @@ pub async fn reveal_log<R: Runtime>(app: AppHandle<R>) -> Result<String, String>
     if !log_dir.exists() {
         fs::create_dir_all(&log_dir).map_err(|e| e.to_string())?;
     }
-    
-    #[cfg(not(test))]
-    opener::open(&log_dir).map_err(|e| e.to_string())?;
-    
+    app.state::<crate::os_actions::ExternalLauncherState>()
+        .open_folder(&log_dir)?;
     Ok(log_dir.to_string_lossy().into_owned())
 }
 

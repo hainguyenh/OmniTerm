@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  clampFraction, fractionFromPointer, paneDividers, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
+  clampFraction, fractionFromPointer, paneDividers, paneOrder, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
 } from '../paneLayout'
 import type { LayoutMode } from '../themes'
 
@@ -69,6 +69,13 @@ describe('paneRect', () => {
     expect(rects.reduce((s, r) => s + num(r.width) * num(r.height), 0)).toBeCloseTo(100 * 100, 0)
     expect(num(rects[0].width)).toBeCloseTo(mode === 4 ? 30 : 20)
     expect(num(rects[0].height)).toBeCloseTo(65)
+  })
+
+  it('orders panes by their window positions', () => {
+    expect(paneOrder(3, 'right')).toEqual([1, 0, 2])
+    expect(paneOrder(3, 'top')).toEqual([0, 1, 2])
+    expect(paneOrder(2, 'left', 'rows')).toEqual([0, 1])
+    expect(paneOrder(4)).toEqual([0, 1, 2, 3])
   })
 })
 

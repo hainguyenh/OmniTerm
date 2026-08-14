@@ -58,10 +58,10 @@ describe("packaged builds emit no diagnostics", () => {
   });
 
   it("keeps the no-console lint rule on, so the previous test cannot be defeated by a new file", () => {
-    const eslintrc = readRepoFile(".eslintrc.cjs");
-    expect(eslintrc).toMatch(/'no-console':\s*'error'/);
+    const eslintConfig = readRepoFile("eslint.config.js");
+    expect(eslintConfig).toMatch(/'no-console':\s*'error'/);
     // The exemption must stay narrow: diag.ts plus things that never ship.
-    const exempt = eslintrc.match(/files:\s*\[([^\]]*)\]/)?.[1] ?? "";
+    const exempt = eslintConfig.match(/files:\s*\['ui\/diag\.ts'[^\]]*\]/)?.[0] ?? "";
     expect(exempt).toContain("ui/diag.ts");
     expect(exempt).not.toMatch(/'ui\/\*|\*\*\/\*\.tsx?'/);
   });

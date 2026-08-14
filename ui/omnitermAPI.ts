@@ -333,7 +333,11 @@ function createTauriAPI(): any {
       // Registers an unsaved shell ("new session") and returns the Connection record to open a pane
       // with — the id it carries is one the backend can resolve, which a renderer-invented id is not.
       // The shell name is validated against the closed set there, not here.
-      open: (shell?: string, workspaceId?: string | null) => invoke<any>('open_quick_shell', { shell: shell ?? null, workspaceId: workspaceId ?? null }),
+      open: (shell?: string, workspaceId?: string | null, folderId?: string | null) => invoke<any>('open_quick_shell', {
+        shell: shell ?? null,
+        workspaceId: workspaceId ?? null,
+        ...(folderId ? { folderId } : {}),
+      }),
       // The shells this machine can really start. Probed in the backend, next to the code that
       // resolves each one to an executable — the renderer has no way to know what is installed.
       list: () => invoke<Array<{ id: string; label: string }>>('list_available_shells'),

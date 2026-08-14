@@ -102,9 +102,27 @@ describe('SessionTabs', () => {
     expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
   })
 
+  it('opens focused-dock session picker when requested', () => {
+    const onPickPane = vi.fn()
+    renderTabs({ onPickPane })
+    fireEvent.click(screen.getByRole('button', { name: 'Choose tab for focused dock' }))
+    expect(onPickPane).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
+  })
+
   it('hides pane badges and reveal controls when tabs are not focused', () => {
     renderTabs({ panes: [null], layoutMode: 1, focusedPane: 0 })
     expect(screen.queryByTitle('Reveal in workspace tree')).not.toBeInTheDocument()
     expect(screen.queryByText('1')).not.toBeInTheDocument()
+  })
+
+  // The tab label is a plain passthrough of the session title. Vietnamese (and other non-ASCII)
+  // names must reach the DOM byte-for-byte; any mangling here would be an app-layer encoding bug
+  // rather than the byte-decode mojibake that happens upstream in the PTY stream.
+  it('renders Vietnamese and other Unicode tab names without mangling them', () => {
+    const name = 'Dự án · 部署 · プロジェクト · 中文'
+    renderTabs({ tabs: [{ id: 'vi-1', connId: 'local-c', name }] })
+    const label = screen.getByText(name)
+    expect(label.textContent).toBe(name)
+    expect(screen.getByTitle(new RegExp(name))).toBeInTheDocument()
   })
 })

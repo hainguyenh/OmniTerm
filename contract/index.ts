@@ -25,6 +25,8 @@ export type Connection = {
   id: string
   name: string
   type: 'SSH' | 'RDP' | 'LOCAL'
+  /** Renderer-side workspace association for sessions opened from the Workspace view. */
+  workspaceId?: string
   host: string
   port: string
   user: string
@@ -60,7 +62,11 @@ export interface WorkspaceFolder {
   id: string
   name: string
   path: string
+  color?: WorkspaceColor
 }
+
+export type WorkspaceColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'gray'
+export type WorkspaceIcon = 'folder' | 'briefcase' | 'layers' | 'code' | 'server' | 'star'
 
 /** Structural presentation pin. Empty `path` means the folder root itself. */
 export interface WorkspacePin {
@@ -79,6 +85,8 @@ export interface Workspace {
   parentId?: string
   order: number
   pins: WorkspacePin[]
+  color?: WorkspaceColor
+  icon?: WorkspaceIcon
 }
 
 /**

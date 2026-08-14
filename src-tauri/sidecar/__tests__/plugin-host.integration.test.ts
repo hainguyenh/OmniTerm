@@ -254,6 +254,46 @@ describe('plugin-host sidecar', () => {
     ]))
   })
 
+  it('routes plugin.invoke to whichever handler owns the method across multiple plugins', async () => {
+    const appData = makeRoot()
+    const bundled = path.join(makeRoot(), 'bundled-renderer-plugins')
+    writePlugin(path.join(bundled, 'alpha'), {
+      id: '@test/alpha',
+      permissions: ['renderer'],
+      sourceText: `
+module.exports = {
+  activate(api) {
+    api.registerInvokeHandler((method) => {
+      if (method === 'alpha.info') return { plugin: 'alpha' }
+      throw new Error('Unknown Alpha method "' + method + '"')
+    })
+  },
+}
+`,
+    })
+    writePlugin(path.join(bundled, 'beta'), {
+      id: '@test/beta',
+      permissions: ['renderer'],
+      sourceText: `
+module.exports = {
+  activate(api) {
+    api.registerInvokeHandler((method) => {
+      if (method === 'beta.info') return { plugin: 'beta' }
+      throw new Error('Unknown Beta method "' + method + '"')
+    })
+  },
+}
+`,
+    })
+
+    const { client } = await startHost(appData, bundled)
+    // Both handlers reject methods they do not own; the sidecar must skip to the owner instead of
+    // letting the first-loaded plugin shadow the second (the missing Blur icon bug).
+    expect(await client.call('plugin.invoke', { method: 'alpha.info', args: [] })).toEqual({ plugin: 'alpha' })
+    expect(await client.call('plugin.invoke', { method: 'beta.info', args: [] })).toEqual({ plugin: 'beta' })
+    await expect(client.call('plugin.invoke', { method: 'gamma.info', args: [] })).rejects.toThrow()
+  })
+
   it('restores the persisted provider preference and can clear selection', async () => {
     const appData = makeRoot()
     const plugins = path.join(appData, 'plugins')

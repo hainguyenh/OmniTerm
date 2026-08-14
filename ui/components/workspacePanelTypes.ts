@@ -15,8 +15,8 @@ export interface WorkspacePanelProps {
     message: string,
     opts?: { title?: string; tone?: 'info' | 'warning' | 'error' },
   ) => Promise<void> | void
-  /** Connect to a workspace connection. */
-  onConnectWorkspaceConnection?: (conn: Connection) => void
+  /** Connect to a workspace connection, preserving the workspace it came from. */
+  onConnectWorkspaceConnection?: (conn: Connection, workspaceId: string) => void
   /** False when no connection-provider plugin is active. */
   hasConnectionProvider?: boolean
   /** Open the connection form at a workspace folder. */

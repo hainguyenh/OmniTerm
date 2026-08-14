@@ -74,11 +74,14 @@ interface TerminalViewProps {
    * tell them from a plain Enter without the app injecting a sequence — see utils/enterKeys.ts.
    */
   enterModes?: EnterModes
+  blurStrength?: number
 }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
+  const [isFocused, setIsFocused] = React.useState(false)
+  const [isHovered, setIsHovered] = React.useState(false)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
   const safeFitRef = useRef<() => void>(() => {})
   // Was the pane pinned to the live tail when it was last hidden? Re-showing scrolls back down only
@@ -246,6 +249,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       api.input(data)
     })
 
+    const onFocusIn = () => setIsFocused(true)
+    const onFocusOut = () => setIsFocused(false)
+    terminalRef.current?.addEventListener('focusin', onFocusIn)
+    terminalRef.current?.addEventListener('focusout', onFocusOut)
+
     // Selection auto-copy + paste. The key bindings that reach these live in the handler below.
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
@@ -405,6 +413,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       remeasureCoalescer.cancel()
       ro.disconnect()
       clipboard.dispose()
+      terminalRef.current?.removeEventListener('focusin', onFocusIn)
+      terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
@@ -458,6 +468,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   return (
     <div
       className="terminal-pane h-full w-full"
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       style={{
         background: theme?.background ?? '#1a1b26',
         // Reads the same token the removed `.p-2` class did, but as an inline style: `.p-2` is a
@@ -470,6 +482,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         // the literal handed to `new Terminal({ fontFamily })` above via DEFAULT_MONO_STACK — letting
         // those two drift is what caused glyphs to be measured at one width and drawn at another.
         '--pane-font-mono': fontFamilyMono ?? DEFAULT_MONO_STACK,
+        filter: blurStrength > 0 && !isFocused && !isHovered ? `blur(${blurStrength}px)` : 'none',
+        transition: 'filter 120ms ease-out',
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />

@@ -95,19 +95,23 @@ mod windows {
     use super::*;
 
     #[test]
-    fn a_bare_shell_takes_no_extra_arguments() {
+    fn a_bare_cmd_bootstraps_utf8_and_takes_no_extra_arguments() {
         let inv = launch(LocalShell::Cmd, None, true).invocation().unwrap();
         assert_eq!(inv.exe, "cmd.exe");
-        assert!(inv.args.is_empty());
+        assert_eq!(inv.args, vec!["/k", "chcp 65001 >nul"]);
     }
 
     #[test]
-    fn powershell_always_passes_nologo() {
+    fn a_bare_powershell_bootstraps_utf8_and_stays_interactive() {
         let inv = launch(LocalShell::Powershell, None, true).invocation().unwrap();
-        assert_eq!(inv.args, vec!["-NoLogo"]);
+        assert_eq!(inv.args, vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]);
     }
 
     /// `keepOpen` is the whole reason a script pane stays readable after it finishes.
+    ///
+    /// A cmd command stays verbatim (no `chcp` bootstrap): chaining with `&&` would re-parse the
+    /// command inside the `/k` string and split a path with spaces — exactly how a workspace `.bat`
+    /// run failed. The bare command is quoted once by the spawner, and only that matters.
     #[test]
     fn cmd_uses_k_to_stay_open_and_c_to_exit() {
         let stay = launch(LocalShell::Cmd, Some("build.bat"), true).invocation().unwrap();
@@ -121,11 +125,17 @@ mod windows {
         let stay = launch(LocalShell::Powershell, Some("& './x.ps1'"), true)
             .invocation()
             .unwrap();
-        assert_eq!(stay.args, vec!["-NoLogo", "-NoExit", "-Command", "& './x.ps1'"]);
+        assert_eq!(
+            stay.args,
+            vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null; & './x.ps1'"]
+        );
         let exit = launch(LocalShell::Powershell, Some("& './x.ps1'"), false)
             .invocation()
             .unwrap();
-        assert_eq!(exit.args, vec!["-NoLogo", "-Command", "& './x.ps1'"]);
+        assert_eq!(
+            exit.args,
+            vec!["-NoLogo", "-Command", "chcp 65001 >$null; & './x.ps1'"]
+        );
     }
 
     /// `default` resolves to the PowerShell executable, so it must get the PowerShell flags — not an
@@ -133,7 +143,7 @@ mod windows {
     #[test]
     fn default_shell_behaves_like_powershell() {
         let inv = launch(LocalShell::Default, Some("echo hi"), false).invocation().unwrap();
-        assert_eq!(inv.args, vec!["-NoLogo", "-Command", "echo hi"]);
+        assert_eq!(inv.args, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
     }
 
     /// Extra args go before the command switch so they still apply when a command is set.
@@ -147,12 +157,14 @@ mod windows {
         ps.args = Some("-NoProfile".to_string());
         assert_eq!(
             ps.invocation().unwrap().args,
-            vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "x"]
+            vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "chcp 65001 >$null; x"]
         );
     }
 
+    /// A user-supplied `/k` owns the command switch, so the UTF-8 bootstrap must not append a second
+    /// one — cmd.exe honours only the last `/k`, and the quoted path would break.
     #[test]
-    fn a_quoted_path_in_extra_args_stays_one_argument() {
+    fn a_user_supplied_cmd_switch_skips_the_bootstrap() {
         let mut l = launch(LocalShell::Cmd, None, true);
         l.args = Some(r#"/k "C:/Program Files/app/run.bat""#.to_string());
         assert_eq!(
@@ -218,22 +230,29 @@ fn windows_argv_builder_is_tested_on_every_platform() {
     let cmd_exit = launch(LocalShell::Cmd, None, false)
         .windows_args(Vec::new(), Some("build.bat".to_string()));
     assert_eq!(cmd_exit, vec!["/c", "build.bat"]);
-    assert!(launch(LocalShell::Cmd, None, true)
-        .windows_args(Vec::new(), None)
-        .is_empty());
+    assert_eq!(
+        launch(LocalShell::Cmd, None, true).windows_args(Vec::new(), None),
+        vec!["/k", "chcp 65001 >nul"]
+    );
 
     let ps_keep = launch(LocalShell::Powershell, None, true)
         .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()));
     assert_eq!(
         ps_keep,
-        vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "echo hi"]
+        vec![
+            "-NoLogo",
+            "-NoProfile",
+            "-NoExit",
+            "-Command",
+            "chcp 65001 >$null; echo hi"
+        ]
     );
     let ps_exit = launch(LocalShell::Default, None, false)
         .windows_args(Vec::new(), Some("echo hi".to_string()));
-    assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "echo hi"]);
+    assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
     assert_eq!(
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None),
-        vec!["-NoLogo"]
+        vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]
     );
 
     let wsl_keep = launch(LocalShell::Wsl, None, true).windows_args(

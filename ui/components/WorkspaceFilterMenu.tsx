@@ -1,12 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { GripHorizontal, X, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import {
+  Briefcase, ChevronsDownUp, ChevronsUpDown, Code2, Folder, GripHorizontal, Layers3, Server, Star, X,
+} from 'lucide-react'
 import type { WorkspaceEntry } from '@omniterm/contract'
+import type { WorkspaceColor, WorkspaceIcon } from '@omniterm/contract'
 import {
   DEFAULT_TREE_FILTER, discoverKinds, isDefaultFilter, isHiddenEntry, isScriptEntry, type TreeFilter,
 } from '../utils/workspaceFilter'
 import { fileKindMeta } from '../utils/fileKind'
 import WorkspaceFilterTree from './WorkspaceFilterTree'
 import { buildWorkspaceTree, collectFilterDirPaths } from '../utils/scriptTree'
+import { WORKSPACE_COLORS, WORKSPACE_COLOR_VALUES, WORKSPACE_ICONS } from '../utils/workspaceAppearance'
 
 /**
  * The Workspace tree's "what do I show" control.
@@ -29,6 +33,14 @@ interface WorkspaceFilterMenuProps {
   /** Where to pin the popover: the bounding rect of whichever trigger opened it. */
   anchor: DOMRect | null
   onClose: () => void
+  title?: string
+  inheritWorkspaceFilter?: boolean
+  onApplySameAsWorkspace?: () => void
+  appearanceOnly?: boolean
+  appearanceColor?: WorkspaceColor
+  onAppearanceColorChange?: (color: WorkspaceColor | undefined) => void
+  appearanceIcon?: WorkspaceIcon
+  onAppearanceIconChange?: (icon: WorkspaceIcon | undefined) => void
 }
 
 const MENU_WIDTH = 288
@@ -39,7 +51,10 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
 const smallButton = 'rounded px-1.5 py-0.5 text-[10px] text-[var(--theme-dim)] hover:bg-[var(--theme-hover-bg)] hover:text-[var(--theme-fg)]'
 
 const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
-  filter, onChange, entries, anchor, onClose,
+  filter, onChange, entries, anchor, onClose, title = 'FILTER Workspace',
+  inheritWorkspaceFilter = false, onApplySameAsWorkspace,
+  appearanceOnly = false, appearanceColor, onAppearanceColorChange,
+  appearanceIcon, onAppearanceIconChange,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null)
   // Where the user dragged the dialog to; `null` = still where its trigger put it.
@@ -152,7 +167,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
     <div
       ref={wrapRef}
       role="group"
-      aria-label="Workspace filter"
+      aria-label={onApplySameAsWorkspace ? 'Folder filter' : 'Workspace filter'}
       className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-theme-border bg-theme-popup text-theme-fg shadow-xl"
       style={{
         left,
@@ -168,7 +183,9 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
         className="flex flex-shrink-0 cursor-move items-center gap-1 border-b border-[var(--theme-border)] px-2 py-1"
       >
         <GripHorizontal className="h-3 w-3 flex-shrink-0 text-[var(--theme-dim)]" />
-        <span className="flex-1 text-[10px] uppercase tracking-wider text-[var(--theme-dim)]">Filter</span>
+        <span className="flex-1 text-[10px] uppercase tracking-wider text-[var(--theme-dim)]">
+          {title}
+        </span>
         <button
           type="button"
           aria-label="Close filter"
@@ -180,6 +197,81 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
       </div>
 
       <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
+        {(onAppearanceColorChange || onAppearanceIconChange) && (
+          <div className="mb-2 border-b border-[var(--theme-border)] pb-2">
+            <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--theme-dim)]">Color</div>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                aria-label="Clear workspace color"
+                title="Clear color"
+                onClick={() => onAppearanceColorChange?.(undefined)}
+                className={`h-5 w-5 rounded border ${appearanceColor ? 'border-[var(--theme-border)]' : 'border-[var(--theme-fg)]'}`}
+              />
+              {WORKSPACE_COLORS.map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`Set color ${color}`}
+                  title={color}
+                  onClick={() => onAppearanceColorChange?.(color)}
+                  className={`h-5 w-5 rounded border ${appearanceColor === color ? 'border-[var(--theme-fg)] ring-1 ring-[var(--theme-fg)]' : 'border-transparent'}`}
+                  style={{ backgroundColor: WORKSPACE_COLOR_VALUES[color] }}
+                />
+              ))}
+            </div>
+            {onAppearanceIconChange && (
+              <>
+                <div className="mb-1 mt-2 text-[10px] uppercase tracking-wider text-[var(--theme-dim)]">Workspace icon</div>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    type="button"
+                    aria-label="Clear workspace icon"
+                    title="No workspace icon"
+                    onClick={() => onAppearanceIconChange(undefined)}
+                    className={`rounded border px-1.5 py-0.5 text-[10px] ${appearanceIcon ? 'border-[var(--theme-border)] text-[var(--theme-dim)]' : 'border-[var(--theme-fg)] bg-[var(--theme-hover-bg)] text-[var(--theme-fg)]'}`}
+                  >
+                    None
+                  </button>
+                  {WORKSPACE_ICONS.map(icon => {
+                    const Icon = {
+                      folder: Folder,
+                      briefcase: Briefcase,
+                      layers: Layers3,
+                      code: Code2,
+                      server: Server,
+                      star: Star,
+                    }[icon]
+                    return (
+                      <button
+                        key={icon}
+                        type="button"
+                        aria-label={`Set workspace icon ${icon}`}
+                        title={icon}
+                        onClick={() => onAppearanceIconChange?.(icon)}
+                        className={`rounded p-1 ${appearanceIcon === icon ? 'bg-[var(--theme-hover-bg)] text-[var(--theme-fg)]' : 'text-[var(--theme-dim)] hover:bg-[var(--theme-hover-bg)]'}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {!appearanceOnly && <>
+        {onApplySameAsWorkspace && (
+          <label className="flex items-center gap-1.5 py-0.5 text-[11px] cursor-pointer">
+            <input
+              type="radio"
+              name="workspace-filter-mode"
+              checked={inheritWorkspaceFilter}
+              onChange={onApplySameAsWorkspace}
+            />
+            Same as workspace
+          </label>
+        )}
         {([
           ['scripts', 'Scripts only'],
           ['all', 'All files'],
@@ -345,6 +437,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
             Reset to default
           </button>
         )}
+        </>}
       </div>
     </div>
   )

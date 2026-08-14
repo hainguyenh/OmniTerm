@@ -112,6 +112,18 @@ pub fn renderer_connection(conn_id: &str, req: &OpenShellRequest) -> Value {
     })
 }
 
+fn renderer_connection_for_workspace(
+    conn_id: &str,
+    req: &OpenShellRequest,
+    workspace_id: Option<&str>,
+) -> Value {
+    let mut payload = renderer_connection(conn_id, req);
+    if let Some(workspace_id) = workspace_id {
+        payload["workspaceId"] = json!(workspace_id);
+    }
+    payload
+}
+
 /// Register a validated launch request under a fresh id and return that id with the Connection
 /// payload for it. `req` must already have come through `parse_open_shell_args`, `open_quick_shell`
 /// or an equivalent allowlist — this function does not re-validate the shell.
@@ -120,8 +132,16 @@ pub fn renderer_connection(conn_id: &str, req: &OpenShellRequest) -> Value {
 /// `[A-Za-z0-9-/:_]` used to break the renderer's event subscriptions outright. Session traffic no
 /// longer travels on named events, but nothing gains from an id that only works because of that.
 fn register<R: Runtime>(app: &AppHandle<R>, req: OpenShellRequest) -> (String, Value) {
+    register_with_workspace(app, req, None)
+}
+
+fn register_with_workspace<R: Runtime>(
+    app: &AppHandle<R>,
+    req: OpenShellRequest,
+    workspace_id: Option<&str>,
+) -> (String, Value) {
     let conn_id = format!("adhoc-{}", Uuid::new_v4());
-    let payload = renderer_connection(&conn_id, &req);
+    let payload = renderer_connection_for_workspace(&conn_id, &req, workspace_id);
     app.state::<AdhocRegistry>().insert(conn_id.clone(), req);
     (conn_id, payload)
 }
@@ -131,6 +151,23 @@ fn register<R: Runtime>(app: &AppHandle<R>, req: OpenShellRequest) -> (String, V
 /// Returns the generated `adhoc-…` connection id, which is what `start_local_session` resolves.
 pub fn open_adhoc_shell<R: Runtime>(app: &AppHandle<R>, req: OpenShellRequest) -> String {
     let (conn_id, payload) = register(app, req);
+    emit_registered_shell(app, conn_id, payload)
+}
+
+pub fn open_adhoc_shell_in_workspace<R: Runtime>(
+    app: &AppHandle<R>,
+    req: OpenShellRequest,
+    workspace_id: &str,
+) -> String {
+    let (conn_id, payload) = register_with_workspace(app, req, Some(workspace_id));
+    emit_registered_shell(app, conn_id, payload)
+}
+
+fn emit_registered_shell<R: Runtime>(
+    app: &AppHandle<R>,
+    conn_id: String,
+    payload: Value,
+) -> String {
     let registry = app.state::<AdhocRegistry>();
 
     let queued = match registry.pending.lock() {
@@ -198,9 +235,15 @@ pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, Stri
 }
 
 
-fn quick_shell_workspace_folder(
-    workspace: &crate::workspace::Workspace,
-) -> Result<&crate::workspace::WorkspaceFolder, String> {
+fn quick_shell_workspace_folder<'a>(
+    workspace: &'a crate::workspace::Workspace,
+    folder_id: Option<&str>,
+) -> Result<&'a crate::workspace::WorkspaceFolder, String> {
+    if let Some(folder_id) = folder_id.map(str::trim).filter(|id| !id.is_empty()) {
+        return workspace.folders.iter()
+            .find(|folder| folder.id == folder_id)
+            .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\"."));
+    }
     match workspace.folders.as_slice() {
         [folder] => Ok(folder),
         [] => Err("Add a folder to this workspace before opening a shell.".to_string()),
@@ -216,20 +259,37 @@ pub async fn open_quick_shell<R: Runtime>(
     app: AppHandle<R>,
     shell: Option<String>,
     workspace_id: Option<String>,
+    folder_id: Option<String>,
 ) -> Result<Value, String> {
     let mut req = quick_shell_request(shell.as_deref())?;
-    if let Some(id) = workspace_id.as_deref().map(str::trim).filter(|id| !id.is_empty()) {
+    if let Some(id) = workspace_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    {
         let workspace = crate::workspace::read_workspaces(&app)?
             .into_iter()
             .find(|workspace| workspace.id == id)
             .ok_or_else(|| format!("Unknown workspace \"{id}\"."))?;
-        let folder = quick_shell_workspace_folder(&workspace)?;
-        if !std::path::Path::new(&folder.path).is_dir() {
+        let folder = quick_shell_workspace_folder(&workspace, folder_id.as_deref())?;
+        let cwd = crate::safepath::canonical(std::path::Path::new(&folder.path))
+            .map_err(|_| "Workspace folder is invalid.".to_string())?;
+        if !cwd.is_dir() {
             return Err("Workspace folder is invalid.".to_string());
         }
-        req.cwd = Some(folder.path.clone());
+        req.cwd = Some(cwd.to_string_lossy().into_owned());
     }
-    Ok(register(&app, req).1)
+    Ok(
+        if let Some(workspace_id) = workspace_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            register_with_workspace(&app, req, Some(workspace_id)).1
+        } else {
+            register(&app, req).1
+        },
+    )
 }
 
 /// The renderer reports it can receive `shell-open` (it only mounts after unlock). Flushes anything
@@ -254,4 +314,3 @@ pub async fn shells_release<R: Runtime>(app: AppHandle<R>, conn_id: String) -> R
     app.state::<AdhocRegistry>().remove(&conn_id);
     Ok(())
 }
-

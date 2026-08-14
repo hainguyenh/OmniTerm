@@ -114,10 +114,13 @@ fn reveal_log_errors_when_logging_is_disabled() {
             .expect_err("must error in a non-debug build");
         assert!(err.contains("no log"), "got {err}");
     }
-    // In debug builds the command tries to open the log folder in the OS file manager
-    // which we cannot exercise headlessly, so we just skip the assertion.
+
     #[cfg(debug_assertions)]
-    let _ = ();
+    {
+        let app = crate::test_support::mock_app();
+        let result = tauri::async_runtime::block_on(reveal_log(app.handle().clone()));
+        assert!(result.is_ok(), "reveal_log must not open a user-facing folder in tests: {result:?}");
+    }
 }
 
 #[cfg(debug_assertions)]

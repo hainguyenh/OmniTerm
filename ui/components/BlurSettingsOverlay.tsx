@@ -1,11 +1,13 @@
 import BlurModal from '../../plugins/blur/app/BlurModal'
 
 interface BlurSettingsOverlayProps {
-  value: number
-  onChange: (value: number) => void
+  strength: number
+  blurDock: boolean
+  enabled: boolean
+  onSave: (strength: number, blurDock: boolean, enabled: boolean) => void
   onClose: () => void
 }
 
-export default function BlurSettingsOverlay({ value, onChange, onClose }: BlurSettingsOverlayProps) {
-  return <BlurModal value={value} onChange={onChange} onClose={onClose} />
+export default function BlurSettingsOverlay({ strength, blurDock, enabled, onSave, onClose }: BlurSettingsOverlayProps) {
+  return <BlurModal strength={strength} blurDock={blurDock} enabled={enabled} onSave={onSave} onClose={onClose} />
 }

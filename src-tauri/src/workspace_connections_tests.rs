@@ -131,12 +131,14 @@ fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
         id: "ws#1".to_string(),
         name: "Composite".to_string(),
         folders: vec![
-            WorkspaceFolder { id: "folder#1".to_string(), name: "One".to_string(), path: "/one".to_string() },
-            WorkspaceFolder { id: "folder#2".to_string(), name: "Two".to_string(), path: "/two".to_string() },
+            WorkspaceFolder { id: "folder#1".to_string(), name: "One".to_string(), path: "/one".to_string(), color: None },
+            WorkspaceFolder { id: "folder#2".to_string(), name: "Two".to_string(), path: "/two".to_string(), color: None },
         ],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let mut connection = conn("c1", "SSH");
     connection.parent_id = Some("folder#missing/src".to_string());
@@ -151,18 +153,20 @@ fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
     let single_ws = Workspace {
         id: "ws#s".to_string(),
         name: "Single".to_string(),
-        folders: vec![WorkspaceFolder { id: "f1".to_string(), name: "F1".to_string(), path: "/one".to_string() }],
+        folders: vec![WorkspaceFolder { id: "f1".to_string(), name: "F1".to_string(), path: "/one".to_string(), color: None }],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     assert!(validate_connection_targets(&single_ws, &[conn("c3", "SSH")]).is_ok());
 }
 
 #[test]
 fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
-    let folder1 = WorkspaceFolder { id: "f1".to_string(), name: "One".to_string(), path: "/one".to_string() };
-    let folder2 = WorkspaceFolder { id: "f2".to_string(), name: "Two".to_string(), path: "/two".to_string() };
+    let folder1 = WorkspaceFolder { id: "f1".to_string(), name: "One".to_string(), path: "/one".to_string(), color: None };
+    let folder2 = WorkspaceFolder { id: "f2".to_string(), name: "Two".to_string(), path: "/two".to_string(), color: None };
     let ws_multi = Workspace {
         id: "ws#m".to_string(),
         name: "Multi".to_string(),
@@ -170,6 +174,8 @@ fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
 
     let mut c_f1_direct = conn("c1", "SSH");
@@ -202,6 +208,8 @@ fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     let c_single_none = conn("c6", "SSH");
     let res_single = local_connection(&ws_single, &folder1, c_single_none.clone()).unwrap().unwrap();
@@ -227,10 +235,13 @@ fn write_at_writes_valid_connections_and_find_by_id_locates_them() {
             id: "folder#lookup".to_string(),
             name: "Lookup".to_string(),
             path: dir.to_str().unwrap().to_string(),
+            color: None,
         }],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
+        color: None,
+        icon: None,
     };
     if let Ok(path) = crate::workspace_persistence::workspaces_file(app.handle()) {
         let _ = std::fs::remove_file(&path);

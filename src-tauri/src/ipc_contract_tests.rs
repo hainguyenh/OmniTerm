@@ -49,7 +49,8 @@ impl IpcApp {
                 .manage(AdhocRegistry::new())
                 .manage(DetachRegistry::new())
                 .manage(PluginHost::new())
-                .manage(RdpSessionManager::new()),
+                .manage(RdpSessionManager::new())
+                .manage(crate::os_actions::ExternalLauncherState::test()),
         )
         .build(context)
         .expect("build IPC test app");
