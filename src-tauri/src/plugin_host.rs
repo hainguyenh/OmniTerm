@@ -7,10 +7,10 @@ use dashmap::DashMap;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use tauri::path::BaseDirectory;
-use tauri::{AppHandle, Manager, Runtime};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{mpsc, oneshot, Mutex};
@@ -61,6 +61,13 @@ pub fn resolve_sidecar_script<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf>
         }
     }
 
+    // A portable `--no-bundle` build keeps resources beside the executable. Tauri's resource
+    // resolver has no bundle metadata to use in that layout, so check the executable directory
+    // explicitly before falling back to the source tree in debug builds.
+    if let Some(path) = executable_adjacent_path(Path::new("sidecar/plugin-host.cjs")) {
+        return Some(path);
+    }
+
     // `cargo test` / `cargo run` without a bundle: fall back to the source tree so `tauri:dev` works.
     #[cfg(debug_assertions)]
     {
@@ -73,6 +80,19 @@ pub fn resolve_sidecar_script<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf>
     }
 
     None
+}
+
+fn executable_adjacent_path(relative: &Path) -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| executable_adjacent_path_from(&exe, relative))
+}
+
+fn executable_adjacent_path_from(executable: &Path, relative: &Path) -> Option<PathBuf> {
+    executable
+        .parent()
+        .map(|parent| parent.join(relative))
+        .filter(|path| path.exists())
 }
 
 /// Optional directory containing one bundled plugin or immediate plugin subdirectories.
@@ -91,6 +111,7 @@ fn bundled_plugin_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
         .resolve("plugins", BaseDirectory::Resource)
         .ok()
         .filter(|dir| dir.exists())
+        .or_else(|| executable_adjacent_path(Path::new("plugins")))
 }
 
 fn contains_installed_plugin(dir: &Path) -> bool {

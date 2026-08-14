@@ -27,7 +27,7 @@ pub(crate) fn lock() -> MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// A mock app whose per-app directories point somewhere this test binary owns.
+/// A mock app whose per-app directories point somewhere this test process owns.
 ///
 /// `tauri::test::mock_app()` leaves the bundle identifier empty, and Tauri resolves
 /// `app_data_dir()`/`app_cache_dir()` as `dirs::data_dir().join(identifier)` — so with no identifier
@@ -37,11 +37,33 @@ pub(crate) fn lock() -> MutexGuard<'static, ()> {
 /// on the profile's in-use subdirectories, so the litter survived and the next run read it back as
 /// real user data — `workspaces.json` accumulated a workspace per run until the "one workspace"
 /// assertions failed. Setting an identifier puts all of it under one disposable subdirectory.
+///
+/// Include the process ID because Cargo runs test binaries concurrently. The mutex above only
+/// serializes tests inside one process; without process-scoped paths, one binary can remove another
+/// binary's log directory between its `remove_dir_all` and `write` calls.
 pub(crate) fn mock_app() -> tauri::App<MockRuntime> {
     let mut context = tauri::test::mock_context(tauri::test::noop_assets());
-    context.config_mut().identifier = "com.omniterm.tests".to_string();
+    context.config_mut().identifier = format!("com.omniterm.tests.{}", std::process::id());
     tauri::test::mock_builder()
         .manage(crate::os_actions::ExternalLauncherState::test())
         .build(context)
         .expect("build a mock app")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mock_app;
+    use tauri::Manager;
+
+    #[test]
+    fn mock_app_data_path_is_scoped_to_the_test_process() {
+        let app = mock_app();
+        let path = app.path().app_data_dir().expect("mock app data path");
+        assert!(
+            path.to_string_lossy()
+                .contains(&std::process::id().to_string()),
+            "mock app path must include current process ID: {}",
+            path.display()
+        );
+    }
 }

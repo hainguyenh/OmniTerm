@@ -183,10 +183,11 @@ fn clear_log_reports_a_log_file_that_cannot_be_truncated() {
 }
 
 /// Linux-only, and deliberately so: this replaces the log directory's PARENT with a file, which is
-/// only safe where that parent belongs to the app. On Linux it is `~/.local/share/com.omniterm.tests`.
-/// On macOS `app_log_dir()` is `~/Library/Logs/<identifier>`, so the parent is the user's own
-/// `~/Library/Logs` — and the `remove_dir_all` below would try to delete it. On Windows the write
-/// fails outright. Neither is worth a coverage line.
+/// only safe where that parent belongs to the app. On Linux it is the process-scoped
+/// `~/.local/share/com.omniterm.tests.<pid>`. On macOS `app_log_dir()` is
+/// `~/Library/Logs/<identifier>`, so the parent is the user's own `~/Library/Logs` — and the
+/// `remove_dir_all` below would try to delete it. On Windows the write fails outright. Neither is
+/// worth a coverage line.
 #[cfg(all(target_os = "linux", debug_assertions))]
 #[test]
 fn reveal_log_reports_a_parent_path_that_is_a_file() {

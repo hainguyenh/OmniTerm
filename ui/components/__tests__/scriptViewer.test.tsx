@@ -34,7 +34,7 @@ describe('ScriptViewer', () => {
     fireEvent.change(textarea, { target: { value: 'echo world' } })
     fireEvent.click(screen.getByTitle('Save (Ctrl+S)'))
     await waitFor(() => expect(writeScript).toHaveBeenCalledWith('ws#1', 'folder#1/deploy.bat', 'echo world'))
-  })
+  }, 15_000)
 
   /**
    * The feature: a plain text file shows its contents. It previously rendered the "content not

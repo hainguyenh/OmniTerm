@@ -209,6 +209,8 @@ test('packaging goes through the same functions the local wizard uses', () => {
 test('portable packaging verifies the bundled plugin is present in the archive', () => {
   const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
   assert.match(packaging, /System\.IO\.Compression\.FileSystem/)
+  assert.match(packaging, /Portable package is missing sidecar\\plugin-host\.cjs/)
+  assert.match(packaging, /Portable archive is missing required sidecar entry/)
   assert.match(packaging, /Portable archive is missing bundled plugin entry/)
   assert.match(packaging, /dist\/index\.js/)
   assert.match(packaging, /plugins\\always-awake/)
