@@ -190,5 +190,11 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
     setViewGroups(prev => prev.map(group => group.id === groupId ? { ...group, ...patch } : group))
   }, [])
 
-  return { viewGroups, setViewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup, updateViewGroup }
+  /** Atomically replace all view groups and switch the active group. Used during session restore. */
+  const restoreGroups = useCallback((groups: ViewGroup[], activeId: string) => {
+    setViewGroups(groups)
+    setActiveGroupId(activeId)
+  }, [])
+
+  return { viewGroups, setViewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup, updateViewGroup, restoreGroups }
 }

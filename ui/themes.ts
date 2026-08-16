@@ -78,7 +78,10 @@ export interface AppTheme {
   }
 }
 
-export type LayoutMode = 1 | 2 | 3 | 4 | 6 | 8
+/** Pane-layout column counts. Single source for both the type and runtime validation. */
+export const LAYOUT_MODES = [1, 2, 3, 4, 6, 8] as const
+
+export type LayoutMode = (typeof LAYOUT_MODES)[number]
 
 /** The built-in default is authored in JSON and is also used by frontend tests and safe fallbacks. */
 export const TOKYO_NIGHT: AppTheme = tokyoNightTheme

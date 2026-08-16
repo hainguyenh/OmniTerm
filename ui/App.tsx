@@ -302,9 +302,7 @@ function App() {
         appSettings={appSettings}
         setAppSettings={(s) => setAppSettings(s)}
         themes={themes}
-        onSettingsOpen={() => setSettingsOpen(true)}
         setThemeRemixOpen={setThemeRemixOpen}
-        updateState={updateState}
         appVersion={appVersion}
         zoomFactor={appSettings.zoomFactor ?? 1}
         onZoomReset={resetZoom}
