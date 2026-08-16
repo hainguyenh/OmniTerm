@@ -396,6 +396,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       smartColors: () => smartColorsRef.current === true,
       refit: () => safeFit(),
       isCurrent: () => termRef.current === term,
+      // Only local panes are restored across restarts, so only they carry saved scrollback.
+      scrollbackKey: isLocal ? `sb-${id}` : undefined,
     })
     noteLocalEcho = stream.noteLocalEcho
 

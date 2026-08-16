@@ -9,9 +9,33 @@ import type { useMainLayoutBase } from './useMainLayoutBase'
 import { DEFAULT_VIEW_GROUP_ID } from '../viewGroups'
 import { diag } from '../diag'
 import { paneOrder } from '../paneLayout'
+import { shellLabel as getShellLabel } from '../shellOptions'
+import { useSessionPersistence } from '../hooks/useSessionPersistence'
+import { useSessionRestore } from '../hooks/useSessionRestore'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
-  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs, setActiveTabs, tabGroups = {}, setTabGroups = () => {}, viewGroups = [], activeGroupId = DEFAULT_VIEW_GROUP_ID, switchViewGroup = () => {}, createNewViewGroup = () => DEFAULT_VIEW_GROUP_ID, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane = null, setFullscreenPane = () => {}, activeTabId, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor = () => {}, panePickerRef, dragPane, setDragPane, statuses, setStatuses, setReconnectKeys, setLatencies, detached, setDetached, poppedOut, setPoppedOut, setResumeMode, setMetrics, setConnectedAt, setStatus, setActivity, activity, connById, toggleDetach, canDetachWindow, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, showAlert, showConfirm, dataMenuOpen, activeView, setActiveView, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef } = base
+  const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs = [], setActiveTabs = () => {}, tabGroups = {}, setTabGroups = () => {}, viewGroups = [], activeGroupId = DEFAULT_VIEW_GROUP_ID, switchViewGroup = () => {}, createNewViewGroup = () => DEFAULT_VIEW_GROUP_ID, restoreGroups = () => {}, ephemeralConns = [], setEphemeralConns = () => {}, panes = [], setPanes = () => {}, focusedPane = 0, setFocusedPane = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, activeTabId, setPendingCloseTabIds = () => {}, skipCloseConfirmRef, panePicker = null, setPanePicker = () => {}, panePickerAnchor, setPanePickerAnchor = () => {}, panePickerRef, dragPane = null, setDragPane = () => {}, statuses = {}, setStatuses = () => {}, setReconnectKeys = () => {}, setLatencies = () => {}, detached = {}, setDetached = () => {}, poppedOut = {}, setPoppedOut = () => {}, setResumeMode = () => {}, setMetrics = () => {}, setConnectedAt = () => {}, setStatus = () => {}, setActivity = () => {}, activity = {}, connById = () => undefined, toggleDetach = () => {}, canDetachWindow = false, popOutTerminal = () => {}, reattachTerminal = () => {}, focusTerminal = () => {}, connFormOpen = false, showAlert, showConfirm, dataMenuOpen = false, activeView, setActiveView = () => {}, editorTabs = {}, setEditorTabs = () => {}, editorDirty = {}, setEditorDirty = () => {}, previewTabId = null, setPreviewTabId = () => {}, handleConnectRef, shellOptions } = base
+
+  const { initialSnapshot } = useSessionPersistence({
+    activeTabs,
+    ephemeralConns,
+    viewGroups,
+    tabGroups,
+    activeGroupId,
+    layoutMode,
+  })
+
+  useSessionRestore({
+    initialSnapshot,
+    setActiveTabs,
+    setEphemeralConns,
+    setTabGroups,
+    restoreGroups,
+    setPanes,
+    setLayoutMode,
+    setFocusedPane,
+  })
+
   useEffect(() => {
       const tab = activeTabs.find(item => item.id === activeTabId);
       const conn = connById(tab?.connId);
@@ -432,10 +456,10 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       onRdpToggle: toggleDetach, onPopOut: popOutTerminal, onAttach: reattachTerminal,
   });
   const renderPaneHeader = (paneIndex: number, conn: Connection | null) => {
-      const sessionId = panes[paneIndex];
-      const target = sessionId && conn ? { id: sessionId, connId: conn.id } : null;
-      const sessionTitle = sessionId ? activeTabs.find(tab => tab.id === sessionId)?.name : undefined;
-      const resolved = target ? resolveAppearance?.(target.id, target.connId) : undefined;
+      const sessionId = panes[paneIndex]
+      const target = sessionId && conn ? { id: sessionId, connId: conn.id } : null
+      const sessionTitle = sessionId ? activeTabs.find(tab => tab.id === sessionId)?.name : undefined
+      const resolved = target ? resolveAppearance?.(target.id, target.connId) : undefined
       const appearance = target && onThemeApply && onFontSizeChange ? {
           themes,
           themeId: resolved?.themeId ?? appSettings.themeId,
@@ -443,8 +467,13 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           darkMode: appSettings.darkMode,
           onThemeApply: (themeId: string) => onThemeApply(themeId, target),
           onFontSizeChange: (delta: number) => onFontSizeChange(delta, target),
-      } : undefined;
-      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={(anchor) => { if (panePicker === paneIndex) setPanePicker(null); else { setPanePickerAnchor(anchor); setPanePicker(paneIndex) } }} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance}/>;
-  };
+      } : undefined
+      // Only LOCAL connections carry a shell identity; SSH/RDP headings use conn.name already.
+      const paneShellLabel = conn?.type === 'LOCAL'
+        ? getShellLabel(shellOptions ?? [], conn.shell)
+        : undefined
+      const paneBusy = conn?.type === 'LOCAL' && sessionId ? (activity[sessionId] ?? false) : undefined
+      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} shellLabel={paneShellLabel} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={(anchor) => { if (panePicker === paneIndex) setPanePicker(null); else { setPanePickerAnchor(anchor); setPanePicker(paneIndex) } }} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance} busy={paneBusy}/>
+  }
   return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
 }

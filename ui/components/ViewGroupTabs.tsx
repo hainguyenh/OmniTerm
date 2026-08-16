@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_VIEW_GROUP_ID, groupUsedPaneCount, type ViewGroup, type ViewGroupPatch } from '../viewGroups'
+import { Tooltip } from './Tooltip'
 
 interface ViewGroupTabsProps {
   groups: ViewGroup[]
@@ -57,64 +58,65 @@ export default function ViewGroupTabs({ groups, activeGroupId, totalTabCount = 0
   })
 
   return (
-    <div className="relative flex items-center gap-1 overflow-x-auto no-scrollbar px-2.5 py-1 border-b border-theme-border/60" role="tablist" aria-label="Terminal views">
+    <div className="relative flex items-center gap-1 overflow-x-auto no-scrollbar px-2.5 py-1 border-b border-theme-border/60" role="tablist" aria-label="Terminal desktops">
       {orderedGroups.map(group => {
         const selected = group.id === activeGroupId
         const isDefault = group.id === DEFAULT_VIEW_GROUP_ID
+        const tabTitle = isDefault ? `${group.label} · ${totalTabCount} tabs` : `${group.label} · ${groupUsedPaneCount(group)}/${group.layoutMode} panes`
         return (
-          <div
-            key={group.id}
-            role="tab"
-            tabIndex={0}
-            aria-selected={selected}
-            draggable={!isDefault}
-            onClick={() => onSelect(group.id)}
-            onContextMenu={event => {
-              event.preventDefault()
-              if (isDefault) return
-              setEditingId(null)
-              setMenu({ x: event.clientX, y: event.clientY, groupId: group.id })
-            }}
-            onDragStart={event => {
-              if (isDefault) return
-              setDraggedId(group.id)
-              event.dataTransfer.effectAllowed = 'move'
-              event.dataTransfer.setData('text/plain', group.id)
-            }}
-            onDragOver={event => {
-              if (!isDefault && draggedId && draggedId !== group.id) {
+          <Tooltip key={group.id} content={tabTitle} placement="bottom">
+            <div
+              role="tab"
+              tabIndex={0}
+              aria-selected={selected}
+              draggable={!isDefault}
+              onClick={() => onSelect(group.id)}
+              onContextMenu={event => {
                 event.preventDefault()
-                event.dataTransfer.dropEffect = 'move'
-              }
-            }}
-            onDrop={event => {
-              if (isDefault) return
-              event.preventDefault()
-              const sourceId = draggedId ?? event.dataTransfer.getData('text/plain')
-              if (sourceId && sourceId !== group.id) {
-                const rect = event.currentTarget.getBoundingClientRect()
-                onReorder(sourceId, group.id, event.clientX < rect.left + rect.width / 2)
-              }
-              setDraggedId(null)
-            }}
-            onDragEnd={() => setDraggedId(null)}
-            onAuxClick={event => { if (event.button === 1 && !isDefault) onUngroup(group.id) }}
-            onKeyDown={event => {
-              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-              event.preventDefault()
-              const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])
-              const current = tabs.indexOf(event.currentTarget)
-              const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
-                : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
-              tabs[next]?.focus()
-            }}
-            className={`inline-flex min-w-[112px] items-center justify-between gap-2 rounded-md border px-2 py-1 text-[10px] transition-colors ${isDefault ? 'cursor-default border-transparent text-theme-dim' : selected ? 'border-theme-accent text-theme-fg' : 'border-transparent text-theme-dim hover:border-theme-border hover:text-theme-fg'} ${draggedId === group.id ? 'opacity-50' : ''}`}
-            style={{ backgroundColor: isDefault ? '#6b728026' : group.color ? `${group.color}26` : selected ? 'var(--theme-hover-bg)' : undefined, borderColor: selected && group.color && !isDefault ? group.color : undefined }}
-            title={isDefault ? `${group.label} · ${totalTabCount} tabs` : `${group.label} · ${groupUsedPaneCount(group)}/${group.layoutMode} panes`}
-          >
-            <span className="truncate">{group.label}</span>
-            <span className="font-mono text-[9px] opacity-70">{isDefault ? totalTabCount : `${groupUsedPaneCount(group)}/${group.layoutMode}`}</span>
-          </div>
+                if (isDefault) return
+                setEditingId(null)
+                setMenu({ x: event.clientX, y: event.clientY, groupId: group.id })
+              }}
+              onDragStart={event => {
+                if (isDefault) return
+                setDraggedId(group.id)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', group.id)
+              }}
+              onDragOver={event => {
+                if (!isDefault && draggedId && draggedId !== group.id) {
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'move'
+                }
+              }}
+              onDrop={event => {
+                if (isDefault) return
+                event.preventDefault()
+                const sourceId = draggedId ?? event.dataTransfer.getData('text/plain')
+                if (sourceId && sourceId !== group.id) {
+                  const rect = event.currentTarget.getBoundingClientRect()
+                  onReorder(sourceId, group.id, event.clientX < rect.left + rect.width / 2)
+                }
+                setDraggedId(null)
+              }}
+              onDragEnd={() => setDraggedId(null)}
+              onAuxClick={event => { if (event.button === 1 && !isDefault) onUngroup(group.id) }}
+              onKeyDown={event => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+                event.preventDefault()
+                const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])
+                const current = tabs.indexOf(event.currentTarget)
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+                  : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+                tabs[next]?.focus()
+              }}
+              className={`inline-flex min-w-[112px] items-center justify-between gap-2 rounded-md border px-2 py-1 text-[10px] transition-colors ${isDefault ? 'cursor-default border-transparent text-theme-dim' : selected ? 'border-theme-accent text-theme-fg' : 'border-transparent text-theme-dim hover:border-theme-border hover:text-theme-fg'} ${draggedId === group.id ? 'opacity-50' : ''}`}
+              style={{ backgroundColor: isDefault ? '#6b728026' : group.color ? `${group.color}26` : selected ? 'var(--theme-hover-bg)' : undefined, borderColor: selected && group.color && !isDefault ? group.color : undefined }}
+            >
+              <span className="truncate">{group.label}</span>
+              <span className="font-mono text-[9px] opacity-70">{isDefault ? totalTabCount : `${groupUsedPaneCount(group)}/${group.layoutMode}`}</span>
+            </div>
+          </Tooltip>
         )
       })}
       {menu && (() => {
@@ -146,7 +148,9 @@ export default function ViewGroupTabs({ groups, activeGroupId, totalTabCount = 0
             <div className="px-2 pt-2 text-[10px] text-theme-dim">Group color</div>
             <div className="flex gap-1 px-2 py-1.5" role="group" aria-label="Group color">
               {GROUP_COLORS.map(color => (
-                <button key={color} type="button" title={`Set color ${color}`} aria-label={`Set group color ${color}`} className="h-5 w-5 rounded-full border border-white/30" style={{ backgroundColor: color }} onClick={() => onUpdate(group.id, { color })} />
+                <Tooltip key={color} content={`Set color ${color}`} placement="top">
+                  <button type="button" aria-label={`Set color ${color}`} className="h-5 w-5 rounded-full border border-white/30" style={{ backgroundColor: color }} onClick={() => onUpdate(group.id, { color })} />
+                </Tooltip>
               ))}
             </div>
           </div>
