@@ -50,6 +50,20 @@
 - Selected-types and selected-files filters now include search fields that do not alter saved selections.
 - `docs/specs/` now routes the current product surface through property-tagged software specifications.
 - Detailed spec source inventories trace every top-level renderer module and every public Rust/Tauri function.
+- Session persistence: the active tab layout, view-group configuration, and focused pane are snapshotted to `localStorage` and restored across restarts; LOCAL shell sessions reopen in the same working directory, agent sessions also replay their resume command.
+- Cross-restart scrollback: raw PTY output is cached in IndexedDB per session and repainted verbatim on reconnect so the terminal history survives app restarts.
+- Output-activity tracking in `terminalStream`: an `onActivity(busy)` callback debounces PTY data bursts and integrates local-process busy/idle signals from the backend; consumers no longer need to poll status.
+- Agent-aware pane header and session tabs: OSC terminal titles are parsed to detect Claude, Gemini, Aider, Cursor, and similar agents; the pane header shows the agent name, folder context, and a Bot icon; the session tab shows an animated marching-ants border while the agent is active.
+- New shared UI primitives: `Button`, `Keycap`, `KeycapCombo`, `Tooltip` (viewport-aware placement with keyboard shortcut display), `SessionStatusIndicator` (color-coded dot + marching-ants SVG ring), and `SessionFooterBar`.
+- `SettingsModal` component consolidates the five settings tabs (General, Plugins, Appearance, Updates, About/Shortcuts) extracted from `MainLayoutOverlays`.
+- `agentRegistry`: maps agent display names to CLI resume recipes (command + resume args).
+- `agentTitle`: parses OSC terminal titles to detect agents and extract folder context.
+- `sessionStore` / `scrollbackStore`: versioned localStorage snapshot and IndexedDB scrollback cache with schema validation and automatic discard of stale data.
+- `shortcutFormatting`: formats key combinations for Keycap and Tooltip display.
+- `open_quick_shell` Tauri command now accepts optional renderer-supplied `cwd` and `command` overrides, validated the same way launcher argv is (capped lengths, real directory check); used by session-restore to reopen agent tabs with the correct working directory and resume command.
+- `cap_cwd` and `cap_command` public helpers exposed from `app-protocol` for consistent length-capping across the launcher and renderer-override code paths.
+- Layout-mode buttons now show Tooltip labels with `Ctrl+N` shortcut hints; split-2 toggles columns/rows, split-3 cycles left/right/top on repeated click.
+- Activity-bar and title-bar buttons wrapped in `Tooltip` with keyboard shortcuts (`Ctrl+B`, `Ctrl+,`).
 
 ### Fixed
 - Launch debug output in `generate-app-assets.mjs` is silenced during normal dev/launch unless icons or assets actually change.
@@ -58,12 +72,18 @@
 - The Tauri workspace module no longer re-exports the test-only `workspaces_file` helper in normal builds, removing its unused-import warning.
 - Windows 16–48 px app icons now use a simplified front-terminal composition so taskbar/window icon slots remain crisp instead of downsampling the full three-window glow artwork.
 - Composite workspace Rust modules now import the protocol library by its declared crate name `app_protocol`, fixing the `omniterm_protocol` unresolved-crate build error.
+- Attach/detach freeze eliminated: restored scrollback is now written with colouring off and chunked, avoiding the synchronous regex pass over large buffers.
+- Activity and error paths now clear the output-activity debounce timer before marking the stream idle, preventing stale busy indicators.
 
 ### Changed
 - Existing single-path workspace records auto-migrate to one-folder composite workspaces while preserving ID, name, and list order.
 - Workspace filesystem operations now use folder-scoped logical paths instead of treating the workspace container as one merged filesystem root.
 - Multi-folder workspaces require choosing a concrete folder for terminal and workspace-connection actions.
 - `docs/specs/` is decomposed into architecture, feature, component, contract, and design sub-folders; leaf specs document description, behavior, functionality, What/Why/How/When, state, errors, security, verification, and source ownership.
+- View groups now default to label `Desktop N` instead of `View N`.
+- `LayoutMode` type is now derived from `LAYOUT_MODES as const` array, enabling runtime iteration over valid values without duplication.
+- Global webkit scrollbars are styled thin with theme colors; `no-scrollbar` utility also zeroes width/height for complete suppression.
+- Vite `optimizeDeps.entries` set to `index.html` to avoid cold-start pre-bundle churn.
 
 ## [v0.1.3] — 2026-08-13
 
