@@ -19,4 +19,7 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [react()],
+  optimizeDeps: {
+    entries: ['index.html'],
+  },
 })

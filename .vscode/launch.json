@@ -11,15 +11,6 @@
         "TAURI_GLOBAL_RUNTIME_DIR": "${env:LOCALAPPDATA}/OmniTerm/tauri-runtime"
       },
       "internalConsoleOptions": "neverOpen"
-    },
-    {
-      "name": "Debug Renderer (browser only)",
-      "type": "chrome",
-      "request": "launch",
-      "url": "http://localhost:5173",
-      "webRoot": "${workspaceFolder}/ui",
-      "preLaunchTask": "dev",
-      "timeout": 60000
     }
   ]
 }
