@@ -205,6 +205,8 @@ fn mock_runtime_covers_open_ready_release_and_direct_quick_shell_commands() {
         Some(native_shell().to_string()),
         None,
         None,
+        None,
+        None,
     ))
     .unwrap();
     let direct_id = payload["id"].as_str().unwrap().to_string();
@@ -272,6 +274,8 @@ fn quick_shell_command_rejects_unsupported_renderer_input() {
         Some("../../evil".to_string()),
         None,
         None,
+        None,
+        None,
     ));
     assert!(result.is_err());
 }
@@ -336,16 +340,16 @@ fn quick_shell_with_workspace_and_queue_overflow_paths() {
 
     let _ = crate::workspace_persistence::write_workspaces(handle, &[ws_valid, ws_empty, ws_multi, ws_bad_dir]);
 
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#ghost".into()), None)).unwrap_err().contains("Unknown workspace"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#empty".into()), None)).unwrap_err().contains("Add a folder"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#multi".into()), None)).unwrap_err().contains("Choose a workspace"));
-    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#baddir".into()), None)).unwrap_err().contains("invalid"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#ghost".into()), None, None, None)).unwrap_err().contains("Unknown workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#empty".into()), None, None, None)).unwrap_err().contains("Add a folder"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#multi".into()), None, None, None)).unwrap_err().contains("Choose a workspace"));
+    assert!(tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#baddir".into()), None, None, None)).unwrap_err().contains("invalid"));
     let selected = tauri::async_runtime::block_on(open_quick_shell(
-        handle.clone(), None, Some("ws#multi".into()), Some("f2".into()),
+        handle.clone(), None, Some("ws#multi".into()), Some("f2".into()), None, None,
     )).unwrap();
     assert_eq!(selected["localCwd"], normalized_path);
 
-    let res = tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#valid".into()), None)).unwrap();
+    let res = tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, Some("ws#valid".into()), None, None, None)).unwrap();
     assert_eq!(res["localCwd"], normalized_path);
 
     for _ in 0..MAX_PENDING_OPENS + 5 {
@@ -355,4 +359,42 @@ fn quick_shell_with_workspace_and_queue_overflow_paths() {
     if let Ok(path) = crate::workspace_persistence::workspaces_file(handle) {
         let _ = std::fs::remove_file(path);
     }
+}
+
+/// Renderer-supplied cwd/command overrides (the session-restore path): a real directory is
+/// canonicalized into the payload, an agent resume command passes through, and anything invalid —
+/// or past the argv cap — is refused or truncated the way the launcher argv path would.
+#[test]
+fn quick_shell_validates_renderer_cwd_and_command_overrides() {
+    use tauri::Manager;
+
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    assert!(app.manage(AdhocRegistry::new()));
+    let handle = app.handle();
+    // Every case opens the platform default shell with only the renderer overrides varying.
+    let open = |cwd: Option<&str>, command: Option<&str>| {
+        let (cwd, command) = (cwd.map(str::to_string), command.map(str::to_string));
+        tauri::async_runtime::block_on(open_quick_shell(handle.clone(), None, None, None, cwd, command))
+    };
+
+    let temp = tempfile::tempdir().unwrap();
+    let normalized_path = dunce::canonicalize(temp.path()).unwrap().to_string_lossy().into_owned();
+
+    let payload = open(Some(&temp.path().to_string_lossy()), Some("claude --resume")).unwrap();
+    assert_eq!(payload["localCwd"], json!(normalized_path));
+    assert_eq!(payload["localCommand"], json!("claude --resume"));
+
+    let err = open(Some("/missing/folder/nowhere"), None).unwrap_err();
+    assert!(err.contains("invalid"), "a nonexistent cwd must be refused: {err}");
+
+    // Oversized input is capped to the same limit the launcher argv path enforces.
+    let long_command = "a".repeat(5000);
+    let payload = open(None, Some(&long_command)).unwrap();
+    assert_eq!(payload["localCommand"].as_str().unwrap().chars().count(), 4096);
+
+    // Whitespace-only values are treated as absent, not as an override.
+    let payload = open(Some("   "), Some("   ")).unwrap();
+    assert_eq!(payload["localCwd"], json!(null));
+    assert_eq!(payload["localCommand"], json!(null));
 }

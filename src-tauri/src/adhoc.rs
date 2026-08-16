@@ -212,8 +212,11 @@ pub fn flush_pending<R: Runtime>(app: &AppHandle<R>) {
 ///
 /// `shell` is untrusted and validated the same way launcher argv is: an unrecognized name, or one
 /// that cannot exist on this platform, is refused rather than passed on to the spawner. An absent or
-/// empty value means the platform default. A quick shell carries no cwd, command or extra args —
-/// there is nothing for the webview to smuggle in.
+/// empty value means the platform default.
+///
+/// A quick shell starts bare — `open_quick_shell` layers the renderer's optional cwd/command
+/// overrides on top, each validated the same way the untrusted launcher argv path validates them:
+/// capped lengths, and a cwd that must canonicalize to a real directory.
 pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, String> {
     let requested = shell.unwrap_or_default();
     let parsed = LocalShell::parse(requested)
@@ -252,17 +255,39 @@ fn quick_shell_workspace_folder<'a>(
 }
 
 /// Register an unsaved shell and return its Connection record, without going through the
-/// `shell-open` queue — the caller opens the pane itself. Nothing about the launch is decided in the
-/// webview: the renderer used to invent a `local-default-…` id that resolved to nothing here.
+/// `shell-open` queue — the caller opens the pane itself. The shell identity is decided here, not
+/// in the webview: the renderer used to invent a `local-default-…` id that resolved to nothing
+/// here. Renderer-supplied cwd/command overrides are accepted but validated — capped, and the cwd
+/// must resolve to a real directory — because they only ever carry the agent-resume recipes the
+/// session-restore code persists.
 #[tauri::command]
 pub async fn open_quick_shell<R: Runtime>(
     app: AppHandle<R>,
     shell: Option<String>,
     workspace_id: Option<String>,
     folder_id: Option<String>,
+    cwd: Option<String>,
+    command: Option<String>,
 ) -> Result<Value, String> {
     let mut req = quick_shell_request(shell.as_deref())?;
-    if let Some(id) = workspace_id
+    if let Some(c) = command
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .and_then(|c| crate::openshell::cap_command(Some(c)))
+    {
+        req.command = Some(c);
+    }
+    if let Some(custom_cwd) = cwd.as_deref().map(str::trim).filter(|c| !c.is_empty()) {
+        let capped = crate::openshell::cap_cwd(Some(custom_cwd))
+            .ok_or_else(|| "Working directory is too long.".to_string())?;
+        let canonical = crate::safepath::canonical(std::path::Path::new(&capped))
+            .map_err(|_| "Working directory is invalid.".to_string())?;
+        if !canonical.is_dir() {
+            return Err("Working directory is invalid.".to_string());
+        }
+        req.cwd = Some(canonical.to_string_lossy().into_owned());
+    } else if let Some(id) = workspace_id
         .as_deref()
         .map(str::trim)
         .filter(|id| !id.is_empty())
