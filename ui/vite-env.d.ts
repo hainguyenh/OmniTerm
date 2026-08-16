@@ -331,7 +331,7 @@ interface Window {
        * Register an unsaved shell ("new session") and return the Connection record to open it with.
        * The Tauri backend validates and registers the shell before a pane can resolve it.
        */
-      open: (shell?: string, workspaceId?: string | null, folderId?: string | null) => Promise<Record<string, unknown> | null>
+      open: (shell?: string, workspaceId?: string | null, folderId?: string | null, cwd?: string | null, command?: string | null) => Promise<Record<string, unknown> | null>
       /**
        * The shells installed on this machine.
        */

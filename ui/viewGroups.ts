@@ -30,7 +30,7 @@ export function notifyViewGroupUngroup(groupId: string): void {
 export function createViewGroup(id: string, index: number, layoutMode: LayoutMode = 1): ViewGroup {
   return {
     id,
-    label: `View ${index}`,
+    label: `Desktop ${index}`,
     layoutMode,
     panes: Array(VIEW_GROUP_MAX_PLANES).fill(null),
     focusedPane: 0,
