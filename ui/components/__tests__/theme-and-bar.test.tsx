@@ -59,9 +59,7 @@ describe("TitleBar", () => {
         appSettings={baseSettings}
         setAppSettings={vi.fn()}
         themes={[TOKYO_NIGHT]}
-        onSettingsOpen={vi.fn()}
         setThemeRemixOpen={vi.fn()}
-        updateState={null}
         {...props}
       />,
     );
@@ -69,25 +67,19 @@ describe("TitleBar", () => {
   it("renders window controls and title", async () => {
     renderBar();
     await waitFor(() => expect(screen.getByText("OmniTerm")).toBeInTheDocument());
-    expect(screen.getByTitle("Minimize")).toBeInTheDocument();
-    expect(screen.getByTitle("Maximize")).toBeInTheDocument();
-    expect(screen.getByTitle("Close")).toBeInTheDocument();
+    expect(screen.getByLabelText("Minimize")).toBeInTheDocument();
+    expect(screen.getByLabelText("Maximize")).toBeInTheDocument();
+    expect(screen.getByLabelText("Close")).toBeInTheDocument();
   });
 
-  it("shows settings (no auth, always available) and no lock button", () => {
+  it("does not show lock button in title bar", () => {
     renderBar();
-    expect(screen.getByTitle("Settings")).toBeInTheDocument();
     expect(screen.queryByTitle("Lock vault")).not.toBeInTheDocument();
-  });
-
-  it("shows update badge in settings title when update is available", () => {
-    renderBar({ updateState: { ...mockUpdateState(), updateAvailable: true } });
-    expect(screen.getByTitle("Settings (Update available!)")).toBeInTheDocument();
   });
 
   it("opens theme picker and lists themes", () => {
     renderBar();
-    fireEvent.click(screen.getByTitle("Appearance — theme & font size"));
+    fireEvent.click(screen.getByLabelText("Appearance — theme & font size"));
     expect(screen.getByText("Tokyo Night")).toBeInTheDocument();
     expect(screen.getByText("Theme Remix…")).toBeInTheDocument();
   });
@@ -97,30 +89,7 @@ describe("TitleBar", () => {
     const save = vi.fn();
     mockOmnitermAPI({ settings: { save } });
     renderBar({ appSettings: { ...baseSettings, darkMode: false }, setAppSettings });
-    fireEvent.click(screen.getByTitle("Switch to Dark Mode"));
+    fireEvent.click(screen.getByLabelText("Switch to Dark Mode"));
     expect(setAppSettings).toHaveBeenCalledWith({ ...baseSettings, darkMode: true });
   });
 });
-
-function mockUpdateState(): UpdateState {
-  return {
-    current: "1.0.0",
-    latest: null,
-    latestTag: null,
-    latestName: "",
-    notes: "",
-    htmlUrl: "",
-    publishedAt: null,
-    updateAvailable: false,
-    skippedVersion: null,
-    lastCheckAt: null,
-    error: null,
-    checking: false,
-    isPortable: false,
-    portableAssetUrl: null,
-    installerAssetUrl: null,
-    downloadProgress: null,
-    downloadStatus: null,
-    hasNewerVersion: false,
-  };
-}

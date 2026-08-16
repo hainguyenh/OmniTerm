@@ -74,7 +74,7 @@ describe("pane header detach control", () => {
     renderHeader({ detach: null });
     expect(screen.queryByRole("button", { name: /detach|attach/i })).toBeNull();
     // The session picker must survive — the two buttons share the header's right corner.
-    expect(screen.getByTitle("Choose session for this pane")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose session for this pane" })).toBeInTheDocument();
   });
 
   it("does not open the session picker or steal focus when detaching", () => {

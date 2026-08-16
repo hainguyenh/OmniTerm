@@ -1,21 +1,29 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { diag } from '../../diag'
 import { mockOmnitermAPI } from '../../testUtils'
 import MainLayoutOverlays from '../MainLayoutOverlays'
 import type { MainLayoutModel } from '../useMainLayoutController'
 
-vi.mock('../PluginManager', () => ({ default: (p: any) => <div data-testid="plugins"><button onClick={() => p.onProviderStatusChanged(true)}>provider-on</button></div> }))
-vi.mock('../GeneralSettings', () => ({ default: (p: any) => <button onClick={p.onCloseSettings}>close-settings</button> }))
-vi.mock('../CustomArtSettings', () => ({ default: (p: any) => <button onClick={p.onArtChanged}>refresh-art</button> }))
-vi.mock('../UpdateSettings', () => ({ default: (p: any) => <div data-testid="updates">
-  <button onClick={p.checkForUpdates}>check-update</button><button onClick={p.skipThisVersion}>skip-update</button>
-  <button onClick={p.clearSkippedVersion}>clear-skip</button><button onClick={p.handleDownloadPortable}>portable</button>
-  <button onClick={p.handleDownloadInstaller}>installer</button><button onClick={() => p.setInstallerChoiceOpen(true)}>installer-choice</button>
-</div> }))
+vi.mock('../SettingsModal', () => ({
+  default: (p: any) => p.isOpen ? (
+    <div data-testid="settings-modal">
+      <button onClick={p.onClose}>close-settings</button>
+      <button onClick={() => p.setHasConnectionProvider(true)}>provider-on</button>
+      <button onClick={p.refreshCustomArt}>refresh-art</button>
+      <button onClick={p.checkForUpdates}>check-update</button>
+      <button onClick={p.skipThisVersion}>skip-update</button>
+      <button onClick={p.clearSkippedVersion}>clear-skip</button>
+      <button onClick={p.handleDownloadPortable}>portable</button>
+      <button onClick={p.handleDownloadInstaller}>installer</button>
+      <button onClick={() => p.setRecordingAction(p.recordingAction ? null : 'zoomIn')}>
+        {p.recordingAction ? 'Record…' : 'toggle-recording'}
+      </button>
+    </div>
+  ) : null,
+}))
 vi.mock('../CloseConfirmModal', () => ({ default: (p: any) => <div data-testid="close-confirm">
   <button onClick={p.onCancel}>cancel-close</button><button onClick={() => p.onConfirm(false)}>confirm-one</button>
   <button onClick={() => p.onConfirm(true)}>confirm-all</button><span>{String(p.isMultiple)}</span>
@@ -50,37 +58,34 @@ beforeEach(() => {
 })
 
 describe('MainLayoutOverlays', () => {
-  it('covers settings, provider refresh, branding, shortcuts, and update actions', async () => {
+  it('covers settings modal integration and actions', async () => {
     const m = model({ aboutOpen: true })
-    const { container } = render(<MainLayoutOverlays model={m} />)
-    expect(screen.getByText('v1.2.3')).toBeInTheDocument()
-    expect(screen.getByText(/optional remote connections/)).toBeInTheDocument()
+    render(<MainLayoutOverlays model={m} />)
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument()
     fireEvent.click(screen.getByText('provider-on'))
-    await waitFor(() => expect(m.setConnectionCapabilities).toHaveBeenCalledWith({ sftp: true }))
     expect(m.setHasConnectionProvider).toHaveBeenCalledWith(true)
     fireEvent.click(screen.getByText('close-settings'))
+    expect(m.setAboutOpen).toHaveBeenCalledWith(false)
     fireEvent.click(screen.getByText('refresh-art'))
-    for (const label of ['check-update', 'skip-update', 'clear-skip', 'portable', 'installer', 'installer-choice']) fireEvent.click(screen.getByText(label))
-    fireEvent.click(screen.getByText('Ctrl+='))
+    expect(m.refreshCustomArt).toHaveBeenCalled()
+    for (const label of ['check-update', 'skip-update', 'clear-skip', 'portable', 'installer']) {
+      fireEvent.click(screen.getByText(label))
+    }
+    expect(m.checkForUpdates).toHaveBeenCalled()
+    expect(m.skipThisVersion).toHaveBeenCalled()
+    expect(m.clearSkippedVersion).toHaveBeenCalled()
+    expect(m.handleDownloadPortable).toHaveBeenCalled()
+    expect(m.handleDownloadInstaller).toHaveBeenCalled()
+    fireEvent.click(screen.getByText('toggle-recording'))
     expect(m.setRecordingAction).toHaveBeenCalledWith('zoomIn')
-    fireEvent.click(container.querySelector('.flex.items-center.justify-between button') as HTMLButtonElement)
-    expect(m.setAboutOpen).toHaveBeenCalledWith(false)
-    fireEvent.click(container.firstElementChild as Element)
-    expect(m.setAboutOpen).toHaveBeenCalledWith(false)
   })
 
-  it('toggles a recording shortcut off and reports a provider capability error', async () => {
-    const error = new Error('provider down')
-    const errorSpy = vi.spyOn(diag, 'error').mockImplementation(() => {})
-    mockOmnitermAPI({ plugin: { connectionCapabilities: vi.fn(async () => { throw error }) } })
-    const m = model({ aboutOpen: true, recordingAction: 'zoomIn', hasConnectionProvider: false, updateState: null })
+  it('toggles a recording shortcut off', async () => {
+    const m = model({ aboutOpen: true, recordingAction: 'zoomIn' })
     render(<MainLayoutOverlays model={m} />)
     expect(screen.getByText('Record…')).toBeInTheDocument()
-    expect(screen.getByText(/plugin-free local terminal/)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Record…'))
     expect(m.setRecordingAction).toHaveBeenCalledWith(null)
-    fireEvent.click(screen.getByText('provider-on'))
-    await waitFor(() => expect(errorSpy).toHaveBeenCalledWith(error))
   })
 
   it.each([

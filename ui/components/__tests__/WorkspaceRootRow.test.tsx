@@ -44,7 +44,7 @@ describe('WorkspaceRootRow', () => {
   it('opens workspace rename from the action button without toggling the row', () => {
     const current = props()
     render(<WorkspaceRootRow {...current} />)
-    fireEvent.click(screen.getByTitle('Rename workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename workspace' }))
     expect(screen.getByDisplayValue('My Project')).toBeInTheDocument()
     expect(current.onToggle).not.toHaveBeenCalled()
   })
@@ -52,8 +52,8 @@ describe('WorkspaceRootRow', () => {
   it('invokes add and remove actions without toggling the row', () => {
     const current = props()
     render(<WorkspaceRootRow {...current} />)
-    fireEvent.click(screen.getByTitle('Add folder to workspace'))
-    fireEvent.click(screen.getByTitle('Remove from workspaces'))
+    fireEvent.click(screen.getByRole('button', { name: 'Add folder to workspace' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
     expect(current.onAddFolder).toHaveBeenCalledOnce()
     expect(current.onRemove).toHaveBeenCalledOnce()
     expect(current.onToggle).not.toHaveBeenCalled()
@@ -75,5 +75,19 @@ describe('WorkspaceRootRow', () => {
     fireEvent.change(input, { target: { value: 'Renamed Workspace' } })
     fireEvent.keyDown(input, { key: 'Enter' })
     expect(onRename).toHaveBeenCalledWith('w1', 'Renamed Workspace')
+  })
+
+  it('renders the folder count badge at the rightmost position', () => {
+    const multiFolderWs: Workspace = {
+      ...ws,
+      folders: [
+        { id: 'f1', name: 'Proj 1', path: 'F:\\proj1' },
+        { id: 'f2', name: 'Proj 2', path: 'F:\\proj2' },
+      ],
+    }
+    render(<WorkspaceRootRow {...props()} workspace={multiFolderWs} />)
+    const badge = screen.getByTitle('2 folder(s)')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveTextContent('2')
   })
 })

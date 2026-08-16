@@ -27,7 +27,7 @@ describe('CustomArtSettings complete behavior', () => {
     expect(screen.getAllByText('Custom')).toHaveLength(2)
     expect(screen.getByAltText('Idle (Dark)')).toHaveAttribute('src', 'blob:idle-dark')
     expect(screen.getByAltText('Loading (Light)')).toHaveAttribute('src', 'blob:loading-light')
-    expect(screen.getAllByTitle('Reset to default')).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /to default artwork/ })).toHaveLength(2)
   })
 
   it('uploads every slot, shows busy text, and refreshes after success', async () => {
@@ -62,7 +62,7 @@ describe('CustomArtSettings complete behavior', () => {
     await waitFor(() => expect(screen.queryByText('Uploading…')).not.toBeInTheDocument())
     expect(x.props.onArtChanged).not.toHaveBeenCalled()
 
-    const resets = screen.getAllByTitle('Reset to default')
+    const resets = screen.getAllByRole('button', { name: /to default artwork/ })
     fireEvent.click(resets[0])
     await waitFor(() => expect(window.omnitermAPI.customArt.remove).toHaveBeenCalledWith('idle-dark'))
     expect(x.props.onArtChanged).not.toHaveBeenCalled()

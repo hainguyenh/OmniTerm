@@ -35,7 +35,7 @@ describe('ScriptViewer remaining behavior', () => {
     const onDirtyChange = vi.fn()
     render(<ScriptViewer workspaceId="ws" script={script} onClose={vi.fn()} onRun={vi.fn()} onDirtyChange={onDirtyChange} />)
 
-    fireEvent.click(await screen.findByTitle('Edit'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'echo new' } })
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true))
@@ -44,7 +44,7 @@ describe('ScriptViewer remaining behavior', () => {
     expect(await screen.findByText('disk read only')).toBeInTheDocument()
     expect(writeScript).toHaveBeenCalledWith('ws', script.path, 'echo new')
 
-    fireEvent.click(screen.getByTitle('Save (Ctrl+S)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save (Ctrl+S)' }))
     await waitFor(() => expect(writeScript).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false))
     expect(screen.queryByText('disk read only')).not.toBeInTheDocument()
@@ -56,13 +56,13 @@ describe('ScriptViewer remaining behavior', () => {
     const onRun = vi.fn()
     const view = render(<ScriptViewer workspaceId="ws" script={script} onClose={onClose} onRun={onRun} />)
 
-    fireEvent.click(await screen.findByTitle('Run'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Run' }))
     expect(onRun).toHaveBeenCalled()
-    fireEvent.click(screen.getByTitle('Copy path'))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy path' }))
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(script.path))
-    expect(screen.getByTitle('Copied!')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copied!' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Edit'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement
     fireEvent.change(textarea, { target: { value: 'changed' } })
     const pre = view.container.querySelector('pre') as HTMLPreElement
@@ -72,11 +72,11 @@ describe('ScriptViewer remaining behavior', () => {
     expect(pre.scrollTop).toBe(27)
     expect(pre.scrollLeft).toBe(9)
 
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.getByText('Discard unsaved changes?')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Keep editing'))
     expect(onClose).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     fireEvent.click(screen.getByText('Discard'))
     expect(onClose).toHaveBeenCalled()
   })
@@ -86,12 +86,12 @@ describe('ScriptViewer remaining behavior', () => {
     const onClose = vi.fn()
     render(<ScriptViewer workspaceId="ws" script={markdown} onClose={onClose} onRun={vi.fn()} />)
 
-    fireEvent.click(await screen.findByTitle('Preview'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview' }))
     expect(screen.getByTestId('markdown-preview')).toHaveTextContent('# Heading')
     fireEvent.click(screen.getByText('fail-preview'))
     expect(screen.getByText(/Preview took too long/)).toBeInTheDocument()
     expect(screen.queryByTestId('markdown-preview')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -100,13 +100,13 @@ describe('ScriptViewer remaining behavior', () => {
     const writeScript = vi.fn(() => pending)
     mockOmnitermAPI({ workspace: { readScript: vi.fn(async () => 'same'), writeScript } })
     render(<ScriptViewer workspaceId="ws" script={script} onClose={vi.fn()} onRun={vi.fn()} />)
-    fireEvent.click(await screen.findByTitle('Edit'))
-    expect(screen.getByTitle('Save (Ctrl+S)')).toBeDisabled()
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expect(screen.getByRole('button', { name: 'Save (Ctrl+S)' })).toBeDisabled()
     fireEvent.keyDown(document, { key: 's', ctrlKey: true })
     expect(writeScript).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'changed' } })
-    fireEvent.click(screen.getByTitle('Save (Ctrl+S)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save (Ctrl+S)' }))
     fireEvent.keyDown(document, { key: 's', metaKey: true })
     await act(async () => {})
     expect(writeScript).toHaveBeenCalledTimes(1)

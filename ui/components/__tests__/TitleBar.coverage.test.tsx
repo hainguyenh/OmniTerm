@@ -68,16 +68,16 @@ describe('TitleBar complete behavior', () => {
     fireEvent.click(screen.getByText('138%'))
     expect(x.props.onZoomReset).toHaveBeenCalled()
 
-    fireEvent.click(screen.getByTitle('Minimize'))
-    fireEvent.click(screen.getByTitle('Maximize'))
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByLabelText('Minimize'))
+    fireEvent.click(screen.getByLabelText('Maximize'))
+    fireEvent.click(screen.getByLabelText('Close'))
     expect(window.omnitermAPI.windowControl.minimize).toHaveBeenCalled()
     expect(window.omnitermAPI.windowControl.toggleMaximize).toHaveBeenCalled()
     expect(window.omnitermAPI.windowControl.close).toHaveBeenCalled()
 
     act(() => emitMaximized?.(true))
-    expect(screen.getByTitle('Restore Down')).toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Restore Down'))
+    expect(screen.getByLabelText('Restore Down')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Restore Down'))
     x.unmount()
     expect(cleanup).toHaveBeenCalled()
   })
@@ -123,22 +123,17 @@ describe('TitleBar complete behavior', () => {
     low.unmount()
   })
 
-  it('toggles mode, opens settings, and exposes update state without optional chrome', async () => {
+  it('toggles mode and handles default settings without optional chrome', async () => {
     const setAppSettings = vi.fn()
-    const onSettingsOpen = vi.fn()
     renderBar({
       appSettings: { ...settings, darkMode: false, fontSize: undefined },
       setAppSettings,
-      onSettingsOpen,
-      updateState: { updateAvailable: true } as UpdateState,
       zoomFactor: undefined,
       appVersion: undefined,
     })
     expect(screen.queryByText(/%$/)).not.toBeInTheDocument()
     expect(screen.queryByText(/^- v/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Settings (Update available!)'))
-    fireEvent.click(screen.getByTitle('Switch to Dark Mode'))
-    expect(onSettingsOpen).toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText('Switch to Dark Mode'))
     expect(setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ darkMode: true }))
     await waitFor(() => expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith(expect.objectContaining({ darkMode: true })))
     expect(appearance.fontSize).toBe(14)

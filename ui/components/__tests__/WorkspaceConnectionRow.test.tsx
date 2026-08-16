@@ -57,28 +57,28 @@ describe('WorkspaceConnectionRow', () => {
   it('Connect button click calls onConnect and stops propagation', () => {
     const onConnect = vi.fn()
     render(<WorkspaceConnectionRow connection={sshConn} depth={0} onConnect={onConnect} onDelete={vi.fn()} />)
-    fireEvent.click(screen.getByTitle('Connect'))
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
     expect(onConnect).toHaveBeenCalledWith(sshConn)
   })
 
   it('Connect button calls onConnect?.() safely when onConnect is absent', () => {
     render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={vi.fn()} />)
-    expect(() => fireEvent.click(screen.getByTitle('Connect'))).not.toThrow()
+    expect(() => fireEvent.click(screen.getByRole('button', { name: 'Connect' }))).not.toThrow()
   })
 
   it('renders Edit button only when onEdit is present', () => {
     const { rerender } = render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={vi.fn()} />)
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit connection' })).not.toBeInTheDocument()
     const onEdit = vi.fn()
     rerender(<WorkspaceConnectionRow connection={sshConn} depth={0} onEdit={onEdit} onDelete={vi.fn()} />)
-    fireEvent.click(screen.getByTitle('Edit'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit connection' }))
     expect(onEdit).toHaveBeenCalledWith(sshConn)
   })
 
   it('Delete button always renders and calls onDelete', () => {
     const onDelete = vi.fn()
     render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={onDelete} />)
-    fireEvent.click(screen.getByTitle('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete connection' }))
     expect(onDelete).toHaveBeenCalledWith(sshConn)
   })
 
