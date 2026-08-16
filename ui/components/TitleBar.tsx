@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react'
-import { Minus, Square, Copy, X, Sun, Moon, Settings } from 'lucide-react'
+import { Minus, Square, Copy, X, Sun, Moon } from 'lucide-react'
 import { appLogo } from '../assets/appLogo'
 import AppearanceMenu from './AppearanceMenu'
+import { Tooltip } from './Tooltip'
 
 interface TitleBarProps {
   appSettings: AppSettings
   setAppSettings: (s: AppSettings) => void
   themes: any[]
-  onSettingsOpen: () => void
   setThemeRemixOpen: (open: boolean) => void
-  updateState: UpdateState | null
   appVersion?: string
   /** App chrome zoom factor (1 = 100%), shown as a click-to-reset percentage. */
   zoomFactor?: number
@@ -26,9 +25,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   appSettings,
   setAppSettings,
   themes,
-  onSettingsOpen,
   setThemeRemixOpen,
-  updateState,
   appVersion,
   zoomFactor,
   onZoomReset,
@@ -117,29 +114,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         className="flex h-full items-center pr-1 gap-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
-        {/* Settings button — opens Backup / About / Check for Updates */}
-        <button
-          type="button"
-          onClick={onSettingsOpen}
-          title={updateState?.updateAvailable ? "Settings (Update available!)" : "Settings"}
-          className="relative inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
-        >
-          <Settings className="w-3.5 h-3.5" />
-          {updateState?.updateAvailable && (
-            <span className="absolute -bottom-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-theme-accent ring-1 ring-[var(--theme-popup-bg)]" />
-          )}
-        </button>
-
         {/* Zoom level — click to reset to 100% (same as Ctrl+0). */}
         {typeof zoomFactor === 'number' && (
-          <button
-            type="button"
-            onClick={onZoomReset}
-            title="Reset zoom to 100%"
-            className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
-          >
-            {Math.round(zoomFactor * 100)}%
-          </button>
+          <Tooltip content="Reset zoom to 100%" shortcut="Ctrl+0" placement="bottom">
+            <button
+              type="button"
+              onClick={onZoomReset}
+              className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+            >
+              {Math.round(zoomFactor * 100)}%
+            </button>
+          </Tooltip>
         )}
 
         {/* Theme + font size — applies to every open terminal. A pane's own header has the control
@@ -156,52 +141,60 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         />
 
         {/* Mode Toggle */}
-        <button
-          type="button"
-          onClick={handleToggleMode}
-          title={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-          className="inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
-        >
-          {isLightMode ? (
-            <Moon className="w-3.5 h-3.5" />
-          ) : (
-            <Sun className="w-3.5 h-3.5" />
-          )}
-        </button>
+        <Tooltip content={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'} shortcut="Ctrl+/" placement="bottom">
+          <button
+            type="button"
+            onClick={handleToggleMode}
+            aria-label={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+            className="inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+          >
+            {isLightMode ? (
+              <Moon className="w-3.5 h-3.5" />
+            ) : (
+              <Sun className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </Tooltip>
 
         {/* Minimize */}
-        <button
-          type="button"
-          onClick={handleMinimize}
-          className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
-          title="Minimize"
-        >
-          <Minus className="w-3.5 h-3.5" />
-        </button>
+        <Tooltip content="Minimize" placement="bottom">
+          <button
+            type="button"
+            onClick={handleMinimize}
+            aria-label="Minimize"
+            className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
 
         {/* Maximize / Restore */}
-        <button
-          type="button"
-          onClick={handleToggleMaximize}
-          className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
-          title={isMaximized ? 'Restore Down' : 'Maximize'}
-        >
-          {isMaximized ? (
-            <Copy className="w-3 h-3 rotate-180" />
-          ) : (
-            <Square className="w-3 h-3" />
-          )}
-        </button>
+        <Tooltip content={isMaximized ? 'Restore Down' : 'Maximize'} placement="bottom">
+          <button
+            type="button"
+            onClick={handleToggleMaximize}
+            aria-label={isMaximized ? 'Restore Down' : 'Maximize'}
+            className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
+          >
+            {isMaximized ? (
+              <Copy className="w-3 h-3 rotate-180" />
+            ) : (
+              <Square className="w-3 h-3" />
+            )}
+          </button>
+        </Tooltip>
 
         {/* Close */}
-        <button
-          type="button"
-          onClick={handleClose}
-          className="w-9 h-full flex items-center justify-center hover:bg-red-600 hover:text-white text-inherit transition-colors"
-          title="Close"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+        <Tooltip content="Close" placement="bottom">
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Close"
+            className="w-9 h-full flex items-center justify-center hover:bg-red-600 hover:text-white text-inherit transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   )

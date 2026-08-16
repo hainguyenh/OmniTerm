@@ -1,13 +1,15 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Maximize2, Minimize2, Bot } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
-import { STATUS_DOT } from '../tabVisuals'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 import { detachTitle, type DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import AppearanceMenu from './AppearanceMenu'
 import type { AppTheme } from '../themes'
+import { formatTerminalTitle } from '../utils/agentTitle'
+import SessionStatusIndicator from './SessionStatusIndicator'
+import { Tooltip } from './Tooltip'
 
 /**
  * The mini header on top of every pane in split view: the pane's identity (shape + number in its own
@@ -22,6 +24,8 @@ interface PaneHeaderProps {
   /** Null while the pane is empty. */
   conn: Connection | null
   sessionTitle?: string
+  /** Human-readable shell label, e.g. "PowerShell 7" — shown in agent mode. */
+  shellLabel?: string
   focused: boolean
   sessionId: string | null
   tabs: SessionTabItem[]
@@ -50,6 +54,7 @@ interface PaneHeaderProps {
   onToggleFullscreen?: () => void
   /** Close this pane's session tab, using the main layout's normal confirmation policy. */
   onClose?: () => void
+  busy?: boolean
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
   appearance?: {
     themes: AppTheme[]
@@ -62,9 +67,9 @@ interface PaneHeaderProps {
 }
 
 const PaneHeader: React.FC<PaneHeaderProps> = ({
-  paneIndex, conn, sessionTitle, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
+  paneIndex, conn, sessionTitle, shellLabel, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, onClose, fullscreen, onToggleFullscreen, appearance,
+  onAssign, onClear, onClose, fullscreen, onToggleFullscreen, appearance, busy,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -76,6 +81,8 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
       ? false
       : true
     : false
+  // Derive agent and folder context from the live OSC title, connection name, or local cwd
+  const formattedTitle = formatTerminalTitle(sessionTitle, shellLabel, conn?.name, conn?.localCwd)
   return (
     <div className="relative flex-shrink-0">
       <div
@@ -99,11 +106,31 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         </span>
         {conn ? (
           <>
-            {conn.type === 'RDP'
-              ? <Monitor className="w-3 h-3 flex-shrink-0" />
-              : <Terminal className="w-3 h-3 flex-shrink-0" />}
-            <span className="truncate font-medium min-w-0 flex-1">{sessionTitle ?? conn.name}</span>
-            {sessionId && <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[statuses[sessionId] ?? 'connecting']}`} />}
+            {formattedTitle.isAgent
+              ? <Bot className="w-3 h-3 flex-shrink-0 text-theme-accent" />
+              : conn.type === 'RDP'
+                ? <Monitor className="w-3 h-3 flex-shrink-0" />
+                : <Terminal className="w-3 h-3 flex-shrink-0" />
+            }
+            <span className="truncate font-medium min-w-0 flex-1 flex items-baseline gap-1">
+              <span className={`truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
+                {formattedTitle.isAgent
+                  ? `${formattedTitle.agentName}${formattedTitle.folderName ? ` - ${formattedTitle.folderName}` : ''}`
+                  : (formattedTitle.folderName ?? formattedTitle.displayTitle)}
+              </span>
+              {formattedTitle.shellLabel && (
+                <span className="text-[9px] text-theme-dim flex-shrink-0 font-normal">
+                  // {formattedTitle.shellLabel}
+                </span>
+              )}
+            </span>
+            {sessionId && (
+              <SessionStatusIndicator
+                status={statuses[sessionId] ?? 'connecting'}
+                busy={busy}
+                isAgent={formattedTitle.isAgent}
+              />
+            )}
           </>
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
@@ -123,46 +150,51 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
             />
           )}
           {detach && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onToggleDetach() }}
-              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-              title={detachTitle(detach, 'pane')}
-              aria-label={detachTitle(detach, 'pane')}
-            >
-              {detach === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
-            </button>
+            <Tooltip content={detachTitle(detach, 'pane')} placement="bottom">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleDetach() }}
+                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                aria-label={detachTitle(detach, 'pane')}
+              >
+                {detach === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+              </button>
+            </Tooltip>
           )}
           {conn && onToggleFullscreen && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onToggleFullscreen() }}
-              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-              title={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
-              aria-label={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
-            >
-              {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-            </button>
+            <Tooltip content={fullscreen ? 'Restore view mode' : 'Focus pane full screen'} placement="bottom">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleFullscreen() }}
+                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                aria-label={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
+              >
+                {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+              </button>
+            </Tooltip>
           )}
           {conn && sessionId && onClose && (
+            <Tooltip content="Close pane" placement="bottom">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onClose() }}
+                className="ml-1 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-theme-error/20 hover:text-theme-error transition-colors"
+                aria-label="Close pane"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="Choose session for this pane" placement="bottom">
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onClose() }}
-              className="ml-1 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-theme-error/20 hover:text-theme-error transition-colors"
-              title="Close pane"
-              aria-label="Close pane"
+              onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
+              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+              aria-label="Choose session for this pane"
             >
-              <X className="w-3 h-3" />
+              <ChevronDown className="w-3 h-3" />
             </button>
-          )}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
-            className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-            title="Choose session for this pane"
-          >
-            <ChevronDown className="w-3 h-3" />
-          </button>
+          </Tooltip>
         </span>
       </div>
       {pickerOpen && createPortal(
@@ -207,7 +239,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                   {connType(t.connId) === 'RDP'
                     ? <Monitor className="w-3 h-3 flex-shrink-0" />
                     : <Terminal className="w-3 h-3 flex-shrink-0" />}
-                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[statuses[t.id] ?? 'connecting']}`} />
+                  <SessionStatusIndicator status={statuses[t.id] ?? 'connecting'} isAgent={formatTerminalTitle(t.name).isAgent} />
                   <span className="truncate flex-1 text-left">{t.name}</span>
                   {here && <Check className="w-3 h-3 flex-shrink-0" />}
                   {OtherShape && other && (

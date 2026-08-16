@@ -1,4 +1,5 @@
 import { Minimize2 } from 'lucide-react'
+import { Button } from './Button'
 
 interface FullscreenRestoreControlProps {
   sessionName?: string
@@ -7,15 +8,16 @@ interface FullscreenRestoreControlProps {
 
 export default function FullscreenRestoreControl({ sessionName, onRestore }: FullscreenRestoreControlProps) {
   return (
-    <button
-      type="button"
+    <Button
       onClick={onRestore}
-      className="absolute right-3 top-3 z-40 flex items-center gap-1.5 rounded-md border border-theme-border bg-theme-popup/95 px-2.5 py-1.5 text-xs text-theme-fg shadow-lg backdrop-blur hover:bg-theme-hover"
+      icon={<Minimize2 className="h-3.5 w-3.5" />}
+      tooltip="Restore view mode (Escape)"
+      tooltipPlacement="bottom"
+      className="absolute right-3 top-3 z-40 bg-theme-popup/95 backdrop-blur shadow-lg hover:bg-theme-hover"
       aria-label="Restore view mode"
-      title="Restore view mode (Escape)"
+      size="sm"
     >
-      <Minimize2 className="h-3.5 w-3.5" />
       <span>Restore view{sessionName ? ` · ${sessionName}` : ''}</span>
-    </button>
+    </Button>
   )
 }
