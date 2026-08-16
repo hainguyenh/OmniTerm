@@ -9,74 +9,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { attachTerminalStream } from "../utils/terminalStream";
-import type { SessionChannel } from "../utils/sessionChannel";
 import { WRITE_CHUNK_SIZE } from "../utils/writeChunks";
 import { mockOmnitermAPI } from "../testUtils";
-import type { Terminal } from "@xterm/xterm";
-
-type ResumeSnapshot = Awaited<ReturnType<Window["omnitermAPI"]["terminalWindow"]["resume"]>>;
-
-const bytes = (text: string) => new TextEncoder().encode(text);
-
-function makeTerminal() {
-  return { write: vi.fn(), options: {} as Record<string, unknown> };
-}
-
-/** A channel that hands back the callbacks it was given, so a test can drive them directly. */
-function makeChannel() {
-  const fire: {
-    ready?: (label?: string) => void;
-    data?: (data: Uint8Array) => void;
-    error?: (err: string) => void;
-    closed?: (code?: number) => void;
-  } = {};
-  const unsubscribe = {
-    ready: vi.fn(),
-    data: vi.fn(),
-    error: vi.fn(),
-    closed: vi.fn(),
-  };
-  const channel: SessionChannel = {
-    connect: vi.fn(),
-    input: vi.fn(),
-    resize: vi.fn(),
-    onReady: (cb) => ((fire.ready = cb), unsubscribe.ready),
-    onData: (cb) => ((fire.data = cb), unsubscribe.data),
-    onError: (cb) => ((fire.error = cb), unsubscribe.error),
-    onClosed: (cb) => ((fire.closed = cb), unsubscribe.closed),
-  };
-  return { channel, fire, unsubscribe };
-}
-
-function attach(overrides: Partial<Parameters<typeof attachTerminalStream>[0]> = {}) {
-  const term = makeTerminal();
-  const { channel, fire, unsubscribe } = makeChannel();
-  const spies = {
-    onStatus: vi.fn(),
-    onExit: vi.fn(),
-    onMetrics: vi.fn(),
-    onActivity: vi.fn(),
-    refit: vi.fn(),
-  };
-  const stream = attachTerminalStream({
-    term: term as unknown as Terminal,
-    api: channel,
-    id: "pane-1",
-    isLocal: false,
-    host: "example.test",
-    mode: "connect",
-    smartColors: () => true,
-    isCurrent: () => true,
-    ...spies,
-    ...overrides,
-  });
-  return { term, fire, unsubscribe, stream, ...spies };
-}
-
-/** Everything written to the terminal since attach, concatenated. */
-const written = (term: ReturnType<typeof makeTerminal>) =>
-  term.write.mock.calls.map(([chunk]) => chunk as string).join("");
+import { attach, bytes, written, type ResumeSnapshot } from "./terminalStreamHarness";
 
 beforeEach(() => {
   mockOmnitermAPI();
