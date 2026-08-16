@@ -10,12 +10,11 @@ import RDPView from './RDPView'
 import ConnectingOverlay from './ConnectingOverlay'
 import DetachedPlaceholder from './DetachedPlaceholder'
 import ConnectionForm from './ConnectionForm'
-import MetricsChips from './SessionMetricsChips'
+import { SessionFooterBar } from './SessionFooterBar'
 import SessionTabs from './SessionTabs'
 import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
-import { Columns2, LayoutGrid, Loader2, Monitor, PanelLeft, RotateCw, Square, Terminal, Unplug } from 'lucide-react'
-import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
+import { Columns2, LayoutGrid, PanelLeft, RotateCw, Square } from 'lucide-react'
 import { paneIdentity } from '../paneIdentity'
 import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
@@ -28,6 +27,7 @@ import FullscreenRestoreControl from './FullscreenRestoreControl'
 import MainLayoutWaitingPane from './MainLayoutWaitingPane'
 import type { MainLayoutModel } from './useMainLayoutController'
 import ViewGroupTabs from './ViewGroupTabs'
+import { Tooltip } from './Tooltip'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
@@ -125,6 +125,14 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 isPreview={(id) => previewTabId === id}
                 isEphemeral={(connId) => ephemeralConns.some(e => e.id === connId)}
                 connType={(connId) => connById(connId)?.type}
+                getShellLabel={(connId) => {
+                  const conn = connById(connId)
+                  if (!conn) return undefined
+                  if (conn.type === 'LOCAL') return shellLabel(shellOptions ?? [], conn.shell)
+                  return undefined
+                }}
+                connName={(connId) => connById(connId)?.name}
+                connCwd={(connId) => connById(connId)?.localCwd}
                 onSelect={showTab}
                 onPromote={keepTab}
                 onClose={closeTab}
@@ -155,57 +163,57 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 [8, Grid8Icon, 'Grid 8']
               ] as const).map(([m, Icon, label]) => {
                 const disabled = m > 1 && activeGroupId === 'ungrouped' && visibleTabs.length === 0
+                const tooltipText = disabled
+                  ? 'Cannot select multi-view when ungrouped with no open tabs'
+                  : m === 3 && layoutMode === 3 ? `${label} (${appSettings.split3Style || 'left'}) - Click to cycle`
+                  : m === 2 && layoutMode === 2 ? `${label} (${appSettings.split2Style || 'columns'}) - Click to toggle`
+                  : label
                 return (
-                <button
-                  key={m}
-                  type="button"
-                  disabled={disabled}
-                  title={
-                    disabled ? 'Cannot select multi-view when ungrouped with no open tabs'
-                    : m === 3 && layoutMode === 3 ? `${label} (${appSettings.split3Style || 'left'}) - Click to cycle`
-                    : m === 2 && layoutMode === 2 ? `${label} (${appSettings.split2Style || 'columns'}) - Click to toggle`
-                    : label
-                  }
-                  onClick={() => {
-                    if (disabled) return
-                    if (m === 3 && layoutMode === 3) {
-                      const currentStyle = appSettings.split3Style || 'left'
-                      const nextStyle = currentStyle === 'left' ? 'right' : currentStyle === 'right' ? 'top' : 'left'
-                      setAppSettings({ ...appSettings, split3Style: nextStyle })
-                      window.omnitermAPI.settings.save({ split3Style: nextStyle })
-                    } else if (m === 2 && layoutMode === 2) {
-                      const nextStyle = (appSettings.split2Style || 'columns') === 'columns' ? 'rows' : 'columns'
-                      setAppSettings({ ...appSettings, split2Style: nextStyle })
-                      window.omnitermAPI.settings.save({ split2Style: nextStyle })
-                    } else {
-                      changeLayoutMode(m)
-                    }
-                  }}
-                  className={`relative inline-flex items-center justify-center w-6 h-6 transition-colors ${
-                    disabled ? 'opacity-20 cursor-not-allowed'
-                    : `hover:bg-white/5 ${
-                        layoutMode === m
-                          ? 'bg-white/10 text-[var(--theme-accent)] font-bold'
-                          : 'text-inherit opacity-50 hover:opacity-100'
-                      }`
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows' ? 'rotate-90' : ''}`} />
-                  {m === 3 && layoutMode === 3 && (
-                    <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
-                  )}
-                  {m === 2 && layoutMode === 2 && (
-                    <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
-                  )}
-                </button>
-              )})}
+                  <Tooltip key={m} content={tooltipText} shortcut={disabled ? undefined : `Ctrl+${m}`} placement="bottom">
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      aria-label={tooltipText}
+                      onClick={() => {
+                        if (disabled) return
+                        if (m === 3 && layoutMode === 3) {
+                          const currentStyle = appSettings.split3Style || 'left'
+                          const nextStyle = currentStyle === 'left' ? 'right' : currentStyle === 'right' ? 'top' : 'left'
+                          setAppSettings({ ...appSettings, split3Style: nextStyle })
+                          window.omnitermAPI.settings.save({ split3Style: nextStyle })
+                        } else if (m === 2 && layoutMode === 2) {
+                          const nextStyle = (appSettings.split2Style || 'columns') === 'columns' ? 'rows' : 'columns'
+                          setAppSettings({ ...appSettings, split2Style: nextStyle })
+                          window.omnitermAPI.settings.save({ split2Style: nextStyle })
+                        } else {
+                          changeLayoutMode(m)
+                        }
+                      }}
+                      className={`relative inline-flex items-center justify-center w-6 h-6 transition-colors ${
+                        disabled ? 'opacity-20 cursor-not-allowed'
+                        : `hover:bg-white/5 ${
+                            layoutMode === m
+                              ? 'bg-white/10 text-[var(--theme-accent)] font-bold'
+                              : 'text-inherit opacity-50 hover:opacity-100'
+                          }`
+                      }`}
+                    >
+                      <Icon className={`w-4 h-4 ${m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows' ? 'rotate-90' : ''}`} />
+                      {m === 3 && layoutMode === 3 && (
+                        <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
+                      )}
+                      {m === 2 && layoutMode === 2 && (
+                        <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
+                      )}
+                    </button>
+                  </Tooltip>
+                )
+              })}
             </div>
   
             </div>
           </div>
   
-          {/* Active-session control bar — rendered as a FOOTER (order-last) so the
-              embedded RDP desktop filling the content area can never cover the controls. */}
           {activeTabId && (() => {
             const conn = activeConnection
             if (!conn) {
@@ -222,93 +230,27 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             const resolvedLatency = conn.type === 'RDP'
               ? (latencies[activeTabId] ?? null)
               : (metrics[activeTabId]?.latency ?? null)
+            const footerShellLabel = conn.type === 'LOCAL'
+              ? shellLabel(shellOptions, conn.shell)
+              : `${conn.user}@${conn.host}:${conn.port}`
             return (
-              <div className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
-                {layoutMode > 1 && (() => {
-                  const identity = paneIdentity(focusedPane)
-                  const Shape = identity.icon
-                  return (
-                    <span className="flex items-center gap-1 flex-shrink-0" style={{ color: identity.color }}
-                      title={`Pane ${focusedPane + 1} · ${identity.label}`}>
-                      <Shape className="w-3.5 h-3.5" fill={identity.color} />
-                      <span className="text-[9px] font-bold">{focusedPane + 1}</span>
-                    </span>
-                  )
-                })()}
-                <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={footerWorkspaceTitle}>
-                  {footerWorkspaceTitle}
-                </span>
-                <span className="opacity-50">·</span>
-                {conn.type === 'RDP'
-                  ? <Monitor className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
-                  : <Terminal className="w-3.5 h-3.5 text-theme-accent flex-shrink-0" />
-                }
-                <span className="text-xs font-medium text-[var(--theme-fg)] truncate min-w-0">{conn.name}</span>
-                {/* Status pill — sits right after the name, with the shell's activity when we know it */}
-                <span className={`inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0 rounded-full flex-shrink-0 ${STATUS_TEXT[status]} bg-theme-bg`}>
-                  {status === 'connecting' ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
-                  )}
-                  {STATUS_LABEL[status]}
-                  {(() => {
-                    const word = activityLabel({
-                      status,
-                      busy: conn.type === 'LOCAL' ? (activity[activeTabId] ?? false) : undefined,
-                    })
-                    return word ? <span className="font-normal text-theme-dim">· {word}</span> : null
-                  })()}
-                </span>
-                {/* Live metrics: latency (SSH + RDP) + remote CPU/RAM/disk + uptime (SSH). */}
-                <MetricsChips
-                  status={status}
-                  latency={resolvedLatency}
-                  metrics={metrics[activeTabId]}
-                  connectedAt={connectedAt[activeTabId]}
-                  compact={layoutMode > 1}
-                />
-  
-                {layoutMode === 1 && (
-                  <span className="text-[10px] text-theme-dim truncate min-w-0 ml-auto shrink">
-                    {conn.type === 'LOCAL'
-                      ? shellLabel(shellOptions, conn.shell)
-                      : `${conn.user}@${conn.host}:${conn.port}`}
-                  </span>
-                )}
-  
-                <div className={`flex items-center gap-1.5 ${layoutMode > 1 ? 'ml-auto' : ''}`}>
-                  {status === 'closed' || status === 'error' ? (
-                    <button
-                      onClick={() => reconnectSession(activeTabId)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] transition-colors"
-                    >
-                      <RotateCw className="w-3 h-3" />
-                      Reconnect
-                    </button>
-                  ) : (
-                    conn.type !== 'LOCAL' && (
-                      <button
-                        onClick={() => disconnectSession(activeTabId)}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border border-theme-border text-theme-fg hover:border-[#f7768e] hover:text-theme-error transition-colors"
-                      >
-                        <Unplug className="w-3 h-3" />
-                        Disconnect
-                      </button>
-                    )
-                  )}
-                </div>
-                {typeof zoomFactor === 'number' && (
-                  <button
-                    type="button"
-                    onClick={onZoomReset}
-                    title="Reset zoom to 100%"
-                    className="flex-shrink-0 text-[10px] font-mono text-theme-dim hover:text-theme-accent transition-colors px-1"
-                  >
-                    {Math.round(zoomFactor * 100)}%
-                  </button>
-                )}
-              </div>
+              <SessionFooterBar
+                conn={conn}
+                tabName={activeTabs.find(tab => tab.id === activeTabId)?.name ?? conn.name}
+                status={status}
+                latency={resolvedLatency}
+                metrics={metrics[activeTabId]}
+                connectedAt={connectedAt[activeTabId]}
+                layoutMode={layoutMode}
+                focusedPane={focusedPane}
+                busy={conn.type === 'LOCAL' ? (activity[activeTabId] ?? false) : undefined}
+                workspaceTitle={footerWorkspaceTitle}
+                footerShellLabel={footerShellLabel}
+                zoomFactor={zoomFactor}
+                onReconnect={() => reconnectSession(activeTabId)}
+                onDisconnect={() => disconnectSession(activeTabId)}
+                onZoomReset={onZoomReset}
+              />
             )
           })()}
           {!activeTabId && (

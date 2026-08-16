@@ -1,5 +1,6 @@
 import React from 'react'
 import { Eye, FolderOpen, FolderGit2, MoonStar, Settings } from 'lucide-react'
+import { Tooltip } from './Tooltip'
 
 export type ActivityView = 'files' | 'workspace'
 
@@ -55,6 +56,7 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
         <ActivityIcon
           icon={<FolderGit2 className="w-5 h-5" />}
           label="Workspace"
+          shortcut="Ctrl+B"
           active={activeView === 'workspace'}
           onClick={() => handleIconClick('workspace')}
         />
@@ -90,6 +92,7 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
         <ActivityIcon
           icon={<Settings className="w-5 h-5" />}
           label="Settings"
+          shortcut="Ctrl+,"
           active={false}
           onClick={onSettingsClick}
         />
@@ -103,32 +106,35 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
 const ActivityIcon: React.FC<{
   icon: React.ReactNode
   label: string
+  shortcut?: string
   active: boolean
   disabled?: boolean
   onClick: () => void
-}> = ({ icon, label, active, disabled, onClick }) => (
-  <button
-    type="button"
-    title={label}
-    disabled={disabled}
-    onClick={onClick}
-    className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors
-      ${disabled
-        ? 'text-[var(--theme-dim)] opacity-30 cursor-not-allowed'
-        : active
-          ? 'text-[var(--theme-accent)] bg-[var(--theme-hover-bg)]'
-          : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]'
-      }`}
-  >
-    {/* Active indicator bar — 2 px accent stripe on the left edge */}
-    {active && (
-      <div
-        className="absolute left-0 top-1/4 w-[2px] h-1/2 rounded-r"
-        style={{ backgroundColor: 'var(--theme-accent)' }}
-      />
-    )}
-    {icon}
-  </button>
+}> = ({ icon, label, shortcut, active, disabled, onClick }) => (
+  <Tooltip content={label} shortcut={shortcut} placement="right">
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors
+        ${disabled
+          ? 'text-[var(--theme-dim)] opacity-30 cursor-not-allowed'
+          : active
+            ? 'text-[var(--theme-accent)] bg-[var(--theme-hover-bg)]'
+            : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]'
+        }`}
+    >
+      {/* Active indicator bar — 2 px accent stripe on the left edge */}
+      {active && (
+        <div
+          className="absolute left-0 top-1/4 w-[2px] h-1/2 rounded-r"
+          style={{ backgroundColor: 'var(--theme-accent)' }}
+        />
+      )}
+      {icon}
+    </button>
+  </Tooltip>
 )
 
 export default ActivityBar

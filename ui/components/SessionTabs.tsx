@@ -1,9 +1,12 @@
 import React from 'react'
-import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate, ExternalLink, Minimize2, LayoutGrid } from 'lucide-react'
+import { Plus, Terminal, Monitor, FileText, Unplug, ChevronDown, Play, Locate, ExternalLink, Minimize2, LayoutGrid, Bot } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
-import { activityDot, tabClasses, tabPlacement, tabTitle, PLACEMENT_STRIPE, type TabFlags } from '../tabVisuals'
+import { tabClasses, tabPlacement, tabTitle, type TabFlags } from '../tabVisuals'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 import { detachTitle, type DetachAction } from '../detachControl'
+import { formatTerminalTitle } from '../utils/agentTitle'
+import SessionStatusIndicator from './SessionStatusIndicator'
+import { Tooltip } from './Tooltip'
 
 /**
  * The session tab strip.
@@ -42,6 +45,9 @@ interface SessionTabsProps {
   isPreview: (tabId: string) => boolean
   isEphemeral: (connId: string) => boolean
   connType: (connId: string) => Connection['type'] | undefined
+  getShellLabel?: (connId: string) => string | undefined
+  connName?: (connId: string) => string | undefined
+  connCwd?: (connId: string) => string | undefined
   onSelect: (tabId: string) => void
   /** Double-click — turns a preview tab into a kept one. */
   onPromote: (tabId: string) => void
@@ -65,7 +71,7 @@ interface SessionTabsProps {
 
 const SessionTabs: React.FC<SessionTabsProps> = ({
   tabs, panes, layoutMode, focusedPane, statuses, activity,
-  isEditor, isPreview, isEphemeral, connType,
+  isEditor, isPreview, isEphemeral, connType, getShellLabel, connName, connCwd,
   onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, onPickPane, detachTabId, detachAction,
   onToggleDetach, onReveal,
 }) => (
@@ -84,130 +90,164 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
       const placement = tabPlacement(paneIdx, focusedPane)
       const docked = placement !== 'background'
       const identity = docked ? paneIdentity(paneIdx) : null
+
+      const titleFormatted = editor
+        ? { isAgent: false, displayTitle: tab.name }
+        : formatTerminalTitle(tab.name, getShellLabel?.(tab.connId), connName?.(tab.connId), connCwd?.(tab.connId))
+      const isAgent = titleFormatted.isAgent
+
       // Docked: the pane's shape replaces the type icon — the pane header right below the tab still
       // shows what kind of session it is. Otherwise the icon carries the activity/kind.
       const Icon = identity?.icon
         ?? (editor ? FileText
           : status === 'closed' ? Unplug
           : type === 'RDP' ? Monitor
+          : isAgent ? Bot
           : busy ? Play
           : Terminal)
       const hue = identity
         ? (placement === 'focused' ? identity.color : withAlpha(identity.color, 0.55))
         : undefined
-      const stripe = PLACEMENT_STRIPE[placement]
+      const isRunning = !!busy && status === 'connected'
+      const tabFullTitle = tabTitle(titleFormatted.displayTitle, placement, paneIdx, layoutMode, flags, identity?.label)
       return (
-        <div
-          key={tab.id}
-          onClick={() => onSelect(tab.id)}
-          onDoubleClick={() => onPromote(tab.id)}
-          onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); onClose(tab.id) } }}
-          onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
-          onContextMenu={(e) => onContextMenu(e, tab.id)}
-          title={tabTitle(tab.name, placement, paneIdx, layoutMode, flags, identity?.label)}
-          style={identity
-            ? {
-                borderColor: hue,
-                backgroundColor: paneSurfaceColor(identity, placement === 'focused'),
-              }
-            : undefined}
-          className={`group relative flex items-center gap-1.5 pl-2.5 pr-1 py-0.5 rounded cursor-pointer
-            border transition-colors flex-shrink-0 select-none max-w-[180px] ${tabClasses(placement, flags)}`}
-        >
-          {stripe && (
-            <span className={`absolute left-0 top-1 bottom-1 w-[3px] rounded-full ${identity ? '' : stripe}`}
-              style={identity ? { backgroundColor: hue } : undefined} />
-          )}
-          <Icon
-            className={`w-3.5 h-3.5 flex-shrink-0 ${!identity && (editor || busy) ? 'text-theme-accent' : ''}`}
-            style={identity ? { color: hue } : undefined}
-            fill={identity && placement === 'focused' ? identity.color : 'none'}
-          />
-          {status && (
-            <span
-              className={`w-2 h-2 rounded-full border flex-shrink-0 ${activityDot(flags)} ${
-                status === 'connecting' ? 'animate-pulse' : ''
-              }`}
-            />
-          )}
-          <span className={`truncate text-xs font-medium ${preview ? 'italic' : ''} ${
-            status === 'error' ? 'text-theme-error' : ''
-          }`}>
-            {tab.name}
-          </span>
-          {/* Pane number badge — which split pane this tab occupies right now, in that pane's hue. */}
-          {layoutMode > 1 && identity && (
-            <span
-              className="flex-shrink-0 w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center"
-              style={placement === 'focused'
-                ? { backgroundColor: identity.color, color: '#1a1b26' }
-                : { backgroundColor: withAlpha(identity.color, 0.2), color: identity.color }}
-            >
-              {paneIdx + 1}
-            </span>
-          )}
-          {/* Only for the file tab currently shown in the focused pane — the tab the user is looking
-              at right now — and only for a file, never a terminal/RDP session (no folder to reveal). */}
-          {editor && placement === 'focused' && (
-            <button
-              onClick={e => { e.stopPropagation(); onReveal(tab.id) }}
-              className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
-                hover:text-theme-accent hover:bg-theme-popup transition-colors"
-              title="Reveal in workspace tree"
-            >
-              <Locate className="w-3 h-3" />
-            </button>
-          )}
-          {tab.id === detachTabId && detachAction && onToggleDetach && (
-            <button
-              onClick={e => { e.stopPropagation(); onToggleDetach() }}
-              className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
-                hover:text-theme-accent hover:bg-theme-popup transition-colors"
-              title={detachTitle(detachAction, 'tab')}
-              aria-label={detachTitle(detachAction, 'tab')}
-            >
-              {detachAction === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
-            </button>
-          )}
-          <button
-            onClick={e => { e.stopPropagation(); onClose(tab.id) }}
-            className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
-              hover:text-theme-error hover:bg-theme-popup transition-colors text-base leading-none"
-            title="Close tab"
+        <Tooltip key={tab.id} content={tabFullTitle} placement="bottom">
+          <div
+            onClick={() => onSelect(tab.id)}
+            onDoubleClick={() => onPromote(tab.id)}
+            onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); onClose(tab.id) } }}
+            onMouseDown={(e) => { if (e.button === 1) e.preventDefault() }}
+            onContextMenu={(e) => onContextMenu(e, tab.id)}
+            style={identity
+              ? {
+                  borderColor: isRunning ? 'transparent' : hue,
+                  backgroundColor: paneSurfaceColor(identity, placement === 'focused'),
+                }
+              : undefined}
+            className={`group relative flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer
+              border transition-colors flex-shrink-0 select-none max-w-[180px] ${isRunning ? 'border-transparent' : ''} ${tabClasses(placement, flags)}`}
           >
-            ×
-          </button>
-        </div>
+            {isRunning && (
+              <svg
+                className="pointer-events-none absolute inset-0 w-full h-full rounded overflow-visible"
+                aria-hidden="true"
+              >
+                <rect
+                  x="0.5"
+                  y="0.5"
+                  width="calc(100% - 1px)"
+                  height="calc(100% - 1px)"
+                  rx="4"
+                  ry="4"
+                  fill="none"
+                  stroke={identity ? hue : 'var(--theme-accent)'}
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
+                  className="animate-marching-ants"
+                />
+              </svg>
+            )}
+            <Icon
+              className={`w-3.5 h-3.5 flex-shrink-0 ${!identity && (editor || busy || isAgent) ? 'text-theme-accent' : ''}`}
+              style={identity ? { color: hue } : undefined}
+              fill={identity && placement === 'focused' ? identity.color : 'none'}
+            />
+            {status && (
+              <SessionStatusIndicator
+                status={status}
+                busy={busy}
+                isAgent={isAgent}
+              />
+            )}
+            <span className={`truncate text-xs font-medium ${preview ? 'italic' : ''} ${
+              status === 'error' ? 'text-theme-error' : ''
+            } ${isAgent ? 'text-theme-accent' : ''}`}>
+              {titleFormatted.displayTitle}
+            </span>
+            {/* Pane number badge — which split pane this tab occupies right now, in that pane's hue. */}
+            {layoutMode > 1 && identity && (
+              <span
+                className="flex-shrink-0 w-4 h-4 rounded text-[9px] font-bold flex items-center justify-center"
+                style={placement === 'focused'
+                  ? { backgroundColor: identity.color, color: '#1a1b26' }
+                  : { backgroundColor: withAlpha(identity.color, 0.2), color: identity.color }}
+              >
+                {paneIdx + 1}
+              </span>
+            )}
+            {/* Only for the file tab currently shown in the focused pane — the tab the user is looking
+                at right now — and only for a file, never a terminal/RDP session (no folder to reveal). */}
+            {editor && placement === 'focused' && (
+              <Tooltip content="Reveal in workspace tree" placement="bottom">
+                <button
+                  onClick={e => { e.stopPropagation(); onReveal(tab.id) }}
+                  className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
+                    hover:text-theme-accent hover:bg-theme-popup transition-colors"
+                  aria-label="Reveal in workspace tree"
+                >
+                  <Locate className="w-3 h-3" />
+                </button>
+              </Tooltip>
+            )}
+            {tab.id === detachTabId && detachAction && onToggleDetach && (
+              <Tooltip content={detachTitle(detachAction, 'tab')} placement="bottom">
+                <button
+                  onClick={e => { e.stopPropagation(); onToggleDetach() }}
+                  className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
+                    hover:text-theme-accent hover:bg-theme-popup transition-colors"
+                  aria-label={detachTitle(detachAction, 'tab')}
+                >
+                  {detachAction === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip content="Close tab" shortcut="Ctrl+W" placement="bottom">
+              <button
+                onClick={e => { e.stopPropagation(); onClose(tab.id) }}
+                className="flex-shrink-0 w-4 h-4 rounded flex items-center justify-center text-theme-dim
+                  hover:text-theme-error hover:bg-theme-popup transition-colors text-base leading-none"
+                aria-label="Close tab"
+              >
+                ×
+              </button>
+            </Tooltip>
+          </div>
+        </Tooltip>
       )
     })}
     <div className="flex ml-1 rounded flex-shrink-0">
-      <button
-        type="button"
-        onClick={onNewSession}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-l hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors"
-        title="New Terminal (Ctrl+N)"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
-      <button
-        type="button"
-        onClick={(e) => onPickShell(e.currentTarget.getBoundingClientRect())}
-        className="inline-flex items-center justify-center px-1 rounded-r hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors border-l border-theme-border/30"
-        title="Select Shell"
-      >
-        <ChevronDown className="w-3 h-3" />
-      </button>
+      <Tooltip content="New Terminal" shortcut="Ctrl+N" placement="bottom">
+        <button
+          type="button"
+          onClick={onNewSession}
+          className="inline-flex items-center justify-center w-7 h-7 rounded-l hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors"
+          aria-label="New Terminal"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </Tooltip>
+      <Tooltip content="Select Shell" placement="bottom">
+        <button
+          type="button"
+          onClick={(e) => onPickShell(e.currentTarget.getBoundingClientRect())}
+          className="inline-flex items-center justify-center px-1 rounded-r hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors border-l border-theme-border/30"
+          aria-label="Select Shell"
+        >
+          <ChevronDown className="w-3 h-3" />
+        </button>
+      </Tooltip>
     </div>
     {onPickPane && (
-      <button
-        type="button"
-        onClick={(e) => onPickPane(e.currentTarget.getBoundingClientRect())}
-        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors flex-shrink-0"
-        title="Choose tab for focused dock"
-        aria-label="Choose tab for focused dock"
-      >
-        <LayoutGrid className="w-3.5 h-3.5" />
-      </button>
+      <Tooltip content="Choose tab for focused dock" placement="bottom">
+        <button
+          type="button"
+          onClick={(e) => onPickPane(e.currentTarget.getBoundingClientRect())}
+          className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-theme-bg/50 text-theme-dim hover:text-theme-fg transition-colors flex-shrink-0"
+          aria-label="Choose tab for focused dock"
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+        </button>
+      </Tooltip>
     )}
   </div>
 )
