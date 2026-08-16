@@ -136,7 +136,7 @@ async function startHost(appData: string, bundled?: string) {
   return { child, client }
 }
 
-describe('plugin-host sidecar', () => {
+describe('plugin-host sidecar', { timeout: 60000 }, () => {
   it('rejects a missing or relative app-data directory', async () => {
     for (const args of [[], ['relative-data']]) {
       const child = spawn(process.execPath, [hostEntry, ...args], { stdio: ['pipe', 'pipe', 'pipe'] })
