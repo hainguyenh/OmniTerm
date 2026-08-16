@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Search, X } from 'lucide-react'
+import { Tooltip } from './Tooltip'
 
 /**
  * The Workspace panel's header line: the section title, and a search that is only an icon until it is
@@ -46,15 +47,16 @@ const WorkspaceSearchBar: React.FC<WorkspaceSearchBarProps> = ({ query, onChange
         <span className="flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-[var(--theme-dim)]">
           Workspaces
         </span>
-        <button
-          type="button"
-          title={SEARCH_HINT}
-          aria-label="Search workspace"
-          onClick={() => setOpen(true)}
-          className="flex-shrink-0 rounded p-1 text-[var(--theme-dim)] transition-colors hover:bg-[var(--theme-hover-bg)] hover:text-[var(--theme-fg)]"
-        >
-          <Search className="h-4 w-4" />
-        </button>
+        <Tooltip content={SEARCH_HINT} placement="bottom">
+          <button
+            type="button"
+            aria-label="Search folders, files, connections (Ctrl+Shift+F)"
+            onClick={() => setOpen(true)}
+            className="flex-shrink-0 rounded p-1 text-[var(--theme-dim)] transition-colors hover:bg-[var(--theme-hover-bg)] hover:text-[var(--theme-fg)]"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+        </Tooltip>
       </>
     )
   }
@@ -74,15 +76,16 @@ const WorkspaceSearchBar: React.FC<WorkspaceSearchBarProps> = ({ query, onChange
         placeholder="Search folders, files…"
         className="min-w-0 flex-1 bg-transparent py-1 text-xs text-[var(--theme-fg)] outline-none placeholder:italic placeholder:text-[var(--theme-dim)]"
       />
-      <button
-        type="button"
-        title="Close search"
-        aria-label="Close search"
-        onClick={close}
-        className="flex-shrink-0 rounded p-0.5 text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      <Tooltip content="Close search (Esc)" placement="bottom">
+        <button
+          type="button"
+          aria-label="Close search (Esc)"
+          onClick={close}
+          className="flex-shrink-0 rounded p-0.5 text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </Tooltip>
     </div>
   )
 }

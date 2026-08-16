@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { FileText, Info, Lock, Plus, X } from 'lucide-react'
 import { pickShell, type ShellOption } from '../shellOptions'
+import { Tooltip } from './Tooltip'
 
 /**
  * The "General" block of the settings panel: the default terminal, and the size cap the built-in file
@@ -78,22 +79,31 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const suggestions = COMMON_VIEWABLE_EXTS.filter((e) => !excludedExts.includes(e) && !systemExcluded.includes(e))
 
   return (
-    <div className="px-4 py-2.5 border-t border-theme-border">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase font-bold tracking-widest text-theme-dim">General</p>
+    <div className="p-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">General Preferences</h3>
+          <p className="text-[11px] text-theme-dim leading-relaxed mt-0.5">
+            Default shell, file viewing limits, and extension filters.
+          </p>
+        </div>
         {/* Development only. A release or portable build writes no log (see
             src-tauri/src/app_utils.rs), so this would open an empty folder at best. */}
         {import.meta.env.DEV && (
-          <button type="button"
-            onClick={() => { onCloseSettings(); window.omnitermAPI.app.revealLog() }}
-            className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-theme-fg hover:text-theme-warning bg-theme-bg border border-theme-border rounded transition-colors"
-            title="Open application log">
-            <FileText className="w-3 h-3 text-theme-warning" />Open log
-          </button>
+          <Tooltip content="Open application log directory" placement="bottom">
+            <button
+              type="button"
+              onClick={() => { onCloseSettings(); window.omnitermAPI.app.revealLog() }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-fg hover:text-theme-warning bg-theme-bg border border-theme-border rounded-lg transition-colors"
+            >
+              <FileText className="w-3 h-3 text-theme-warning" />
+              Open log
+            </button>
+          </Tooltip>
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
         <label htmlFor="default-shell" className={LABEL_CLS}>Default Terminal</label>
         <div className="relative">
           <select
@@ -114,7 +124,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
 
       {/* Viewer size cap. 1 MB covers every script and config file in a normal workspace; this exists
           for the person who wants to read a 3 MB log without leaving the app. */}
-      <div className="flex flex-col gap-1.5 mt-3">
+      <div className="flex flex-col gap-1.5">
         <label htmlFor="max-open-file-mb" className={LABEL_CLS}>Max file size to open</label>
         <div className="flex items-center gap-2">
           <input
@@ -143,19 +153,21 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       {/* Excluded file types: the fixed, non-editable half (system) plus the user's own additions.
           Widening the fixed list is impossible by construction — it is only ever shown, never offered
           as something to toggle, and the input silently ignores an extension already on it. */}
-      <div className="flex flex-col gap-1.5 mt-3">
+      <div className="flex flex-col gap-1.5">
         <div className="flex items-center gap-1.5">
           <label className={LABEL_CLS}>Excluded file types</label>
           {systemExcluded.length > 0 && (
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowSystemExcluded((v) => !v)}
-                className="p-0.5 rounded text-theme-dim hover:text-theme-accent"
-                title="Show the file types the app always excludes"
-              >
-                <Info className="w-3 h-3" />
-              </button>
+              <Tooltip content="Show system-locked excluded file types" placement="bottom">
+                <button
+                  type="button"
+                  onClick={() => setShowSystemExcluded((v) => !v)}
+                  className="p-0.5 rounded text-theme-dim hover:text-theme-accent"
+                  aria-label="Show system-locked excluded file types"
+                >
+                  <Info className="w-3 h-3" />
+                </button>
+              </Tooltip>
               {showSystemExcluded && (
                 <>
                   {/* Click-outside catcher — a plain overlay, not a focus trap, since this is just a list. */}
@@ -197,35 +209,39 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           <datalist id="excluded-ext-suggestions">
             {suggestions.map((ext) => <option key={ext} value={ext} />)}
           </datalist>
-          <button
-            type="button"
-            onClick={() => addExcludedExt(customExt)}
-            disabled={!customExt.trim()}
-            className="flex-shrink-0 p-1.5 rounded border border-theme-border text-theme-dim hover:text-theme-accent hover:border-theme-accent disabled:opacity-40 disabled:pointer-events-none"
-            title="Add extension"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
+          <Tooltip content="Add extension to exclude list" shortcut="Enter" placement="bottom">
+            <button
+              type="button"
+              onClick={() => addExcludedExt(customExt)}
+              disabled={!customExt.trim()}
+              className="flex-shrink-0 p-1.5 rounded-lg border border-theme-border text-theme-dim hover:text-theme-accent hover:border-theme-accent disabled:opacity-40 disabled:pointer-events-none"
+              aria-label="Add extension to exclude list"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Currently-excluded extensions — common or custom, all in one compact row instead of a
             second grid, so this section's height no longer depends on how many are checked. */}
         {excludedExts.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 mt-1">
             {excludedExts.map((ext) => (
               <span
                 key={ext}
-                className="flex items-center gap-1 px-2 py-1 rounded border border-theme-border text-[11px] text-theme-fg"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg border border-theme-border text-[11px] text-theme-fg bg-theme-bg"
               >
                 .{ext}
-                <button
-                  type="button"
-                  onClick={() => toggleExcludedExt(ext)}
-                  className="text-theme-dim hover:text-red-400"
-                  title={`Stop excluding .${ext}`}
-                >
-                  <X className="w-3 h-3" />
-                </button>
+                <Tooltip content={`Stop excluding .${ext}`} placement="top">
+                  <button
+                    type="button"
+                    onClick={() => toggleExcludedExt(ext)}
+                    className="text-theme-dim hover:text-red-400 p-0.5"
+                    aria-label={`Stop excluding .${ext}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </Tooltip>
               </span>
             ))}
           </div>

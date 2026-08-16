@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Play, Pencil, Eye, Save, X, Loader2, AlertTriangle, FileLock2, BookOpen, Code2, Copy, Check } from 'lucide-react'
+import {
+  Play, Copy, X, Check, Eye, Pencil, Save, AlertTriangle, Loader2, Code2, BookOpen, FileLock2,
+} from 'lucide-react'
 import type { WorkspaceScript } from '@omniterm/contract'
 import { fileKindMeta } from '../utils/fileKind'
+import { Tooltip } from './Tooltip'
 import { highlightLines, type Token, type TokenType } from '../utils/scriptHighlight'
 import MarkdownPreview from './MarkdownPreview'
 
@@ -307,21 +310,23 @@ const HeaderBtn: React.FC<{
   accent?: boolean
   children: React.ReactNode
 }> = ({ title, onClick, disabled, accent, children }) => (
-  <button
-    type="button"
-    title={title}
-    disabled={disabled}
-    onClick={onClick}
-    className={`p-1.5 rounded transition-colors ${
-      disabled
-        ? 'text-[var(--theme-dim)] opacity-40 cursor-not-allowed'
-        : accent
-          ? 'text-[var(--theme-accent)] hover:bg-[var(--theme-hover-bg)]'
-          : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]'
-    }`}
-  >
-    {children}
-  </button>
+  <Tooltip content={title} placement="bottom">
+    <button
+      type="button"
+      aria-label={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={`p-1.5 rounded transition-colors ${
+        disabled
+          ? 'text-[var(--theme-dim)] opacity-40 cursor-not-allowed'
+          : accent
+            ? 'text-[var(--theme-accent)] hover:bg-[var(--theme-hover-bg)]'
+            : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]'
+      }`}
+    >
+      {children}
+    </button>
+  </Tooltip>
 )
 
 export default ScriptViewer

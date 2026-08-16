@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { FileInput, FolderPlus, Plus } from 'lucide-react'
 import WorkspaceSearchBar from './WorkspaceSearchBar'
+import { Tooltip } from './Tooltip'
 
 interface WorkspacePanelHeaderProps {
   query: string
@@ -30,15 +31,21 @@ const WorkspacePanelHeader: React.FC<WorkspacePanelHeaderProps> = ({
     <div className="border-b border-[var(--theme-border)]">
       <div className="flex items-center gap-1 px-3 py-2">
         <WorkspaceSearchBar query={query} onChange={onQueryChange} />
-        <button type="button" title="Import VS Code workspace" aria-label="Import VS Code workspace" onClick={onImport} className={actionClass}>
-          <FileInput className="w-4 h-4" />
-        </button>
-        <button type="button" title="New workspace" aria-label="New workspace" onClick={() => setCreating(value => !value)} className={actionClass}>
-          <Plus className="w-4 h-4" />
-        </button>
-        <button type="button" title="Add workspace folder" aria-label="Add workspace folder" onClick={onAdd} className={actionClass}>
-          <FolderPlus className="w-4 h-4" />
-        </button>
+        <Tooltip content="Import VS Code workspace" placement="bottom">
+          <button type="button" aria-label="Import VS Code workspace" onClick={onImport} className={actionClass}>
+            <FileInput className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip content="New workspace" placement="bottom">
+          <button type="button" aria-label="New workspace" onClick={() => setCreating(value => !value)} className={actionClass}>
+            <Plus className="w-4 h-4" />
+          </button>
+        </Tooltip>
+        <Tooltip content="Add workspace folder" shortcut="Ctrl+Shift+N" placement="bottom">
+          <button type="button" aria-label="Add workspace folder" onClick={onAdd} className={actionClass}>
+            <FolderPlus className="w-4 h-4" />
+          </button>
+        </Tooltip>
       </div>
       {creating && (
         <form className="flex items-center gap-1 px-3 pb-2" onSubmit={submit}>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UseDialogReturn } from '../hooks/useDialog'
+import { Tooltip } from './Tooltip'
 
 interface PluginManagerProps {
   activeSessionCount: number
@@ -238,14 +239,16 @@ export default function PluginManager({
           <span className="text-[10px] text-[var(--theme-dim)]">
             {plugins.filter(plugin => plugin.id !== 'omniterm.plugin-host').length} installed
           </span>
-          <button
-            type="button"
-            disabled={busyId !== null}
-            onClick={() => { void installPackage() }}
-            className="rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-fg)] hover:border-[var(--theme-accent)] disabled:opacity-50"
-          >
-            Install ZIP
-          </button>
+          <Tooltip content="Install plugin package from .zip archive" placement="bottom">
+            <button
+              type="button"
+              disabled={busyId !== null}
+              onClick={() => { void installPackage() }}
+              className="rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-fg)] hover:border-[var(--theme-accent)] disabled:opacity-50"
+            >
+              Install ZIP
+            </button>
+          </Tooltip>
         </div>
       </div>
       <p className="mb-2 text-[10px] leading-relaxed text-[var(--theme-dim)]">
@@ -308,26 +311,33 @@ export default function PluginManager({
                 </p>
               )}
               {plugin.activeConnectionProvider && plugin.enabled && plugin.status === 'loaded' && (
-                <button type="button"
-                  disabled={busyId === plugin.id || plugin.selectedConnectionProvider}
-                  onClick={() => { void selectProvider(plugin) }}
-                  className={`mt-2 w-full rounded-md border px-2 py-1.5 text-[10px] font-semibold transition-colors disabled:cursor-default ${
-                    plugin.selectedConnectionProvider
-                      ? 'border-[var(--theme-accent)] bg-[var(--theme-hover-bg)] text-[var(--theme-accent)]'
-                      : 'border-[var(--theme-border)] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]'
-                  }`}>
-                  {plugin.selectedConnectionProvider ? 'Active connection provider' : 'Use for connections'}
-                </button>
+                <Tooltip
+                  content={plugin.selectedConnectionProvider ? 'Currently active connection provider' : 'Select this plugin as the active connection provider'}
+                  placement="bottom"
+                >
+                  <button type="button"
+                    disabled={busyId === plugin.id || plugin.selectedConnectionProvider}
+                    onClick={() => { void selectProvider(plugin) }}
+                    className={`mt-2 w-full rounded-md border px-2 py-1.5 text-[10px] font-semibold transition-colors disabled:cursor-default ${
+                      plugin.selectedConnectionProvider
+                        ? 'border-[var(--theme-accent)] bg-[var(--theme-hover-bg)] text-[var(--theme-accent)]'
+                        : 'border-[var(--theme-border)] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]'
+                    }`}>
+                    {plugin.selectedConnectionProvider ? 'Active connection provider' : 'Use for connections'}
+                  </button>
+                </Tooltip>
               )}
               {plugin.source === 'user' && (
-                <button
-                  type="button"
-                  disabled={busyId !== null}
-                  onClick={() => { void removePlugin(plugin) }}
-                  className="mt-2 w-full rounded-md border border-theme-error/60 px-2 py-1.5 text-[10px] font-semibold text-theme-error hover:bg-theme-error/10 disabled:opacity-50"
-                >
-                  Remove plugin
-                </button>
+                <Tooltip content={`Remove “${plugin.name}” from computer`} placement="bottom">
+                  <button
+                    type="button"
+                    disabled={busyId !== null}
+                    onClick={() => { void removePlugin(plugin) }}
+                    className="mt-2 w-full rounded-md border border-theme-error/60 px-2 py-1.5 text-[10px] font-semibold text-theme-error hover:bg-theme-error/10 disabled:opacity-50"
+                  >
+                    Remove plugin
+                  </button>
+                </Tooltip>
               )}
             </div>
           ))}
@@ -336,22 +346,28 @@ export default function PluginManager({
       {restartRequired && (
         <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[var(--theme-accent)] bg-[var(--theme-hover-bg)] px-3 py-2">
           <span className="text-[10px] text-[var(--theme-fg)]">Restart required to finish plugin changes.</span>
-          <button type="button" onClick={() => { void restart() }}
-            className="shrink-0 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-accent-fg)]">
-            Restart now
-          </button>
+          <Tooltip content="Restart OmniTerm to apply plugin updates" placement="left">
+            <button type="button" onClick={() => { void restart() }}
+              className="shrink-0 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-accent-fg)]">
+              Restart now
+            </button>
+          </Tooltip>
         </div>
       )}
       {capabilities?.importExport && plugins.some(plugin => plugin.selectedConnectionProvider) && (
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <button type="button" onClick={() => { void importMetadata() }}
-            className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
-            Import metadata
-          </button>
-          <button type="button" onClick={() => { void exportMetadata() }}
-            className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
-            Export metadata
-          </button>
+          <Tooltip content="Import connection metadata from file" placement="bottom">
+            <button type="button" onClick={() => { void importMetadata() }}
+              className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
+              Import metadata
+            </button>
+          </Tooltip>
+          <Tooltip content="Export saved connection metadata to file" placement="bottom">
+            <button type="button" onClick={() => { void exportMetadata() }}
+              className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
+              Export metadata
+            </button>
+          </Tooltip>
         </div>
       )}
     </div>

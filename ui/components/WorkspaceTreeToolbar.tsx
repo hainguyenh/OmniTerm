@@ -3,6 +3,7 @@ import {
   ChevronsDownUp, ChevronsUpDown, Filter, List, ListTree, RefreshCw,
 } from 'lucide-react'
 import { filterSummary, isDefaultFilter, type TreeFilter } from '../utils/workspaceFilter'
+import { Tooltip } from './Tooltip'
 
 /**
  * The row of controls above one expanded workspace's tree.
@@ -44,51 +45,59 @@ const WorkspaceTreeToolbar: React.FC<WorkspaceTreeToolbarProps> = ({
 
   return (
     <div className="flex items-center justify-between gap-1 px-2 py-0.5">
-      <button
-        type="button"
-        title="Filter what this workspace shows"
-        data-filter-trigger
-        onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
-        className={`min-w-0 truncate rounded px-1 text-[10px] uppercase tracking-wider hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
-      >
-        {filterSummary(filter, fileCount)}
-      </button>
+      <Tooltip content="Filter what this workspace shows" placement="bottom">
+        <button
+          type="button"
+          data-filter-trigger
+          onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
+          className={`min-w-0 truncate rounded px-1 text-[10px] uppercase tracking-wider hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
+        >
+          {filterSummary(filter, fileCount)}
+        </button>
+      </Tooltip>
 
       <div className="flex flex-shrink-0 items-center gap-0.5">
         {allCollapsed !== null && (
+          <Tooltip content={allCollapsed ? 'Expand all' : 'Collapse all'} placement="bottom">
+            <button
+              type="button"
+              aria-label={allCollapsed ? 'Expand all' : 'Collapse all'}
+              onClick={onToggleCollapseAll}
+              className={iconButton}
+            >
+              {allCollapsed
+                ? <ChevronsUpDown className="w-3.5 h-3.5" />
+                : <ChevronsDownUp className="w-3.5 h-3.5" />}
+            </button>
+          </Tooltip>
+        )}
+        <Tooltip content="Filter what this workspace shows" placement="bottom">
           <button
             type="button"
-            title={allCollapsed ? 'Expand all' : 'Collapse all'}
-            onClick={onToggleCollapseAll}
+            data-filter-trigger
+            aria-label="Filter what this workspace shows"
+            aria-expanded={filterMenuOpen}
+            onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
+            className={`flex-shrink-0 p-0.5 rounded hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
+        <Tooltip content={flatView ? 'Show as tree' : 'Flatten'} placement="bottom">
+          <button
+            type="button"
+            aria-label={flatView ? 'Show as tree' : 'Flatten'}
+            onClick={onToggleFlatView}
             className={iconButton}
           >
-            {allCollapsed
-              ? <ChevronsUpDown className="w-3.5 h-3.5" />
-              : <ChevronsDownUp className="w-3.5 h-3.5" />}
+            {flatView ? <ListTree className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
           </button>
-        )}
-        <button
-          type="button"
-          title="Filter what this workspace shows"
-          data-filter-trigger
-          aria-label="Filter workspace contents"
-          aria-expanded={filterMenuOpen}
-          onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
-          className={`flex-shrink-0 p-0.5 rounded hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
-        >
-          <Filter className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          title={flatView ? 'Show as tree' : 'Flatten'}
-          onClick={onToggleFlatView}
-          className={iconButton}
-        >
-          {flatView ? <ListTree className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
-        </button>
-        <button type="button" title="Rescan" onClick={onRescan} className={iconButton}>
-          <RefreshCw className={`w-3 h-3 ${scanning ? 'animate-spin' : ''}`} />
-        </button>
+        </Tooltip>
+        <Tooltip content="Rescan" placement="bottom">
+          <button type="button" aria-label="Rescan" onClick={onRescan} className={iconButton}>
+            <RefreshCw className={`w-3 h-3 ${scanning ? 'animate-spin' : ''}`} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   )
