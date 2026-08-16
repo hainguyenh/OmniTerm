@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
 import { WORKSPACE_COLOR_VALUES } from '../utils/workspaceAppearance'
+import { Tooltip } from './Tooltip'
 
 interface WorkspaceRootRowProps {
   workspace: Workspace
@@ -89,7 +90,7 @@ export default function WorkspaceRootRow({
     <div
       draggable={!isEditing}
       data-workspace-id={workspace.id}
-      className="group flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+      className="group sticky top-0 z-10 bg-[var(--theme-sidebar)] flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
       style={{ paddingLeft: 8 + depth * 12 }}
       onClick={onToggle}
       onDragStart={isEditing ? undefined : onDragStart}
@@ -127,45 +128,54 @@ export default function WorkspaceRootRow({
           className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-[var(--theme-bg)] text-[var(--theme-fg)] border border-[var(--theme-accent)] rounded outline-none"
         />
       ) : (
-        <span
-          className="flex-1 truncate text-sm"
-          onDoubleClick={event => {
-            event.stopPropagation()
-            startRename()
-          }}
-        >
-          {workspace.name}
-        </span>
+        <Tooltip content={title} placement="top">
+          <span
+            className="flex-1 truncate text-sm"
+            onDoubleClick={event => {
+              event.stopPropagation()
+              startRename()
+            }}
+          >
+            {workspace.name}
+          </span>
+        </Tooltip>
       )}
       {connectionAction}
       {onRename && (
+        <Tooltip content="Rename workspace" placement="bottom">
+          <button
+            type="button"
+            aria-label="Rename workspace"
+            onClick={event => { event.stopPropagation(); startRename() }}
+            className={actionClass}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        </Tooltip>
+      )}
+      <Tooltip content="Add folder to workspace" placement="bottom">
         <button
           type="button"
-          title="Rename workspace"
-          aria-label="Rename workspace"
-          onClick={event => { event.stopPropagation(); startRename() }}
+          aria-label="Add folder to workspace"
+          onClick={event => { event.stopPropagation(); onAddFolder() }}
           className={actionClass}
         >
-          <Pencil className="w-3.5 h-3.5" />
+          <FolderPlus className="w-3.5 h-3.5" />
         </button>
-      )}
-      <button
-        type="button"
-        title="Add folder to workspace"
-        aria-label="Add folder to workspace"
-        onClick={event => { event.stopPropagation(); onAddFolder() }}
-        className={actionClass}
-      >
-        <FolderPlus className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        title="Remove from workspaces"
-        onClick={event => { event.stopPropagation(); onRemove() }}
-        className={`${actionClass} hover:text-red-400`}
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      </Tooltip>
+      <Tooltip content="Remove from workspaces" placement="bottom">
+        <button
+          type="button"
+          aria-label="Remove from workspaces"
+          onClick={event => { event.stopPropagation(); onRemove() }}
+          className={`${actionClass} hover:text-red-400`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </Tooltip>
+      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-[var(--theme-dim)] font-mono font-medium flex-shrink-0" title={`${workspace.folders.length} folder(s)`}>
+        {workspace.folders.length}
+      </span>
     </div>
   )
 }

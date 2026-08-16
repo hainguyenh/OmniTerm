@@ -4,6 +4,7 @@ import {
   Eye, EyeOff, Download, Pencil, Trash2, Loader2, X, AlertTriangle,
 } from 'lucide-react'
 import ConfirmDialog from './ConfirmDialog'
+import { Tooltip } from './Tooltip'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -190,15 +191,17 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ id, connectionName, active = 
   const visible = showHidden ? entries : entries.filter(e => !e.name.startsWith('.'))
 
   const toolBtn = (title: string, onClick: () => void, icon: React.ReactNode, disabled = false) => (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className="flex-1 flex items-center justify-center py-1.5 rounded-lg text-theme-dim hover:text-theme-accent hover:bg-theme-popup transition-colors disabled:opacity-30 disabled:hover:text-theme-dim disabled:hover:bg-transparent"
-    >
-      {icon}
-    </button>
+    <Tooltip content={title} placement="bottom">
+      <button
+        type="button"
+        aria-label={title}
+        onClick={onClick}
+        disabled={disabled}
+        className="flex-1 flex items-center justify-center py-1.5 rounded-lg text-theme-dim hover:text-theme-accent hover:bg-theme-popup transition-colors disabled:opacity-30 disabled:hover:text-theme-dim disabled:hover:bg-transparent"
+      >
+        {icon}
+      </button>
+    </Tooltip>
   )
 
   return (
