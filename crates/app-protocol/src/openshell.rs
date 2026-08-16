@@ -53,6 +53,17 @@ fn flag<'a>(argv: &'a [String], name: &str) -> Option<&'a str> {
     Some(value.as_str())
 }
 
+/// Cap a renderer-supplied quick-shell cwd override. The webview is a lower-trust source than
+/// the backend, but the same caps the launcher argv path applies keep the two paths consistent.
+pub fn cap_cwd(value: Option<&str>) -> Option<String> {
+    cap(value, MAX_CWD)
+}
+
+/// Cap a renderer-supplied quick-shell command override — same limit as launcher `--command`.
+pub fn cap_command(value: Option<&str>) -> Option<String> {
+    cap(value, MAX_COMMAND)
+}
+
 /// Parse `--open-shell <shell> [--cwd D] [--command C] [--args A] [--keep-open 0|1] [--name N]`
 /// out of a full argv array.
 ///
