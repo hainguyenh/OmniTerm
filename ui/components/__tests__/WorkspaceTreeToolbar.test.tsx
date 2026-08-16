@@ -63,7 +63,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={onOpenFilterMenu} filterMenuOpen
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    const filterBtn = screen.getByLabelText('Filter workspace contents')
+    const filterBtn = screen.getByLabelText('Filter what this workspace shows')
     expect(filterBtn).toHaveAttribute('aria-expanded', 'true')
     fireEvent.click(filterBtn)
     expect(onOpenFilterMenu).toHaveBeenCalledTimes(1)
@@ -74,8 +74,8 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    expect(screen.queryByTitle('Collapse all')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Expand all')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Collapse all' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Expand all' })).not.toBeInTheDocument()
   })
 
   it('shows Expand all when allCollapsed=true', () => {
@@ -83,7 +83,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    expect(screen.getByTitle('Expand all')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand all' })).toBeInTheDocument()
   })
 
   it('shows Collapse all when allCollapsed=false', () => {
@@ -92,7 +92,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={false} onToggleCollapseAll={onToggleCollapseAll} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    const btn = screen.getByTitle('Collapse all')
+    const btn = screen.getByRole('button', { name: 'Collapse all' })
     fireEvent.click(btn)
     expect(onToggleCollapseAll).toHaveBeenCalledTimes(1)
   })
@@ -103,7 +103,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={onToggleFlatView} scanning={false} onRescan={vi.fn()}
     />)
-    const flattenBtn = screen.getByTitle('Flatten')
+    const flattenBtn = screen.getByRole('button', { name: 'Flatten' })
     expect(document.querySelector('.lucide-list')).toBeInTheDocument()
     fireEvent.click(flattenBtn)
     expect(onToggleFlatView).toHaveBeenCalledTimes(1)
@@ -111,7 +111,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView onToggleFlatView={onToggleFlatView} scanning={false} onRescan={vi.fn()}
     />)
-    expect(screen.getByTitle('Show as tree')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show as tree' })).toBeInTheDocument()
     expect(document.querySelector('.lucide-list-tree')).toBeInTheDocument()
   })
 
@@ -121,7 +121,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={onRescan}
     />)
-    fireEvent.click(screen.getByTitle('Rescan'))
+    fireEvent.click(screen.getByRole('button', { name: 'Rescan' }))
     expect(onRescan).toHaveBeenCalledTimes(1)
   })
 

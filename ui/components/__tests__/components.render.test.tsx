@@ -162,9 +162,7 @@ describe("component rendering smoke tests", () => {
         }}
         setAppSettings={vi.fn()}
         themes={[]}
-        onSettingsOpen={vi.fn()}
         setThemeRemixOpen={vi.fn()}
-        updateState={null}
       />,
     );
     await waitFor(() => expect(screen.getByText("OmniTerm")).toBeInTheDocument());

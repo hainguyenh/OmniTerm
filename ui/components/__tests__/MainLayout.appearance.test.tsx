@@ -135,7 +135,7 @@ describe('MainLayout terminal appearance integration', () => {
     expect(onFontSizeChange).toHaveBeenLastCalledWith(2, { id: SSH.id, connId: SSH.id })
 
     expect(screen.getByText('125%')).toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Reset zoom to 100%'))
+    fireEvent.click(screen.getByRole('button', { name: '125%' }))
     expect(onZoomReset).toHaveBeenCalledOnce()
 
     fireEvent.click(screen.getByText('Disconnect'))

@@ -27,12 +27,12 @@ describe('ScriptViewer', () => {
     await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'folder#1/deploy.bat'))
 
     // Enter edit mode: the textarea is seeded with the loaded content.
-    fireEvent.click(screen.getByTitle('Edit'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
     const textarea = await screen.findByRole('textbox') as HTMLTextAreaElement
     expect(textarea.value).toBe('echo hello')
 
     fireEvent.change(textarea, { target: { value: 'echo world' } })
-    fireEvent.click(screen.getByTitle('Save (Ctrl+S)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save (Ctrl+S)' }))
     await waitFor(() => expect(writeScript).toHaveBeenCalledWith('ws#1', 'folder#1/deploy.bat', 'echo world'))
   }, 15_000)
 
@@ -49,10 +49,10 @@ describe('ScriptViewer', () => {
     expect(await screen.findByText('release checklist')).toBeInTheDocument()
     await waitFor(() => expect(readScript).toHaveBeenCalledWith('ws#1', 'folder#1/notes.txt'))
     // Read-only: no pencil, no save.
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
-    expect(screen.queryByTitle('Save (Ctrl+S)')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save (Ctrl+S)' })).not.toBeInTheDocument()
     // And no Run: the backend refuses to launch a .txt, so offering it would only produce an error.
-    expect(screen.queryByTitle('Run')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
   /** `.rdp` is text — showing which host it points at is the point — but it stays launch-only. */
@@ -64,8 +64,8 @@ describe('ScriptViewer', () => {
     render(<ScriptViewer workspaceId="ws#1" script={RDP} onClose={vi.fn()} onRun={onRun} />)
 
     expect(await screen.findByText(/full address:s:server01/)).toBeInTheDocument()
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Launch'))
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Launch' }))
     expect(onRun).toHaveBeenCalled()
   })
 
@@ -77,9 +77,9 @@ describe('ScriptViewer', () => {
 
     expect(await screen.findByText(/Content not available to view/i)).toBeInTheDocument()
     expect(readScript).not.toHaveBeenCalled()
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     // Nothing to run either — a `.pem` is not launchable, so there is no button to offer.
-    expect(screen.queryByTitle('Run')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
   })
 
   /**
@@ -96,7 +96,7 @@ describe('ScriptViewer', () => {
 
     expect(await screen.findByText(message)).toBeInTheDocument()
     // No edit affordance for a file whose text never arrived.
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
   /** A provider predating `viewable` must keep working: its editable scripts still open. */
@@ -112,7 +112,7 @@ describe('ScriptViewer', () => {
     // Asserted on textContent, not findByText: `.bat` is syntax-highlighted, so "echo legacy" is split
     // across a keyword span and a text span.
     await waitFor(() => expect(container.querySelector('pre')?.textContent).toBe('echo legacy'))
-    expect(screen.getByTitle('Edit')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   /** The feature: a Markdown file gets a Preview toggle, rendering formatted output instead of the
@@ -125,14 +125,14 @@ describe('ScriptViewer', () => {
     await waitFor(() => expect(readScript).toHaveBeenCalled())
 
     // Not editable, so there is no pencil — only the preview toggle.
-    expect(screen.queryByTitle('Edit')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Preview'))
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
 
     expect(await screen.findByRole('heading', { name: 'Hello' })).toBeInTheDocument()
     expect(screen.getByText('text', { selector: 'em' })).toBeInTheDocument()
 
     // Toggling back shows the untouched raw source again.
-    fireEvent.click(screen.getByTitle('View raw'))
+    fireEvent.click(screen.getByRole('button', { name: 'View raw' }))
     await waitFor(() => expect(screen.queryByRole('heading', { name: 'Hello' })).not.toBeInTheDocument())
   })
 })

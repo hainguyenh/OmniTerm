@@ -60,18 +60,18 @@ function renderHeader(props: Partial<React.ComponentProps<typeof PaneHeader>> = 
 describe("pane header appearance control", () => {
   it("is omitted for an empty pane (no appearance to change)", () => {
     renderHeader({ appearance: undefined });
-    expect(screen.queryByTitle(/Appearance/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Appearance/i })).not.toBeInTheDocument();
   });
 
   it("shows this pane's own font size, labelled by pane number", () => {
     renderHeader();
-    expect(screen.getByTitle("Appearance — theme & font size (Pane 2)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Appearance — theme & font size (Pane 2)" })).toBeInTheDocument();
     expect(screen.getByText("16")).toBeInTheDocument();
   });
 
   it("changes this pane's font size without needing it focused first", () => {
     const { onFontSizeChange, onFocus } = renderHeader();
-    const button = screen.getByTitle("Increase font size");
+    const button = screen.getByRole("button", { name: "+" });
     fireEvent.mouseDown(button);
     fireEvent.click(button);
     expect(onFontSizeChange).toHaveBeenCalledWith(1);
@@ -82,14 +82,14 @@ describe("pane header appearance control", () => {
 
   it("applies a theme to just this pane via its own palette", () => {
     const { onThemeApply } = renderHeader();
-    fireEvent.click(screen.getByTitle("Appearance — theme & font size (Pane 2)"));
+    fireEvent.click(screen.getByRole("button", { name: "Appearance — theme & font size (Pane 2)" }));
     fireEvent.click(screen.getByText("Tokyo Night"));
     expect(onThemeApply).toHaveBeenCalledWith("tokyo-night");
   });
 
   it("does not open the session picker when the appearance control is used", () => {
     const { onTogglePicker } = renderHeader();
-    fireEvent.click(screen.getByTitle("Increase font size"));
+    fireEvent.click(screen.getByRole("button", { name: "+" }));
     expect(onTogglePicker).not.toHaveBeenCalled();
   });
 

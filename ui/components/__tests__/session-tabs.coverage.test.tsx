@@ -60,13 +60,21 @@ describe('SessionTabs', () => {
     expect(screen.getByText('Closed')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
     expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByTitle('Reveal in workspace tree')).toBeInTheDocument()
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument()
+    expect(screen.getByLabelText('Reveal in workspace tree')).toBeInTheDocument()
+    expect(container.querySelector('.animate-ping')).toBeInTheDocument()
+  })
+
+  it('formats AI agent tabs as {AI agent} - {folder} // {shell}', () => {
+    renderTabs({
+      tabs: [{ id: 'agent-1', connId: 'local-c', name: 'claude: ~/my-project' }],
+      getShellLabel: () => 'PowerShell 7',
+    })
+    expect(screen.getByText('Claude Code - my-project // PowerShell 7')).toBeInTheDocument()
   })
 
   it('selects, promotes, closes, and opens context actions', () => {
     const { props } = renderTabs()
-    const tab = screen.getByText('Production').closest('[title]') as HTMLElement
+    const tab = screen.getByText('Production').closest('div.group') as HTMLElement
     fireEvent.click(tab)
     fireEvent.doubleClick(tab)
     fireEvent.contextMenu(tab)
@@ -81,12 +89,12 @@ describe('SessionTabs', () => {
 
   it('reveals an editor without selecting it and closes from its button', () => {
     const { props } = renderTabs()
-    fireEvent.click(screen.getByTitle('Reveal in workspace tree'))
+    fireEvent.click(screen.getByLabelText('Reveal in workspace tree'))
     expect(props.onReveal).toHaveBeenCalledWith('editor-1')
     expect(props.onSelect).not.toHaveBeenCalled()
 
-    const editor = screen.getByText('deploy.sh').closest('[title]') as HTMLElement
-    const close = editor.querySelector('button[title="Close tab"]') as HTMLButtonElement
+    const editor = screen.getByText('deploy.sh').closest('div.group') as HTMLElement
+    const close = editor.querySelector('button[aria-label="Close tab"]') as HTMLButtonElement
     fireEvent.click(close)
     expect(props.onClose).toHaveBeenCalledWith('editor-1')
     expect(props.onSelect).not.toHaveBeenCalled()
@@ -96,8 +104,8 @@ describe('SessionTabs', () => {
     const onNewSession = vi.fn()
     const onPickShell = vi.fn()
     renderTabs({ onNewSession, onPickShell })
-    fireEvent.click(screen.getByTitle('New Terminal (Ctrl+N)'))
-    fireEvent.click(screen.getByTitle('Select Shell'))
+    fireEvent.click(screen.getByLabelText('New Terminal'))
+    fireEvent.click(screen.getByLabelText('Select Shell'))
     expect(onNewSession).toHaveBeenCalledOnce()
     expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
   })
@@ -111,7 +119,7 @@ describe('SessionTabs', () => {
 
   it('hides pane badges and reveal controls when tabs are not focused', () => {
     renderTabs({ panes: [null], layoutMode: 1, focusedPane: 0 })
-    expect(screen.queryByTitle('Reveal in workspace tree')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Reveal in workspace tree')).not.toBeInTheDocument()
     expect(screen.queryByText('1')).not.toBeInTheDocument()
   })
 
@@ -123,6 +131,15 @@ describe('SessionTabs', () => {
     renderTabs({ tabs: [{ id: 'vi-1', connId: 'local-c', name }] })
     const label = screen.getByText(name)
     expect(label.textContent).toBe(name)
-    expect(screen.getByTitle(new RegExp(name))).toBeInTheDocument()
+    expect(label.closest('div.group')).toBeInTheDocument()
+  })
+
+  it('renders animated marching-ants dashed border for running sessions and omits left rail stripe', () => {
+    const { container } = renderTabs({
+      activity: { 'local-1': true },
+      statuses: { 'local-1': 'connected' },
+    })
+    expect(container.querySelector('.animate-marching-ants')).toBeInTheDocument()
+    expect(container.querySelector('.w-\\[3px\\]')).not.toBeInTheDocument()
   })
 })
