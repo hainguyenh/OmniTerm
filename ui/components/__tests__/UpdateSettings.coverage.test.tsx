@@ -49,7 +49,7 @@ describe('UpdateSettings', () => {
     expect(screen.getByText(/Up to date/)).toBeInTheDocument()
     expect(screen.getByText(/Last checked/)).toBeInTheDocument()
     expect(screen.getByText('Skipping v1.1.0')).toBeInTheDocument()
-    fireEvent.click(screen.getByTitle(/Clear skipped version/))
+    fireEvent.click(screen.getByRole('button', { name: /Clear skipped version/ }))
     expect(p.clearSkippedVersion).toHaveBeenCalled()
   })
 

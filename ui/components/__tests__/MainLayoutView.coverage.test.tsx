@@ -101,7 +101,7 @@ describe('MainLayoutView coverage', () => {
     const { rerender } = render(<MainLayoutView model={m} />)
     for (const label of ['select-tab', 'promote-tab', 'close-tab', 'new-tab', 'shell-tab', 'reveal-tab']) fireEvent.click(screen.getByText(label))
     fireEvent.contextMenu(screen.getByText('menu-tab'), { clientX: 8, clientY: 9 })
-    fireEvent.click(screen.getByTitle('Split 2'))
+    fireEvent.click(screen.getByRole('button', { name: 'Split 2' }))
     expect(m.showTab).toHaveBeenCalledWith('game-tab')
     expect(m.keepTab).toHaveBeenCalledWith('game-tab')
     expect(m.closeTab).toHaveBeenCalledWith('game-tab')
@@ -123,12 +123,12 @@ describe('MainLayoutView coverage', () => {
 
     const split2 = model({ layoutMode: 2, appSettings: { ...m.appSettings, split2Style: 'columns' }, activeTabs: [], panes: [null, null] })
     rerender(<MainLayoutView model={split2} />)
-    fireEvent.click(screen.getByTitle(/Split 2 \(columns\)/))
+    fireEvent.click(screen.getByRole('button', { name: /Split 2 \(columns\)/ }))
     expect(split2.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ split2Style: 'rows' }))
 
     const split3 = model({ layoutMode: 3, appSettings: { ...m.appSettings, split3Style: 'right' }, activeTabs: [], panes: [null, null, null] })
     rerender(<MainLayoutView model={split3} />)
-    fireEvent.click(screen.getByTitle(/Split 3 \(right\)/))
+    fireEvent.click(screen.getByRole('button', { name: /Split 3 \(right\)/ }))
     expect(split3.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ split3Style: 'top' }))
 
     const single = model({
@@ -168,7 +168,7 @@ describe('MainLayoutView coverage', () => {
     expect(within(footer).getByText('SSH')).toBeInTheDocument()
     expect(screen.getByTestId('metrics')).toHaveTextContent('error:12:true')
     fireEvent.click(screen.getByText('Reconnect'))
-    fireEvent.click(screen.getByTitle('Reset zoom to 100%'))
+    fireEvent.click(screen.getByRole('button', { name: '125%' }))
     expect(m.reconnectSession).toHaveBeenCalledWith('ssh-tab')
     expect(m.onZoomReset).toHaveBeenCalled()
 

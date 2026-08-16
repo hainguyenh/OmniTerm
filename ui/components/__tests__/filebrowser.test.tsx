@@ -45,7 +45,7 @@ describe("FileBrowser", () => {
     renderBrowser();
     await waitFor(() => expect(screen.getByText("readme.txt")).toBeInTheDocument());
     expect(screen.queryByText(".bashrc")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Show hidden files"));
+    fireEvent.click(screen.getByRole('button', { name: 'Show hidden files' }));
     await waitFor(() => expect(screen.getByText(".bashrc")).toBeInTheDocument());
   });
 
@@ -104,7 +104,7 @@ describe("FileBrowser", () => {
   it("shows inline new-folder input when button clicked", async () => {
     renderBrowser();
     await waitFor(() => expect(screen.getByText("logs")).toBeInTheDocument());
-    fireEvent.click(screen.getByTitle("New folder"));
+    fireEvent.click(screen.getByRole('button', { name: 'New folder' }));
     expect(screen.getByPlaceholderText("folder name")).toBeInTheDocument();
   });
 
@@ -118,7 +118,7 @@ describe("FileBrowser", () => {
     });
     renderBrowser();
     await waitFor(() => expect(listFn).toHaveBeenCalled());
-    const input = screen.getByTitle("Remote path — press Enter to navigate");
+    const input = screen.getByTitle('Remote path — press Enter to navigate');
     fireEvent.change(input, { target: { value: "/etc" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(listFn).toHaveBeenCalledWith("c1", "/etc"));

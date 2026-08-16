@@ -39,7 +39,7 @@ describe('PaneHeader remaining behavior', () => {
     expect(x.props.onDragStart).toHaveBeenCalled()
     expect(x.props.onDragEnd).toHaveBeenCalled()
 
-    fireEvent.click(screen.getByTitle('Choose session for this pane'))
+    fireEvent.click(screen.getByLabelText('Choose session for this pane'))
     expect(x.props.onTogglePicker).toHaveBeenCalledWith(expect.anything())
     fireEvent.click(screen.getByText('Empty this pane'))
     expect(x.props.onClear).toHaveBeenCalled()
@@ -73,5 +73,11 @@ describe('PaneHeader remaining behavior', () => {
     expect(onToggleFullscreen).toHaveBeenCalled()
     x.rerender(<PaneHeader {...x.props} fullscreen />)
     expect(screen.getByRole('button', { name: 'Restore view mode' })).toBeInTheDocument()
+  })
+
+  it('renders running status beacon when busy is true', () => {
+    const { container } = setup({ busy: true })
+    expect(screen.getByTitle('Running command')).toBeInTheDocument()
+    expect(container.querySelector('.animate-ping')).toBeInTheDocument()
   })
 })

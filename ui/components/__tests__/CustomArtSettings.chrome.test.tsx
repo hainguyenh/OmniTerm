@@ -35,24 +35,12 @@ beforeEach(() => mockOmnitermAPI({
   customArt: { upload: vi.fn(async () => 'blob:new'), remove: vi.fn(async () => {}) },
 }))
 
-describe('collapse toggle', () => {
-  // The body is always mounted — collapsing animates max-height rather than unmounting — so the
-  // chevron rotation and the container's own style are what say which state it is in.
-  const body = () => document.querySelector('.overflow-hidden') as HTMLElement
-
-  it('starts collapsed', () => {
+describe('header and direct display', () => {
+  it('renders title, description, and cards directly without collapsing', () => {
     renderArt()
-    expect(body()).toHaveStyle({ maxHeight: '0px', opacity: '0' })
-  })
-
-  it('expands and collapses again on the header', () => {
-    renderArt()
-    const header = screen.getByText('Pane Art')
-    fireEvent.click(header)
-    expect(body()).toHaveStyle({ opacity: '1' })
-
-    fireEvent.click(header)
-    expect(body()).toHaveStyle({ maxHeight: '0px', opacity: '0' })
+    expect(screen.getByText('Custom Pane Art')).toBeInTheDocument()
+    expect(screen.getByText(/Upload custom images or GIFs/)).toBeInTheDocument()
+    expect(screen.getAllByText('Upload')).toHaveLength(4)
   })
 })
 
@@ -70,16 +58,12 @@ describe('info tooltip', () => {
     expect(screen.queryByText(TEXT)).not.toBeInTheDocument()
   })
 
-  it('toggles on click without also toggling the section', () => {
+  it('toggles on click', () => {
     renderArt()
     const info = screen.getByLabelText('Pane Art info')
-    const body = document.querySelector('.overflow-hidden') as HTMLElement
 
     fireEvent.click(info)
     expect(screen.getByText(TEXT)).toBeInTheDocument()
-    // The info button sits inside the header row; without stopPropagation the same click would also
-    // expand the section.
-    expect(body).toHaveStyle({ maxHeight: '0px' })
 
     fireEvent.click(info)
     expect(screen.queryByText(TEXT)).not.toBeInTheDocument()
@@ -121,7 +105,7 @@ describe('Save affordance', () => {
     fireEvent.click(screen.getAllByText('Upload')[0])
     await waitFor(() => expect(screen.getByText('Save Changes (1)')).toBeInTheDocument())
 
-    fireEvent.click(screen.getAllByTitle('Reset to default')[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /to default artwork/ })[0])
     await waitFor(() => expect(screen.getByText('All Saved')).toBeInTheDocument())
     expect(window.omnitermAPI.customArt.remove).toHaveBeenCalledWith('idle-light')
   })
@@ -140,7 +124,7 @@ describe('Save affordance', () => {
 describe('remove wiring', () => {
   it('sends each slot its own identifier', async () => {
     renderArt(ALL_CUSTOM)
-    const resets = screen.getAllByTitle('Reset to default')
+    const resets = screen.getAllByRole('button', { name: /to default artwork/ })
     for (const reset of resets) fireEvent.click(reset)
     await waitFor(() => expect(window.omnitermAPI.customArt.remove).toHaveBeenCalledTimes(4))
     expect(vi.mocked(window.omnitermAPI.customArt.remove).mock.calls.map(([slot]) => slot))

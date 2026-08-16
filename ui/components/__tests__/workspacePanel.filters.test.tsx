@@ -19,7 +19,7 @@ describe('WorkspacePanel filters and connections', () => {
     expect(screen.queryByText('.env')).not.toBeInTheDocument()
     expect(screen.queryByText('.vscode')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('All files'))
     expect(screen.getByText('.env')).toBeInTheDocument()
     // The hidden folder is part of the tree once "All files" admits it.
@@ -35,7 +35,7 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.click(screen.getByText('tools'))
     await screen.findByText('go.sh')
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('Selected files'))
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
 
@@ -61,7 +61,7 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('Selected types'))
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
     // Seeded with the runnable kinds present, so .txt is offered but not ticked.
@@ -82,7 +82,7 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
     const before = menu.style.left
 
@@ -108,7 +108,7 @@ describe('WorkspacePanel filters and connections', () => {
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('All files'))
     // Closed first: the open menu's own radio label reads "All files" too.
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -140,7 +140,7 @@ describe('WorkspacePanel filters and connections', () => {
     await screen.findByText('go.sh')
 
     // Search is one icon on the header line until it is asked for; opening it swaps in the input.
-    fireEvent.click(screen.getByLabelText('Search workspace'))
+    fireEvent.click(screen.getByLabelText(/Search folders, files, connections/))
     fireEvent.change(screen.getByLabelText('Search workspace'), { target: { value: 'go.sh' } })
     expect(screen.getByText('tools')).toBeInTheDocument()
     expect(screen.getByText('go.sh')).toBeInTheDocument()
@@ -174,7 +174,7 @@ describe('WorkspacePanel filters and connections', () => {
     const infraBlock = infraRow.parentElement as HTMLElement
     expect(within(infraBlock).getByText('prod-web')).toBeInTheDocument()
 
-    fireEvent.click(within(screen.getByText('Staging RDP').parentElement as HTMLElement).getByTitle('Connect'))
+    fireEvent.click(within(screen.getByText('Staging RDP').parentElement as HTMLElement).getByRole('button', { name: 'Connect' }))
     expect(onConnect).toHaveBeenCalledWith(ROOT_CONN, WS.id)
   })
 

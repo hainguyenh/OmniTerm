@@ -10,11 +10,11 @@ const captured = vi.hoisted(() => ({ title: null as any, main: null as any, remi
 
 vi.mock('../TitleBar', () => ({ TitleBar: (props: any) => {
   captured.title = props
-  return <div data-testid="title"><button onClick={props.onSettingsOpen}>open-settings</button><button onClick={() => props.setThemeRemixOpen(true)}>open-remix</button><button onClick={props.onZoomReset}>reset-zoom</button><button onClick={() => props.onFontSizeChange(2)}>title-font</button><button onClick={() => props.onThemeApply('theme-b')}>title-theme</button><button onClick={() => props.onApplyToAll(22)}>all-font</button></div>
+  return <div data-testid="title"><button onClick={() => props.setThemeRemixOpen(true)}>open-remix</button><button onClick={props.onZoomReset}>reset-zoom</button><button onClick={() => props.onFontSizeChange(2)}>title-font</button><button onClick={() => props.onThemeApply('theme-b')}>title-theme</button><button onClick={() => props.onApplyToAll(22)}>all-font</button></div>
 } }))
 vi.mock('../MainLayout', () => ({ default: (props: any) => {
   captured.main = props
-  return <div data-testid="main"><button onClick={() => props.onActiveTerminalChange({ id: 'tab-1', connId: 'conn-1' })}>focus-terminal</button><button onClick={() => props.onFontSizeChange(1)}>focused-font</button><button onClick={() => props.onFontSizeChange(-100, { id: 'adhoc-tab', connId: 'adhoc-new' })}>adhoc-font</button><button onClick={() => props.onThemeApply('theme-b')}>focused-theme</button><button onClick={() => props.onSettingsReload('tab-1')}>reload-settings</button></div>
+  return <div data-testid="main"><button onClick={() => props.setSettingsOpen(true)}>open-settings</button><button onClick={() => props.onActiveTerminalChange({ id: 'tab-1', connId: 'conn-1' })}>focus-terminal</button><button onClick={() => props.onFontSizeChange(1)}>focused-font</button><button onClick={() => props.onFontSizeChange(-100, { id: 'adhoc-tab', connId: 'adhoc-new' })}>adhoc-font</button><button onClick={() => props.onThemeApply('theme-b')}>focused-theme</button><button onClick={() => props.onSettingsReload('tab-1')}>reload-settings</button></div>
 } }))
 vi.mock('../ThemeRemixModal', () => ({ ThemeRemixModal: (props: any) => {
   captured.remix = props
@@ -123,7 +123,7 @@ describe('App orchestration', () => {
     expect(settingsSave).toHaveBeenCalledTimes(savesBeforeAdhoc)
 
     act(() => updateListener?.({ current: '1.0.0', checking: true } as UpdateState))
-    expect(captured.title.updateState.checking).toBe(true)
+    expect(captured.main.updateState.checking).toBe(true)
     act(() => settingsChanged?.())
     await waitFor(() => expect(settingsGet.mock.calls.length).toBeGreaterThan(1))
     fireEvent.click(screen.getByText('reload-settings'))

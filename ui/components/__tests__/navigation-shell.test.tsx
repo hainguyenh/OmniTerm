@@ -32,11 +32,11 @@ describe('navigation and empty-session shell', () => {
       />,
     )
 
-    fireEvent.click(screen.getByTitle('Workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
     expect(onViewChange).toHaveBeenCalledWith(null)
-    fireEvent.click(screen.getByTitle('Files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
     expect(onViewChange).toHaveBeenCalledTimes(1)
-    expect(screen.getByTitle('Files')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Files' })).toBeDisabled()
 
     rerender(
       <ActivityBar
@@ -46,9 +46,9 @@ describe('navigation and empty-session shell', () => {
         onSettingsClick={onSettingsClick}
       />,
     )
-    fireEvent.click(screen.getByTitle('Files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
     expect(onViewChange).toHaveBeenLastCalledWith('files')
-    fireEvent.click(screen.getByTitle('Settings'))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(onSettingsClick).toHaveBeenCalledOnce()
   })
 
@@ -119,7 +119,7 @@ describe('navigation and empty-session shell', () => {
     )
     expect(screen.getByText('Ctrl+N')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
-    fireEvent.click(screen.getByTitle('Select Shell'))
+    fireEvent.click(screen.getByRole('button', { name: 'Select Shell' }))
     expect(onNewSession).toHaveBeenCalledOnce()
     expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
     expect(container.querySelector('img')).toBeNull()

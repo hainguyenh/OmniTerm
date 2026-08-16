@@ -15,14 +15,14 @@ describe('ViewGroupTabs', () => {
 
     fireEvent.contextMenu(screen.getByRole('tab'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Rename group' }))
-    expect(screen.getByRole('menu', { name: 'View 1 options' })).toBeInTheDocument()
+    expect(screen.getByRole('menu', { name: 'Desktop 1 options' })).toBeInTheDocument()
     expect(screen.getByRole('tab')).not.toContainElement(screen.getByLabelText('Group name'))
     fireEvent.change(screen.getByLabelText('Group name'), { target: { value: 'Work' } })
     fireEvent.keyDown(screen.getByLabelText('Group name'), { key: 'Enter' })
     expect(onUpdate).toHaveBeenCalledWith('view-1', { label: 'Work' })
 
     fireEvent.contextMenu(screen.getByRole('tab'))
-    fireEvent.click(screen.getByRole('button', { name: 'Set group color #34d399' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Set color #34d399' }))
     expect(onUpdate).toHaveBeenCalledWith('view-1', { color: '#34d399' })
   })
 

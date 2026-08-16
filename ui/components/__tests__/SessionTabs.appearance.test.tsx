@@ -32,7 +32,8 @@ describe('SessionTabs pane surfaces', () => {
       />,
     )
 
-    expect(screen.getByTitle(/Focused/)).toHaveStyle({ backgroundColor: '#7aa2f72e' })
-    expect(screen.getByTitle(/Docked/)).toHaveStyle({ backgroundColor: '#e0af681a' })
+    // Tab divs carry no title anymore; the styled element is the tab row containing the label text.
+    expect(screen.getByText(/Focused/).closest('.group')).toHaveStyle({ backgroundColor: '#7aa2f72e' })
+    expect(screen.getByText(/Docked/).closest('.group')).toHaveStyle({ backgroundColor: '#e0af681a' })
   })
 })

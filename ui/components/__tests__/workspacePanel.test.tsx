@@ -32,7 +32,7 @@ describe('WorkspacePanel', () => {
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
-    fireEvent.click(screen.getByTitle('Remove from workspaces'))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Remove "my-project" from workspaces?')
     expect(remove).not.toHaveBeenCalled()
@@ -40,7 +40,7 @@ describe('WorkspacePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(remove).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByTitle('Remove from workspaces'))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(remove).toHaveBeenCalledWith('ws#1'))
   })
@@ -61,14 +61,14 @@ describe('WorkspacePanel', () => {
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('folder#1')
 
-    fireEvent.click(screen.getByTitle('Unlink folder from workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink folder from workspace' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('The folder will not be deleted.')
     expect(removeFolder).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(removeFolder).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByTitle('Unlink folder from workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink folder from workspace' }))
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(removeFolder).toHaveBeenCalledWith('ws#1', 'folder#1'))
     await waitFor(() => expect(screen.queryByText('folder#1')).not.toBeInTheDocument())
@@ -94,7 +94,7 @@ describe('WorkspacePanel', () => {
     await screen.findByText('folder#1')
 
     expect(screen.getByLabelText('Pinned folder')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Unpin folder#1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin item' }))
     await waitFor(() => expect(setPinned).toHaveBeenCalledWith('ws#1', 'folder#1', '', false))
     await waitFor(() => expect(screen.queryByLabelText('Pinned folder')).not.toBeInTheDocument())
   })
@@ -157,7 +157,7 @@ describe('WorkspacePanel', () => {
     // The skeleton and the root folder's first page arrive together on expand.
     expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', '', 0, 2000)
 
-    fireEvent.click(screen.getByTitle('Run'))
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }))
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', script: scriptOf(BAT) })
   })
 
@@ -175,7 +175,7 @@ describe('WorkspacePanel', () => {
     fireEvent.click(screen.getByText('my-project'))
     await waitFor(() => expect(screen.getByText('deploy.bat')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByTitle('Run'))
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }))
     expect(onRunScript).toHaveBeenCalledWith('ws#1', scriptOf(BAT))
     expect(run).not.toHaveBeenCalled()
   })
@@ -204,7 +204,7 @@ describe('WorkspacePanel', () => {
     fireEvent.click(screen.getByText('my-project'))
     await waitFor(() => expect(screen.getByText('folder#1')).toBeInTheDocument())
 
-    fireEvent.click(within(screen.getByText('folder#1').parentElement as HTMLElement).getByTitle('Open terminal here'))
+    fireEvent.click(within(screen.getByText('folder#1').parentElement as HTMLElement).getByRole('button', { name: 'Open terminal here' }))
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', subPath: 'folder#1' })
   })
 
@@ -219,7 +219,7 @@ describe('WorkspacePanel', () => {
 
     // The 'scripts' folder row exposes its own "Open terminal here" action.
     const scriptsRow = screen.getByText('scripts').parentElement as HTMLElement
-    fireEvent.click(within(scriptsRow).getByTitle('Open terminal here'))
+    fireEvent.click(within(scriptsRow).getByRole('button', { name: 'Open terminal here' }))
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', subPath: 'scripts' })
   })
 
@@ -307,11 +307,11 @@ describe('WorkspacePanel', () => {
     await screen.findByText('scripts')
 
     // Expand all → the folder opens and its file appears; collapse all hides it again.
-    fireEvent.click(screen.getByTitle('Expand all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     expect(await screen.findByText('go.sh')).toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Collapse all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
     expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Expand all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all' }))
     expect(screen.getByText('go.sh')).toBeInTheDocument()
   })
 
@@ -330,7 +330,7 @@ describe('WorkspacePanel', () => {
     expect(onOpenScript).toHaveBeenCalledWith('ws#1', scriptOf(RDP))
 
     // The run icon is labelled "Launch" for .rdp.
-    fireEvent.click(screen.getByTitle('Launch'))
+    fireEvent.click(screen.getByRole('button', { name: 'Launch' }))
     expect(run).toHaveBeenCalledWith({ workspaceId: 'ws#1', script: scriptOf(RDP) })
   })
 
@@ -345,7 +345,7 @@ describe('WorkspacePanel', () => {
     await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
     expect(screen.queryByText('empty')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('Show empty folders'))
     expect(screen.getByText('empty')).toBeInTheDocument()
     await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
@@ -359,7 +359,7 @@ describe('WorkspacePanel', () => {
     await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
     expect(screen.queryByText('notes.txt')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByLabelText('Filter workspace contents'))
+    fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
     fireEvent.click(screen.getByLabelText('All files'))
     expect(screen.getByText('notes.txt')).toBeInTheDocument()
 

@@ -181,7 +181,8 @@ describe('TerminalView full lifecycle', () => {
     act(() => handlers.localReady?.('PowerShell 7'))
     expect(onStatus).not.toHaveBeenCalledWith('connected')
 
-    act(() => handlers.localData?.(new TextEncoder().encode('success 123')))
+    // Async act flushes the scrollback gate that holds output until the store read resolves.
+    await act(async () => { handlers.localData?.(new TextEncoder().encode('success 123')) })
     expect(onStatus).toHaveBeenCalledWith('connected')
     expect(term.writes.join('')).toContain('success')
     act(() => term.dataHandler?.('dir\r'))
@@ -333,15 +334,14 @@ describe('TerminalView full lifecycle', () => {
     const element = container.querySelectorAll('.h-full.w-full')[1] as HTMLElement
     const term = xterm.terminals[0]
 
-    // Before the paste, the same text is colorized.
-    act(() => handlers.localData?.(new TextEncoder().encode('error one')))
+    await act(async () => { handlers.localData?.(new TextEncoder().encode('error one')) })
     expect(term.writes.join('')).toContain('\x1b[91merror\x1b[39m')
 
     fireEvent.contextMenu(element)
     await waitFor(() => expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('echo-session', 'pasted text'))
 
     term.writes.length = 0
-    act(() => handlers.localData?.(new TextEncoder().encode('error two')))
+    await act(async () => { handlers.localData?.(new TextEncoder().encode('error two')) })
     expect(term.writes.join('')).toBe('error two')
   })
 

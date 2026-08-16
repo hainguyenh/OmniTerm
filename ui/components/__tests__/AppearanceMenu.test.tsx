@@ -29,8 +29,8 @@ function renderMenu(props: Partial<React.ComponentProps<typeof AppearanceMenu>> 
 describe('AppearanceMenu', () => {
   it('shows the current font size and shifts it by one step per click', () => {
     const { onFontSizeChange } = renderMenu()
-    fireEvent.click(screen.getByTitle('Increase font size'))
-    fireEvent.click(screen.getByTitle('Decrease font size'))
+    fireEvent.click(screen.getByRole('button', { name: '+' }))
+    fireEvent.click(screen.getByRole('button', { name: '-' }))
     expect(onFontSizeChange).toHaveBeenNthCalledWith(1, 1)
     expect(onFontSizeChange).toHaveBeenNthCalledWith(2, -1)
     expect(screen.getByText('14')).toBeInTheDocument()
@@ -38,7 +38,7 @@ describe('AppearanceMenu', () => {
 
   it('opens the theme list and applies the chosen theme, then closes', () => {
     const { onThemeApply } = renderMenu()
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     expect(screen.getByText('Other Theme')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Other Theme'))
     expect(onThemeApply).toHaveBeenCalledWith('other')
@@ -47,7 +47,7 @@ describe('AppearanceMenu', () => {
 
   it('shows the scope label so it is clear whose look is being changed', () => {
     renderMenu({ scopeLabel: 'Pane 2' })
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     expect(screen.getByText('Pane 2')).toBeInTheDocument()
   })
 
@@ -55,29 +55,29 @@ describe('AppearanceMenu', () => {
     const onApplyToAll = vi.fn()
     const onRemix = vi.fn()
     renderMenu({ onApplyToAll, onRemix })
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     fireEvent.click(screen.getByText('Apply to all terminals'))
     expect(onApplyToAll).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     fireEvent.click(screen.getByText('Theme Remix…'))
     expect(onRemix).toHaveBeenCalledTimes(1)
   })
 
   it('omits "Apply to all terminals" and remix when no handler is given', () => {
     renderMenu()
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     expect(screen.queryByText('Apply to all terminals')).not.toBeInTheDocument()
     expect(screen.queryByText('Theme Remix…')).not.toBeInTheDocument()
   })
 
   it('closes on Escape and on an outside click', () => {
     renderMenu()
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     expect(screen.getByText('Theme')).toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByText('Theme')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Appearance — theme & font size'))
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance — theme & font size' }))
     fireEvent.mouseDown(document.body)
     expect(screen.queryByText('Theme')).not.toBeInTheDocument()
   })

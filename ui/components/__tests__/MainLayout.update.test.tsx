@@ -103,6 +103,7 @@ describe("MainLayout update UI", () => {
       },
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /about & updates/i }));
     fireEvent.click(screen.getByRole("button", { name: /check for updates/i }));
 
     await waitFor(() => {
@@ -115,6 +116,7 @@ describe("MainLayout update UI", () => {
     const downloadInstaller = vi.fn().mockResolvedValue(undefined);
     renderLayout({}, { updates: { downloadInstaller } });
 
+    fireEvent.click(screen.getByRole("button", { name: /about & updates/i }));
     fireEvent.click(screen.getByRole("button", { name: /install update/i }));
     expect(screen.getByText(/how would you like to install the update/i)).toBeInTheDocument();
 
@@ -125,11 +127,12 @@ describe("MainLayout update UI", () => {
     });
   });
 
-  /** The update check is plain app settings, so it is visible with no tab to find. */
-  it("shows the update check without any tab to open", async () => {
+  /** The update check is available under About & Updates tab. */
+  it("shows the update check under About & Updates tab", async () => {
     renderLayout({}, {});
     await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled());
 
+    fireEvent.click(screen.getByRole("button", { name: /about & updates/i }));
     expect(screen.getByRole("button", { name: /install update/i })).toBeInTheDocument();
     expect(screen.getByText(/check on startup/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Advanced$/ })).toBeNull();
@@ -160,6 +163,7 @@ describe("MainLayout update UI", () => {
       },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /plugins/i }));
     // Wait for the plugin list to land, so this is not just asserting on an unrendered panel.
     expect(await screen.findByText("Connection Manager")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /export encrypted backup/i })).toBeNull();
@@ -218,6 +222,7 @@ describe("MainLayout update UI", () => {
     });
     renderLayout({}, { plugin: { list, setEnabled } });
 
+    fireEvent.click(screen.getByRole("button", { name: /plugins/i }));
     const toggle = await screen.findByRole("switch", { name: /disable connection manager/i });
     fireEvent.click(toggle);
     expect(await screen.findByText("Disable plugin")).toBeInTheDocument();

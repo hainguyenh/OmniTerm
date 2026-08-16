@@ -54,9 +54,9 @@ describe('FileBrowser complete behavior', () => {
     expect(screen.getByText('20 MB')).toBeInTheDocument()
     expect(screen.queryByText('.hidden')).not.toBeInTheDocument()
     expect(container.querySelector('[title^="tiny.txt — 10 B"]')).toBeTruthy()
-    fireEvent.click(screen.getByTitle('Show hidden files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Show hidden files' }))
     expect(screen.getByText('.hidden')).toBeInTheDocument()
-    expect(screen.getByTitle('Hide hidden files')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Hide hidden files' })).toBeInTheDocument()
     unmount()
     expect(cleanup).toHaveBeenCalledOnce()
   })
@@ -110,14 +110,14 @@ describe('FileBrowser complete behavior', () => {
     const { api } = setup()
     await ready()
     api.home.mockResolvedValueOnce('/other')
-    fireEvent.click(screen.getByTitle('Home directory'))
+    fireEvent.click(screen.getByRole('button', { name: 'Home directory' }))
     await waitFor(() => expect(api.list).toHaveBeenCalledWith('session', '/other'))
 
     fireEvent.doubleClick(screen.getByText('folder'))
     await waitFor(() => expect(api.list).toHaveBeenCalledWith('session', '/other/folder'))
-    fireEvent.click(screen.getByTitle('Up one level'))
+    fireEvent.click(screen.getByRole('button', { name: 'Up one level' }))
     await waitFor(() => expect(api.list).toHaveBeenCalledWith('session', '/other'))
-    fireEvent.click(screen.getByTitle('Refresh'))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
     await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('session', '/other'))
   })
 
@@ -125,14 +125,14 @@ describe('FileBrowser complete behavior', () => {
     const { api } = setup()
     await ready()
     api.home.mockRejectedValueOnce('home failed')
-    fireEvent.click(screen.getByTitle('Home directory'))
+    fireEvent.click(screen.getByRole('button', { name: 'Home directory' }))
     await screen.findByText('home failed')
   })
 
   it('creates valid folders and cancels empty, slash, Escape, and blur inputs', async () => {
     const { api } = setup()
     await ready()
-    const open = () => fireEvent.click(screen.getByTitle('New folder'))
+    const open = () => fireEvent.click(screen.getByRole('button', { name: 'New folder' }))
 
     open()
     let input = screen.getByPlaceholderText('folder name')
@@ -157,7 +157,7 @@ describe('FileBrowser complete behavior', () => {
     const { api } = setup()
     await ready()
     const initialLists = api.list.mock.calls.length
-    fireEvent.click(screen.getByTitle('Upload file(s) here'))
+    fireEvent.click(screen.getByRole('button', { name: 'Upload file(s) here' }))
     await waitFor(() => expect(api.upload).toHaveBeenCalledWith('session', '/home/me'))
     expect(api.list.mock.calls.length).toBe(initialLists + 1)
 

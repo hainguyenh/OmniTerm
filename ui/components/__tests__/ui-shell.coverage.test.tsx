@@ -20,14 +20,14 @@ describe('small UI shells', () => {
     const onViewChange = vi.fn()
     const onSettingsClick = vi.fn()
     const { rerender } = render(<ActivityBar activeView="workspace" filesEnabled={false} onViewChange={onViewChange} onSettingsClick={onSettingsClick} />)
-    fireEvent.click(screen.getByTitle('Workspace'))
+    fireEvent.click(screen.getByRole('button', { name: 'Workspace' }))
     expect(onViewChange).toHaveBeenCalledWith(null)
-    fireEvent.click(screen.getByTitle('Files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
     expect(onViewChange).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByTitle('Settings'))
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(onSettingsClick).toHaveBeenCalled()
     rerender(<ActivityBar activeView={null} filesEnabled onViewChange={onViewChange} onSettingsClick={onSettingsClick} />)
-    fireEvent.click(screen.getByTitle('Files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Files' }))
     expect(onViewChange).toHaveBeenLastCalledWith('files')
   })
 
@@ -35,12 +35,12 @@ describe('small UI shells', () => {
     const { rerender } = render(
       <ActivityBar activeView={null} filesEnabled onViewChange={vi.fn()} onSettingsClick={vi.fn()} alwaysAwakeEnabled />,
     )
-    expect(screen.queryByTitle(/Always Awake/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Always Awake/ })).not.toBeInTheDocument()
 
     rerender(
       <ActivityBar activeView={null} filesEnabled onViewChange={vi.fn()} onSettingsClick={vi.fn()} alwaysAwakeAvailable />,
     )
-    expect(screen.getByTitle('Always Awake')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Always Awake' })).toBeInTheDocument()
   })
 
   it('pins Always Awake beside Settings rather than with the panel views', () => {
@@ -57,12 +57,12 @@ describe('small UI shells', () => {
         onAlwaysAwakeClick={onAlwaysAwakeClick}
       />,
     )
-    const awake = screen.getByTitle('Always Awake (active)')
-    const settings = screen.getByTitle('Settings')
+    const awake = screen.getByRole('button', { name: 'Always Awake (active)' })
+    const settings = screen.getByRole('button', { name: 'Settings' })
     // Same pinned group as Settings, and immediately above it.
     expect(awake.parentElement).toBe(settings.parentElement)
     expect(awake.nextElementSibling).toBe(settings)
-    expect(screen.getByTitle('Files').parentElement).not.toBe(settings.parentElement)
+    expect(screen.getByRole('button', { name: 'Files' }).parentElement).not.toBe(settings.parentElement)
 
     fireEvent.click(awake)
     expect(onAlwaysAwakeClick).toHaveBeenCalled()
@@ -82,8 +82,8 @@ describe('small UI shells', () => {
         alwaysAwakeAvailable
       />,
     )
-    const blur = screen.getByTitle('Blur inactive windows (on)')
-    const awake = screen.getByTitle('Always Awake')
+    const blur = screen.getByRole('button', { name: 'Blur inactive windows (on)' })
+    const awake = screen.getByRole('button', { name: 'Always Awake' })
     expect(blur.nextElementSibling).toBe(awake)
     fireEvent.click(blur)
     expect(onBlurClick).toHaveBeenCalled()
@@ -128,7 +128,7 @@ describe('small UI shells', () => {
     expect(screen.getByRole('button', { name: 'Terminal workspace' })).toBeInTheDocument()
     expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('New Terminal'))
-    fireEvent.click(screen.getByTitle('Select Shell'))
+    fireEvent.click(screen.getByRole('button', { name: 'Select Shell' }))
     fireEvent.click(screen.getByText('Choose open session (3)'))
     expect(open).toHaveBeenCalled()
     expect(pick).toHaveBeenCalledWith(expect.objectContaining({ left: 2, bottom: 9 }))
