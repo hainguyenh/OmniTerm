@@ -1,6 +1,7 @@
 import React from 'react'
 import { Monitor, Pencil, Play, Terminal, Trash2 } from 'lucide-react'
 import type { Connection } from '@omniterm/contract'
+import { Tooltip } from './Tooltip'
 
 /**
  * A saved connection, rendered as a leaf of the workspace tree inside the folder its `parentId`
@@ -41,32 +42,38 @@ const WorkspaceConnectionRow: React.FC<WorkspaceConnectionRowProps> = ({
     {typeIconFor(connection.type)}
     <span className="flex-1 truncate text-xs">{connection.name}</span>
     <span className="text-[9px] text-[var(--theme-dim)] uppercase mr-1">{connection.type}</span>
-    <button
-      type="button"
-      title="Connect"
-      onClick={(e) => { e.stopPropagation(); onConnect?.(connection) }}
-      className={`${hoverAction} text-[var(--theme-accent)]`}
-    >
-      <Play className="w-3.5 h-3.5" />
-    </button>
-    {onEdit && (
+    <Tooltip content="Connect" placement="bottom">
       <button
         type="button"
-        title="Edit"
-        onClick={(e) => { e.stopPropagation(); onEdit(connection) }}
-        className={`${hoverAction} text-[var(--theme-dim)] hover:text-[var(--theme-fg)]`}
+        aria-label="Connect"
+        onClick={(e) => { e.stopPropagation(); onConnect?.(connection) }}
+        className={`${hoverAction} text-[var(--theme-accent)]`}
       >
-        <Pencil className="w-3 h-3" />
+        <Play className="w-3.5 h-3.5" />
       </button>
+    </Tooltip>
+    {onEdit && (
+      <Tooltip content="Edit connection" placement="bottom">
+        <button
+          type="button"
+          aria-label="Edit connection"
+          onClick={(e) => { e.stopPropagation(); onEdit(connection) }}
+          className={`${hoverAction} text-[var(--theme-dim)] hover:text-[var(--theme-fg)]`}
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+      </Tooltip>
     )}
-    <button
-      type="button"
-      title="Delete"
-      onClick={(e) => { e.stopPropagation(); onDelete(connection) }}
-      className={`${hoverAction} text-[var(--theme-dim)] hover:text-red-400`}
-    >
-      <Trash2 className="w-3 h-3" />
-    </button>
+    <Tooltip content="Delete connection" placement="bottom">
+      <button
+        type="button"
+        aria-label="Delete connection"
+        onClick={(e) => { e.stopPropagation(); onDelete(connection) }}
+        className={`${hoverAction} text-[var(--theme-dim)] hover:text-red-400`}
+      >
+        <Trash2 className="w-3 h-3" />
+      </button>
+    </Tooltip>
   </div>
 )
 

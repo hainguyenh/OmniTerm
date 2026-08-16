@@ -20,6 +20,7 @@ import { WORKSPACE_COLOR_VALUES } from '../utils/workspaceAppearance'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceShowMore from './WorkspaceShowMore'
 import type { WorkspacePanelView } from './workspacePanelView'
+import { Tooltip } from './Tooltip'
 
 interface WorkspaceTreeRendererProps {
   workspace: Workspace
@@ -112,25 +113,29 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
       >
         <Icon className="w-4 h-4 flex-shrink-0" style={{ color: meta.color }} />
         <span className={`flex-1 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
-        <button
-          type="button"
-          title={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'}
-          onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-          className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-        >
-          {isPinned(workspace, node.path)
-            ? <PinOff className="w-3.5 h-3.5" />
-            : <Pin className="w-3.5 h-3.5" />}
-        </button>
-        {script && (
+        <Tooltip content={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'} placement="bottom">
           <button
             type="button"
-            title={script.kind === 'rdp' ? 'Launch' : 'Run'}
-            onClick={event => { event.stopPropagation(); onRunScript(wsId, script) }}
-            className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+            aria-label={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'}
+            onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
+            className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
           >
-            <Play className="w-3.5 h-3.5" />
+            {isPinned(workspace, node.path)
+              ? <PinOff className="w-3.5 h-3.5" />
+              : <Pin className="w-3.5 h-3.5" />}
           </button>
+        </Tooltip>
+        {script && (
+          <Tooltip content={script.kind === 'rdp' ? 'Launch' : 'Run'} placement="bottom">
+            <button
+              type="button"
+              aria-label={script.kind === 'rdp' ? 'Launch' : 'Run'}
+              onClick={event => { event.stopPropagation(); onRunScript(wsId, script) }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+            >
+              <Play className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         )}
       </div>
     )
@@ -205,53 +210,58 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
             style={{ color: rootFolder?.color ? WORKSPACE_COLOR_VALUES[rootFolder.color] : 'var(--theme-dim)' }}
           />
           <span className="flex-1 truncate text-xs">{node.name}</span>
-          {pinned && (
-            <button
-              type="button"
-              title="Unpin item"
-              aria-label={`Unpin ${node.name}`}
-              onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-              className="flex-shrink-0 rounded p-1 text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-            >
-              <Pin className="w-3.5 h-3.5" aria-label="Pinned folder" />
-            </button>
-          )}
-          {!pinned && (
-            <button
-              type="button"
-              title="Pin item"
-              onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-            >
-              <Pin className="w-3.5 h-3.5" />
-            </button>
+          {pinned ? (
+            <Tooltip content="Unpin item" placement="bottom">
+              <button
+                type="button"
+                aria-label="Unpin item"
+                onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
+                className="flex-shrink-0 rounded p-1 text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+              >
+                <Pin className="w-3.5 h-3.5" aria-label="Pinned folder" />
+              </button>
+            </Tooltip>
+          ) : (
+            <Tooltip content="Pin item" placement="bottom">
+              <button
+                type="button"
+                aria-label="Pin item"
+                onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+              >
+                <Pin className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
           )}
           {rootFolder && (
+            <Tooltip content="Unlink folder from workspace" placement="bottom">
+              <button
+                type="button"
+                aria-label="Unlink folder from workspace"
+                onClick={event => {
+                  event.stopPropagation()
+                  onSetFolderPendingRemoval({
+                    workspaceId: workspace.id,
+                    folderId: rootFolder.id,
+                    name: rootFolder.name,
+                  })
+                }}
+                className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-red-400 hover:bg-[var(--theme-bg)] transition"
+              >
+                <Unlink className="w-3.5 h-3.5" />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="Open terminal here" placement="bottom">
             <button
               type="button"
-              title="Unlink folder from workspace"
-              aria-label={`Unlink ${rootFolder.name} from workspace`}
-              onClick={event => {
-                event.stopPropagation()
-                onSetFolderPendingRemoval({
-                  workspaceId: workspace.id,
-                  folderId: rootFolder.id,
-                  name: rootFolder.name,
-                })
-              }}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-red-400 hover:bg-[var(--theme-bg)] transition"
+              aria-label="Open terminal here"
+              onClick={event => { event.stopPropagation(); onOpenTerminal(workspace.id, node.path) }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
             >
-              <Unlink className="w-3.5 h-3.5" />
+              <Terminal className="w-3.5 h-3.5" />
             </button>
-          )}
-          <button
-            type="button"
-            title="Open terminal here"
-            onClick={event => { event.stopPropagation(); onOpenTerminal(workspace.id, node.path) }}
-            className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
-          >
-            <Terminal className="w-3.5 h-3.5" />
-          </button>
+          </Tooltip>
           {renderConnectionAction(workspace, node.path, node.name)}
         </div>
         {expanded && <>
