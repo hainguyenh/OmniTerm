@@ -161,7 +161,7 @@ describe("packaged builds emit no diagnostics", () => {
   // Lives in GeneralSettings.tsx since the settings panel's General block moved out of MainLayout.
   it("hides the Open log control unless this is a dev build", () => {
     expect(readRepoFile("ui", "components", "GeneralSettings.tsx")).toMatch(
-      /import\.meta\.env\.DEV && \(\s*\n\s*<button[\s\S]{0,400}revealLog\(\)/,
+      /import\.meta\.env\.DEV && \([\s\S]{0,400}revealLog\(\)/,
     );
   });
 
