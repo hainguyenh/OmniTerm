@@ -2,6 +2,7 @@ import type { Terminal } from '@xterm/xterm'
 import type { SessionChannel } from './sessionChannel'
 import { chunkForWrite } from './writeChunks'
 import { OutputHighlighter } from '../highlighter'
+import { MAX_SCROLLBACK_BYTES, loadScrollback, saveScrollback } from './scrollbackStore'
 import type { SessionStatus } from '../components/MainLayout'
 
 /**
@@ -33,6 +34,12 @@ export interface TerminalStreamOptions {
   refit: () => void
   /** True while this stream's terminal is still the mounted one — guards the async attach result. */
   isCurrent: () => boolean
+  /**
+   * IndexedDB key preserving this pane's output across app restarts. Local sessions only —
+   * remote sessions are never restored, so there is no load-back path. Maps 1:1 to the
+   * persisted tab's `scrollbackKey` in the session snapshot.
+   */
+  scrollbackKey?: string
 }
 
 /** Feed `text` to xterm in pieces it can parse without blocking a frame. */
@@ -53,7 +60,7 @@ export interface TerminalStream {
 /** Subscribe to a session and start (or attach to) it. */
 export const attachTerminalStream = ({
   term, api, id, isLocal, host, mode,
-  onStatus, onExit, onMetrics, onActivity, smartColors, refit, isCurrent,
+  onStatus, onExit, onMetrics, onActivity, smartColors, refit, isCurrent, scrollbackKey,
 }: TerminalStreamOptions): TerminalStream => {
   // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell behind it can
   // take much longer to actually produce a prompt — a cold WSL VM boot in particular can take several
@@ -85,19 +92,67 @@ export const attachTerminalStream = ({
    * (no replay message at all) cannot leave the flag set for live data.
    */
   let expectingReplay = false
+  let activityTimer: ReturnType<typeof setTimeout> | null = null
+  let streamBusy = false
 
-  const cleanupData = api.onData((data: Uint8Array) => {
-    if (!sawFirstData) {
-      sawFirstData = true
-      onStatus('connected')
+  const setStreamActive = (busy: boolean) => {
+    if (streamBusy !== busy) {
+      streamBusy = busy
+      onActivity(busy)
     }
-    const text = decoder.decode(data, { stream: true })
-    if (expectingReplay) {
-      expectingReplay = false
-      // Scrollback that was already rendered once, in the window this pane just came from. It is fed
-      // to the highlighter with colouring OFF so its escape-sequence state still matches the screen,
-      // and the ORIGINAL text is written: running an 8-alternation regex with a lookbehind over a
-      // quarter of a megabyte, synchronously, was most of the freeze on attach/detach.
+  }
+
+  const markOutputActivity = () => {
+    if (expectingReplay) return
+    setStreamActive(true)
+    if (activityTimer) clearTimeout(activityTimer)
+    activityTimer = setTimeout(() => {
+      activityTimer = null
+      setStreamActive(false)
+    }, 1200)
+  }
+
+  // ── Cross-restart scrollback ────────────────────────────────────────────────
+  // Raw output (pre-colouring) is accumulated under `scrollbackKey` and flushed to IndexedDB on
+  // a debounce, so a restart can repaint what this pane had on screen. On a fresh connect the
+  // saved text is loaded FIRST: until that read settles, incoming text is parked in `gated` so
+  // restored history always lands above live output.
+  let scrollBuffer = ''
+  let scrollDirty = false
+  let scrollTimer: ReturnType<typeof setTimeout> | null = null
+  let gated: string[] | null = scrollbackKey && mode === 'connect' ? [] : null
+  let gatedReplay: boolean[] = []
+  const SCROLLBACK_SAVE_MS = 3_000
+
+  const appendScrollback = (text: string) => {
+    if (!scrollbackKey) return
+    scrollBuffer += text
+    if (scrollBuffer.length > MAX_SCROLLBACK_BYTES) {
+      scrollBuffer = scrollBuffer.slice(-MAX_SCROLLBACK_BYTES)
+    }
+    scrollDirty = true
+  }
+
+  const scheduleScrollbackSave = () => {
+    if (!scrollbackKey || scrollTimer) return
+    scrollTimer = setTimeout(() => {
+      scrollTimer = null
+      if (scrollDirty) {
+        scrollDirty = false
+        void saveScrollback(scrollbackKey, scrollBuffer)
+      }
+    }, SCROLLBACK_SAVE_MS)
+  }
+
+  /** Write one decoded message. `replay` text is already-rendered history — written verbatim. */
+  const handleText = (text: string, replay: boolean) => {
+    appendScrollback(text)
+    scheduleScrollbackSave()
+    if (replay) {
+      // Scrollback that was already rendered once (an attach replay, or restored history). It is
+      // fed to the highlighter with colouring OFF so its escape-sequence state still matches the
+      // screen, and the ORIGINAL text is written: running an 8-alternation regex with a lookbehind
+      // over a quarter of a megabyte, synchronously, was most of the freeze on attach/detach.
       highlighter.transform(text, false)
       writeChunked(term, text)
       return
@@ -105,9 +160,31 @@ export const attachTerminalStream = ({
     // Chunked as well: one huge message (a `cat` of a big file, a build log dumping at once) blocks a
     // frame no matter where it came from. Text at or below the chunk size passes through as-is.
     writeChunked(term, highlighter.transform(text, smartColors()))
+  }
+
+  const cleanupData = api.onData((data: Uint8Array) => {
+    if (!sawFirstData) {
+      sawFirstData = true
+      onStatus('connected')
+    }
+    markOutputActivity()
+    const text = decoder.decode(data, { stream: true })
+    const replay = expectingReplay
+    expectingReplay = false
+    if (gated !== null) {
+      gated.push(text)
+      gatedReplay.push(replay)
+      return
+    }
+    handleText(text, replay)
   })
 
   const cleanupError = api.onError((err: string) => {
+    if (activityTimer) {
+      clearTimeout(activityTimer)
+      activityTimer = null
+    }
+    setStreamActive(false)
     onStatus('error')
     term.write('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
   })
@@ -117,6 +194,11 @@ export const attachTerminalStream = ({
   // script's `pause` looked identical to one that had frozen, and every key typed into it was
   // silently dropped by the backend ("Session not found").
   const markExited = (code?: number) => {
+    if (activityTimer) {
+      clearTimeout(activityTimer)
+      activityTimer = null
+    }
+    setStreamActive(false)
     term.options.cursorBlink = false
     term.options.disableStdin = true
     term.write(code === undefined
@@ -137,13 +219,40 @@ export const attachTerminalStream = ({
 
   // Busy/idle is the mirror image: local-only, since it is the host's process tree being watched.
   const cleanupActivity = isLocal
-    ? window.omnitermAPI.connect.onLocalActivity(id, onActivity)
+    ? window.omnitermAPI.connect.onLocalActivity(id, (busy) => {
+        if (busy) {
+          setStreamActive(true)
+        } else if (!activityTimer) {
+          setStreamActive(false)
+        }
+      })
     : () => {}
+
+  // A restored pane repaints its saved history before anything the new PTY emits. `gated` is
+  // non-null only for this case; once the read settles the saved text is written and everything
+  // parked while waiting is released through the normal path, in arrival order.
+  if (gated !== null && scrollbackKey) {
+    const key = scrollbackKey
+    void loadScrollback(key).then(saved => {
+      if (!isCurrent()) return // torn down while awaiting
+      if (saved) scrollBuffer = saved
+      if (scrollBuffer) {
+        // The seed is already the saved buffer — write it verbatim, no re-append.
+        highlighter.transform(scrollBuffer, false)
+        writeChunked(term, scrollBuffer)
+      }
+      const queued = gated ?? []
+      const queuedReplay = gatedReplay
+      gated = null
+      gatedReplay = []
+      queued.forEach((text, i) => handleText(text, queuedReplay[i]))
+      refit()
+    })
+  }
 
   // Start (or attach to) the session. Every output listener above is registered FIRST, so attach's
   // replay and its live subscription cannot miss bytes emitted between the two.
-  if (mode === 'attach') {
-    // Bind to the existing backend session: replay its buffer and restore its status, never
+  if (mode === 'attach') {    // Bind to the existing backend session: replay its buffer and restore its status, never
     // reconnect. The backend only resumes live delivery once resume() is called, so nothing streams
     // before this subscription exists.
     onStatus('connecting')
@@ -163,9 +272,7 @@ export const attachTerminalStream = ({
         // cannot reintroduce the single-huge-write freeze.
         if (snapshot.data && snapshot.data.length > 0) {
           sawFirstData = true
-          const text = decoder.decode(snapshot.data, { stream: true })
-          highlighter.transform(text, false)
-          writeChunked(term, text)
+          handleText(decoder.decode(snapshot.data, { stream: true }), true)
         }
         if (snapshot.status === 'ready') onStatus('connected')
         else if (snapshot.status === 'error') {
@@ -190,6 +297,13 @@ export const attachTerminalStream = ({
       cleanupClosed()
       cleanupMetrics()
       cleanupActivity()
+      // Final scrollback flush — unmount is the last moment the full buffer is owned here.
+      if (scrollTimer) clearTimeout(scrollTimer)
+      scrollTimer = null
+      if (scrollbackKey && scrollDirty) {
+        scrollDirty = false
+        void saveScrollback(scrollbackKey, scrollBuffer)
+      }
     },
     noteLocalEcho: () => highlighter.noteLocalEcho(),
   }
