@@ -280,15 +280,16 @@ OmniTerm/
 | Module | Purpose |
 |---|---|
 | `lib.rs` | `run()` builds the app, registers state and all Tauri commands |
-| `pty.rs` | Core PTY engine. `PtyManager` holds `DashMap<String, PtySession>`. Spawns shells via `CommandBuilder`, streams output through per-session Tauri `Channel` objects |
+| `pty.rs` | Tauri bridge to the out-of-process session daemon. `PtyManager` caches session metadata, forwards input/resize/policy commands, and streams daemon events through Tauri `Channel` objects |
 | `pty_resolve.rs` | Resolves `conn_id` across three tiers: ad-hoc registry, persisted `connections.json`, plugin-host scoped connections |
-| `session_output.rs` | Output sink + scrollback buffer (256KiB, newline-aligned). Handles detach/attach without ordering buffer races |
+| `crates/session-core/` | Out-of-process PTY/session owner: process lifecycle, activity, IPC server/client, manifests, and bounded live/durable scrollback |
+| `crates/session-protocol/` | Versioned JSON IPC contract for session creation, attach, lifecycle, persistence policy, input, resize, and status |
 | `connections.rs` | Connection tree CRUD. `Connection` struct has no password field. `scrub_stored_secrets` wipes legacy `password`/`hasPassword` on startup |
 | `tree_validate.rs` | Import validation: max 10k records, field length caps, required types, shell parsing via `LocalShell::parse` |
 | `safepath.rs` | Path containment: canonical resolve + symlink detection + parent check. Three gate sets: run (allowlist), write (allowlist), view (denylist) |
 | `shell_spec.rs` | Closed-set `LocalShell` enum. `parse(s) -> Option<Self>` -- callers treat `None` as rejection |
 | `launch.rs` | Converts `LocalLaunch` to `Invocation` (executable + args): `/k /c` (cmd), `-NoExit -Command` (PowerShell), `-- bash -lc <cmd>; exec bash -l` (WSL) |
-| `terminal_window.rs` | Panel detach into `term-*` OS window. `DetachRegistry` maps ID -> `DetachedEntry`. Re-attach scrollback replay flow |
+| `terminal_window.rs` | Panel detach into `term-*` OS window. `DetachRegistry` maps ID -> `DetachedEntry`; daemon-owned PTYs remain authoritative across window/app detach and reattach |
 | `plugin_host.rs` / `plugin_management.rs` | Node.js sidecar management: JSON-RPC 2.0 over stdin/stdout, ZIP plugin install with atomic rename to `plugins/` |
 | `workspace.rs` / `workspace_scan.rs` | Workspace folder scanning, script execution via ad-hoc registry, `.omniterm/connections.json` |
 | other (`themes.rs`, `settings.rs`, `app_utils.rs`, `rdp_launch.rs`) | Theme management, settings, external URL control (HTTPS only), RDP embedding |

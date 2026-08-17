@@ -1,31 +1,41 @@
-/**
- * useSessionRestore.ts — applies a persisted session snapshot once on mount.
- *
- * Each ephemeral LOCAL connection is re-registered with the Rust backend via
- * `shells.open()` to obtain a fresh adhoc-* id. Old ids from the snapshot are
- * mapped to fresh ids before populating activeTabs, panes, and view groups so
- * the rest of the layout machinery sees only valid, backend-known ids.
- *
- * SSH/RDP sessions are not restored — the remote side drops the connection when
- * the app closes and there is no silent re-auth path.
- */
+/** Restore saved PTY tabs by reattaching live daemon sessions before considering any cold launch. */
 import { useEffect } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
-import { clearSnapshot, type SessionSnapshot } from '../utils/sessionStore'
-import { deleteScrollback, loadScrollback, saveScrollback } from '../utils/scrollbackStore'
+import { clearSnapshot, type PersistedConn, type SessionSnapshot } from '../utils/sessionStore'
 import { diag } from '../diag'
+import { parseAgentTitle } from '../utils/agentTitle'
+import {
+  getPersistencePolicy,
+  hasExplicitPersistencePolicy,
+} from '../utils/persistencePolicy'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
   setActiveTabs: (fn: (prev: { id: string; connId: string; name: string }[]) => { id: string; connId: string; name: string }[]) => void
   setEphemeralConns: (fn: (prev: Connection[]) => Connection[]) => void
   setTabGroups: (fn: (prev: Record<string, string>) => Record<string, string>) => void
+  setResumeMode: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
+  resolveConnection?: (id?: string) => Connection | undefined
   restoreGroups: (groups: ViewGroup[], activeId: string) => void
   setPanes: (panes: (string | null)[]) => void
   setLayoutMode: (mode: LayoutMode) => void
   setFocusedPane: (pane: number) => void
+}
+
+function connectionFromSnapshot(conn: PersistedConn): Connection {
+  return {
+    id: conn.id,
+    name: conn.name,
+    type: conn.type ?? 'LOCAL',
+    host: conn.host ?? '',
+    port: conn.port ?? '',
+    user: conn.user ?? '',
+    ...(conn.shell ? { shell: conn.shell as Connection['shell'] } : {}),
+    ...(conn.workspaceId ? { workspaceId: conn.workspaceId } : {}),
+    ...(conn.localCwd ? { localCwd: conn.localCwd } : {}),
+  }
 }
 
 export function useSessionRestore({
@@ -33,6 +43,8 @@ export function useSessionRestore({
   setActiveTabs,
   setEphemeralConns,
   setTabGroups,
+  setResumeMode,
+  resolveConnection,
   restoreGroups,
   setPanes,
   setLayoutMode,
@@ -40,102 +52,99 @@ export function useSessionRestore({
 }: SessionRestoreInput): void {
   useEffect(() => {
     if (!initialSnapshot || initialSnapshot.activeTabs.length === 0) return
-
     let cancelled = false
 
     void (async () => {
-      // Map old connId (adhoc-*) → newly registered Connection. Registration is independent
-      // per connection, so they all run in parallel; a rejected open only drops that session.
-      const results = await Promise.allSettled(
-        initialSnapshot.ephemeralConns.map(async (persisted) => {
-          const conn = await window.omnitermAPI.shells.open(
-            persisted.shell,
-            persisted.workspaceId ?? null,
-            undefined,
-            persisted.localCwd ?? null,
-            persisted.initialCommand ?? null,
-          ) as Connection | null
-          if (!conn) throw new Error('shells.open returned no connection')
-          return { oldId: persisted.id, conn }
-        }),
-      )
-      const connMap = new Map<string, Connection>()
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          diag.warn('[useSessionRestore] could not re-register shell', result.reason)
-        } else {
-          connMap.set(result.value.oldId, result.value.conn)
-        }
-      }
-
-      if (cancelled || connMap.size === 0) return
-
-      // Map old tabId → new tabId using the remapped connId.
-      const tabIdMap = new Map<string, string>()
-      const newTabs: { id: string; connId: string; name: string }[] = []
-      const newConns: Connection[] = []
-      const scrollbackRekeys: Array<{ from: string; to: string }> = []
+      const daemonSessions = await window.omnitermAPI?.connect?.listLocalSessions?.() ?? []
+      const daemonById = new Map<string, (typeof daemonSessions)[number]>()
+      for (const session of daemonSessions) daemonById.set(session.id, session)
+      const savedConnById = new Map(initialSnapshot.ephemeralConns.map(conn => [conn.id, conn]))
+      const restoredConns = new Map<string, Connection>()
+      const restoredTabs: { id: string; connId: string; name: string }[] = []
+      const attachMode: Record<string, boolean> = {}
 
       for (const tab of initialSnapshot.activeTabs) {
-        const conn = connMap.get(tab.connId)
+        const daemonSession = daemonById.get(tab.sessionId)
+        const live = daemonSession?.lifecycle === 'live'
+        const savedConn = savedConnById.get(tab.connId)
+        const isAgent = (parseAgentTitle(tab.name) ?? parseAgentTitle(savedConn?.name)) !== null
+        const localPolicy = getPersistencePolicy(tab.id, isAgent)
+        const policy = daemonSession?.policy
+          ?? (hasExplicitPersistencePolicy(tab.id) ? localPolicy : tab.persistencePolicy)
+        let conn = resolveConnection?.(tab.connId) ?? (savedConn ? connectionFromSnapshot(savedConn) : undefined)
+
+        if (live) {
+          if (!conn) continue
+          restoredConns.set(conn.id, conn)
+          restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
+          attachMode[tab.id] = true
+          continue
+        }
+
+        const recover = policy === 'recover-after-reboot'
+          && (!daemonSession || daemonSession.lifecycle === 'interrupted')
+
+        if (savedConn && (savedConn.type ?? 'LOCAL') === 'LOCAL') {
+          const needsRegistration = savedConn.ephemeral || (recover && !!savedConn.initialCommand)
+          if (needsRegistration) {
+            try {
+              conn = undefined
+              const opened = await window.omnitermAPI.shells.open(
+                savedConn.shell,
+                savedConn.workspaceId ?? null,
+                undefined,
+                savedConn.localCwd ?? null,
+                recover ? savedConn.initialCommand ?? null : null,
+              ) as Connection | null
+              if (opened) conn = opened
+            } catch (error) {
+              diag.warn('[useSessionRestore] shell registration failed', error)
+            }
+          }
+        }
+
         if (!conn) continue
-        const newTabId = `${conn.id}_${crypto.randomUUID().slice(0, 8)}`
-        tabIdMap.set(tab.id, newTabId)
-        newTabs.push({ id: newTabId, connId: conn.id, name: tab.name })
-        if (tab.scrollbackKey) scrollbackRekeys.push({ from: tab.scrollbackKey, to: `sb-${newTabId}` })
-        if (!newConns.some(c => c.id === conn.id)) newConns.push(conn)
+        restoredConns.set(conn.id, conn)
+        restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
+        // Non-recover policies stay stopped. Recoverable tabs start a new daemon generation.
+        attachMode[tab.id] = !recover
       }
 
-      if (cancelled || newTabs.length === 0) return
+      if (cancelled || restoredTabs.length === 0) return
 
       setEphemeralConns(prev => {
-        const existing = new Set(prev.map(c => c.id))
-        return [...prev, ...newConns.filter(c => !existing.has(c.id))]
+        const existing = new Set(prev.map(conn => conn.id))
+        return [...prev, ...[...restoredConns.values()].filter(conn => !existing.has(conn.id))]
       })
-
       setActiveTabs(prev => {
-        const existing = new Set(prev.map(t => t.id))
-        return [...prev, ...newTabs.filter(t => !existing.has(t.id))]
+        const existing = new Set(prev.map(tab => tab.id))
+        return [...prev, ...restoredTabs.filter(tab => !existing.has(tab.id))]
       })
+      setResumeMode(prev => ({ ...prev, ...attachMode }))
 
-      // Remap view-group pane arrays to use fresh tab ids.
+      const restoredIds = new Set(restoredTabs.map(tab => tab.id))
       const restoredGroups: ViewGroup[] = initialSnapshot.viewGroups.map(group => ({
         ...group,
-        panes: group.panes.map(id => (id !== null ? (tabIdMap.get(id) ?? null) : null)),
+        panes: group.panes.map(id => (id !== null && restoredIds.has(id) ? id : null)),
       }))
-
-      // Remap tabGroups mapping.
       const restoredTabGroups: Record<string, string> = {}
-      for (const [oldId, groupId] of Object.entries(initialSnapshot.tabGroups)) {
-        const newId = tabIdMap.get(oldId)
-        if (newId) restoredTabGroups[newId] = groupId
+      for (const [tabId, groupId] of Object.entries(initialSnapshot.tabGroups)) {
+        if (restoredIds.has(tabId)) restoredTabGroups[tabId] = groupId
       }
       setTabGroups(() => restoredTabGroups)
-
-      // Apply view groups and active group atomically.
       restoreGroups(restoredGroups, initialSnapshot.activeGroupId)
 
-      // Restore pane layout for the active group.
-      const activeGroup = restoredGroups.find(g => g.id === initialSnapshot.activeGroupId)
+      const activeGroup = restoredGroups.find(group => group.id === initialSnapshot.activeGroupId)
       if (activeGroup) {
         setPanes(activeGroup.panes)
         setLayoutMode(activeGroup.layoutMode)
         setFocusedPane(Math.min(activeGroup.focusedPane, activeGroup.layoutMode - 1))
       }
 
-      diag.log('[useSessionRestore] restored', newTabs.length, 'session(s)')
-
-      // Carry each restored tab's saved scrollback across the id remap, then consume the
-      // snapshot. Consuming it here is what lets an emptied layout stay empty: persistence
-      // never writes for an empty layout, so nothing re-creates the snapshot after this.
-      for (const { from, to } of scrollbackRekeys) {
-        const data = await loadScrollback(from)
-        if (data) await saveScrollback(to, data)
-        await deleteScrollback(from)
-      }
+      diag.log('[useSessionRestore] restored', restoredTabs.length, 'PTY session(s)')
       if (!cancelled) clearSnapshot()
     })()
 
     return () => { cancelled = true }
-  }, []) // intentionally empty — runs once on mount to restore persisted sessions
+  }, []) // startup-only restore
 }

@@ -138,6 +138,7 @@ export type AttachSnapshot = {
   label?: string
   error?: string
   busy: boolean
+  generation: number
 }
 
 /**

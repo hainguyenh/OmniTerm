@@ -1,22 +1,17 @@
-/**
- * useSessionPersistence.ts — reads the startup snapshot once and writes a live snapshot back on
- * every meaningful layout change (debounced to avoid hammering localStorage on rapid edits).
- *
- * An empty layout writes nothing: `useSessionRestore` consumes the stored snapshot once it has
- * been applied, so a crashed or force-quit app still restores on the next open, while a layout
- * the user deliberately emptied stays empty.
- */
+/** Persist enough renderer metadata to reattach daemon PTYs or safely reconstruct them after reboot. */
 import { useEffect, useRef } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { formatAgentResumeCommand } from '../utils/agentRegistry'
+import { getPersistencePolicy } from '../utils/persistencePolicy'
 import { pruneScrollback } from '../utils/scrollbackStore'
 import {
   SNAPSHOT_VERSION,
   loadSnapshot,
   saveSnapshot,
+  type PersistedConn,
   type PersistedTab,
   type PersistedViewGroup,
   type SessionSnapshot,
@@ -25,108 +20,178 @@ import {
 interface PersistenceDeps {
   activeTabs?: { id: string; connId: string; name: string }[]
   ephemeralConns?: Connection[]
+  resolveConnection?: (id?: string) => Connection | undefined
   viewGroups?: ViewGroup[]
   tabGroups?: Record<string, string>
   activeGroupId?: string
   layoutMode?: LayoutMode
 }
 
+type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
+
 const DEBOUNCE_MS = 1_000
+
+function buildSnapshot(
+  ptyTabs: PtyTab[],
+  connectionFor: (id: string) => Connection | undefined,
+  ephemeralById: Map<string, Connection>,
+  previousById: Map<string, PersistedTab>,
+  daemonGenerationById: Map<string, number>,
+  viewGroups: ViewGroup[],
+  tabGroups: Record<string, string>,
+  activeGroupId: string,
+  layoutMode: LayoutMode,
+): SessionSnapshot {
+  const ptyTabIds = new Set(ptyTabs.map(tab => tab.id))
+  const resumeCommands = new Map<string, string>()
+  const persistedTabs: PersistedTab[] = ptyTabs.map(tab => {
+    const conn = connectionFor(tab.connId)
+    const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
+    const policy = getPersistencePolicy(tab.id, agent !== null)
+    const resumeCommand = agent ? formatAgentResumeCommand(agent.agentName) : null
+    // Safe allowlisted agent recipes can be checkpointed regardless of the current policy. Restore
+    // still gates execution on recover-after-reboot, so a later policy toggle cannot lose the recipe.
+    if (resumeCommand) resumeCommands.set(tab.connId, resumeCommand)
+    return {
+      id: tab.id,
+      sessionId: tab.id,
+      generation: daemonGenerationById.get(tab.id) ?? previousById.get(tab.id)?.generation ?? 1,
+      persistencePolicy: policy,
+      connId: tab.connId,
+      name: tab.name,
+      scrollbackKey: `sb-${tab.id}`,
+    }
+  })
+
+  const persistedConns: PersistedConn[] = []
+  const seenConns = new Set<string>()
+  for (const tab of ptyTabs) {
+    const conn = connectionFor(tab.connId)
+    if (!conn || seenConns.has(conn.id)) continue
+    seenConns.add(conn.id)
+    const initialCommand = resumeCommands.get(conn.id)
+    persistedConns.push({
+      id: conn.id,
+      name: conn.name,
+      type: conn.type === 'SSH' ? 'SSH' : 'LOCAL',
+      ephemeral: ephemeralById.has(conn.id),
+      ...(conn.shell !== undefined ? { shell: conn.shell } : {}),
+      ...(conn.workspaceId !== undefined ? { workspaceId: conn.workspaceId } : {}),
+      ...(conn.localCwd !== undefined ? { localCwd: conn.localCwd } : {}),
+      ...(initialCommand ? { initialCommand } : {}),
+      ...(conn.host ? { host: conn.host } : {}),
+      ...(conn.port ? { port: conn.port } : {}),
+      ...(conn.user ? { user: conn.user } : {}),
+    })
+  }
+
+  const persistedGroups: PersistedViewGroup[] = viewGroups.map(group => ({
+    id: group.id,
+    label: group.label,
+    ...(group.color !== undefined ? { color: group.color } : {}),
+    ...(group.persistent !== undefined ? { persistent: group.persistent } : {}),
+    layoutMode: group.layoutMode,
+    panes: group.panes.map(id => (id !== null && ptyTabIds.has(id) ? id : null)),
+    focusedPane: group.focusedPane,
+  }))
+  const persistedTabGroups: Record<string, string> = {}
+  for (const [tabId, groupId] of Object.entries(tabGroups)) {
+    if (ptyTabIds.has(tabId)) persistedTabGroups[tabId] = groupId
+  }
+
+  return {
+    version: SNAPSHOT_VERSION,
+    activeTabs: persistedTabs,
+    ephemeralConns: persistedConns,
+    viewGroups: persistedGroups,
+    tabGroups: persistedTabGroups,
+    activeGroupId,
+    layoutMode,
+  }
+}
 
 export function useSessionPersistence({
   activeTabs = [],
   ephemeralConns = [],
+  resolveConnection,
   viewGroups = [],
   tabGroups = {},
   activeGroupId = 'ungrouped',
   layoutMode = 1,
 }: PersistenceDeps = {}): { initialSnapshot: SessionSnapshot | null } {
-  // Loaded exactly once, on the first render. A separate flag distinguishes "not yet loaded"
-  // from "loaded and empty" — the snapshot value itself uses null for both, so the ref alone
-  // cannot tell them apart.
   const initialSnapshotRef = useRef<SessionSnapshot | null>(null)
   const loadedRef = useRef(false)
+  const structuralSignatureRef = useRef('')
   if (!loadedRef.current) {
     loadedRef.current = true
     initialSnapshotRef.current = loadSnapshot()
   }
 
   useEffect(() => {
-    // Only persist LOCAL shell connections — SSH/RDP cannot be resumed.
-    const localConns = (ephemeralConns ?? []).filter(c => c?.type === 'LOCAL')
-    const localConnIds = new Set(localConns.map(c => c.id))
-    const localTabs = (activeTabs ?? []).filter(t => localConnIds.has(t.connId))
+    const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
+    const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
+    const ptyTabs = activeTabs.filter(tab => {
+      const type = connectionFor(tab.connId)?.type
+      return type === 'LOCAL' || type === 'SSH'
+    })
+    if (ptyTabs.length === 0) return
 
-    // Nothing worth writing if there are no local sessions.
-    if (localConns.length === 0) return
+    const previousById = new Map<string, PersistedTab>()
+    for (const tab of initialSnapshotRef.current?.activeTabs ?? []) previousById.set(tab.sessionId, tab)
+    const noDaemonGenerations = new Map<string, number>()
+    const saveCheckpoint = (generations = noDaemonGenerations) => {
+      const snapshot = buildSnapshot(
+        ptyTabs, connectionFor, ephemeralById, previousById, generations,
+        viewGroups, tabGroups, activeGroupId, layoutMode,
+      )
+      saveSnapshot(snapshot)
+      void pruneScrollback(new Set(snapshot.activeTabs.map(tab => tab.scrollbackKey ?? '')))
+    }
 
-    const localTabIds = new Set(localTabs.map(t => t.id))
+    // A new/renamed PTY is checkpointed synchronously. This closes the one-second window where the
+    // daemon could keep a brand-new PTY alive after GUI exit but the next GUI had no tab id to attach.
+    const structuralSignature = ptyTabs.map(tab => {
+      const conn = connectionFor(tab.connId)
+      const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
+      return `${tab.id}\0${tab.connId}\0${tab.name}\0${getPersistencePolicy(tab.id, agent !== null)}`
+    }).join('\u0001')
+    if (structuralSignatureRef.current !== structuralSignature) {
+      structuralSignatureRef.current = structuralSignature
+      saveCheckpoint()
+    }
+
+    // Policy synchronization is immediate; it must not depend on the debounced rich checkpoint.
+    for (const tab of ptyTabs) {
+      const conn = connectionFor(tab.connId)
+      const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
+      const policy = getPersistencePolicy(tab.id, agent !== null)
+      const update = window.omnitermAPI?.connect?.setPersistencePolicy?.(tab.id, policy)
+      void update?.catch(() => {})
+    }
+
+    // Flush the latest pane/group layout synchronously as the webview goes away. The daemon already
+    // owns terminal bytes; this checkpoint only has non-secret reconstruction metadata.
+    const onPageExit = () => saveCheckpoint()
+    window.addEventListener('pagehide', onPageExit)
+    window.addEventListener('beforeunload', onPageExit)
 
     const timer = setTimeout(() => {
-      // Strip non-local tabs from view-group pane arrays so slot positions
-      // remain meaningful after restore (SSH/RDP tabs become null slots).
-      const persistedGroups: PersistedViewGroup[] = (viewGroups ?? []).map(group => ({
-        id: group.id,
-        label: group.label,
-        ...(group.color !== undefined ? { color: group.color } : {}),
-        ...(group.persistent !== undefined ? { persistent: group.persistent } : {}),
-        layoutMode: group.layoutMode,
-        panes: (group.panes ?? []).map(id => (id !== null && localTabIds.has(id) ? id : null)),
-        focusedPane: group.focusedPane,
-      }))
-
-      const persistedTabGroups: Record<string, string> = {}
-      for (const [tabId, groupId] of Object.entries(tabGroups ?? {})) {
-        if (localTabIds.has(tabId)) persistedTabGroups[tabId] = groupId
-      }
-
-      // Map connId → resume command for any tab that has an active agent.
-      // Built alongside persistedTabs so the conn mapper below can look it up.
-      const connResumeCommands = new Map<string, string>()
-
-      const persistedTabs: PersistedTab[] = localTabs.map(tab => {
-        const conn = localConns.find(c => c.id === tab.connId)
-        const agentCtx = parseAgentTitle(tab.name) || parseAgentTitle(conn?.name)
-        if (agentCtx) {
-          const resumeCmd = formatAgentResumeCommand(agentCtx.agentName)
-          if (resumeCmd) connResumeCommands.set(tab.connId, resumeCmd)
-        }
-        return {
-          id: tab.id,
-          connId: tab.connId,
-          name: tab.name,
-          scrollbackKey: `sb-${tab.id}`,
-        }
-      })
-
-      const snapshot: SessionSnapshot = {
-        version: SNAPSHOT_VERSION,
-        activeTabs: persistedTabs,
-        ephemeralConns: localConns.map(c => {
-          const initialCommand = connResumeCommands.get(c.id)
-          return {
-            id: c.id,
-            name: c.name,
-            ...(c.shell !== undefined ? { shell: c.shell } : {}),
-            ...(c.workspaceId !== undefined ? { workspaceId: c.workspaceId } : {}),
-            ...(c.localCwd !== undefined ? { localCwd: c.localCwd } : {}),
-            ...(initialCommand ? { initialCommand } : {}),
-          }
-        }),
-        viewGroups: persistedGroups,
-        tabGroups: persistedTabGroups,
-        activeGroupId,
-        layoutMode,
-      }
-      saveSnapshot(snapshot)
-      // Drop scrollback buffers for tabs that no longer exist. Runs only on a real save — an
-      // empty layout keeps whatever is stored so a pending restore can still find it.
-      const liveKeys = new Set(persistedTabs.map(t => t.scrollbackKey ?? ''))
-      void pruneScrollback(liveKeys)
+      void (async () => {
+        const daemonSessions = typeof window !== 'undefined'
+          ? await window.omnitermAPI?.connect?.listLocalSessions?.() ?? []
+          : []
+        const generations = new Map<string, number>()
+        for (const session of daemonSessions) generations.set(session.id, session.generation)
+        saveCheckpoint(generations)
+      })()
     }, DEBOUNCE_MS)
 
-    return () => clearTimeout(timer)
-  }, [activeTabs, ephemeralConns, viewGroups, tabGroups, activeGroupId, layoutMode])
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('pagehide', onPageExit)
+      window.removeEventListener('beforeunload', onPageExit)
+    }
+  }, [activeTabs, ephemeralConns, resolveConnection, viewGroups, tabGroups, activeGroupId, layoutMode])
 
   return { initialSnapshot: initialSnapshotRef.current }
 }

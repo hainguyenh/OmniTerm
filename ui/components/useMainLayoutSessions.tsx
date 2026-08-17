@@ -19,6 +19,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
   const { initialSnapshot } = useSessionPersistence({
     activeTabs,
     ephemeralConns,
+    resolveConnection: connById,
     viewGroups,
     tabGroups,
     activeGroupId,
@@ -30,6 +31,8 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
     setActiveTabs,
     setEphemeralConns,
     setTabGroups,
+    setResumeMode,
+    resolveConnection: connById,
     restoreGroups,
     setPanes,
     setLayoutMode,

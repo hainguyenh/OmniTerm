@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import type { Connection } from '@omniterm/contract'
 import { useSessionRestore } from '../useSessionRestore'
 import {
   SNAPSHOT_KEY,
@@ -11,7 +12,7 @@ import {
   type SessionSnapshot,
 } from '../../utils/sessionStore'
 import { loadScrollback, saveScrollback } from '../../utils/scrollbackStore'
-import type { Connection } from '@omniterm/contract'
+import { setPersistencePolicyOverride } from '../../utils/persistencePolicy'
 
 const registeredConn = (over: Partial<Connection> = {}): Connection => ({
   id: 'adhoc-fresh-99',
@@ -24,32 +25,57 @@ const registeredConn = (over: Partial<Connection> = {}): Connection => ({
   ...over,
 })
 
+function snapshot(
+  policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' = 'recover-after-reboot',
+): SessionSnapshot {
+  return {
+    version: SNAPSHOT_VERSION,
+    activeTabs: [{
+      id: 'old-tab-1', sessionId: 'old-tab-1', generation: 2,
+      persistencePolicy: policy, connId: 'old-adhoc-1', name: 'PowerShell',
+      scrollbackKey: 'sb-old-tab-1',
+    }],
+    ephemeralConns: [{
+      id: 'old-adhoc-1', name: 'PowerShell', type: 'LOCAL', ephemeral: true,
+      shell: 'powershell', localCwd: 'F:/repo',
+    }],
+    viewGroups: [{
+      id: 'ungrouped', label: 'Ungrouped', layoutMode: 2,
+      panes: ['old-tab-1', null, null, null, null, null, null, 'ghost'], focusedPane: 7,
+    }],
+    tabGroups: { 'old-tab-1': 'ungrouped' },
+    activeGroupId: 'ungrouped',
+    layoutMode: 2,
+  }
+}
+
 const setters = () => ({
   setActiveTabs: vi.fn(),
   setEphemeralConns: vi.fn(),
   setTabGroups: vi.fn(),
+  setResumeMode: vi.fn(),
   restoreGroups: vi.fn(),
   setPanes: vi.fn(),
   setLayoutMode: vi.fn(),
   setFocusedPane: vi.fn(),
 })
 
-/** Invoke a setter's updater against `prev` the way React would. */
 const applied = <T,>(setter: { mock: { calls: unknown[][] } }, prev: T): T =>
   (setter.mock.calls[0][0] as (p: T) => T)(prev)
 
 describe('useSessionRestore', () => {
   const mockOpen = vi.fn()
+  const listLocalSessions = vi.fn()
 
   beforeEach(() => {
     mockOpen.mockReset()
+    listLocalSessions.mockReset().mockResolvedValue([])
     localStorage.clear()
     Object.defineProperty(window, 'omnitermAPI', {
       configurable: true,
       value: {
-        shells: {
-          open: mockOpen,
-        },
+        shells: { open: mockOpen },
+        connect: { listLocalSessions },
       },
     })
   })
@@ -59,228 +85,154 @@ describe('useSessionRestore', () => {
     localStorage.clear()
   })
 
-  it('does nothing when initialSnapshot is null', () => {
+  it('does nothing without a restorable snapshot', () => {
     const s = setters()
     renderHook(() => useSessionRestore({ initialSnapshot: null, ...s }))
+    renderHook(() => useSessionRestore({ initialSnapshot: { ...snapshot(), activeTabs: [] }, ...s }))
+    expect(listLocalSessions).not.toHaveBeenCalled()
     expect(mockOpen).not.toHaveBeenCalled()
-    expect(s.setActiveTabs).not.toHaveBeenCalled()
   })
 
-  it('does nothing when activeTabs is empty', () => {
+  it('reattaches a live daemon session without spawning or re-registering it', async () => {
+    listLocalSessions.mockResolvedValue([{ id: 'old-tab-1', lifecycle: 'live', generation: 2 }])
     const s = setters()
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [],
-      ephemeralConns: [],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
+
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
     expect(mockOpen).not.toHaveBeenCalled()
-    expect(s.setActiveTabs).not.toHaveBeenCalled()
+    expect(applied(s.setActiveTabs, [])).toEqual([
+      { id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell' },
+    ])
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': true })
   })
 
-  it('re-registers shells and seeds state with remapped ids', async () => {
+  it('uses the interrupted daemon manifest policy when it is newer than the renderer snapshot', async () => {
+    listLocalSessions.mockResolvedValue([{
+      id: 'old-tab-1', lifecycle: 'interrupted', generation: 2, policy: 'recover-after-reboot',
+    }])
     mockOpen.mockResolvedValue(registeredConn())
     const s = setters()
 
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell' }],
-      ephemeralConns: [{ id: 'old-adhoc-1', name: 'PowerShell', shell: 'powershell' }],
-      viewGroups: [
-        {
-          id: 'ungrouped',
-          label: 'Ungrouped',
-          layoutMode: 2,
-          panes: ['old-tab-1', null, null, null, null, null, null, 'old-tab-ghost'],
-          focusedPane: 7,
-        },
-      ],
-      tabGroups: { 'old-tab-1': 'ungrouped' },
-      activeGroupId: 'ungrouped',
-      layoutMode: 2,
-    }
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot('keep-running'), ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
+  })
 
+  it('uses an explicit policy override when the renderer snapshot is older than the user choice', async () => {
+    setPersistencePolicyOverride('old-tab-1', 'recover-after-reboot')
+    mockOpen.mockResolvedValue(registeredConn())
+    const s = setters()
+
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot('keep-running'), ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
+  })
+
+  it('cold-recovers only recover-after-reboot and preserves the stable session id', async () => {
+    mockOpen.mockResolvedValue(registeredConn())
+    const s = setters()
+
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
     await vi.waitFor(() => expect(s.restoreGroups).toHaveBeenCalled())
-    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, null, null)
 
-    // Fresh tab ids derived from the new conn id, carrying the persisted display name.
+    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
     const tabs = applied<{ id: string; connId: string; name: string }[]>(s.setActiveTabs, [])
-    expect(tabs).toHaveLength(1)
-    expect(tabs[0].id).toMatch(/^adhoc-fresh-99_[0-9a-f-]+$/)
-    expect(tabs[0].connId).toBe('adhoc-fresh-99')
-    expect(tabs[0].name).toBe('PowerShell')
-
-    // Pane slots remap to the new id; an unknown tab id becomes an empty slot.
+    expect(tabs).toEqual([{ id: 'old-tab-1', connId: 'adhoc-fresh-99', name: 'PowerShell' }])
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
     const groups = s.restoreGroups.mock.calls[0][0] as Array<{ panes: (string | null)[] }>
-    expect(groups[0].panes[0]).toBe(tabs[0].id)
+    expect(groups[0].panes[0]).toBe('old-tab-1')
     expect(groups[0].panes[7]).toBeNull()
-    expect(s.setPanes).toHaveBeenCalledWith(groups[0].panes)
-
-    // tabGroups remap to the fresh id, and focusedPane is clamped to the layout's pane count.
-    const tabGroups = applied<Record<string, string>>(s.setTabGroups, {})
-    expect(tabGroups[tabs[0].id]).toBe('ungrouped')
     expect(s.setFocusedPane).toHaveBeenCalledWith(1)
   })
 
-  it('restores AI agent session with initialCommand and localCwd', async () => {
-    mockOpen.mockResolvedValue(
-      registeredConn({ id: 'adhoc-agent-fresh', localCwd: 'F:/my-repo', localCommand: 'claude --resume' }),
-    )
+  it('uses a safe persisted AI resume command only for reboot recovery', async () => {
+    mockOpen.mockResolvedValue(registeredConn({ id: 'agent-fresh' }))
     const s = setters()
+    const saved = snapshot('recover-after-reboot')
+    saved.activeTabs[0].name = 'Claude Code - repo'
+    saved.ephemeralConns[0].initialCommand = 'claude --continue'
 
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'tab-agent', connId: 'conn-agent', name: 'claude: ~/my-repo' }],
-      ephemeralConns: [
-        { id: 'conn-agent', name: 'Local Shell', shell: 'powershell', localCwd: 'F:/my-repo', initialCommand: 'claude --resume' },
-      ],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
-
-    await vi.waitFor(() => {
-      expect(mockOpen).toHaveBeenCalledWith(
-        'powershell',
-        null,
-        undefined,
-        'F:/my-repo',
-        'claude --resume',
-      )
-    })
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(mockOpen).toHaveBeenCalled())
+    expect(mockOpen).toHaveBeenCalledWith(
+      'powershell', null, undefined, 'F:/repo', 'claude --continue',
+    )
   })
 
-  it('consumes the stored snapshot after applying, so a deliberately emptied layout stays empty', async () => {
+  it('does not relaunch a recover session that the live daemon recorded as closed', async () => {
+    listLocalSessions.mockResolvedValue([{
+      id: 'old-tab-1', lifecycle: 'closed', generation: 2, policy: 'recover-after-reboot',
+    }])
+    mockOpen.mockResolvedValue(registeredConn({ id: 'agent-stopped' }))
+    const s = setters()
+    const saved = snapshot('recover-after-reboot')
+    saved.activeTabs[0].name = 'Claude Code - repo'
+    saved.ephemeralConns[0].initialCommand = 'claude --continue'
+
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': true })
+  })
+
+  it.each(['keep-running', 'close-with-app'] as const)(
+    're-registers %s ephemeral metadata but leaves the terminal stopped',
+    async (policy) => {
+      mockOpen.mockResolvedValue(registeredConn())
+      const s = setters()
+      renderHook(() => useSessionRestore({ initialSnapshot: snapshot(policy), ...s }))
+      await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+      expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
+      expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': true })
+    },
+  )
+
+  it('keeps the snapshot for retry when shell registration fails', async () => {
+    mockOpen.mockRejectedValue(new Error('backend unavailable'))
+    const s = setters()
+    const saved = snapshot()
+    saveSnapshot(saved)
+
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(mockOpen).toHaveBeenCalled())
+    expect(s.setActiveTabs).not.toHaveBeenCalled()
+    expect(localStorage.getItem(SNAPSHOT_KEY)).not.toBeNull()
+  })
+
+  it('consumes the snapshot only after at least one tab is restored', async () => {
     mockOpen.mockResolvedValue(registeredConn())
     const s = setters()
+    const saved = snapshot()
+    saveSnapshot(saved)
 
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell' }],
-      ephemeralConns: [{ id: 'old-adhoc-1', name: 'PowerShell', shell: 'powershell' }],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-    saveSnapshot(snapshot)
-    expect(localStorage.getItem(SNAPSHOT_KEY)).not.toBeNull()
-
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
     await vi.waitFor(() => expect(localStorage.getItem(SNAPSHOT_KEY)).toBeNull())
   })
 
-  it('keeps the snapshot for a later retry when every shell re-registration fails', async () => {
-    mockOpen.mockRejectedValue(new Error('backend unavailable'))
-    const s = setters()
-
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell' }],
-      ephemeralConns: [{ id: 'old-adhoc-1', name: 'PowerShell', shell: 'powershell' }],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-    saveSnapshot(snapshot)
-
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
-    await vi.waitFor(() => expect(mockOpen).toHaveBeenCalled())
-    expect(s.setActiveTabs).not.toHaveBeenCalled()
-    expect(localStorage.getItem(SNAPSHOT_KEY)).not.toBeNull()
-  })
-
-  it('restores only the tabs whose connection re-registered on partial failure', async () => {
-    const ok = registeredConn({ id: 'adhoc-ok' })
-    mockOpen.mockImplementationOnce(() => Promise.resolve(ok)).mockImplementationOnce(() =>
-      Promise.reject(new Error('shell gone')),
-    )
-    const s = setters()
-
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [
-        { id: 'tab-ok', connId: 'conn-ok', name: 'Kept' },
-        { id: 'tab-bad', connId: 'conn-bad', name: 'Dropped' },
-      ],
-      ephemeralConns: [
-        { id: 'conn-ok', name: 'Kept', shell: 'powershell' },
-        { id: 'conn-bad', name: 'Dropped', shell: 'powershell' },
-      ],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
-    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
-
-    const tabs = applied<{ id: string; connId: string; name: string }[]>(s.setActiveTabs, [])
-    expect(tabs).toHaveLength(1)
-    expect(tabs[0].name).toBe('Kept')
-  })
-
-  it('seeds no state when unmounted before shells.open settles', async () => {
-    let release: ((c: Connection) => void) | undefined
+  it('does not seed renderer state after unmount while registration is pending', async () => {
+    let release: ((conn: Connection) => void) | undefined
     mockOpen.mockReturnValue(new Promise<Connection>((resolve) => { release = resolve }))
     const s = setters()
-
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell' }],
-      ephemeralConns: [{ id: 'old-adhoc-1', name: 'PowerShell', shell: 'powershell' }],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-
-    const view = renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
+    const view = renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
     view.unmount()
     release?.(registeredConn())
     await vi.waitFor(() => expect(mockOpen).toHaveBeenCalled())
-
     expect(s.setActiveTabs).not.toHaveBeenCalled()
-    expect(s.restoreGroups).not.toHaveBeenCalled()
   })
 
-  it('carries saved scrollback across the tab id remap', async () => {
+  it('keeps scrollback under the stable session key', async () => {
     mockOpen.mockResolvedValue(registeredConn())
     const s = setters()
-
     await saveScrollback('sb-old-tab-1', 'previous pane output')
 
-    const snapshot: SessionSnapshot = {
-      version: SNAPSHOT_VERSION,
-      activeTabs: [{ id: 'old-tab-1', connId: 'old-adhoc-1', name: 'PowerShell', scrollbackKey: 'sb-old-tab-1' }],
-      ephemeralConns: [{ id: 'old-adhoc-1', name: 'PowerShell', shell: 'powershell' }],
-      viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
-      layoutMode: 1,
-    }
-
-    renderHook(() => useSessionRestore({ initialSnapshot: snapshot, ...s }))
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
-
-    const tabs = applied<{ id: string; connId: string; name: string }[]>(s.setActiveTabs, [])
-    // The memory fallback (no IndexedDB under jsdom) still proves the re-key: the new key
-    // holds the old buffer and the old key is gone.
-    await vi.waitFor(async () => {
-      expect(await loadScrollback(`sb-${tabs[0].id}`)).toBe('previous pane output')
-    })
-    expect(await loadScrollback('sb-old-tab-1')).toBeNull()
+    expect(await loadScrollback('sb-old-tab-1')).toBe('previous pane output')
   })
 })

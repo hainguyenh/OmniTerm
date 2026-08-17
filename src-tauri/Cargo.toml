@@ -20,10 +20,14 @@ embed-resource = "3"
 [dev-dependencies]
 tempfile = "3"
 tauri = { version = "2", features = ["test"] }
+portable-pty = "0.8"
+sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 [dependencies]
 omniterm-core = { path = "../crates/app-core" }
 omniterm-protocol = { path = "../crates/app-protocol" }
+omniterm-session-core = { path = "../crates/session-core" }
+omniterm-session-protocol = { path = "../crates/session-protocol" }
 
 # Tauri core + plugins
 #
@@ -47,12 +51,9 @@ tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# PTY
-portable-pty = "0.8"
+# Session/window state. PTY ownership and process polling live in `omniterm-session-core`;
+# portable-pty/sysinfo stay above as dev-dependencies for native integration tests only.
 dashmap = "6"
-# Process tree, for the busy/idle indicator (see src/proc_activity.rs). Only the process list is
-# needed, so the default features (disks, networks, components) stay off.
-sysinfo = { version = "0.33", default-features = false, features = ["system"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }

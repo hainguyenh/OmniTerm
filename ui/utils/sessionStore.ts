@@ -1,37 +1,37 @@
-/**
- * sessionStore.ts — snapshot of the current UI session layout for cross-restart persistence.
- *
- * Saves to localStorage — no Rust backend changes needed. Only LOCAL shell sessions are
- * persisted; SSH and RDP cannot be meaningfully resumed after the remote side has dropped them.
- *
- * The snapshot is versioned and schema-validated on load. Any corrupt or outdated snapshot is
- * silently discarded so the app starts with a clean slate instead of crashing.
- */
+/** Durable renderer layout metadata used to reattach or reconstruct daemon-owned PTY sessions. */
 import { LAYOUT_MODES, type LayoutMode } from '../themes'
+import { parseAgentTitle } from './agentTitle'
+import {
+  getPersistencePolicy,
+  isPersistencePolicy,
+  type TerminalPersistencePolicy,
+} from './persistencePolicy'
 
 export const SNAPSHOT_KEY = 'omniterm:session-snapshot'
-export const SNAPSHOT_VERSION = 1 as const
-
-// ── Types ────────────────────────────────────────────────────────────────────
+export const SNAPSHOT_VERSION = 2 as const
 
 export interface PersistedTab {
   id: string
+  sessionId: string
+  generation: number
+  persistencePolicy: TerminalPersistencePolicy
   connId: string
   name: string
-  /** IndexedDB key holding this tab's saved scrollback, written by the persistence layer. */
   scrollbackKey?: string
 }
 
-/** Subset of Connection needed to re-register an ephemeral LOCAL shell on restore. */
 export interface PersistedConn {
-  /** Original adhoc-* id. Used to correlate tabs before remapping. */
   id: string
   name: string
-  /** LocalShell value ('powershell', 'cmd', 'bash', etc.). */
+  type?: 'LOCAL' | 'SSH'
+  ephemeral?: boolean
   shell?: string
   workspaceId?: string
   localCwd?: string
   initialCommand?: string
+  host?: string
+  port?: string
+  user?: string
 }
 
 export interface PersistedViewGroup {
@@ -40,7 +40,6 @@ export interface PersistedViewGroup {
   color?: string
   persistent?: boolean
   layoutMode: LayoutMode
-  /** Tab ids in each pane slot; null slots are empty. */
   panes: (string | null)[]
   focusedPane: number
 }
@@ -48,16 +47,12 @@ export interface PersistedViewGroup {
 export interface SessionSnapshot {
   version: typeof SNAPSHOT_VERSION
   activeTabs: PersistedTab[]
-  /** Only LOCAL shell connections — SSH/RDP are not restorable. */
   ephemeralConns: PersistedConn[]
   viewGroups: PersistedViewGroup[]
-  /** tabId → viewGroupId for tabs that belong to a non-default view group. */
   tabGroups: Record<string, string>
   activeGroupId: string
   layoutMode: LayoutMode
 }
-
-// ── Validation ───────────────────────────────────────────────────────────────
 
 const VALID_LAYOUT_MODES = new Set<number>(LAYOUT_MODES)
 
@@ -77,23 +72,24 @@ function isStringRecord(v: unknown): v is Record<string, string> {
 function isPersistedTab(v: unknown): v is PersistedTab {
   if (!v || typeof v !== 'object') return false
   const o = v as Record<string, unknown>
-  if (typeof o['id'] !== 'string' || typeof o['connId'] !== 'string' || typeof o['name'] !== 'string') {
-    return false
-  }
-  if (o['scrollbackKey'] !== undefined && typeof o['scrollbackKey'] !== 'string') {
-    return false
-  }
-  return true
+  return typeof o['id'] === 'string'
+    && typeof o['sessionId'] === 'string'
+    && typeof o['generation'] === 'number'
+    && isPersistencePolicy(o['persistencePolicy'])
+    && typeof o['connId'] === 'string'
+    && typeof o['name'] === 'string'
+    && (o['scrollbackKey'] === undefined || typeof o['scrollbackKey'] === 'string')
 }
 
 function isPersistedConn(v: unknown): v is PersistedConn {
   if (!v || typeof v !== 'object') return false
   const o = v as Record<string, unknown>
   if (typeof o['id'] !== 'string' || typeof o['name'] !== 'string') return false
-  if (o['shell'] !== undefined && typeof o['shell'] !== 'string') return false
-  if (o['workspaceId'] !== undefined && typeof o['workspaceId'] !== 'string') return false
-  if (o['localCwd'] !== undefined && typeof o['localCwd'] !== 'string') return false
-  if (o['initialCommand'] !== undefined && typeof o['initialCommand'] !== 'string') return false
+  if (o['type'] !== undefined && o['type'] !== 'LOCAL' && o['type'] !== 'SSH') return false
+  if (o['ephemeral'] !== undefined && typeof o['ephemeral'] !== 'boolean') return false
+  for (const key of ['shell', 'workspaceId', 'localCwd', 'initialCommand', 'host', 'port', 'user']) {
+    if (o[key] !== undefined && typeof o[key] !== 'string') return false
+  }
   return true
 }
 
@@ -108,56 +104,77 @@ function isPersistedViewGroup(v: unknown): v is PersistedViewGroup {
     && typeof o['focusedPane'] === 'number'
 }
 
-function isSessionSnapshot(v: unknown): v is SessionSnapshot {
-  if (!v || typeof v !== 'object') return false
-  const o = v as Record<string, unknown>
-  if (o['version'] !== SNAPSHOT_VERSION) return false
-  if (!Array.isArray(o['activeTabs'])
-    || !(o['activeTabs'] as unknown[]).every(isPersistedTab)) return false
-  if (!Array.isArray(o['ephemeralConns'])
-    || !(o['ephemeralConns'] as unknown[]).every(isPersistedConn)) return false
-  if (!Array.isArray(o['viewGroups'])
-    || !(o['viewGroups'] as unknown[]).every(isPersistedViewGroup)) return false
-  if (!isStringRecord(o['tabGroups'])) return false
-  if (typeof o['activeGroupId'] !== 'string') return false
-  if (!isLayoutMode(o['layoutMode'])) return false
-  return true
+function hasCommonSnapshotShape(o: Record<string, unknown>): boolean {
+  return Array.isArray(o['activeTabs'])
+    && Array.isArray(o['ephemeralConns'])
+    && (o['ephemeralConns'] as unknown[]).every(isPersistedConn)
+    && Array.isArray(o['viewGroups'])
+    && (o['viewGroups'] as unknown[]).every(isPersistedViewGroup)
+    && isStringRecord(o['tabGroups'])
+    && typeof o['activeGroupId'] === 'string'
+    && isLayoutMode(o['layoutMode'])
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+function migrateV1(o: Record<string, unknown>): SessionSnapshot | null {
+  if (!hasCommonSnapshotShape(o)) return null
+  const tabs = o['activeTabs'] as unknown[]
+  const migrated: PersistedTab[] = []
+  for (const value of tabs) {
+    if (!value || typeof value !== 'object') return null
+    const tab = value as Record<string, unknown>
+    if (typeof tab['id'] !== 'string' || typeof tab['connId'] !== 'string' || typeof tab['name'] !== 'string') return null
+    const isAgent = parseAgentTitle(tab['name']) !== null
+    migrated.push({
+      id: tab['id'],
+      sessionId: tab['id'],
+      generation: 1,
+      persistencePolicy: getPersistencePolicy(tab['id'], isAgent),
+      connId: tab['connId'],
+      name: tab['name'],
+      ...(typeof tab['scrollbackKey'] === 'string' ? { scrollbackKey: tab['scrollbackKey'] } : {}),
+    })
+  }
+  return {
+    version: SNAPSHOT_VERSION,
+    activeTabs: migrated,
+    ephemeralConns: (o['ephemeralConns'] as PersistedConn[]).map(conn => ({ type: 'LOCAL', ephemeral: true, ...conn })),
+    viewGroups: o['viewGroups'] as PersistedViewGroup[],
+    tabGroups: o['tabGroups'] as Record<string, string>,
+    activeGroupId: o['activeGroupId'] as string,
+    layoutMode: o['layoutMode'] as LayoutMode,
+  }
+}
 
-/**
- * Persist a session snapshot. Silently no-ops when localStorage is unavailable
- * (e.g. storage quota exceeded, private-browsing lockdown).
- */
+function parseSnapshot(v: unknown): SessionSnapshot | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const o = v as Record<string, unknown>
+  if (o['version'] === 1) return migrateV1(o)
+  if (o['version'] !== SNAPSHOT_VERSION || !hasCommonSnapshotShape(o)) return null
+  if (!(o['activeTabs'] as unknown[]).every(isPersistedTab)) return null
+  return o as unknown as SessionSnapshot
+}
+
 export function saveSnapshot(snapshot: SessionSnapshot): void {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot))
   } catch {
-    // Storage is optional — silently ignore quota or access errors.
+    // Storage is optional.
   }
 }
 
-/**
- * Load and validate the persisted snapshot. Returns null when no snapshot exists,
- * when the JSON is malformed, or when the schema or version does not match.
- */
 export function loadSnapshot(): SessionSnapshot | null {
   try {
     const raw = localStorage.getItem(SNAPSHOT_KEY)
-    if (!raw) return null
-    const parsed: unknown = JSON.parse(raw)
-    return isSessionSnapshot(parsed) ? parsed : null
+    return raw ? parseSnapshot(JSON.parse(raw) as unknown) : null
   } catch {
     return null
   }
 }
 
-/** Remove the persisted snapshot from localStorage. */
 export function clearSnapshot(): void {
   try {
     localStorage.removeItem(SNAPSHOT_KEY)
   } catch {
-    // ignore
+    // Storage is optional.
   }
 }
