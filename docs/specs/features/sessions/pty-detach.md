@@ -28,7 +28,7 @@ Defines native PTY ownership, output/activity processing and moving an existing 
 
 ## What
 
-Native runtime owns process handles and session registry; detachment changes presentation ownership only.
+The out-of-process session daemon owns PTY/process handles and the live session registry; detachment changes presentation ownership only.
 
 ## Why
 
@@ -36,7 +36,7 @@ OS resources must survive renderer remounts and detaching must not create a dupl
 
 ## How
 
-PTY commands operate on native session IDs. Output/status/activity helpers emit events. `terminal_window` maps existing session IDs to detached windows and reattaches them without restarting the PTY.
+PTY commands operate on stable daemon session IDs. The daemon buffers output and derives activity, while the Tauri bridge forwards its stream over existing renderer channels. `terminal_window` maps existing session IDs to detached windows and reattaches without restarting the PTY.
 
 ## When
 
@@ -46,7 +46,7 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 
 - One native session per session ID.
 - Detach preserves process/session identity.
-- Output ordering is preserved through batching.
+- Replay is emitted before the live daemon stream, preserving output ordering across attach/restart.
 
 ## Functionalities
 
@@ -54,8 +54,8 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 - `send_session_input` — owned by this spec.
 - `resize_session` — owned by this spec.
 - `kill_session` / `disconnect_session` — owned by this spec.
-- `push_output` / `send_status` — owned by this spec.
-- `spawn_poller` — owned by this spec.
+- `list_local_sessions` / `set_session_persistence` — owned by this spec.
+- daemon output/activity streaming — owned by `session-core`.
 - `detach_terminal` — owned by this spec.
 - `reattach_terminal` — owned by this spec.
 
@@ -67,17 +67,17 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 | `send_session_input` | Write session input. | Interactive shell. | Lookup writer by session ID. | User input. |
 | `resize_session` | Resize PTY. | Match UI geometry. | Lookup PTY and resize. | Pane/xterm resize. |
 | `kill_session` / `disconnect_session` | Stop/release session. | Explicit lifecycle. | Lookup registry and terminate/release. | Close/disconnect. |
-| `push_output` / `send_status` | Emit runtime stream/status. | Renderer updates. | Batch/publish events by session. | Output/status changes. |
-| `spawn_poller` | Poll process activity. | Metrics/status. | Background activity sampling. | Live session. |
+| `list_local_sessions` / `set_session_persistence` | Read/update daemon lifecycle state. | Restore and Hybrid lifetime policy. | Query or mutate sessiond records by stable session ID. | Startup/policy change. |
+| daemon output/activity | Buffer replay and publish runtime state. | Keep PTY continuity independent of renderer lifetime. | `session-core` owns the 256 KiB replay tail, stream, and process poller. | Live session. |
 | `detach_terminal` | Create/focus detached renderer for existing session. | Move presentation without new PTY. | Bind session ID to Tauri window. | Detach. |
 | `reattach_terminal` | Return session presentation to main app. | Reversible detach. | Release detached mapping and reattach. | Reattach. |
 
 ## State and data
 
-- Session registry
-- PTY handles
-- Output buffers
-- Activity metrics
+- Daemon session registry
+- Daemon-owned PTY handles
+- Bounded replay plus durable recovery tail
+- Daemon-owned activity metrics
 - Window attachment map
 
 ## Errors and edge cases
@@ -90,12 +90,13 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 
 ## Verification
 
-- PTY/io/output/activity tests
-- terminal_window tests
+- session-core persistence/replay/activity tests
+- Tauri bridge and terminal_window tests
 
 ## Source map
 
 - `src-tauri/src/pty.rs`
-- `src-tauri/src/session_output.rs`
-- `src-tauri/src/session_activity.rs`
+- `crates/session-core/src/manager.rs`
+- `crates/session-core/src/output.rs`
+- `crates/session-core/src/activity.rs`
 - `src-tauri/src/terminal_window.rs`

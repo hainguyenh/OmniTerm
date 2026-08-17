@@ -197,10 +197,22 @@ interface Window {
       onLocalClosed: (id: string, cb: (code?: number) => void) => () => void
       /**
        * The shell started or stopped running something (a child process, or a command it was
-       * launched with) — fired on change only. Backed by the Tauri backend's activity poller; the
+       * launched with) — fired on change only. Backed by the session daemon's activity poller; the
        * Electron build has no equivalent probe, so there it never fires and tabs read idle.
        */
       onLocalActivity: (id: string, cb: (busy: boolean) => void) => () => void
+      listLocalSessions: () => Promise<Array<{
+        id: string
+        generation: number
+        policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot'
+        lifecycle: 'live' | 'interrupted' | 'closed' | 'error'
+        pid?: number | null
+        label: string
+        busy: boolean
+        launchedWithCommand: boolean
+        ssh: boolean
+      }>>
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') => Promise<void>
     }
     // Multi-window terminal detach/reattach. `detachedSessionId` is non-null only inside a
     // popped-out window (from its --omniterm-detached=<id> launch arg); the primary reads null.
@@ -215,7 +227,7 @@ interface Window {
        * session's own data channel before this resolves, so it reaches the caller's onData handler
        * instead of being serialized here.
        */
-      resume: (sessionId: string) => Promise<{ data: Uint8Array; status: 'connecting' | 'ready' | 'error' | 'closed'; label?: string; error?: string; busy?: boolean } | null>
+      resume: (sessionId: string) => Promise<{ data: Uint8Array; status: 'connecting' | 'ready' | 'error' | 'closed'; label?: string; error?: string; busy?: boolean; generation: number } | null>
       reattach: (sessionId: string) => Promise<boolean>
       focus: (sessionId: string) => void
       release: (sessionId: string) => void

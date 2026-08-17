@@ -183,6 +183,8 @@ const defaults: Api = {
     localDisconnect: () => {},
     localInput: () => {},
     localResize: () => {},
+    listLocalSessions: async () => [],
+    setPersistencePolicy: async () => {},
     onLocalReady: noopSub,
     onLocalData: noopSub,
     onLocalError: noopSub,

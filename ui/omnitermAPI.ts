@@ -130,8 +130,11 @@ function createTauriAPI(): any {
       onLocalData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
       onLocalError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
       onLocalClosed: (id: string, cb: (code: number) => void) => onSession(id, 'closed', cb),
-      // Busy/idle: whether the shell has anything running under it (see src-tauri/src/proc_activity.rs).
+      // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
       onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
+      listLocalSessions: () => invoke<any[]>('list_local_sessions').catch(() => []),
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') =>
+        invoke<void>('set_session_persistence', { id, policy }),
 
       // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt
       // is therefore native to ssh.exe and no credential crosses the frontend API.
@@ -178,8 +181,7 @@ function createTauriAPI(): any {
       onRDPClosed: (id: string, cb: () => void) => onEvent<null>(`rdp-closed-${id}`, cb),
     },
 
-    // Detached terminal windows. A pane popped out here keeps running in Rust; only its output sink
-    // moves between windows (see src-tauri/src/session_output.rs).
+    // Detached terminal windows are disposable daemon clients; PTYs stay owned by sessiond.
     terminalWindow: {
       // Truthy in a detached window, null in the main one. Derived from the window LABEL rather
       // than a URL parameter because `getCurrentWindow()` is synchronous: App.tsx has to choose its

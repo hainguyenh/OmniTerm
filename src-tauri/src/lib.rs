@@ -27,10 +27,7 @@ pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_l
 #[cfg(windows)]
 pub use app_core::win_job;
 pub mod pty;
-pub mod pty_output_batch;
 pub mod pty_resolve;
-pub mod session_activity;
-pub mod session_output;
 pub mod safepath_command;
 pub use app_core::safepath;
 pub use app_core::workspace_scan;
@@ -126,8 +123,11 @@ pub fn run() {
             // ever launched left one in the cache directory.
             rdp_embed::sweep_stale_temp_files(app.handle());
 
-            // Tells each pane whether its shell is running something (tab busy/idle indicator).
-            let _activity_poller = session_activity::spawn_poller(app.handle().clone());
+            // The out-of-process session daemon owns PTYs and their activity polling. This GUI keeps
+            // a lease only so `close-with-app` sessions can be reaped when the client disappears.
+            if let Err(error) = app.state::<PtyManager>().configure(app.handle()) {
+                log::warn!("[setup] session daemon client did not initialize: {error}");
+            }
             // Always Awake starts its own poller on the plugin's first `get_state`, so a build with
             // the plugin absent never runs it. See always_awake::ensure_poller.
 
@@ -184,6 +184,8 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         pty::send_session_input,
         pty::resize_session,
         pty::disconnect_session,
+        pty::list_local_sessions,
+        pty::set_session_persistence,
         pty_resolve::prepare_ssh_session,
         // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
         // positioned a window that was never reparented and got no error saying so. Docking, if

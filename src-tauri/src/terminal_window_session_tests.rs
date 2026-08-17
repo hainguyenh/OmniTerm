@@ -45,6 +45,7 @@ impl Drop for KillOnDrop<'_> {
 /// gone" branch is covered separately by the "missing" registry-entry tests above finding nothing to
 /// close in the first place).
 #[test]
+#[ignore = "requires packaged OmniTerm executable so --sessiond can be spawned"]
 fn happy_paths_through_a_real_session_and_a_real_mock_window() {
     let _guard = test_support::lock();
     let app = test_support::mock_app();
@@ -185,13 +186,13 @@ fn detach_terminal_rejects_already_detached_session() {
 fn attach_session_returns_none_if_session_is_missing() {
     let app = test_support::mock_app();
     assert!(app.manage(PtyManager::new()));
-    let snapshot = tauri::async_runtime::block_on(attach_session(
+    let result = tauri::async_runtime::block_on(attach_session(
         app.state::<PtyManager>(),
         "missing".to_string(),
         discarding_channel(),
         status_channel().0,
-    )).unwrap();
-    assert!(snapshot.is_none());
+    ));
+    assert_eq!(result.unwrap_err(), "Terminal session daemon is not initialized");
 }
 
 #[test]

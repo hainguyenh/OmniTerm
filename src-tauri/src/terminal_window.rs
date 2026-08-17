@@ -1,10 +1,8 @@
 //! Popping a pane out into its own OS window, and folding it back in.
 //!
-//! The PTY already lives here, in `PtyManager`'s app-global map, so a second window drives it with
-//! the same `send_session_input` / `resize_session` commands the main one uses — there is no session
-//! ownership to transfer. What does have to move is the *output sink*: a `tauri::ipc::Channel`
-//! belongs to the webview that created it, so detaching parks the sink and attaching installs a new
-//! one, replaying the scrollback in between (see session_output.rs).
+//! PTYs live in the out-of-process session daemon. Windows are disposable clients: detaching or
+//! folding a pane back only changes which webview subscribes to a session. Reattaching asks the
+//! daemon for buffered scrollback before streaming new output, so no PTY ownership moves with UI.
 //!
 //! A detached window identifies itself by its **label**, not by a URL parameter. `getCurrentWindow()`
 //! is synchronous in the webview, so the renderer can decide which root view to render before its
@@ -12,7 +10,7 @@
 //! ask about a window it does not own.
 
 use crate::pty::{self, PtyManager, SessionStatus};
-use crate::session_output::AttachSnapshot;
+use session_protocol::AttachSnapshot;
 use dashmap::DashMap;
 use serde::Serialize;
 use serde_json::Value;
@@ -122,11 +120,9 @@ pub async fn detach_terminal<R: Runtime>(
     if registry.entries.contains_key(&session_id) {
         return Ok(false);
     }
-    let Some(session) = pty.sessions.get(&session_id) else {
+    if !pty.sessions.contains_key(&session_id) {
         return Ok(false);
-    };
-    let output = std::sync::Arc::clone(&session.output);
-    drop(session); // Release the shard guard before building a window.
+    }
 
     let label = registry.mint_label();
     let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
@@ -141,12 +137,6 @@ pub async fn detach_terminal<R: Runtime>(
         .disable_drag_drop_handler()
         .build()
         .map_err(|e| format!("Could not open a window for this session: {e}"))?;
-
-    // Park the sink only once the window exists. Doing it earlier would blank the pane in the main
-    // window on a failed build, with nothing to show it instead.
-    if let Ok(mut out) = output.lock() {
-        out.detach();
-    }
 
     registry.entries.insert(
         session_id.clone(),
@@ -200,18 +190,7 @@ pub async fn attach_session(
     on_data: Channel<Response>,
     on_status: Channel<SessionStatus>,
 ) -> Result<Option<AttachSnapshot>, String> {
-    let Some(session) = pty.sessions.get(&id) else {
-        // The shell exited while the window was opening. `None` is not an error: the renderer shows
-        // "session is no longer available" in the pane rather than an error dialog.
-        return Ok(None);
-    };
-    let output = std::sync::Arc::clone(&session.output);
-    drop(session);
-
-    let mut out = output
-        .lock()
-        .map_err(|_| "This session's output lock is poisoned.".to_string())?;
-    Ok(Some(out.attach(on_data, on_status)))
+    pty::attach_existing_session(&pty, id, on_data, on_status).await
 }
 
 /// Fold a detached pane back into the main window.
@@ -265,7 +244,7 @@ pub async fn release_terminal_window(
 /// Decide what a destroyed detached window means for its session.
 ///
 /// Three cases, in order:
-///   * the app is quitting — do nothing; every window is closing and the sessions go with the process;
+///   * the app is quitting — do nothing; the daemon applies each session's persistence policy;
 ///   * an explicit Re-attach — fold back, regardless of what the shell is doing;
 ///   * the user closed the window — fold back if the shell is *busy* (never lose running work to a
 ///     mis-click), otherwise kill the session, which is what closing a terminal window normally means.
@@ -309,11 +288,11 @@ fn session_is_busy<R: Runtime>(app: &AppHandle<R>, session_id: &str) -> bool {
     let Some(session) = pty.sessions.get(session_id) else {
         return false;
     };
-    session.output.lock().map(|out| out.busy()).unwrap_or(false)
+    session.busy
 }
 
 /// Drop the registry entry and tell the main window to reclaim the pane. The tab remounts in
-/// `attach` mode, which calls `attach_session` and gets the scrollback back.
+/// `attach` mode and gets buffered daemon scrollback before live output.
 fn finish_reattach<R: Runtime>(app: &AppHandle<R>, session_id: &str) {
     if let Some(registry) = app.try_state::<DetachRegistry>() {
         registry.entries.remove(session_id);

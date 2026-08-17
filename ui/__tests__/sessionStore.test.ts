@@ -13,8 +13,8 @@ import {
 function makeSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSnapshot {
   return {
     version: SNAPSHOT_VERSION,
-    activeTabs: [{ id: 'tab-1', connId: 'adhoc-1', name: 'PowerShell' }],
-    ephemeralConns: [{ id: 'adhoc-1', name: 'PowerShell', shell: 'powershell' }],
+    activeTabs: [{ id: 'tab-1', sessionId: 'tab-1', generation: 1, persistencePolicy: 'keep-running', connId: 'adhoc-1', name: 'PowerShell' }],
+    ephemeralConns: [{ id: 'adhoc-1', name: 'PowerShell', type: 'LOCAL', shell: 'powershell' }],
     viewGroups: [
       {
         id: 'ungrouped',
@@ -98,6 +98,23 @@ describe('sessionStore', () => {
       expect(loadSnapshot()).toBeNull()
     })
 
+    it('migrates a valid v1 snapshot instead of discarding it', () => {
+      const v1 = {
+        ...makeSnapshot(),
+        version: 1,
+        activeTabs: [{ id: 'agent-tab', connId: 'adhoc-1', name: 'Claude Code - repo' }],
+        ephemeralConns: [{ id: 'adhoc-1', name: 'repo', shell: 'powershell' }],
+      }
+      storage[SNAPSHOT_KEY] = JSON.stringify(v1)
+      const loaded = loadSnapshot()
+      expect(loaded?.version).toBe(SNAPSHOT_VERSION)
+      expect(loaded?.activeTabs[0]).toMatchObject({
+        sessionId: 'agent-tab',
+        generation: 1,
+        persistencePolicy: 'recover-after-reboot',
+      })
+    })
+
     it('returns null when activeTabs is missing a required field', () => {
       const bad = { ...makeSnapshot(), activeTabs: [{ id: 'x' }] }
       storage[SNAPSHOT_KEY] = JSON.stringify(bad)
@@ -156,12 +173,12 @@ describe('sessionStore', () => {
   it('round-trips a multi-group snapshot faithfully', () => {
     const snap = makeSnapshot({
       activeTabs: [
-        { id: 'tab-a', connId: 'adhoc-a', name: 'Tab A' },
-        { id: 'tab-b', connId: 'adhoc-b', name: 'Tab B' },
+        { id: 'tab-a', sessionId: 'tab-a', generation: 1, persistencePolicy: 'keep-running', connId: 'adhoc-a', name: 'Tab A' },
+        { id: 'tab-b', sessionId: 'tab-b', generation: 1, persistencePolicy: 'keep-running', connId: 'adhoc-b', name: 'Tab B' },
       ],
       ephemeralConns: [
-        { id: 'adhoc-a', name: 'Tab A', shell: 'cmd' },
-        { id: 'adhoc-b', name: 'Tab B', shell: 'bash', workspaceId: 'ws-1' },
+        { id: 'adhoc-a', name: 'Tab A', type: 'LOCAL', shell: 'cmd' },
+        { id: 'adhoc-b', name: 'Tab B', type: 'LOCAL', shell: 'bash', workspaceId: 'ws-1' },
       ],
       viewGroups: [
         { id: 'ungrouped', label: 'Ungrouped', layoutMode: 1, panes: ['tab-a', null, null, null, null, null, null, null], focusedPane: 0 },
@@ -184,6 +201,9 @@ describe('sessionStore', () => {
       activeTabs: [
         {
           id: 'tab-agent',
+          sessionId: 'tab-agent',
+          generation: 3,
+          persistencePolicy: 'recover-after-reboot',
           connId: 'adhoc-agent',
           name: 'claude: ~/project',
           scrollbackKey: 'sb-tab-agent',
@@ -194,13 +214,13 @@ describe('sessionStore', () => {
           id: 'adhoc-agent',
           name: 'Local Shell',
           localCwd: 'F:/repos/project',
-          initialCommand: 'claude --resume',
+          initialCommand: 'claude --continue',
         },
       ],
     })
     saveSnapshot(snap)
     const loaded = loadSnapshot()
     expect(loaded?.activeTabs[0].scrollbackKey).toBe('sb-tab-agent')
-    expect(loaded?.ephemeralConns[0].initialCommand).toBe('claude --resume')
+    expect(loaded?.ephemeralConns[0].initialCommand).toBe('claude --continue')
   })
 })

@@ -9,6 +9,7 @@ import AppearanceMenu from './AppearanceMenu'
 import type { AppTheme } from '../themes'
 import { formatTerminalTitle } from '../utils/agentTitle'
 import SessionStatusIndicator from './SessionStatusIndicator'
+import SessionPersistenceMenu from './SessionPersistenceMenu'
 import { Tooltip } from './Tooltip'
 
 /**
@@ -148,6 +149,9 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               onFontSizeChange={appearance.onFontSizeChange}
               compact
             />
+          )}
+          {conn && conn.type !== 'RDP' && sessionId && (
+            <SessionPersistenceMenu sessionId={sessionId} isAgent={formattedTitle.isAgent} />
           )}
           {detach && (
             <Tooltip content={detachTitle(detach, 'pane')} placement="bottom">

@@ -1,7 +1,7 @@
 //! Shared session lifecycle status type used by PTY source, output sink, and
 //! the Tauri command boundary.
 //!
-//! Lives in `app_protocol` so `session_output.rs` (desktop adapter) and the
+//! Lives in `app_protocol` so the Tauri session bridge and the
 //! (future) CLI can both reference it from app-core without a Tauri dependency.
 
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ pub enum SessionStatus {
 	Ready { label: String },
 	Error { message: String },
 	Closed { code: u32 },
-	/// The shell is (or is no longer) running something — see session_activity.rs. Sent on change
+	/// The shell is (or is no longer) running something — see `session-core/activity.rs`. Sent on change
 	/// only, so the renderer can hold it as a plain flag.
 	Activity { busy: bool },
 }

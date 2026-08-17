@@ -11,7 +11,7 @@
 //!     probe inside the distro. (See the WSL branch of launch.rs for how such a pane is spawned.)
 //!   * **In-process work reads idle.** `powershell -Command "Start-Sleep 60"` forks nothing. This is
 //!     why a command-launched pane is held busy for a short grace instead of trusting the probe alone
-//!     (see session_activity.rs).
+//!     (see `session-core/activity.rs`).
 //!   * **PID reuse.** The shell's own pid is safe for the session's lifetime — portable-pty keeps the
 //!     child's handle open, and Windows will not recycle a pid while a handle to it exists. Deeper in
 //!     the tree a process whose real parent has exited carries a stale parent id, and if that number

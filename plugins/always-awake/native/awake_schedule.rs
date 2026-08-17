@@ -55,7 +55,7 @@ pub(super) fn now_ms() -> i64 {
 }
 
 /// One session as Always Awake sees it, copied out of the DashMap so no shard guard is held across
-/// the process snapshot. Same reason `session_activity::Target` exists — and, like it, this is what
+/// the process snapshot. Same reason the session-daemon activity target exists — and, like it, this is what
 /// makes the activity rule testable without standing up a real PTY.
 pub struct AwakeTarget {
     pub ssh: bool,

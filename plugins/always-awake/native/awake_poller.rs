@@ -78,7 +78,7 @@ pub fn spawn_poller<R: Runtime>(app: AppHandle<R>) -> std::thread::JoinHandle<()
                     return;
                 };
                 // A blocking process enumeration, which is another reason this does not belong on an
-                // async worker — session_activity.rs offloads its own snapshot for the same reason.
+                // async worker — sessiond offloads its own process snapshot for the same reason.
                 let table = if manager.sessions.is_empty() {
                     crate::proc_activity::ProcTable::default()
                 } else {

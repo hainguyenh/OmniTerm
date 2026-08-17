@@ -3,7 +3,7 @@
  */
 import { createRef } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import PaneHeader from '../PaneHeader'
 
@@ -26,6 +26,13 @@ function setup(overrides: Partial<React.ComponentProps<typeof PaneHeader>> = {})
 }
 
 describe('PaneHeader remaining behavior', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    Object.defineProperty(window, 'omnitermAPI', {
+      configurable: true,
+      value: { connect: { setPersistencePolicy: vi.fn().mockResolvedValue(undefined) } },
+    })
+  })
   it('focuses, drags connected panes, opens picker, clears, and assigns sessions', () => {
     const x = setup()
     const header = screen.getByTitle(/Pane 2/)
@@ -73,6 +80,21 @@ describe('PaneHeader remaining behavior', () => {
     expect(onToggleFullscreen).toHaveBeenCalled()
     x.rerender(<PaneHeader {...x.props} fullscreen />)
     expect(screen.getByRole('button', { name: 'Restore view mode' })).toBeInTheDocument()
+  })
+
+
+  it('offers all Hybrid persistence modes and persists a user selection', async () => {
+    setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
+    const select = screen.getByRole('combobox', { name: 'Session persistence' })
+    expect(select).toHaveValue('keep-running')
+    expect(screen.getByRole('option', { name: 'Close with OmniTerm' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Keep running' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Recover after reboot' })).toBeInTheDocument()
+
+    fireEvent.change(select, { target: { value: 'recover-after-reboot' } })
+    expect(select).toHaveValue('recover-after-reboot')
+    expect(window.omnitermAPI.connect.setPersistencePolicy).toHaveBeenCalledWith('s1', 'recover-after-reboot')
+    expect(localStorage.getItem('omniterm:terminal-persistence-policies')).toContain('recover-after-reboot')
   })
 
   it('renders running status beacon when busy is true', () => {

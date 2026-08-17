@@ -1,81 +1,123 @@
-//! Local terminal sessions: a real PTY per pane, streamed to the renderer.
-//!
-//! A pane reports ready/data/error/closed over two `tauri::ipc::Channel`s rather than global events
-//! named `session-data-<id>`, for three reasons:
-//!
-//!   * Correctness: a session id may contain any character (LOCAL panes mint `<connId>_<uuid>`),
-//!     while Tauri event names are restricted to `[A-Za-z0-9-/:_]`. An id outside that set made every
-//!     `listen`/`emit` fail and left the pane stuck on "connecting" forever.
-//!   * Isolation: a global event carrying a shell's output reaches every listener in the webview, so
-//!     any script there could read another pane's bytes or forge its errors. A channel is reachable
-//!     only through the callback its creator registered.
-//!   * Throughput: a channel payload over 1 KiB is fetched as binary, skipping the JSON
-//!     number-array encoding an event has to use for the same bytes.
-//!
-//! Which channels a session currently writes to can change — see session_output.rs.
+//! Tauri bridge to the out-of-process terminal session daemon.
 
 use crate::launcher;
 #[cfg(test)]
 #[path = "pty_tests.rs"]
 mod tests;
-#[cfg(all(test, unix))]
-#[path = "pty_io_tests.rs"]
-mod io_tests;
-use crate::pty_output_batch::OutputBatcher;
 use crate::pty_resolve::resolve_local_launch;
-use crate::session_output::{send_status, Output};
 use dashmap::DashMap;
-use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use session_core::{SessionDaemonClient, SessionSubscription};
+use session_protocol::{
+    DaemonStatus, LaunchSpec, PersistencePolicy, ServerMessage, SessionLifecycle, SessionSummary,
+};
 use std::ffi::OsString;
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Manager, Runtime};
+use uuid::Uuid;
 
-/// Re‑export from the shared protocol crate so every intra‑crate `crate::pty::SessionStatus` path
-/// keeps resolving unchanged.
 pub use app_protocol::session_status::SessionStatus;
 
-/// Initial output geometry; the renderer resizes after xterm measures the pane, matching the initial 80x24 Electron geometry.
-const INITIAL_COLS: u16 = 80;
-const INITIAL_ROWS: u16 = 24;
-
-pub struct PtySession {
-    master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    /// Kills the child directly. Dropping the master is not enough: the reader task holds a cloned
-    /// reader handle that keeps the PTY alive, so without this a disconnected pane leaves its shell
-    /// (and anything it spawned) running for the life of the app.
-    killer: Arc<Mutex<Box<dyn ChildKiller + Send + Sync>>>,
-    /// The shell's OS pid — the root of the descendant search that decides busy/idle. `None` when
-    /// portable-pty could not report one, in which case the pane simply never reports busy.
-    pub(crate) pid: Option<u32>,
-    /// Where this session's bytes and status go, and the scrollback kept for whoever attaches next.
-    /// Shared rather than owned by the reader task, so a pane can move between windows — see
-    /// session_output.rs for why the buffer and the sink share one lock.
-    pub(crate) output: Arc<Mutex<Output>>,
-    /// This session baked a saved command into the shell's argv (see launch.rs). Such a pane reports
-    /// busy from the start: the shell may not have forked the command yet, and a pure-batch script
-    /// runs *inside* cmd.exe with no child process to find.
-    pub(crate) launched_with_command: bool,
-    /// The session is an SSH transport. Always Awake treats a connected SSH PTY as active because
-    /// the remote command state is not visible in the local Windows process tree.
-    pub(crate) ssh: bool,
-    /// Kill-on-close job holding the shell and its descendants (see win_job.rs). `kill_session` uses
-    /// it so a manual disconnect reaps orphans the same way a natural exit does.
-    #[cfg(windows)]
-    job: Option<Arc<crate::win_job::JobHandle>>,
+#[derive(Debug, Clone)]
+pub struct PtySessionMeta {
+    pub pid: Option<u32>,
+    pub launched_with_command: bool,
+    pub ssh: bool,
+    pub busy: bool,
+    pub generation: u64,
+    pub policy: PersistencePolicy,
+    pub lifecycle: SessionLifecycle,
+    pub label: String,
 }
 
 pub struct PtyManager {
-    pub sessions: DashMap<String, PtySession>,
+    pub sessions: Arc<DashMap<String, PtySessionMeta>>,
+    client: OnceLock<SessionDaemonClient>,
+    lease_started: AtomicBool,
 }
 
 impl PtyManager {
     pub fn new() -> Self {
         Self {
-            sessions: DashMap::new(),
+            sessions: Arc::new(DashMap::new()),
+            client: OnceLock::new(),
+            lease_started: AtomicBool::new(false),
         }
+    }
+
+    pub fn configure<R: Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
+        if self.client.get().is_none() {
+            let state_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?
+                .join("sessiond");
+            let executable = std::env::current_exe()
+                .map_err(|error| format!("Could not resolve OmniTerm executable: {error}"))?;
+            let client = SessionDaemonClient::new(
+                state_dir,
+                executable,
+                format!("gui-{}", Uuid::new_v4()),
+            );
+            let _ = self.client.set(client);
+        }
+        self.ensure_lease();
+        Ok(())
+    }
+
+    fn ensure_lease(&self) {
+        if self.lease_started.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let Some(client) = self.client.get().cloned() else {
+            self.lease_started.store(false, Ordering::Release);
+            return;
+        };
+        tauri::async_runtime::spawn(async move {
+            loop {
+                if let Err(error) = client.hold_lease().await {
+                    log::debug!("[sessiond] client lease ended: {error}");
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+        });
+    }
+
+    pub(crate) fn client(&self) -> Result<SessionDaemonClient, String> {
+        self.client
+            .get()
+            .cloned()
+            .ok_or_else(|| "Terminal session daemon is not initialized".to_string())
+    }
+
+    fn cache_summary(&self, summary: &SessionSummary) {
+        if summary.lifecycle == SessionLifecycle::Interrupted {
+            self.sessions.remove(&summary.id);
+            return;
+        }
+        self.sessions.insert(
+            summary.id.clone(),
+            PtySessionMeta {
+                pid: summary.pid,
+                launched_with_command: summary.launched_with_command,
+                ssh: summary.ssh,
+                busy: summary.busy,
+                generation: summary.generation,
+                policy: summary.policy,
+                lifecycle: summary.lifecycle,
+                label: summary.label.clone(),
+            },
+        );
+    }
+
+    async fn refresh(&self) -> Result<Vec<SessionSummary>, String> {
+        let sessions = self.client()?.list().await?;
+        self.sessions.clear();
+        for summary in &sessions {
+            self.cache_summary(summary);
+        }
+        Ok(sessions)
     }
 }
 
@@ -85,8 +127,6 @@ impl Default for PtyManager {
     }
 }
 
-/// PATH for a pane, with the launcher shim directory prepended so a script running inside the pane
-/// can call `nc-open` to open another pane in this app instead of spawning a detached console.
 fn path_with_helper<R: Runtime>(app: &AppHandle<R>) -> Option<OsString> {
     let bin_dir = launcher::launcher_bin_dir(app);
     let current = std::env::var_os("PATH")?;
@@ -95,21 +135,11 @@ fn path_with_helper<R: Runtime>(app: &AppHandle<R>) -> Option<OsString> {
     std::env::join_paths(parts).ok()
 }
 
-/// Encode the renderer's appearance for CLI tools that use the conventional COLORFGBG hint.
-///
-/// `COLORFGBG` is commonly written as foreground;background ANSI indexes. Keeping this explicit
-/// at PTY launch lets agents such as Claude Code choose the same light/dark palette as xterm.
 pub(crate) fn colorfgbg_for_dark_mode(dark_mode: Option<bool>) -> Option<&'static str> {
     dark_mode.map(|dark| if dark { "15;0" } else { "0;15" })
 }
 
-/// Start a pane and stream it back over `on_data` (raw bytes) and `on_status` (ready/error/closed).
-///
-/// The channels come from the caller, which creates them with its callbacks already attached — so
-/// unlike the event-based port there is no window between "the PTY is running" and "the renderer can
-/// receive", and no bytes to lose in it.
 #[tauri::command]
-#[allow(clippy::too_many_arguments)]
 pub async fn start_local_session<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, PtyManager>,
@@ -120,166 +150,60 @@ pub async fn start_local_session<R: Runtime>(
     on_data: Channel<Response>,
     on_status: Channel<SessionStatus>,
 ) -> Result<(), String> {
-    // Re-connecting with a live id would orphan the previous child; tear it down first.
-    if state.sessions.contains_key(&id) {
-        kill_session(&state, &id);
-    }
-
+    state.configure(&app)?;
     let launch = resolve_local_launch(&app, &conn_id, shell).await?;
     let invocation = launch.invocation()?;
-    log::info!("[pty] starting session {id} ({} {:?})", invocation.exe, invocation.args);
-
-    let pair = NativePtySystem::default()
-        .openpty(PtySize {
-            rows: INITIAL_ROWS,
-            cols: INITIAL_COLS,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| format!("Could not open a pseudo-terminal: {e}"))?;
-
-    let mut cmd = CommandBuilder::new(&invocation.exe);
-    for arg in &invocation.args {
-        cmd.arg(arg);
-    }
-    if let Some(cwd) = &launch.cwd {
-        let cwd = dunce::canonicalize(cwd)
-            .map_err(|error| format!("Could not resolve working directory {cwd}: {error}"))?;
-        cmd.cwd(cwd);
-    }
+    let mut env = vec![
+        ("TERM".to_string(), "xterm-256color".to_string()),
+        ("COLORTERM".to_string(), "truecolor".to_string()),
+    ];
     if let Some(path) = path_with_helper(&app) {
-        cmd.env("PATH", path);
+        env.push(("PATH".to_string(), path.to_string_lossy().into_owned()));
     }
-    // Agents/readline key capability detection off TERM.
-    cmd.env("TERM", "xterm-256color");
-    cmd.env("COLORTERM", "truecolor");
-    if let Some(colorfgbg) = colorfgbg_for_dark_mode(dark_mode) {
-        cmd.env("COLORFGBG", colorfgbg);
+    if let Some(value) = colorfgbg_for_dark_mode(dark_mode) {
+        env.push(("COLORFGBG".to_string(), value.to_string()));
     }
-
-    let mut child = pair
-        .slave
-        .spawn_command(cmd)
-        .map_err(|e| format!("Could not start {}: {e}", invocation.exe))?;
-
-    // A script that shells out to `wsl.exe` (or similar) can leave a helper process running long after
-    // the shell exits. The job lets the exit watcher below take that whole tree down instead of
-    // leaking it for the life of the app. Best-effort: without one the pane just loses that cleanup.
-    #[cfg(windows)]
-    let job: Option<Arc<crate::win_job::JobHandle>> = match child.as_raw_handle() {
-        Some(raw) => match crate::win_job::assign_new_job(raw) {
-            Ok(job) => Some(Arc::new(job)),
-            Err(e) => {
-                log::warn!("[pty] could not create a job object for session {id}: {e}");
-                None
-            }
-        },
-        None => None,
-    };
-
-    // Drop our end of the slave: while it is open the reader never observes EOF when the shell exits.
-    drop(pair.slave);
-
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
-    let killer = child.clone_killer();
-    // Read before `child` moves into the exit-watcher task below — that move is what makes this the
-    // only place the pid can be captured.
-    let pid = child.process_id();
     let launched_with_command = launch.command.is_some();
     let ssh = launch
         .command
         .as_deref()
         .is_some_and(|command| command.to_ascii_lowercase().contains("ssh.exe"));
-
-    let label = launch.shell.label().to_string();
-    let output = Arc::new(Mutex::new(Output::new(on_data, on_status, label.clone())));
-
-    state.sessions.insert(
-        id.clone(),
-        PtySession {
-            master: Arc::new(Mutex::new(pair.master)),
-            writer: Arc::new(Mutex::new(writer)),
-            killer: Arc::new(Mutex::new(killer)),
-            pid,
-            output: Arc::clone(&output),
-            launched_with_command,
-            ssh,
-            #[cfg(windows)]
-            job: job.clone(),
-        },
-    );
-
-    send_status(&output, SessionStatus::Ready { label });
-    // Baseline activity, so the tab has a state before the poller's first tick lands.
-    let busy = launched_with_command;
-    send_status(&output, SessionStatus::Activity { busy });
-
-    let reader_output = Arc::clone(&output);
-    let reader_task = tokio::task::spawn_blocking(move || {
-        // Reads are coalesced into fewer, larger IPC messages — see pty_output_batch.rs. One message
-        // per 4 KiB read saturated the renderer's event loop under an agent CLI's repaint traffic.
-        let batcher = OutputBatcher::spawn(Arc::clone(&reader_output));
-        let mut reader = reader;
-        let mut buf = [0u8; 4096];
-        let mut failure = None;
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                // Deliberately does not stop when the sink is dead — that is just a detached pane,
-                // and the bytes go to its replay buffer. Breaking (as this did when there was only
-                // ever one window) would kill a popped-out pane's output permanently.
-                Ok(n) => batcher.push(&buf[..n]),
-                Err(e) => {
-                    failure = Some(e.to_string());
-                    break;
-                }
-            }
-        }
-        // Drained before the error is reported, so whatever the shell managed to write stays ahead of
-        // the message explaining why the stream ended.
-        batcher.finish();
-        if let Some(message) = failure {
-            send_status(&reader_output, SessionStatus::Error { message });
-        }
-    });
-
-    let app_clone = app.clone();
-    let id_clone = id.clone();
-    tokio::spawn(async move {
-        // Wait on the shell itself rather than on the reader seeing EOF. A ConPTY reports EOF only once
-        // OpenConsole considers every process attached to the console gone, so one orphaned descendant
-        // (a stray `wsl.exe` helper) keeps the read blocked long after the shell has exited.
-        let code = tokio::task::spawn_blocking(move || {
-            child.wait().map(|s| s.exit_code()).unwrap_or(0)
-        })
+    let spec = LaunchSpec {
+        exe: invocation.exe,
+        args: invocation.args,
+        cwd: launch.cwd,
+        env,
+        label: launch.shell.label().to_string(),
+        launched_with_command,
+        ssh,
+    };
+    let client = state.client()?;
+    let previous = client
+        .list()
         .await
-        .unwrap_or(0);
-
-        // Take down whatever the shell left behind, so it does not linger in the background.
-        #[cfg(windows)]
-        if let Some(job) = &job {
-            job.terminate(code);
-        }
-
-        // Drop the session — and with it `master`, whose Windows impl calls `ClosePseudoConsole` —
-        // *before* joining the reader. That tears the pseudoconsole down at the OS level and is what
-        // unblocks the pending read; joining first is what let an orphan hang the pane indefinitely.
-        if let Some(manager) = app_clone.try_state::<PtyManager>() {
-            manager.sessions.remove(&id_clone);
-        }
-
-        // Joined after, so buffered output still reaches the renderer ahead of Closed.
-        let _ = reader_task.await;
-
-        // Through the shared holder, not a captured channel: by now the pane may be living in a
-        // detached window, and a clone taken at start time would deliver Closed to the dead one.
-        send_status(&output, SessionStatus::Closed { code });
-    });
-
+        .unwrap_or_default()
+        .into_iter()
+        .find(|session| session.id == id);
+    let generation = previous
+        .as_ref()
+        .map(|session| session.generation.saturating_add(1))
+        .unwrap_or(1);
+    let policy = previous
+        .as_ref()
+        .map(|session| session.policy)
+        .unwrap_or(PersistencePolicy::KeepRunning);
+    let summary = client
+        .create(id.clone(), generation, policy, spec)
+        .await?;
+    state.cache_summary(&summary);
+    let mut subscription = client.attach(id.clone()).await?;
+    if !subscription.replay.is_empty() {
+        on_data
+            .send(Response::new(std::mem::take(&mut subscription.replay)))
+            .map_err(|error| error.to_string())?;
+    }
+    send_initial_status(&on_status, &subscription.snapshot);
+    spawn_stream(id, subscription, on_data, on_status, state.inner());
     Ok(())
 }
 
@@ -289,13 +213,7 @@ pub async fn send_session_input(
     id: String,
     data: String,
 ) -> Result<(), String> {
-    let session = state.sessions.get(&id).ok_or("Session not found")?;
-    let mut writer = session
-        .writer
-        .lock()
-        .map_err(|_| "Failed to acquire writer lock".to_string())?;
-    writer.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
-    writer.flush().map_err(|e| e.to_string())
+    state.client()?.input(id, data).await
 }
 
 #[tauri::command]
@@ -305,72 +223,7 @@ pub async fn resize_session(
     cols: u16,
     rows: u16,
 ) -> Result<(), String> {
-    if cols == 0 || rows == 0 {
-        return Err("Terminal size must be non-zero".to_string());
-    }
-    let session = state.sessions.get(&id).ok_or("Session not found")?;
-    let master = session
-        .master
-        .lock()
-        .map_err(|_| "Failed to acquire master lock".to_string())?;
-    master
-        .resize(PtySize {
-            rows,
-            cols,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|e| e.to_string())
-}
-
-/// Remove a session and kill its child. Idempotent.
-///
-/// Takes `&PtyManager` so an `AppHandle`-only detached-window close handler can use the disconnect path.
-pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
-    let Some((_, session)) = manager.sessions.remove(id) else {
-        return;
-    };
-    let killer = Arc::clone(&session.killer);
-    #[cfg(windows)]
-    let job = session.job.clone();
-    drop(session);
-
-    let outcome = match killer.lock() {
-        Ok(mut killer) => killer.kill(),
-        Err(_) => Err(std::io::Error::other("killer lock is poisoned")),
-    };
-    // `Err` here is not evidence of failure on Windows: portable-pty 0.8.1's `WinChildKiller::kill`
-    // inverts the `TerminateProcess` return-code check, so a *successful* kill comes back as `Err`
-    // carrying a stale OS error ("The handle is invalid."). See the note in
-    // tests/shell_integration.rs, which asserts the child really does die. The authoritative signal
-    // is the reader task's `session-closed` emit, so this is logged rather than surfaced.
-    if let Err(e) = outcome {
-        if !is_process_gone_error(&e) {
-            log::debug!("[pty] kill for session {id} reported: {e}");
-        }
-    }
-
-    // Same orphan cleanup the natural-exit path does, so a disconnect does not leak descendants.
-    #[cfg(windows)]
-    if let Some(job) = job {
-        job.terminate(1);
-    }
-}
-
-/// A shell can exit between the detached window's close event and its cleanup call. Treat the
-/// resulting not-found/invalid-handle errors as successful cleanup; the session was already gone.
-fn is_process_gone_error(error: &std::io::Error) -> bool {
-    if error.kind() == std::io::ErrorKind::NotFound {
-        return true;
-    }
-    // Windows reports a stale PTY process handle as ERROR_INVALID_HANDLE (6) when the
-    // child exited between removal from the registry and the kill request. Cleanup is
-    // already complete in that case, so do not surface it as a session failure.
-    #[cfg(windows)]
-    if error.raw_os_error() == Some(6) {
-        return true;
-    }
-    false
+    state.client()?.resize(id, cols, rows).await
 }
 
 #[tauri::command]
@@ -378,9 +231,157 @@ pub async fn disconnect_session(
     state: tauri::State<'_, PtyManager>,
     id: String,
 ) -> Result<(), String> {
-    if !state.sessions.contains_key(&id) {
-        return Err("Session not found".to_string());
+    state.sessions.remove(&id);
+    state.client()?.disconnect(id).await
+}
+
+#[tauri::command]
+pub async fn list_local_sessions(
+    state: tauri::State<'_, PtyManager>,
+) -> Result<Vec<SessionSummary>, String> {
+    state.refresh().await
+}
+
+#[tauri::command]
+pub async fn set_session_persistence(
+    state: tauri::State<'_, PtyManager>,
+    id: String,
+    policy: PersistencePolicy,
+) -> Result<(), String> {
+    state.client()?.set_policy(id.clone(), policy).await?;
+    if let Some(mut session) = state.sessions.get_mut(&id) {
+        session.policy = policy;
     }
-    kill_session(&state, &id);
     Ok(())
+}
+
+pub(crate) async fn attach_existing_session(
+    manager: &PtyManager,
+    id: String,
+    on_data: Channel<Response>,
+    on_status: Channel<SessionStatus>,
+) -> Result<Option<session_protocol::AttachSnapshot>, String> {
+    let client = manager.client()?;
+    let mut subscription = match client.attach(id.clone()).await {
+        Ok(subscription) => subscription,
+        Err(error) if error.contains("Session not found") || error.contains("interrupted") => {
+            return Ok(None);
+        }
+        Err(error) => return Err(error),
+    };
+    if !subscription.replay.is_empty() {
+        on_data
+            .send(Response::new(std::mem::take(&mut subscription.replay)))
+            .map_err(|error| error.to_string())?;
+    }
+    let snapshot = subscription.snapshot.clone();
+    spawn_stream(id, subscription, on_data, on_status, manager);
+    Ok(Some(snapshot))
+}
+
+pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
+    manager.sessions.remove(id);
+    let Ok(client) = manager.client() else {
+        return;
+    };
+    let id = id.to_string();
+    tauri::async_runtime::spawn(async move {
+        let _ = client.disconnect(id).await;
+    });
+}
+
+fn send_initial_status(
+    on_status: &Channel<SessionStatus>,
+    snapshot: &session_protocol::AttachSnapshot,
+) {
+    match snapshot.status.as_str() {
+        "ready" => {
+            let _ = on_status.send(SessionStatus::Ready {
+                label: snapshot.label.clone().unwrap_or_else(|| "Terminal".to_string()),
+            });
+            let _ = on_status.send(SessionStatus::Activity {
+                busy: snapshot.busy,
+            });
+        }
+        "error" => {
+            let _ = on_status.send(SessionStatus::Error {
+                message: snapshot
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "Terminal session failed".to_string()),
+            });
+        }
+        "closed" => {
+            let _ = on_status.send(SessionStatus::Closed { code: 0 });
+        }
+        _ => {}
+    }
+}
+
+fn spawn_stream(
+    id: String,
+    mut subscription: SessionSubscription,
+    on_data: Channel<Response>,
+    on_status: Channel<SessionStatus>,
+    manager: &PtyManager,
+) {
+    let sessions = manager.sessions.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let message = match subscription.next().await {
+                Ok(message) => message,
+                Err(error) => {
+                    // A renderer going away is observed through a failed channel send below. Getting
+                    // here means the daemon subscription itself vanished, so do not leave the pane
+                    // falsely "connected" or cold-spawn a replacement behind the user's back.
+                    if let Some(mut meta) = sessions.get_mut(&id) {
+                        if meta.lifecycle == SessionLifecycle::Live {
+                            meta.lifecycle = SessionLifecycle::Error;
+                        }
+                    }
+                    let _ = on_status.send(SessionStatus::Error {
+                        message: format!("Terminal session service disconnected: {error}"),
+                    });
+                    break;
+                }
+            };
+            match message {
+                ServerMessage::Data { data } => {
+                    if on_data.send(Response::new(data)).is_err() {
+                        break;
+                    }
+                }
+                ServerMessage::Status { status } => {
+                    if let Some(mut meta) = sessions.get_mut(&id) {
+                        match &status {
+                            DaemonStatus::Activity { busy } => meta.busy = *busy,
+                            DaemonStatus::Closed { .. } => {
+                                meta.busy = false;
+                                meta.lifecycle = SessionLifecycle::Closed;
+                            }
+                            DaemonStatus::Error { .. } => meta.lifecycle = SessionLifecycle::Error,
+                            DaemonStatus::Ready { label } => meta.label = label.clone(),
+                        }
+                    }
+                    if on_status.send(to_tauri_status(status)).is_err() {
+                        break;
+                    }
+                }
+                ServerMessage::Error { message } => {
+                    let _ = on_status.send(SessionStatus::Error { message });
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+}
+
+fn to_tauri_status(status: DaemonStatus) -> SessionStatus {
+    match status {
+        DaemonStatus::Ready { label } => SessionStatus::Ready { label },
+        DaemonStatus::Error { message } => SessionStatus::Error { message },
+        DaemonStatus::Closed { code } => SessionStatus::Closed { code },
+        DaemonStatus::Activity { busy } => SessionStatus::Activity { busy },
+    }
 }
