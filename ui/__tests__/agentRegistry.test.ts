@@ -8,20 +8,19 @@ import {
 describe('agentRegistry', () => {
   it('provides recipes for known agents', () => {
     expect(AGENT_REGISTRY['OpenCode']).toBeDefined()
-    expect(AGENT_REGISTRY['OpenCode'].command).toBe('opencode')
+    expect(AGENT_REGISTRY['OpenCode']?.command).toBe('opencode')
 
     expect(AGENT_REGISTRY['Claude Code']).toBeDefined()
-    expect(AGENT_REGISTRY['Claude Code'].command).toBe('claude')
-    expect(AGENT_REGISTRY['Claude Code'].resumeArgs).toEqual(['--resume'])
+    expect(AGENT_REGISTRY['Claude Code']?.command).toBe('claude')
+    expect(AGENT_REGISTRY['Claude Code']?.resumeArgs).toEqual(['--continue'])
 
     expect(AGENT_REGISTRY['Aider']).toBeDefined()
-    expect(AGENT_REGISTRY['Aider'].command).toBe('aider')
+    expect(AGENT_REGISTRY['Aider']?.command).toBe('aider')
 
-    expect(AGENT_REGISTRY['Antigravity CLI']).toBeDefined()
-    expect(AGENT_REGISTRY['Antigravity CLI'].command).toBe('agy')
+    expect(AGENT_REGISTRY['Antigravity CLI']).toBeNull()
 
     expect(AGENT_REGISTRY['Codex']).toBeDefined()
-    expect(AGENT_REGISTRY['Codex'].command).toBe('codex')
+    expect(AGENT_REGISTRY['Codex']?.command).toBe('codex')
   })
 
   it('matches agent recipes case-insensitively', () => {
@@ -34,8 +33,7 @@ describe('agentRegistry', () => {
     const aider = getAgentResumeRecipe('AIDER')
     expect(aider?.command).toBe('aider')
 
-    const agy = getAgentResumeRecipe('antigravity cli')
-    expect(agy?.command).toBe('agy')
+    expect(getAgentResumeRecipe('antigravity cli')).toBeNull()
 
     const unknown = getAgentResumeRecipe('unknown-agent')
     expect(unknown).toBeNull()
@@ -47,15 +45,17 @@ describe('agentRegistry', () => {
     expect(getAgentResumeRecipe('   ')).toBeNull()
     // The CLI command name is as valid a key as the display name.
     expect(getAgentResumeRecipe('claude')?.command).toBe('claude')
-    expect(getAgentResumeRecipe('  Goose  ')?.command).toBe('goose')
+    expect(getAgentResumeRecipe('  Goose  ')).toBeNull()
   })
 
   it('formats resume commands cleanly with arguments', () => {
-    expect(formatAgentResumeCommand('OpenCode')).toBe('opencode')
-    expect(formatAgentResumeCommand('Claude Code')).toBe('claude --resume')
+    expect(formatAgentResumeCommand('OpenCode')).toBe('opencode --continue')
+    expect(formatAgentResumeCommand('Claude Code')).toBe('claude --continue')
     expect(formatAgentResumeCommand('Aider')).toBe('aider --restore-chat-history')
-    expect(formatAgentResumeCommand('Antigravity CLI')).toBe('agy')
-    expect(formatAgentResumeCommand('Codex')).toBe('codex resume')
+    expect(formatAgentResumeCommand('Antigravity CLI')).toBeNull()
+    expect(formatAgentResumeCommand('Codex')).toBe('codex resume --last')
+    expect(formatAgentResumeCommand('Gemini CLI')).toBe('gemini --resume')
+    expect(formatAgentResumeCommand('Copilot CLI')).toBeNull()
     expect(formatAgentResumeCommand('Unknown')).toBeNull()
   })
 })

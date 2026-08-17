@@ -90,7 +90,7 @@ Whenever PTY/session output/status/open events flow or plugin host exchanges run
 
 ## Source map
 
-- `src-tauri/src/session_output.rs`
+- `crates/session-core/src/output.rs`
 - `src-tauri/src/adhoc.rs`
 - `ui/utils/sessionChannel.ts`
 - `src-tauri/src/plugin_host_rpc.rs`

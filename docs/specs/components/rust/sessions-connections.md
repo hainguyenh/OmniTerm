@@ -57,8 +57,8 @@ On connection load/save/import/export and every terminal session start/IO/resize
 - `send_session_input` — owned by this spec.
 - `resize_session` — owned by this spec.
 - `kill_session` / `disconnect_session` — owned by this spec.
-- `push_output` / `send_status` — owned by this spec.
-- `resolve_tick` / `spawn_poller` — owned by this spec.
+- daemon output/status streaming — owned by `session-core`.
+- daemon process-activity polling — owned by `session-core`.
 - `connections_path` — owned by this spec.
 - `scrub_stored_secrets` — owned by this spec.
 - `load_connections` / `save_connections` — owned by this spec.
@@ -76,8 +76,8 @@ On connection load/save/import/export and every terminal session start/IO/resize
 | `send_session_input` | Write PTY input. | Interactive terminal. | Lookup writer by session ID. | User input. |
 | `resize_session` | Resize PTY. | Correct geometry. | Lookup session PTY and resize. | UI resize. |
 | `kill_session` / `disconnect_session` | Terminate/release session. | Explicit lifecycle. | Lookup registry and cleanup. | Close/disconnect. |
-| `push_output` / `send_status` | Emit output/status. | Renderer updates. | Batch/publish events by ID. | Runtime changes. |
-| `resolve_tick` / `spawn_poller` | Derive/poll activity metrics. | Session diagnostics/status. | Background process activity sampling. | Live session. |
+| daemon output/status | Emit replay plus live output/status. | Renderer updates without owning PTYs. | Buffer/publish by stable daemon session ID. | Runtime changes. |
+| daemon activity poller | Derive activity metrics. | Session diagnostics/status. | Background process-tree sampling inside sessiond. | Live session. |
 | `connections_path` | Resolve global profile file. | One app-owned storage location. | App data path. | Connection load/save. |
 | `scrub_stored_secrets` | Remove sensitive fields. | Prevent password persistence. | Transform records before serialization. | Save/export. |
 | `load_connections` / `save_connections` | Read/write global profiles. | Durable reusable connections. | Parse/sanitize/serialize app-data JSON. | Startup/mutation. |
@@ -86,8 +86,8 @@ On connection load/save/import/export and every terminal session start/IO/resize
 
 ## State and data
 
-- Session registry/PTY handles
-- Output/activity state
+- Daemon session registry/PTY handles
+- Daemon output/activity state
 - Connection profile JSON
 - Temporary runtime connection registry
 
@@ -102,14 +102,15 @@ On connection load/save/import/export and every terminal session start/IO/resize
 
 ## Verification
 
-- PTY/resolve/output/activity tests
+- PTY bridge/session-core persistence and activity tests
 - connection persistence/import tests
 - password audit
 
 ## Source map
 
 - `src-tauri/src/pty.rs`
+- `crates/session-core/src/manager.rs`
 - `src-tauri/src/pty_resolve.rs`
-- `src-tauri/src/session_output.rs`
-- `src-tauri/src/session_activity.rs`
+- `crates/session-core/src/output.rs`
+- `crates/session-core/src/activity.rs`
 - `src-tauri/src/connections.rs`
