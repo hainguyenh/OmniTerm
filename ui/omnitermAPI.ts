@@ -245,7 +245,7 @@ function createTauriAPI(): any {
       clearLog: () => invoke<boolean>('clear_log'),
       // Open a local file or directory with the OS's default handler (Explorer/Finder/xdg-open).
       // URL inputs are refused by the backend (validate_path_for_open); the renderer routes URLs
-      // through `activateTerminalLink` instead.
+      // through the link/path overlay menu's "Open Link" item (TerminalViewLinkMenuHost.openUrl).
       openInSystem: (path: string) =>
         invoke<void>('open_in_system', { path }).catch((e) => {
           diag.warn('[omnitermAPI] open_in_system failed', e)

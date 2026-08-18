@@ -5,9 +5,9 @@
 ### Added
 - feat(scripts): add `scripts/free-dev-port.mjs` to reclaim dev port 5173 from an orphaned vite before it binds (@the-long-ride)
 - feat(specs): add `docs/specs/architecture/dev-server-stability.md` leaf spec for the Windows-only `tauri dev` lifecycle invariants (@the-long-ride)
-- feat(terminal): right-click link/path overlay menu (Copy Link/Open Link, Copy Path/Open in OS) — `terminalLinks.ts` detects URL or filesystem path at the click coordinate and routes through `createTerminalContextMenu`; `Open in OS` is hidden for non-LOCAL panes (@the-long-ride)
+- feat(terminal): link-modifier-click (Ctrl on Windows/Linux, Cmd on macOS) link/path overlay menu (Copy Link/Open Link, Copy Path/Open in OS) — `terminalLinks.ts` detects URL or filesystem path at the click coordinate and routes through `createTerminalContextMenu` (`onLinkClick`); `Open in OS` is hidden for non-LOCAL panes; right-click stays reserved for the long-standing copy-selection / paste behaviour (@the-long-ride)
 - feat(tauri): `open_in_system` command backed by `validate_path_for_open` — refuses URLs (incl. authority-less schemes like `mailto:`), control chars, and empty input; trims surrounding whitespace before opening with `opener::open` (@the-long-ride)
-- feat(specs): add `docs/specs/features/sessions/terminal-status-link-menu.md` leaf spec for the running indicator signal, oscillating dot, and right-click link/path menu (@the-long-ride)
+- feat(specs): add `docs/specs/features/sessions/terminal-status-link-menu.md` leaf spec for the running indicator signal, oscillating dot, and link-modifier-click (Ctrl/Cmd) link/path menu (@the-long-ride)
 
 ### Fixed
 - fix(tauri-dev): prevent EBUSY crash when cargo links build-script `.exe` files in `target/` by ignoring the bare `target` directory in vite's watcher so chokidar installs no `fs.watch()` on it (matcher `isCargoTarget` with regex `(^|[/\\])target([/\\]|$)`) (@the-long-ride)
@@ -24,6 +24,7 @@
 - refactor(terminal): extract `createTerminalContextMenu` + `TerminalViewLinkMenuHost` from `TerminalView.tsx` to bring it under the 500-line source limit and unit-test the menu dispatch in isolation (@the-long-ride)
 - build(rust): unblock `cargo clippy --workspace -- -D warnings` — `session-core/src/manifest.rs` redundant closure, `session-core/src/manager.rs` needless `Ok(... ?)` wrap, `src-tauri/src/pty.rs` scoped `#[allow(clippy::too_many_arguments)]` for the `start_local_session` Tauri command (renderer args are positionally injected), `src-tauri/src/pty_tests.rs` unused `tauri::Manager` import (@the-long-ride)
 - docs(specs): register new UI modules (`TerminalLinkMenu`, `TerminalViewLinkMenuHost`, `createTerminalContextMenu`) and updated `terminalLinks` exports, plus the Rust `open_in_system` public function, in `docs/specs/components/{frontend,rust}/source-inventory.md` (@the-long-ride)
+- refactor(terminal): move the link/path overlay menu trigger from right-click to the platform link-modifier click (Ctrl on Windows/Linux, Cmd on macOS) — `createTerminalContextMenu` now returns `{ onContextMenu, onLinkClick }` where `onContextMenu` is paste-fallback only and `onLinkClick` runs `findLinkOrPathInTerminal` under `isTerminalLinkModifierClick(e)` + `button === 0`; `activateTerminalLink` removed, xterm's `linkHandler` and the plain-URL linkifier's `ILink.activate` become no-ops so the modifier click surfaces the menu instead of direct-opening the URL (@the-long-ride)
 
 ## [v0.1.4] — 2026-08-14
 
