@@ -130,6 +130,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                 status={statuses[sessionId] ?? 'connecting'}
                 busy={busy}
                 isAgent={formattedTitle.isAgent}
+                runningStyle="oscillate"
               />
             )}
           </>

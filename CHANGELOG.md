@@ -5,6 +5,9 @@
 ### Added
 - feat(scripts): add `scripts/free-dev-port.mjs` to reclaim dev port 5173 from an orphaned vite before it binds (@the-long-ride)
 - feat(specs): add `docs/specs/architecture/dev-server-stability.md` leaf spec for the Windows-only `tauri dev` lifecycle invariants (@the-long-ride)
+- feat(terminal): right-click link/path overlay menu (Copy Link/Open Link, Copy Path/Open in OS) — `terminalLinks.ts` detects URL or filesystem path at the click coordinate and routes through `createTerminalContextMenu`; `Open in OS` is hidden for non-LOCAL panes (@the-long-ride)
+- feat(tauri): `open_in_system` command backed by `validate_path_for_open` — refuses URLs (incl. authority-less schemes like `mailto:`), control chars, and empty input; trims surrounding whitespace before opening with `opener::open` (@the-long-ride)
+- feat(specs): add `docs/specs/features/sessions/terminal-status-link-menu.md` leaf spec for the running indicator signal, oscillating dot, and right-click link/path menu (@the-long-ride)
 
 ### Fixed
 - fix(tauri-dev): prevent EBUSY crash when cargo links build-script `.exe` files in `target/` by ignoring the bare `target` directory in vite's watcher so chokidar installs no `fs.watch()` on it (matcher `isCargoTarget` with regex `(^|[/\\])target([/\\]|$)`) (@the-long-ride)
@@ -16,6 +19,11 @@
 - build(scripts): preface `dev` and `dev:frontend` with `node scripts/free-dev-port.mjs` (`pnpm tauri dev` inherits it transitively via `beforeDevCommand: "pnpm dev:frontend"`) so a stale port holder is reclaimed before vite binds (@the-long-ride)
 - build(gitignore): also ignore `/vite.config.d.ts` (the declaration file `tsc -b` emits alongside the already-ignored `/vite.config.js`) so `pnpm typecheck` does not leave an untracked build-trash file in the working tree (@the-long-ride)
 - refactor(session): tighten explicit-disconnect guard comment and collapse `AttachedSession` struct literal in `session-core/manager.rs` (@the-long-ride)
+- refactor(terminal): drive pane busy/idle from the backend activity probe only (`onLocalActivity`); drop the bytes-driven activity debounce in `terminalStream.ts` so long output no longer strobes the running indicator (@the-long-ride)
+- feat(terminal): pane header renders an oscillating running dot plus two ghost-trail dots (`runningStyle='oscillate'`); picker dropdown and tab indicators keep the legacy `ping` style (@the-long-ride)
+- refactor(terminal): extract `createTerminalContextMenu` + `TerminalViewLinkMenuHost` from `TerminalView.tsx` to bring it under the 500-line source limit and unit-test the menu dispatch in isolation (@the-long-ride)
+- build(rust): unblock `cargo clippy --workspace -- -D warnings` — `session-core/src/manifest.rs` redundant closure, `session-core/src/manager.rs` needless `Ok(... ?)` wrap, `src-tauri/src/pty.rs` scoped `#[allow(clippy::too_many_arguments)]` for the `start_local_session` Tauri command (renderer args are positionally injected), `src-tauri/src/pty_tests.rs` unused `tauri::Manager` import (@the-long-ride)
+- docs(specs): register new UI modules (`TerminalLinkMenu`, `TerminalViewLinkMenuHost`, `createTerminalContextMenu`) and updated `terminalLinks` exports, plus the Rust `open_in_system` public function, in `docs/specs/components/{frontend,rust}/source-inventory.md` (@the-long-ride)
 
 ## [v0.1.4] — 2026-08-14
 

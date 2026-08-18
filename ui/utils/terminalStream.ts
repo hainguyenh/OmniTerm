@@ -92,7 +92,6 @@ export const attachTerminalStream = ({
    * (no replay message at all) cannot leave the flag set for live data.
    */
   let expectingReplay = false
-  let activityTimer: ReturnType<typeof setTimeout> | null = null
   let streamBusy = false
 
   const setStreamActive = (busy: boolean) => {
@@ -100,16 +99,6 @@ export const attachTerminalStream = ({
       streamBusy = busy
       onActivity(busy)
     }
-  }
-
-  const markOutputActivity = () => {
-    if (expectingReplay) return
-    setStreamActive(true)
-    if (activityTimer) clearTimeout(activityTimer)
-    activityTimer = setTimeout(() => {
-      activityTimer = null
-      setStreamActive(false)
-    }, 1200)
   }
 
   // ── Cross-restart scrollback ────────────────────────────────────────────────
@@ -167,7 +156,6 @@ export const attachTerminalStream = ({
       sawFirstData = true
       onStatus('connected')
     }
-    markOutputActivity()
     const text = decoder.decode(data, { stream: true })
     const replay = expectingReplay
     expectingReplay = false
@@ -180,10 +168,6 @@ export const attachTerminalStream = ({
   })
 
   const cleanupError = api.onError((err: string) => {
-    if (activityTimer) {
-      clearTimeout(activityTimer)
-      activityTimer = null
-    }
     setStreamActive(false)
     onStatus('error')
     term.write('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
@@ -194,10 +178,6 @@ export const attachTerminalStream = ({
   // script's `pause` looked identical to one that had frozen, and every key typed into it was
   // silently dropped by the backend ("Session not found").
   const markExited = (code?: number) => {
-    if (activityTimer) {
-      clearTimeout(activityTimer)
-      activityTimer = null
-    }
     setStreamActive(false)
     term.options.cursorBlink = false
     term.options.disableStdin = true
@@ -218,14 +198,11 @@ export const attachTerminalStream = ({
     : window.omnitermAPI.connect.onSessionMetrics(id, onMetrics)
 
   // Busy/idle is the mirror image: local-only, since it is the host's process tree being watched.
+  // Output bytes no longer drive the dot — only the backend's process-tree probe does, so the dot
+  // reflects a real running child (vim, ssh, a build tool, an agent CLI) and not the shell's own
+  // echo of the user's typing.
   const cleanupActivity = isLocal
-    ? window.omnitermAPI.connect.onLocalActivity(id, (busy) => {
-        if (busy) {
-          setStreamActive(true)
-        } else if (!activityTimer) {
-          setStreamActive(false)
-        }
-      })
+    ? window.omnitermAPI.connect.onLocalActivity(id, setStreamActive)
     : () => {}
 
   // A restored pane repaints its saved history before anything the new PTY emits. `gated` is

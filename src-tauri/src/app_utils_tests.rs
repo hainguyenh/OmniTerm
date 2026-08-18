@@ -283,3 +283,45 @@ fn reveal_log_covers_directory_creation_reuse_and_opener_failure_windows() {
     std::env::set_var("PATH", original_path);
     let _ = std::fs::remove_dir_all(log_dir);
 }
+
+// ── open_in_system path validation ────────────────────────────────────────
+// `open_in_system` itself is not invoked from tests (it would launch the OS default handler);
+// `validate_path_for_open` is the layer that decides whether a path is safe to feed to it.
+
+#[test]
+fn validate_path_for_open_accepts_absolute_and_relative_paths() {
+    assert_eq!(validate_path_for_open(r"C:\Users\me\foo.txt"), Ok(r"C:\Users\me\foo.txt"));
+    assert_eq!(validate_path_for_open("/home/me/foo.txt"), Ok("/home/me/foo.txt"));
+    assert_eq!(validate_path_for_open("./src/lib.rs"), Ok("./src/lib.rs"));
+    assert_eq!(validate_path_for_open("../build/Debug/omniterm.exe"), Ok("../build/Debug/omniterm.exe"));
+}
+
+#[test]
+fn validate_path_for_open_refuses_urls() {
+    // The renderer's link/path detector sends HTTPS URLs through its own path; the opening command
+    // must refuse everything that looks URL-shaped, so a detector slip cannot launch a protocol
+    // handler (`file:`, `mailto:`, custom schemes).
+    for url in [
+        "https://example.test/",
+        "http://example.test/",
+        "file:///etc/passwd",
+        "mailto:user@test",
+        "notorious://payload",
+    ] {
+        assert!(validate_path_for_open(url).is_err(), "{url} should be refused");
+    }
+}
+
+#[test]
+fn validate_path_for_open_refuses_empty_and_control_chars() {
+    assert!(validate_path_for_open("").is_err());
+    assert!(validate_path_for_open("   ").is_err());
+    assert!(validate_path_for_open("C:\\foo\nbar.txt").is_err());
+    assert!(validate_path_for_open("foo\tbar.rs").is_err());
+    assert!(validate_path_for_open("foo\0bar.rs").is_err());
+}
+
+#[test]
+fn validate_path_for_open_trims_surrounding_whitespace() {
+    assert_eq!(validate_path_for_open("  ./foo.txt  "), Ok("./foo.txt"));
+}

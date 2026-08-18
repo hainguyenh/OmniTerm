@@ -161,11 +161,10 @@ impl SessionManager {
 
         spawn_reader(reader, Arc::clone(&output), Arc::clone(&session.lifecycle));
         self.spawn_exit_watcher(session_id.to_string(), child, session);
-        Ok(self
-            .sessions
+        self.sessions
             .get(session_id)
             .map(|entry| crate::summary::session_summary(session_id, &entry))
-            .ok_or_else(|| "Session disappeared during startup".to_string())?)
+            .ok_or_else(|| "Session disappeared during startup".to_string())
     }
 
     fn spawn_exit_watcher(

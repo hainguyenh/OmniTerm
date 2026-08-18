@@ -97,9 +97,13 @@ describe('PaneHeader remaining behavior', () => {
     expect(localStorage.getItem('omniterm:terminal-persistence-policies')).toContain('recover-after-reboot')
   })
 
-  it('renders running status beacon when busy is true', () => {
+  it('renders the oscillating running indicator when busy is true', () => {
     const { container } = setup({ busy: true })
-    expect(screen.getByTitle('Running command')).toBeInTheDocument()
-    expect(container.querySelector('.animate-ping')).toBeInTheDocument()
+    // The pane header owns the wider header slot, so it uses the oscillating dot — not the ping ring.
+    expect(screen.getByTitle('Running process')).toBeInTheDocument()
+    expect(container.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
+    expect(container.querySelector('.animate-ping')).toBeNull()
+    expect(container.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
+    expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
   })
 })

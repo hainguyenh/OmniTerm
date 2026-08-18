@@ -88,3 +88,47 @@ pub async fn get_version<R: Runtime>(_app: AppHandle<R>) -> Result<String, Strin
     // same single source of truth regardless of tauri.conf.json's state.
     Ok(env!("CARGO_PKG_VERSION").to_string())
 }
+
+/// Validate that `path` is a safe non-URL local filesystem path that may be opened with the OS's
+/// default handler. Returned string is the trimmed path the call should open.
+///
+/// URLs are refused absolutely: the renderer's link/path detector routes `https://…` through its own
+/// path (`activateTerminalLink`), and `file:///…` / `mailto:…` / custom schemes would otherwise become
+/// arbitrary program execution via the OS's registered protocol handler (see `is_allowed_plugin_url`
+/// for the same risk on the plugin side).
+fn validate_path_for_open(path: &str) -> Result<&str, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Path is empty.".to_string());
+    }
+    if trimmed.contains("://") {
+        return Err("URLs are not routed through open_in_system.".to_string());
+    }
+    // Refuse URL schemes that lack an authority (`mailto:`, `tel:`, custom protocol schemes) so the
+    // OS's protocol handler cannot be invoked through the terminal's link menu. The `://` check
+    // above only catches authority-style URLs. A Windows drive letter followed by a path separator
+    // (`X:\` or `X:/`) is the one colon-led prefix that must still pass as a path.
+    if let Some(idx) = trimmed.find(':') {
+        let scheme = &trimmed[..idx];
+        let after_is_path_sep = trimmed[idx + 1..].starts_with(['/', '\\']);
+        let is_windows_drive =
+            scheme.len() == 1 && scheme.starts_with(|c: char| c.is_ascii_alphabetic()) && after_is_path_sep;
+        let is_url_scheme = !scheme.is_empty()
+            && scheme.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
+        if is_url_scheme && !is_windows_drive {
+            return Err("URLs are not routed through open_in_system.".to_string());
+        }
+    }
+    if trimmed.chars().any(|c| c.is_control()) {
+        return Err("Path contains control characters.".to_string());
+    }
+    Ok(trimmed)
+}
+
+/// Open a local file or directory with the OS's default handler (Explorer/Finder/xdg-open), the way
+/// `reveal_log` opens the log directory. URL inputs are refused beforehand — see the guard above.
+#[tauri::command]
+pub async fn open_in_system(path: String) -> Result<(), String> {
+    let validated = validate_path_for_open(&path)?;
+    opener::open(validated).map_err(|e| e.to_string())
+}

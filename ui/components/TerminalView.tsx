@@ -16,6 +16,8 @@ import { activateTerminalLink, registerPlainUrlLinks } from '../utils/terminalLi
 import '@xterm/xterm/css/xterm.css'
 import { Connection, SessionStatus } from './MainLayout'
 import { TerminalTheme, TOKYO_NIGHT } from '../themes'
+import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
+import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 
 export { DEFAULT_MONO_STACK }
 
@@ -82,6 +84,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const termRef = useRef<Terminal | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
   const [isHovered, setIsHovered] = React.useState(false)
+  // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
+  // host (Escape / outside click / item picked).
+  const [linkMenu, setLinkMenu] = React.useState<TerminalLinkMenuState | null>(null)
   // Set by the main effect; lets the fontSize effect refit without re-running it.
   const safeFitRef = useRef<() => void>(() => {})
   // Was the pane pinned to the live tail when it was last hidden? Re-showing scrolls back down only
@@ -261,20 +266,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
     let suppressNativePasteUntil = 0
 
-    const onContextMenu = (e: MouseEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      term.focus()
-      const hasSelection = typeof term.hasSelection === 'function' && term.hasSelection()
-      if (hasSelection) void clipboard.copySelection()
-      else {
-        // Chromium/xterm can dispatch a native paste after the context-menu gesture. The custom
-        // route below is the single writer for right-click; keep the native event from duplicating it.
-        suppressNativePasteUntil = performance.now() + 250
-        void clipboard.paste()
-      }
-    }
+    const onContextMenu = createTerminalContextMenu({
+      term,
+      termElRef: terminalRef,
+      clipboard,
+      setLinkMenu,
+      setSuppressPaste: () => { suppressNativePasteUntil = performance.now() + 250 },
+    })
     const onNativePaste = (e: ClipboardEvent) => {
       if (performance.now() > suppressNativePasteUntil) return
       e.preventDefault()
@@ -489,6 +487,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />
+      <TerminalViewLinkMenuHost
+        menu={linkMenu}
+        isLocal={connection.type === 'LOCAL'}
+        onClose={() => setLinkMenu(null)}
+      />
     </div>
   )
 }

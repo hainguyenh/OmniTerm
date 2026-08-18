@@ -3,6 +3,10 @@
  * Busy/idle signalling and cross-restart scrollback — the two stream behaviours the session
  * status indicators and the restart-restore feature depend on. Split from terminalStream.test.ts
  * to keep both files under the source-size limit.
+ *
+ * Busy/idle is owned by the backend's process-tree probe — output bytes alone no longer drive it,
+ * so the dot reflects a real running child (vim, ssh, a build tool, an agent CLI) and not the
+ * shell's echo of typed keys.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -10,110 +14,86 @@ import { deleteScrollback, loadScrollback, saveScrollback } from "../utils/scrol
 import { mockOmnitermAPI } from "../testUtils";
 import { attach, bytes, written } from "./terminalStreamHarness";
 
-/** Captured onLocalActivity callback, so a test can drive backend busy/idle transitions. */
+/** Captured backend busy/idle callback — a test drives it as the real probe would. */
 let localActivitySink: ((busy: boolean) => void) | undefined;
 
 beforeEach(() => {
   mockOmnitermAPI();
+  localActivitySink = undefined;
 });
 
+/** A `connect.onLocalActivity` mock that hands back the callback so a test can drive backend state. */
+const captureActivity = () =>
+  vi.fn((_id: string, cb: (busy: boolean) => void) => {
+    localActivitySink = cb;
+    return () => {};
+  });
+
 describe("attachTerminalStream — activity and scrollback", () => {
-  it("marks stream busy on incoming data and settles to idle after debounce interval", () => {
-    vi.useFakeTimers();
-    try {
-      const { fire, onActivity } = attach({ isLocal: true });
+  it("drives busy/idle purely from backend onLocalActivity, not from output bytes", () => {
+    mockOmnitermAPI({ connect: { onLocalActivity: captureActivity() } });
+    const { fire, onActivity } = attach({ isLocal: true });
 
-      fire.data?.(bytes("hello world"));
-      expect(onActivity).toHaveBeenCalledWith(true);
+    // PTY bytes alone never flip the dot — typed echo, prompt redraws, banner craft are not activity.
+    fire.data?.(bytes("typing output, prompt redraw, etc."));
+    expect(onActivity).not.toHaveBeenCalled();
 
-      vi.advanceTimersByTime(1300);
-      expect(onActivity).toHaveBeenCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
+    localActivitySink?.(true);
+    expect(onActivity).toHaveBeenLastCalledWith(true);
+
+    localActivitySink?.(false);
+    expect(onActivity).toHaveBeenLastCalledWith(false);
+
+    // Dedup: a redundant idle event does not fire onActivity again.
+    localActivitySink?.(false);
+    expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(1);
   });
 
-  it("clears the busy debounce immediately when the stream errors", () => {
-    vi.useFakeTimers();
-    try {
-      const { fire, onActivity } = attach({ isLocal: true });
+  it("clears busy when the stream errors even while bytes are still arriving", () => {
+    mockOmnitermAPI({ connect: { onLocalActivity: captureActivity() } });
+    const { fire, onActivity } = attach({ isLocal: true });
 
-      fire.data?.(bytes("partial output"));
-      expect(onActivity).toHaveBeenCalledWith(true);
+    localActivitySink?.(true);
+    expect(onActivity).toHaveBeenLastCalledWith(true);
 
-      fire.error?.("boom");
-      expect(onActivity).toHaveBeenCalledWith(false);
-      let idleCalls = onActivity.mock.calls.filter(([busy]) => busy === false).length;
-      expect(idleCalls).toBe(1);
+    fire.data?.(bytes("partial output"));
+    fire.error?.("boom");
+    expect(onActivity).toHaveBeenLastCalledWith(false);
 
-      // The cleared timer must not fire a second idle transition later.
-      vi.advanceTimersByTime(2000);
-      idleCalls = onActivity.mock.calls.filter(([busy]) => busy === false).length;
-      expect(idleCalls).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    // No second idle flip from a delayed timer — the busy debounce is gone.
+    expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(1);
   });
 
-  it("clears the busy debounce when the session exits", () => {
-    vi.useFakeTimers();
-    try {
-      const { fire, onActivity } = attach({ isLocal: true });
+  it("clears busy when the session exits regardless of backend state", () => {
+    mockOmnitermAPI({ connect: { onLocalActivity: captureActivity() } });
+    const { fire, onActivity } = attach({ isLocal: true });
 
-      fire.data?.(bytes("last words"));
-      fire.closed?.(0);
+    localActivitySink?.(true);
+    fire.data?.(bytes("last words"));
+    fire.closed?.(0);
 
-      expect(onActivity).toHaveBeenCalledWith(false);
-      vi.advanceTimersByTime(2000);
-      expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(onActivity).toHaveBeenLastCalledWith(false);
+    expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(1);
   });
 
-  it("keeps busy when the backend reports idle while output is still arriving", () => {
-    vi.useFakeTimers();
-    try {
-      const onLocalActivity = vi.fn((_id: string, cb: (busy: boolean) => void) => {
-        localActivitySink = cb;
-        return () => {};
-      });
-      mockOmnitermAPI({ connect: { onLocalActivity } });
-      const { fire, onActivity } = attach({ isLocal: true });
+  it("lets backend idle win even while output is mid-arrival (no output debounce outranks it)", () => {
+    mockOmnitermAPI({ connect: { onLocalActivity: captureActivity() } });
+    const { fire, onActivity } = attach({ isLocal: true });
 
-      fire.data?.(bytes("burst"));
-      localActivitySink?.(false);
+    localActivitySink?.(true);
+    fire.data?.(bytes("burst after the busy signal"));
 
-      // The pending output debounce outranks the backend's idle report.
-      expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(0);
-
-      vi.advanceTimersByTime(1300);
-      expect(onActivity).toHaveBeenCalledWith(false);
-    } finally {
-      localActivitySink = undefined;
-      vi.useRealTimers();
-    }
+    // The previous output-debounce would have held this idle at bay; that was the bug being fixed.
+    localActivitySink?.(false);
+    expect(onActivity).toHaveBeenLastCalledWith(false);
   });
 
-  it("re-arms the debounce so a steady stream never flickers to idle", () => {
-    vi.useFakeTimers();
-    try {
-      const { fire, onActivity } = attach({ isLocal: true });
+  it("never drives onActivity on a remote pane (no fixed heuristic on output bytes)", () => {
+    const { fire, onActivity } = attach({ isLocal: false });
 
-      fire.data?.(bytes("tick"));
-      vi.advanceTimersByTime(800);
-      fire.data?.(bytes("tock"));
-      vi.advanceTimersByTime(800);
-      fire.data?.(bytes("tick"));
-      vi.advanceTimersByTime(800);
-
-      expect(onActivity.mock.calls.filter(([busy]) => busy === false).length).toBe(0);
-
-      vi.advanceTimersByTime(500);
-      expect(onActivity).toHaveBeenCalledWith(false);
-    } finally {
-      vi.useRealTimers();
-    }
+    fire.data?.(bytes("lots of remote output\r\n"));
+    fire.error?.("dropped");
+    expect(onActivity).not.toHaveBeenCalled();
   });
 
   it("paints saved scrollback before live output and saves the merged buffer on dispose", async () => {
@@ -128,7 +108,7 @@ describe("attachTerminalStream — activity and scrollback", () => {
     await vi.waitFor(() => expect(written(term)).toContain("live output"));
 
     expect(written(term)).toBe("saved history\r\nlive output\r\n");
-    // The debounce has not elapsed, so the store still holds only the previous save.
+    // The scrollback flush is debounced 3s — the store still holds only the previous save.
     expect(await loadScrollback("sb-pane-1")).toBe("saved history\r\n");
 
     stream.dispose();

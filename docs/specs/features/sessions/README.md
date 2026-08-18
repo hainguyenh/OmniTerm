@@ -6,6 +6,7 @@ Routing for this product feature.
 
 - [Terminal lifecycle](terminal-lifecycle.md) — renderer session behavior
 - [PTY/detach](pty-detach.md) — native runtime and windows
+- [Terminal status & link menu](terminal-status-link-menu.md) — running indicator signal, oscillating dot, right-click link/path overlay
 
 ## Spec conventions
 
