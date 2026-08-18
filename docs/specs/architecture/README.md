@@ -6,6 +6,7 @@ Cross-cutting ownership and boundaries.
 
 - [Application shell](application-shell.md) — renderer composition
 - [Runtime boundaries](runtime-boundaries.md) — contract/core/Tauri/renderer layers
+- [Dev server stability](dev-server-stability.md) — Windows-only `tauri dev` lifecycle and watcher invariant
 - [Security and data](security-data.md) — trust boundaries
 - [Windowing/layouts](windowing-layouts.md) — pane and detached-window behavior
 

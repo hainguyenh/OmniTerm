@@ -136,7 +136,7 @@ describe("attachTerminalStream — attach mode", () => {
     // Running the highlighter's alternation over a quarter-megabyte replay, synchronously, was most
     // of the freeze on attach. The highlighter still *sees* the text so its escape state stays in
     // sync — it just must not rewrite it.
-    resumeWith({ data: new Uint8Array(0), status: "ready" });
+    resumeWith({ data: new Uint8Array(0), status: "ready", generation: 1 });
     const { term, fire, stream } = attach({ mode: "attach", smartColors: () => true });
 
     fire.data?.(bytes("error 404\n"));
@@ -146,7 +146,7 @@ describe("attachTerminalStream — attach mode", () => {
   });
 
   it("colourizes the message after the replay", async () => {
-    resumeWith({ data: new Uint8Array(0), status: "ready" });
+    resumeWith({ data: new Uint8Array(0), status: "ready", generation: 1 });
     const { term, fire } = attach({ mode: "attach", smartColors: () => true });
 
     fire.data?.(bytes("first\n"));
@@ -159,7 +159,7 @@ describe("attachTerminalStream — attach mode", () => {
   it("clears the replay flag when the session had nothing buffered", async () => {
     // No replay message ever arrives, so only resume() settling can clear the flag — otherwise the
     // first live message is written uncoloured forever.
-    resumeWith({ data: new Uint8Array(0), status: "ready" });
+    resumeWith({ data: new Uint8Array(0), status: "ready", generation: 1 });
     const { term, fire, onStatus } = attach({ mode: "attach", smartColors: () => true });
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenLastCalledWith("connected"));
@@ -170,7 +170,7 @@ describe("attachTerminalStream — attach mode", () => {
 
   it("writes an inline snapshot buffer chunked and uncoloured", async () => {
     const payload = "error ".repeat(WRITE_CHUNK_SIZE / 3);
-    resumeWith({ data: bytes(payload), status: "ready" });
+    resumeWith({ data: bytes(payload), status: "ready", generation: 1 });
     const { term, onStatus } = attach({ mode: "attach", smartColors: () => true });
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenLastCalledWith("connected"));
@@ -179,7 +179,7 @@ describe("attachTerminalStream — attach mode", () => {
   });
 
   it("restores a closed session's status without a second exit banner", async () => {
-    resumeWith({ data: new Uint8Array(0), status: "closed" });
+    resumeWith({ data: new Uint8Array(0), status: "closed", generation: 1 });
     const { term, onStatus, onExit } = attach({ mode: "attach" });
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenLastCalledWith("closed"));
@@ -198,7 +198,7 @@ describe("attachTerminalStream — attach mode", () => {
   });
 
   it("drops a resume that settles after the pane was torn down", async () => {
-    resumeWith({ data: bytes("late"), status: "ready" });
+    resumeWith({ data: bytes("late"), status: "ready", generation: 1 });
     const { term, onStatus } = attach({ mode: "attach", isCurrent: () => false });
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenCalledWith("connecting"));
