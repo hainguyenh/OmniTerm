@@ -523,3 +523,30 @@ textarea.code-editor-textarea {
 .animate-marching-ants {
   animation: marching-ants 0.85s linear infinite;
 }
+
+/* ── Running header dot: left-right oscillation with a 2-step ghost trail ──
+   Range peak-to-peak = 5× dot width (6px dot → ±15px travel). Ghosts lag the dot by a
+   positive animation-delay; `backwards` fill plants them at the 0% keyframe (leftmost)
+   during the pre-delay window, matching the dot there before they pick up the cycle. */
+@keyframes running-dot-oscillate {
+  0%, 100% { transform: translateX(-15px); }
+  50%      { transform: translateX(15px); }
+}
+
+.animate-running-dot-oscillate {
+  animation: running-dot-oscillate 1.4s ease-in-out infinite;
+}
+
+.running-dot-ghost-1 {
+  animation: running-dot-oscillate 1.4s ease-in-out infinite;
+  animation-delay: 0.15s;
+  animation-fill-mode: backwards;
+  opacity: 0.45;
+}
+
+.running-dot-ghost-2 {
+  animation: running-dot-oscillate 1.4s ease-in-out infinite;
+  animation-delay: 0.3s;
+  animation-fill-mode: backwards;
+  opacity: 0.2;
+}
