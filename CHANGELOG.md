@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- feat(scripts): add `scripts/free-dev-port.mjs` to reclaim dev port 5173 from an orphaned vite before it binds (@the-long-ride)
+- feat(specs): add `docs/specs/architecture/dev-server-stability.md` leaf spec for the Windows-only `tauri dev` lifecycle invariants (@the-long-ride)
+
+### Fixed
+- fix(tauri-dev): prevent EBUSY crash when cargo links build-script `.exe` files in `target/` by ignoring the bare `target` directory in vite's watcher so chokidar installs no `fs.watch()` on it (matcher `isCargoTarget` with regex `(^|[/\\])target([/\\]|$)`) (@the-long-ride)
+- fix(dev): reclaim port 5173 from an orphaned (crashed/killed) vite before the next `pnpm dev`/`pnpm tauri dev` start hits the hard-coded `strictPort` rejection (@the-long-ride)
+- fix(tests): repair 6 committed-broken fixtures in `ui/__tests__/terminalStream.test.ts` by adding the required `generation: number` field to `ResumeSnapshot` resume mocks so `pnpm test` (and a cold `pnpm typecheck`) no longer fail TS2345 on those snapshots (@the-long-ride)
+
+### Changed
+- build(scripts): preface `dev` and `dev:frontend` with `node scripts/free-dev-port.mjs` (`pnpm tauri dev` inherits it transitively via `beforeDevCommand: "pnpm dev:frontend"`) so a stale port holder is reclaimed before vite binds (@the-long-ride)
+- build(gitignore): also ignore `/vite.config.d.ts` (the declaration file `tsc -b` emits alongside the already-ignored `/vite.config.js`) so `pnpm typecheck` does not leave an untracked build-trash file in the working tree (@the-long-ride)
+
 ## [v0.1.4] — 2026-08-14
 
 ### Added

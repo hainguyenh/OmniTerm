@@ -10,8 +10,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "pnpm assets:generate && vite",
-    "dev:frontend": "pnpm assets:generate && vite",
+    "dev": "pnpm assets:generate && node scripts/free-dev-port.mjs && vite",
+    "dev:frontend": "pnpm assets:generate && node scripts/free-dev-port.mjs && vite",
     "build:frontend": "pnpm assets:generate && tsc && vite build",
     "tauri:dev": "pnpm tauri:dev:basic",
     "tauri:dev:basic": "pnpm assets:generate && tauri dev --config src-tauri/tauri.dev.conf.json",
