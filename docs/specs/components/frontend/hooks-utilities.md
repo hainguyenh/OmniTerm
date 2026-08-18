@@ -60,7 +60,7 @@ Whenever owning components need lifecycle state, native events, or deterministic
 - `buildWorkspaceTree` / `filterTreeByQuery` — owned by this spec.
 - `buildWorkspaceForest` / `workspaceDropIndex` — owned by this spec.
 - `createSessionChannel` / `attachTerminalStream` — owned by this spec.
-- `safeHttpUrl` / `activateTerminalLink` — owned by this spec.
+- `safeHttpUrl` / `isTerminalLinkModifierClick` — owned by this spec.
 - `themeCssVars` / `applyThemeVars` — owned by this spec.
 - `createWebglController` / pool helpers` — owned by this spec.
 - `matchShortcut` / `resolveShortcuts` — owned by this spec.
@@ -80,7 +80,7 @@ Whenever owning components need lifecycle state, native events, or deterministic
 | `buildWorkspaceTree` / `filterTreeByQuery` | Build/search tree. | Pure deterministic workspace projection. | Map logical entries and preserve ancestors. | Tree render/search. |
 | `buildWorkspaceForest` / `workspaceDropIndex` | Hierarchy/order calculations. | Correct nested reordering. | Group/sort/calculate indexes. | Workspace list/drop. |
 | `createSessionChannel` / `attachTerminalStream` | Terminal event transport. | Reusable stream lifecycle. | Subscribe/cleanup/write chunks. | Terminal attach. |
-| `safeHttpUrl` / `activateTerminalLink` | Gate terminal links. | Prevent unsafe output-controlled navigation. | Parse/allow HTTP(S). | Link click. |
+| `safeHttpUrl` / `isTerminalLinkModifierClick` | Gate terminal links. | Prevent unsafe output-controlled navigation. | Parse/allow HTTP(S). | Modifier-click gate. |
 | `themeCssVars` / `applyThemeVars` | Project theme to CSS. | Consistent visual state. | Resolve fields and set CSS variables. | Theme change. |
 | `createWebglController` / pool helpers | Manage bounded WebGL contexts. | Avoid context exhaustion. | Acquire/touch/release pooled resources. | Terminal rendering. |
 | `matchShortcut` / `resolveShortcuts` | Keyboard matching/resolution. | Consistent shortcut semantics. | Normalize event/config and compare. | Keydown. |

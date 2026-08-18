@@ -21,18 +21,18 @@ export const safeHttpUrl = (value: string): URL | null => {
 
 const isMac = (): boolean => /Mac/i.test(navigator.platform || navigator.userAgent)
 
-/** Open a validated link only from the platform's normal terminal-link modifier click. */
-export const activateTerminalLink = (event: MouseEvent, text: string): void => {
-  if (isMac() ? !event.metaKey : !event.ctrlKey) return
-  const url = safeHttpUrl(text)
-  if (!url) return
-  window.open(url.href, '_blank', 'noopener,noreferrer')
-}
+/**
+ * True when the platform's normal terminal-link modifier is held — Cmd on macOS, Ctrl elsewhere.
+ * Single source of truth shared by the renderer-side triggers that surface the link/path menu so the
+ * menu and xterm's hover-decoration stay in step on the same platform.
+ */
+export const isTerminalLinkModifierClick = (event: MouseEvent): boolean =>
+  isMac() ? event.metaKey : event.ctrlKey
 
-// ── Right-click link/path detector ────────────────────────────────────────
+// ── link/path detector ─────────────────────────────────────────────────────
 //
-// Detects HTTP(S) URLs *and* local file paths beneath a right-click so the pane can show a small
-// overlay menu ("Copy Link/Path", "Open Link/Path"). URLs are matched first — see
+// Detects HTTP(S) URLs *and* local file paths beneath a platform link-modifier click so the pane
+// can show a small overlay menu ("Copy Link/Path", "Open Link/Path"). URLs are matched first — see
 // `findLinkOrPathAt` — so `https://example/x.txt` is never mis-read as a path even though its
 // `/x.txt` tail would otherwise match the path regex.
 
@@ -49,7 +49,7 @@ const FILE_PATH_RE =
   /(?<![A-Za-z])[A-Za-z]:[\\/][\w.\\/-]+|~\/[\w.\\/-]+|\.\/[\w.\\/-]+|\.\.\/[\w.\\/-]+|(?<!\w)\/[\w.-]+(?:[\\/][\w.-]+)*|(?<!\w)[\w.-]+(?:[\\/][\w.-]+)+/g
 const TRAILING_PATH_PUNCTUATION_RE = /[),.;:!?\]}"'`]+$/
 
-/** The link/path classification a right-click is offering a small overlay menu for. */
+/** The link/path classification a modifier click is offering a small overlay menu for. */
 export type TerminalLinkMenuKind = 'url' | 'path'
 
 export interface DetectedLinkOrPath {
@@ -135,13 +135,20 @@ const plainUrlsOnLine = (text: string, y: number): ILink[] => {
         start: { x: start + 1, y },
         end: { x: end + 1, y },
       },
-      activate: activateTerminalLink,
+      activate: () => {
+        // The modifier-click menu (see `createTerminalContextMenu`) owns link activation now; this
+        // no-op keeps xterm's hover-decoration without making it direct-open the URL underneath.
+      },
     })
   }
   return links
 }
 
-/** Register plain URL linkification; xterm's built-in provider continues to handle OSC 8 links. */
+/**
+ * Register plain URL linkification so xterm underlines URL spans on the platform link-modifier
+ * hover. xterm's `activate` is a no-op — the modifier-click overlay menu owns link activation for
+ * both URLs and paths. xterm's built-in provider continues to handle OSC 8 links.
+ */
 export const registerPlainUrlLinks = (term: Terminal) => {
   const provider: ILinkProvider = {
     provideLinks: (bufferLineNumber, callback) => {

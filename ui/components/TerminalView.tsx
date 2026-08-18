@@ -12,7 +12,7 @@ import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
 import { createTerminalClipboard } from '../utils/terminalClipboard'
 import { attachTerminalStream } from '../utils/terminalStream'
-import { activateTerminalLink, registerPlainUrlLinks } from '../utils/terminalLinks'
+import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
 import { Connection, SessionStatus } from './MainLayout'
 import { TerminalTheme, TOKYO_NIGHT } from '../themes'
@@ -167,9 +167,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const term = new Terminal(createTerminalOptions({
       isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
-    // xterm handles OSC 8 links itself; this validates the URL and requires the platform's normal
-    // modifier click before opening it. Plain URLs are supplied by the provider below.
-    term.options.linkHandler = { activate: activateTerminalLink }
+    // xterm's linkHandler is a no-op — `onLinkClick` owns modifier-click activation; `registerPlainUrlLinks` keeps the hover cue (see terminalLinks.ts).
+    term.options.linkHandler = { activate: () => {} }
 
     termRef.current = term
 
@@ -266,7 +265,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
     let suppressNativePasteUntil = 0
 
-    const onContextMenu = createTerminalContextMenu({
+    const { onContextMenu, onLinkClick } = createTerminalContextMenu({
       term,
       termElRef: terminalRef,
       clipboard,
@@ -281,6 +280,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
+    termEl.addEventListener('mousedown', onLinkClick)
     termEl.addEventListener('paste', onNativePaste, true)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
     termEl.addEventListener('mouseup', onMouseUp)
@@ -418,6 +418,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
+      termEl.removeEventListener('mousedown', onLinkClick)
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)

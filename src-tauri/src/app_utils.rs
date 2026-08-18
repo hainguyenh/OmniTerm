@@ -92,10 +92,10 @@ pub async fn get_version<R: Runtime>(_app: AppHandle<R>) -> Result<String, Strin
 /// Validate that `path` is a safe non-URL local filesystem path that may be opened with the OS's
 /// default handler. Returned string is the trimmed path the call should open.
 ///
-/// URLs are refused absolutely: the renderer's link/path detector routes `https://…` through its own
-/// path (`activateTerminalLink`), and `file:///…` / `mailto:…` / custom schemes would otherwise become
-/// arbitrary program execution via the OS's registered protocol handler (see `is_allowed_plugin_url`
-/// for the same risk on the plugin side).
+/// URLs are refused absolutely: the renderer's link/path overlay menu (see `createTerminalContextMenu`
+/// / `TerminalViewLinkMenuHost.openUrl`) routes `https://…` through its own path, and `file:///…` /
+/// `mailto:…` / custom schemes would otherwise become arbitrary program execution via the OS's
+/// registered protocol handler (see `is_allowed_plugin_url` for the same risk on the plugin side).
 fn validate_path_for_open(path: &str) -> Result<&str, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {

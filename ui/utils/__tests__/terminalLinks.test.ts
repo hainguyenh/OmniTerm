@@ -4,9 +4,9 @@
 import type { ILinkProvider, Terminal } from '@xterm/xterm'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  activateTerminalLink,
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
+  isTerminalLinkModifierClick,
   registerPlainUrlLinks,
   safeHttpUrl,
 } from '../terminalLinks'
@@ -19,16 +19,20 @@ describe('terminalLinks', () => {
     expect(safeHttpUrl('https://example.test/has space')).toBeNull()
   })
 
-  it('requires the platform modifier before opening a link', () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
-    const event = new MouseEvent('click', { ctrlKey: true })
+  it('isTerminalLinkModifierClick returns true only when the platform modifier is held', () => {
+    // jsdom defaults to a non-Mac platform, so Ctrl is the link-modifier key here.
+    expect(isTerminalLinkModifierClick(new MouseEvent('click', { ctrlKey: true }))).toBe(true)
+    expect(isTerminalLinkModifierClick(new MouseEvent('click', { ctrlKey: false, metaKey: true }))).toBe(false)
 
-    activateTerminalLink(event, 'https://example.test/docs')
-    activateTerminalLink(new MouseEvent('click'), 'https://example.test/nope')
-
-    expect(open).toHaveBeenCalledOnce()
-    expect(open).toHaveBeenCalledWith('https://example.test/docs', '_blank', 'noopener,noreferrer')
-    open.mockRestore()
+    // A Mac platform would flip the rule: Cmd matches, Ctrl does not.
+    const originalPlatform = navigator.platform
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true })
+    try {
+      expect(isTerminalLinkModifierClick(new MouseEvent('click', { metaKey: true }))).toBe(true)
+      expect(isTerminalLinkModifierClick(new MouseEvent('click', { ctrlKey: true }))).toBe(false)
+    } finally {
+      Object.defineProperty(navigator, 'platform', { value: originalPlatform, configurable: true })
+    }
   })
 
   it('linkifies plain URLs and trims sentence punctuation', () => {

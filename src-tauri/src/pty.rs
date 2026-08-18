@@ -142,9 +142,6 @@ pub(crate) fn colorfgbg_for_dark_mode(dark_mode: Option<bool>) -> Option<&'stati
 // `clippy::too_many_arguments` allow: Tauri injects AppHandle, State, and the two Channels
 // positionally; the renderer args cannot collapse into a struct without changing the IPC contract.
 #[allow(clippy::too_many_arguments)]
-// `clippy::too_many_arguments` allow: Tauri injects AppHandle, State, and the two Channels
-// positionally; the renderer args cannot collapse into a struct without changing the IPC contract.
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn start_local_session<R: Runtime>(
     app: AppHandle<R>,
