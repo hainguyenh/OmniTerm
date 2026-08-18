@@ -222,6 +222,7 @@ const defaults: Api = {
     platform: "win32",
     revealLog: async () => "",
     clearLog: async () => false,
+    openInSystem: async () => {},
     setZoomFactor: () => {},
     getZoomFactor: () => 1,
   },

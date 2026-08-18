@@ -25,6 +25,26 @@ describe('SessionStatusIndicator', () => {
     expect(indicator.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
+  it('renders the oscillating dot with a 2-step ghost trail when runningStyle="oscillate"', () => {
+    render(<SessionStatusIndicator status="connected" busy runningStyle="oscillate" />)
+    const indicator = screen.getByTitle('Running process')
+    expect(indicator).toBeInTheDocument()
+    expect(indicator.querySelector('.animate-ping')).toBeNull()
+    expect(indicator.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
+    expect(indicator.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
+    expect(indicator.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
+  })
+
+  it('uses the oscillate variant label for AI agents too', () => {
+    render(<SessionStatusIndicator status="connected" isAgent busy runningStyle="oscillate" />)
+    expect(screen.getByTitle('AI agent running')).toBeInTheDocument()
+  })
+
+  it('falls back to the ping variant when runningStyle is omitted', () => {
+    render(<SessionStatusIndicator status="connected" busy />)
+    expect(screen.getByTitle('Running command')).toBeInTheDocument()
+  })
+
   it('renders connecting pulse indicator', () => {
     render(<SessionStatusIndicator status="connecting" />)
     const indicator = screen.getByTitle('Connecting…')

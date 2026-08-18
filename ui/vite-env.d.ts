@@ -255,6 +255,8 @@ interface Window {
       platform: NodeJS.Platform
       revealLog: () => Promise<string>
       clearLog: () => Promise<boolean>
+      /** Open a local file or directory with the OS's default handler. URLs refused by the backend. */
+      openInSystem: (path: string) => Promise<void>
       setZoomFactor: (factor: number) => void
       getZoomFactor: () => number
     }

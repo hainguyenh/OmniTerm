@@ -128,7 +128,7 @@ fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
             MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
         )
     }
-    .map_err(|error| std::io::Error::other(error))
+    .map_err(std::io::Error::other)
 }
 
 pub(crate) fn remove(state_dir: &Path, id: &str) {

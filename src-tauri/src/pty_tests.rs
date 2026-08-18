@@ -1,6 +1,5 @@
 use super::*;
 use crate::test_support;
-use tauri::Manager;
 
 #[test]
 fn colorfgbg_matches_the_terminal_appearance() {
