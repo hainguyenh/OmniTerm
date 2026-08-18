@@ -191,9 +191,7 @@ impl SessionManager {
             if let Ok(mut output) = session.output.lock() {
                 output.status(DaemonStatus::Closed { code });
             }
-            // An explicit disconnect removes the session before killing the child. Do not let this
-            // late exit watcher recreate its manifest (or overwrite a newer generation with the
-            // same stable id) after the user deliberately closed it.
+            // Do not let an explicit disconnect's late exit watcher recreate/overwrite its manifest.
             let still_current = manager
                 .sessions
                 .get(&id)
@@ -217,11 +215,7 @@ impl SessionManager {
             .lock()
             .map_err(|_| "Session output lock is poisoned".to_string())?;
         let (snapshot, replay, receiver) = output.attach(session.generation);
-        Ok(AttachedSession {
-            snapshot,
-            replay,
-            receiver,
-        })
+        Ok(AttachedSession { snapshot, replay, receiver })
     }
 
     pub fn input(&self, session_id: &str, data: &str) -> Result<(), String> {
