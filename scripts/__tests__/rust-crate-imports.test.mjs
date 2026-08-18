@@ -32,3 +32,17 @@ test('workspace Rust modules import the protocol crate by its declared library n
     )
   }
 })
+
+test('native crates used by packaged Tauri modules remain runtime dependencies', async () => {
+  const manifest = await readFile(new URL('../../src-tauri/Cargo.toml', import.meta.url), 'utf8')
+  const runtimeDependencies = manifest.match(/\[dependencies\]([\s\S]*?)(?:\n\[|$)/)?.[1] ?? ''
+  const devDependencies = manifest.match(/\[dev-dependencies\]([\s\S]*?)(?:\n\[|$)/)?.[1] ?? ''
+  const alwaysAwake = await readFile(
+    new URL('../../plugins/always-awake/native/always_awake.rs', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(alwaysAwake, /\buse sysinfo::System;/)
+  assert.match(runtimeDependencies, /^sysinfo\s*=/m, 'sysinfo is used by packaged Always Awake code')
+  assert.doesNotMatch(devDependencies, /^sysinfo\s*=/m, 'runtime sysinfo must not be dev-only')
+})
