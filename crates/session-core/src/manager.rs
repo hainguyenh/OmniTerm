@@ -222,6 +222,9 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
+        if let Ok(mut output) = session.output.lock() {
+            output.note_input();
+        }
         let mut writer = session
             .writer
             .lock()
