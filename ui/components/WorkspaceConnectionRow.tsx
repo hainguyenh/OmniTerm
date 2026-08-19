@@ -32,7 +32,7 @@ const WorkspaceConnectionRow: React.FC<WorkspaceConnectionRowProps> = ({
   connection, depth, onConnect, onEdit, onDelete,
 }) => (
   <div
-    className="group flex items-center gap-2 pr-1 py-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+    className="group flex items-center gap-2 pr-1 py-1 rounded bg-[var(--theme-bg)] cursor-pointer hover:bg-[var(--theme-hover-bg)]"
     style={{ paddingLeft: 8 + depth * 12 }}
     onDoubleClick={() => onConnect?.(connection)}
     title={connection.type !== 'LOCAL'

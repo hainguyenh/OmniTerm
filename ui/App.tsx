@@ -8,6 +8,7 @@ import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { applyThemeVars, themeCssVars } from './utils/themeVars'
 import { diag } from './diag'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
+import { useWindowRounding } from './hooks/useWindowRounding'
 
 interface AppSettings {
   themeId: string
@@ -51,6 +52,7 @@ function App() {
   const [activeTerminal, setActiveTerminal] = useState<{ id: string; connId: string } | null>(null)
   const [windowActive, setWindowActive] = useState(true)
   const { available: blurAvailable } = useBlurPlugin()
+  const windowRounded = useWindowRounding()
   const startupUpdateChecked = useRef(false)
   useEffect(() => {
     const onFocus = () => setWindowActive(true)
@@ -297,7 +299,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]">
+    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       <TitleBar
         appSettings={appSettings}
         setAppSettings={(s) => setAppSettings(s)}

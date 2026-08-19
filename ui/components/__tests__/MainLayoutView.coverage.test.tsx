@@ -90,6 +90,12 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTestId('workspace')).toBeInTheDocument()
   })
 
+  it('paints the secondary panel with the theme sidebar fill so workspace rows stand out', () => {
+    render(<MainLayoutView model={model({ activeView: 'workspace' })} />)
+    const panel = screen.getByTestId('workspace').closest('div.bg-theme-sidebar')
+    expect(panel).not.toBeNull()
+  })
+
   it('handles the tab strip and all layout-picker transitions', () => {
     const m = model({
       activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
