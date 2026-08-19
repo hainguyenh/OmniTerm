@@ -36,7 +36,7 @@ Processes and app-data files are native resources; central ownership avoids rend
 
 ## How
 
-PTY resolver looks up known connection/temporary IDs and builds launch details. PTY registry handles IO/lifecycle. Output/activity publish events. Connection service sanitizes and serializes reusable profiles.
+PTY resolver looks up known connection/temporary IDs and builds launch details. PTY registry handles IO/lifecycle. Output/activity publish events; the activity daemon keeps ordinary shells process-tree based and applies OSC/output/input-aware idle detection to recognized AI-agent TUIs. Connection service sanitizes and serializes reusable profiles.
 
 ## When
 
@@ -57,8 +57,9 @@ On connection load/save/import/export and every terminal session start/IO/resize
 - `send_session_input` — owned by this spec.
 - `resize_session` — owned by this spec.
 - `kill_session` / `disconnect_session` — owned by this spec.
+- `list_local_sessions` / `set_session_persistence` / `attach_existing_session` — owned by this spec.
 - daemon output/status streaming — owned by `session-core`.
-- daemon process-activity polling — owned by `session-core`.
+- daemon process/activity polling, including agent-aware idle baselines — owned by `session-core`.
 - `connections_path` — owned by this spec.
 - `scrub_stored_secrets` — owned by this spec.
 - `load_connections` / `save_connections` — owned by this spec.
@@ -76,8 +77,9 @@ On connection load/save/import/export and every terminal session start/IO/resize
 | `send_session_input` | Write PTY input. | Interactive terminal. | Lookup writer by session ID. | User input. |
 | `resize_session` | Resize PTY. | Correct geometry. | Lookup session PTY and resize. | UI resize. |
 | `kill_session` / `disconnect_session` | Terminate/release session. | Explicit lifecycle. | Lookup registry and cleanup. | Close/disconnect. |
+| `list_local_sessions` / `set_session_persistence` / `attach_existing_session` | Query daemon sessions, set policy, and re-attach. | Session survival across close/restart. | IPC bridges to sessiond client methods. | App restore / policy change / window attach. |
 | daemon output/status | Emit replay plus live output/status. | Renderer updates without owning PTYs. | Buffer/publish by stable daemon session ID. | Runtime changes. |
-| daemon activity poller | Derive activity metrics. | Session diagnostics/status. | Background process-tree sampling inside sessiond. | Live session. |
+| daemon activity poller | Derive activity metrics. | Session diagnostics/status without pinning idle agent TUIs to running. | Process-tree sampling for normal shells; OSC title + input/output timing (fresh local input forces idle) and idle descendant baselines for recognized agents. | Live session. |
 | `connections_path` | Resolve global profile file. | One app-owned storage location. | App data path. | Connection load/save. |
 | `scrub_stored_secrets` | Remove sensitive fields. | Prevent password persistence. | Transform records before serialization. | Save/export. |
 | `load_connections` / `save_connections` | Read/write global profiles. | Durable reusable connections. | Parse/sanitize/serialize app-data JSON. | Startup/mutation. |
@@ -113,4 +115,5 @@ On connection load/save/import/export and every terminal session start/IO/resize
 - `src-tauri/src/pty_resolve.rs`
 - `crates/session-core/src/output.rs`
 - `crates/session-core/src/activity.rs`
+- `crates/session-core/src/agent_activity.rs`
 - `src-tauri/src/connections.rs`

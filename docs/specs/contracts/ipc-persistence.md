@@ -50,11 +50,12 @@ For every renderer-native action or durable load/save.
 ## Functionalities
 
 - `generate_handler!` — owned by this spec.
-- `invoke` wrappers` — owned by this spec.
+- `invoke` wrappers — owned by this spec.
 - `read_workspaces` / `write_workspaces` — owned by this spec.
 - `load_connections` / `save_connections` — owned by this spec.
 - `Workspace connection commands` — owned by this spec.
 - `Settings/theme commands` — owned by this spec.
+- `Session and window commands` — owned by this spec.
 
 ## Components and functions
 
@@ -66,6 +67,7 @@ For every renderer-native action or durable load/save.
 | `load_connections` / `save_connections` | Global connection persistence. | Durable reusable profiles. | Read/sanitize/write app-data JSON. | Connection load/mutation. |
 | Workspace connection commands | Project-folder profile persistence. | Portable project scope. | Use real workspace folder `.omniterm/connections.json`. | Workspace profile action. |
 | Settings/theme commands | App preference/custom theme persistence. | Central native file ownership. | Validated app-data/custom-theme IO. | Settings/theme action. |
+| Session and window commands | PTY lifecycle, detachment, and OS integration. | Central process and window control. | Bridges to sessiond daemon, detach registry, and OS opener. | Session/window/link action. |
 
 ## State and data
 

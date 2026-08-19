@@ -36,7 +36,7 @@ OS resources must survive renderer remounts and detaching must not create a dupl
 
 ## How
 
-PTY commands operate on stable daemon session IDs. The daemon buffers output and derives activity, while the Tauri bridge forwards its stream over existing renderer channels. `terminal_window` maps existing session IDs to detached windows and reattaches without restarting the PTY.
+PTY commands operate on stable daemon session IDs. The daemon buffers output and derives shell/agent-aware activity, while the Tauri bridge forwards its stream over existing renderer channels. `terminal_window` maps existing session IDs to detached windows and reattaches without restarting the PTY.
 
 ## When
 
@@ -68,7 +68,7 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 | `resize_session` | Resize PTY. | Match UI geometry. | Lookup PTY and resize. | Pane/xterm resize. |
 | `kill_session` / `disconnect_session` | Stop/release session. | Explicit lifecycle. | Lookup registry and terminate/release. | Close/disconnect. |
 | `list_local_sessions` / `set_session_persistence` | Read/update daemon lifecycle state. | Restore and Hybrid lifetime policy. | Query or mutate sessiond records by stable session ID. | Startup/policy change. |
-| daemon output/activity | Buffer replay and publish runtime state. | Keep PTY continuity independent of renderer lifetime. | `session-core` owns the 256 KiB replay tail, stream, and process poller. | Live session. |
+| daemon output/activity | Buffer replay and publish runtime state. | Keep PTY continuity independent of renderer lifetime. | `session-core` owns the 256 KiB replay tail plus ordinary-shell process polling and agent-aware OSC/input/output activity tracking with fresh local input forcing idle. | Live session. |
 | `detach_terminal` | Create/focus detached renderer for existing session. | Move presentation without new PTY. | Bind session ID to Tauri window. | Detach. |
 | `reattach_terminal` | Return session presentation to main app. | Reversible detach. | Release detached mapping and reattach. | Reattach. |
 
@@ -99,4 +99,5 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 - `crates/session-core/src/manager.rs`
 - `crates/session-core/src/output.rs`
 - `crates/session-core/src/activity.rs`
+- `crates/session-core/src/agent_activity.rs`
 - `src-tauri/src/terminal_window.rs`

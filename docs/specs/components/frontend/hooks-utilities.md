@@ -57,12 +57,15 @@ Whenever owning components need lifecycle state, native events, or deterministic
 - `useSplitRatios` / `useViewGroups` — owned by this spec.
 - `useTreeReveal` — owned by this spec.
 - `useWorkspaceMutations` / `useWorkspaceScan` — owned by this spec.
+- `useWindowRounding` — owned by this spec.
+- `useSessionPersistence` / `useSessionRestore` — owned by this spec.
 - `buildWorkspaceTree` / `filterTreeByQuery` — owned by this spec.
 - `buildWorkspaceForest` / `workspaceDropIndex` — owned by this spec.
 - `createSessionChannel` / `attachTerminalStream` — owned by this spec.
 - `safeHttpUrl` / `isTerminalLinkModifierClick` — owned by this spec.
+- `findLinkOrPathAt` / `createTerminalContextMenu` — owned by this spec.
 - `themeCssVars` / `applyThemeVars` — owned by this spec.
-- `createWebglController` / pool helpers` — owned by this spec.
+- `createWebglController` / pool helpers — owned by this spec.
 - `matchShortcut` / `resolveShortcuts` — owned by this spec.
 - `normalizePastePayload` / `chunkForWrite` — owned by this spec.
 
@@ -77,10 +80,13 @@ Whenever owning components need lifecycle state, native events, or deterministic
 | `useSplitRatios` / `useViewGroups` | Manage layout/group state. | Central layout lifecycle. | State/update helpers. | Pane/group actions. |
 | `useTreeReveal` | Reveal tree ancestors. | Make target visible. | Compute ancestor keys and expand. | Programmatic reveal. |
 | `useWorkspaceMutations` / `useWorkspaceScan` | Workspace async lifecycle. | Separate writes/scans from rendering. | Call feature API and synchronize state. | Workspace actions. |
+| `useWindowRounding` | Detect OS window corner rounding capability. | Apply correct platform titlebar styling. | Check OS platform and Tauri window state. | Window mount or resize. |
+| `useSessionPersistence` / `useSessionRestore` | Snapshot and restore live sessions. | Preserve terminal state across runs. | Synchronize persistence policies and restore active PTYs. | Session mount/unmount and app launch. |
 | `buildWorkspaceTree` / `filterTreeByQuery` | Build/search tree. | Pure deterministic workspace projection. | Map logical entries and preserve ancestors. | Tree render/search. |
 | `buildWorkspaceForest` / `workspaceDropIndex` | Hierarchy/order calculations. | Correct nested reordering. | Group/sort/calculate indexes. | Workspace list/drop. |
 | `createSessionChannel` / `attachTerminalStream` | Terminal event transport. | Reusable stream lifecycle. | Subscribe/cleanup/write chunks. | Terminal attach. |
-| `safeHttpUrl` / `isTerminalLinkModifierClick` | Gate terminal links. | Prevent unsafe output-controlled navigation. | Parse/allow HTTP(S). | Modifier-click gate. |
+| `safeHttpUrl` / `isTerminalLinkModifierClick` | Gate terminal links. | Prevent unsafe output-controlled navigation. | Parse/allow HTTP(S) and verify platform modifier. | Modifier-click gate. |
+| `findLinkOrPathAt` / `createTerminalContextMenu` | Link/path detection and context menu handling. | Disambiguate link clicks from selection/paste. | Detect URLs/paths in terminal buffer and route contextmenu/mousedown. | Terminal interaction. |
 | `themeCssVars` / `applyThemeVars` | Project theme to CSS. | Consistent visual state. | Resolve fields and set CSS variables. | Theme change. |
 | `createWebglController` / pool helpers | Manage bounded WebGL contexts. | Avoid context exhaustion. | Acquire/touch/release pooled resources. | Terminal rendering. |
 | `matchShortcut` / `resolveShortcuts` | Keyboard matching/resolution. | Consistent shortcut semantics. | Normalize event/config and compare. | Keydown. |
