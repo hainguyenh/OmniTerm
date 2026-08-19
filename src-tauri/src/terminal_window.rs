@@ -125,7 +125,7 @@ pub async fn detach_terminal<R: Runtime>(
     }
 
     let label = registry.mint_label();
-    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("index.html".into()))
         .title(&name)
         .inner_size(900.0, 600.0)
         .min_inner_size(400.0, 200.0)
@@ -134,7 +134,13 @@ pub async fn detach_terminal<R: Runtime>(
         // webview installs an OS drag-drop handler that swallows dragover/drop before the page sees
         // them, and dragging a pane header does nothing. A detached window shows the same panes, so
         // it needs the same answer.
-        .disable_drag_drop_handler()
+        .disable_drag_drop_handler();
+    // Same rounded-window build as the main window (see tauri.windows.conf.json): on Windows the
+    // window is created transparent and shadowless, and the page shell carries the corner radius.
+    // macOS keeps its native rounding and Linux an opaque square window.
+    #[cfg(target_os = "windows")]
+    let builder = builder.transparent(true).shadow(false);
+    let window = builder
         .build()
         .map_err(|e| format!("Could not open a window for this session: {e}"))?;
 

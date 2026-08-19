@@ -20,14 +20,16 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
     assert!(fixture
         .error("send_session_input", json!({ "id": "missing", "data": "x" }))
         .to_string()
-        .contains("Session"));
+        .to_lowercase()
+        .contains("session"));
     assert!(fixture
         .error(
             "resize_session",
             json!({ "id": "missing", "cols": 80, "rows": 24 }),
         )
         .to_string()
-        .contains("Session"));
+        .to_lowercase()
+        .contains("session"));
     assert!(fixture
         .invoke("disconnect_session", json!({ "id": "missing" }))
         .is_err());
