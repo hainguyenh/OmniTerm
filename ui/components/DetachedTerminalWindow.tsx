@@ -8,6 +8,7 @@ import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
+import { useWindowRounding } from '../hooks/useWindowRounding'
 
 interface DetachedTerminalWindowProps {
   appSettings: AppSettings
@@ -50,6 +51,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [missing, setMissing] = useState(false)
   const [windowActive, setWindowActive] = useState(true)
   const { available: blurAvailable } = useBlurPlugin()
+  const windowRounded = useWindowRounding()
 
   useEffect(() => {
     const onFocus = () => setWindowActive(true)
@@ -104,7 +106,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   }
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]">
+    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       {/* The window is built with decorations off, so this strip is the title bar; the drag region
           is Tauri's, declared on the element rather than via a CSS property. */}
       <div

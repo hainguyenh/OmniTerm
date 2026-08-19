@@ -5,6 +5,16 @@
     <link rel="icon" type="image/webp" href="/ui/generated/OmniTerm-Logo.webp" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OmniTerm</title>
+    <script>
+      // Windows builds create transparent, shadowless windows (see tauri.windows.conf.json) and
+      // draw the rounded window shell with CSS, so the document background must be transparent
+      // there for the desktop to show through the corner radius. macOS keeps its native window
+      // rounding and Linux an opaque square window — both keep the opaque background. Runs before
+      // first paint so the very first frame is already rounded.
+      if (navigator.userAgent.includes('Windows')) {
+        document.documentElement.classList.add('win-window')
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

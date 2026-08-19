@@ -1,15 +1,15 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, Monitor, ChevronDown, Check, X, ExternalLink, Maximize2, Minimize2, Bot } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, Bot } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
-import { detachTitle, type DetachAction } from '../detachControl'
+import type { DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import AppearanceMenu from './AppearanceMenu'
 import type { AppTheme } from '../themes'
 import { formatTerminalTitle } from '../utils/agentTitle'
 import SessionStatusIndicator from './SessionStatusIndicator'
-import SessionPersistenceMenu from './SessionPersistenceMenu'
+import SessionControlButtons from './SessionControlButtons'
 import { Tooltip } from './Tooltip'
 
 /**
@@ -151,32 +151,18 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               compact
             />
           )}
-          {conn && conn.type !== 'RDP' && sessionId && (
-            <SessionPersistenceMenu sessionId={sessionId} isAgent={formattedTitle.isAgent} />
-          )}
-          {detach && (
-            <Tooltip content={detachTitle(detach, 'pane')} placement="bottom">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onToggleDetach() }}
-                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-                aria-label={detachTitle(detach, 'pane')}
-              >
-                {detach === 'attach' ? <Minimize2 className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
-              </button>
-            </Tooltip>
-          )}
-          {conn && onToggleFullscreen && (
-            <Tooltip content={fullscreen ? 'Restore view mode' : 'Focus pane full screen'} placement="bottom">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onToggleFullscreen() }}
-                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-                aria-label={fullscreen ? 'Restore view mode' : 'Focus pane full screen'}
-              >
-                {fullscreen ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-              </button>
-            </Tooltip>
+          {conn && sessionId && (
+            <SessionControlButtons
+              conn={conn}
+              sessionId={sessionId}
+              busy={busy}
+              isAgent={formattedTitle.isAgent}
+              detach={detach}
+              onToggleDetach={onToggleDetach}
+              detachWhere="pane"
+              fullscreen={fullscreen}
+              onToggleFullscreen={onToggleFullscreen}
+            />
           )}
           {conn && sessionId && onClose && (
             <Tooltip content="Close pane" placement="bottom">

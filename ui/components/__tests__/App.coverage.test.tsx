@@ -185,4 +185,10 @@ describe('App orchestration', () => {
     await waitFor(() => expect(document.documentElement.style.getPropertyValue('--theme-sidebar-bg')).toBe('rgba(0, 0, 0, 0.05)'))
     expect(document.documentElement.style.getPropertyValue('--theme-popup-bg')).toBe('#f2eed9')
   })
+
+  it('rounds the main window shell on Windows while the window is restored', async () => {
+    install(settings)
+    const { container } = render(<App />)
+    await waitFor(() => expect(container.querySelector('.app-window-rounded')).not.toBeNull())
+  })
 })

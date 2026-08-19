@@ -34,6 +34,23 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Windows rounded-window build (see tauri.windows.conf.json): the window is created transparent
+   and shadowless, and the page shell carries the corner radius. The opaque document background
+   above would paint the window's square corners, so it is removed there; other platforms keep the
+   opaque background because their windows stay opaque (macOS rounds natively, Linux is square). */
+html.win-window,
+html.win-window body,
+html.win-window #root {
+  background-color: transparent;
+}
+
+/* 8px matches the Windows 11 system window rounding. useWindowRounding() applies this only while
+   the window is restored — a maximized window covers the screen, and the radius would show the
+   desktop at the corners. */
+html.win-window .app-window-rounded {
+  border-radius: 8px;
+}
+
 
 /* ── Global scrollbars: thin, theme-colored, transparent track ── */
 *::-webkit-scrollbar {

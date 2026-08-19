@@ -30,7 +30,13 @@ describe('PaneHeader remaining behavior', () => {
     localStorage.clear()
     Object.defineProperty(window, 'omnitermAPI', {
       configurable: true,
-      value: { connect: { setPersistencePolicy: vi.fn().mockResolvedValue(undefined) } },
+      value: {
+        connect: {
+          localInput: vi.fn(),
+          sshInput: vi.fn(),
+          setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
+        },
+      },
     })
   })
   it('focuses, drags connected panes, opens picker, clears, and assigns sessions', () => {
@@ -83,18 +89,43 @@ describe('PaneHeader remaining behavior', () => {
   })
 
 
-  it('offers all Hybrid persistence modes and persists a user selection', async () => {
+  it('offers all Hybrid persistence modes from a button popover and persists a selection', () => {
     setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
-    const select = screen.getByRole('combobox', { name: 'Session persistence' })
-    expect(select).toHaveValue('keep-running')
-    expect(screen.getByRole('option', { name: 'Close with OmniTerm' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Keep running' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'Recover after reboot' })).toBeInTheDocument()
+    // Default for a non-agent SSH pane is keep-running per persistencePolicy.ts.
+    const trigger = screen.getByRole('button', { name: 'Session persistence' })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
-    fireEvent.change(select, { target: { value: 'recover-after-reboot' } })
-    expect(select).toHaveValue('recover-after-reboot')
+    fireEvent.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+
+    const close = screen.getByRole('menuitemradio', { name: 'Close with OmniTerm' })
+    const keep = screen.getByRole('menuitemradio', { name: 'Keep running' })
+    const recover = screen.getByRole('menuitemradio', { name: 'Recover after reboot' })
+    expect(close).toBeInTheDocument()
+    // 'keep-running' is the default-effective policy, so it shows the radio check.
+    expect(keep).toHaveAttribute('aria-checked', 'true')
+    expect(close).toHaveAttribute('aria-checked', 'false')
+    expect(recover).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(recover)
     expect(window.omnitermAPI.connect.setPersistencePolicy).toHaveBeenCalledWith('s1', 'recover-after-reboot')
     expect(localStorage.getItem('omniterm:terminal-persistence-policies')).toContain('recover-after-reboot')
+    // The popover closes after a selection.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('closes the persistence menu on Escape and on an outside click', () => {
+    setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
+    const trigger = screen.getByRole('button', { name: 'Session persistence' })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menuitemradio', { name: 'Keep running' })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('menuitemradio', { name: 'Keep running' })).not.toBeInTheDocument()
+
+    fireEvent.click(trigger)
+    fireEvent.mouseDown(document.body)
+    expect(screen.queryByRole('menuitemradio', { name: 'Keep running' })).not.toBeInTheDocument()
   })
 
   it('renders the oscillating running indicator when busy is true', () => {
@@ -105,5 +136,35 @@ describe('PaneHeader remaining behavior', () => {
     expect(container.querySelector('.animate-ping')).toBeNull()
     expect(container.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
     expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
+  })
+
+  it('sends Ctrl+C from the Stop button while busy and disables it while idle', () => {
+    const x = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true })
+    const stop = screen.getByRole('button', { name: 'Stop current process' })
+    expect(stop).toBeEnabled()
+    fireEvent.click(stop)
+    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x03')
+    x.rerender(<PaneHeader {...x.props} busy={false} />)
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeDisabled()
+  })
+
+  it('clears the terminal via the same input channel as cls, even while idle', () => {
+    setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
+    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x0c')
+  })
+
+  it('routes Stop and Clear through the SSH input channel for SSH panes', () => {
+    setup({ conn: ssh, sessionId: 's1', busy: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
+    expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x03')
+    expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x0c')
+  })
+
+  it('omits Stop and Clear for RDP panes, which have no PTY semantics', () => {
+    setup({ conn: rdp, sessionId: 's2', panes: [null, 's2'], layoutMode: 2, statuses: {} })
+    expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
   })
 })

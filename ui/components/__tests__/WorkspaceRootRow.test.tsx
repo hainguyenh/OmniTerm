@@ -90,4 +90,12 @@ describe('WorkspaceRootRow', () => {
     expect(badge).toBeInTheDocument()
     expect(badge).toHaveTextContent('2')
   })
+
+  it('paints the workspace row with the sidebar theme background', () => {
+    const { container } = render(<WorkspaceRootRow {...props()} />)
+    const row = container.querySelector('[data-workspace-id="w1"]') as HTMLElement
+    expect(row.className).toContain('bg-[var(--theme-sidebar-bg)]')
+    expect(row.className).not.toContain('bg-[var(--theme-bg)]')
+    expect(row.className).toContain('hover:bg-[var(--theme-hover-bg)]')
+  })
 })

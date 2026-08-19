@@ -143,4 +143,12 @@ describe('DetachedTerminalWindow', () => {
     await waitFor(() => expect(screen.getByText('This session is no longer available.')).toBeInTheDocument())
     expect(screen.queryByTestId('terminal')).not.toBeInTheDocument()
   })
+
+  it('rounds the detached window shell on Windows while the window is restored', async () => {
+    mockOmnitermAPI({ terminalWindow: { bootstrap: vi.fn(async () => null) } })
+    const { container } = render(
+      <DetachedTerminalWindow appSettings={baseSettings} setAppSettings={vi.fn()} themes={[]} smartColors />,
+    )
+    await waitFor(() => expect(container.querySelector('.app-window-rounded')).not.toBeNull())
+  })
 })

@@ -1,10 +1,12 @@
 import React from 'react'
 import { Bot, Loader2, Monitor, RotateCw, Terminal, Unplug } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
+import type { DetachAction } from '../detachControl'
 import { activityLabel, STATUS_DOT, STATUS_LABEL, STATUS_TEXT } from '../tabVisuals'
 import { paneIdentity } from '../paneIdentity'
 import MetricsChips from './SessionMetricsChips'
 import { extractFolder, parseAgentTitle } from '../utils/agentTitle'
+import SessionControlButtons from './SessionControlButtons'
 import { Tooltip } from './Tooltip'
 
 /**
@@ -17,6 +19,7 @@ import { Tooltip } from './Tooltip'
  */
 interface SessionFooterBarProps {
   conn: Connection
+  sessionId: string
   tabName: string
   status: SessionStatus
   latency: number | null
@@ -30,14 +33,19 @@ interface SessionFooterBarProps {
   /** Human-readable shell label for LOCAL connections, or user@host:port for SSH. */
   footerShellLabel: string
   zoomFactor: number | undefined
+  detach: DetachAction | null
+  onToggleDetach: () => void
+  fullscreen?: boolean
+  onToggleFullscreen?: () => void
   onReconnect: () => void
   onDisconnect: () => void
   onZoomReset: (() => void) | undefined
 }
 
 export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
-  conn, tabName, status, latency, metrics, connectedAt, layoutMode, focusedPane,
-  busy, workspaceTitle, footerShellLabel, zoomFactor, onReconnect, onDisconnect, onZoomReset,
+  conn, sessionId, tabName, status, latency, metrics, connectedAt, layoutMode, focusedPane,
+  busy, workspaceTitle, footerShellLabel, zoomFactor, detach, onToggleDetach, fullscreen,
+  onToggleFullscreen, onReconnect, onDisconnect, onZoomReset,
 }) => {
   // Derive agent context from the live tab name (kept in sync with OSC title by TerminalView),
   // with fallback to connection command/name.
@@ -148,6 +156,18 @@ export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
           </button>
         </Tooltip>
       )}
+      <SessionControlButtons
+        conn={conn}
+        sessionId={sessionId}
+        busy={busy}
+        isAgent={agentCtx !== null}
+        detach={detach}
+        onToggleDetach={onToggleDetach}
+        fullscreen={fullscreen}
+        onToggleFullscreen={onToggleFullscreen}
+        tooltipPlacement="top"
+        className="ml-auto"
+      />
     </div>
   )
 }

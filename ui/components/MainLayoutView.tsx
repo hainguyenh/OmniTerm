@@ -72,7 +72,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
         {activeView !== null && (
           <div
-            className="flex-shrink-0 flex flex-col border-r border-[var(--theme-border)] min-w-0 overflow-hidden relative"
+            className="flex-shrink-0 flex flex-col border-r border-[var(--theme-border)] min-w-0 overflow-hidden relative bg-theme-sidebar"
             style={{ width: sidebarVisible ? sidebarWidth : 0 }}
           >
             {activeView === 'workspace' ? (
@@ -236,6 +236,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             return (
               <SessionFooterBar
                 conn={conn}
+                sessionId={activeTabId}
                 tabName={activeTabs.find(tab => tab.id === activeTabId)?.name ?? conn.name}
                 status={status}
                 latency={resolvedLatency}
@@ -247,6 +248,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 workspaceTitle={footerWorkspaceTitle}
                 footerShellLabel={footerShellLabel}
                 zoomFactor={zoomFactor}
+                detach={detachControl.stateOf(activeTabId)}
+                onToggleDetach={() => detachControl.toggle(activeTabId)}
+                fullscreen={fullscreenPane === focusedPane}
+                onToggleFullscreen={() => setFullscreenPane(current => current === focusedPane ? null : focusedPane)}
                 onReconnect={() => reconnectSession(activeTabId)}
                 onDisconnect={() => disconnectSession(activeTabId)}
                 onZoomReset={onZoomReset}
