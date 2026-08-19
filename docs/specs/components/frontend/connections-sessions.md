@@ -57,6 +57,11 @@ When editing/launching connections or rendering/updating live sessions.
 - `ConnectingOverlay` — owned by this spec.
 - `WaitingPane` — owned by this spec.
 - `SessionMetricsChips` — owned by this spec.
+- `SessionControlButtons` — owned by this spec.
+- `SessionPersistenceMenu` — owned by this spec.
+- `SessionStatusIndicator` — owned by this spec.
+- `SessionFooterBar` — owned by this spec.
+- `TerminalLinkMenu` / `TerminalViewLinkMenuHost` — owned by this spec.
 
 ## Components and functions
 
@@ -71,6 +76,11 @@ When editing/launching connections or rendering/updating live sessions.
 | `ConnectingOverlay` | Show async connection progress. | User feedback. | Render launch status. | Connecting. |
 | `WaitingPane` | Render no/awaiting session state. | Clear empty-pane UX. | Present placeholder/action. | No active content. |
 | `SessionMetricsChips` | Render session metrics. | Expose activity/health. | Map native metrics to chips. | Metrics available. |
+| `SessionControlButtons` | Shared session header/footer actions. | Keep Stop, Clear, Fullscreen, Detach actions uniform. | Render shared buttons and forward actions to owning session. | Pane header or active footer bar rendered. |
+| `SessionPersistenceMenu` | Per-terminal persistence policy selector. | Configure lifetime policy (None, Window, Hybrid, App). | Open dropdown menu and invoke daemon persistence updates. | User clicks persistence indicator. |
+| `SessionStatusIndicator` | Render session status dot/animation. | Visual cue for connected/busy/idle/disconnected. | Render status indicator with oscillate or ping styles. | Pane header, footer, or tabs. |
+| `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls and status. | Compose status, persistence menu, and session controls. | Active session in focused pane. |
+| `TerminalLinkMenu` / `TerminalViewLinkMenuHost` | Modifier-click link/path context menu. | Copy or open detected URLs and file paths. | Portal overlay menu triggered by Ctrl/Cmd+click on actionable spans. | User modifier-clicks detected link or path. |
 
 ## State and data
 
@@ -102,3 +112,9 @@ When editing/launching connections or rendering/updating live sessions.
 - `ui/components/SessionTabs.tsx`
 - `ui/components/TerminalView.tsx`
 - `ui/components/RDPView.tsx`
+- `ui/components/SessionControlButtons.tsx`
+- `ui/components/SessionPersistenceMenu.tsx`
+- `ui/components/SessionStatusIndicator.tsx`
+- `ui/components/SessionFooterBar.tsx`
+- `ui/components/TerminalLinkMenu.tsx`
+- `ui/components/TerminalViewLinkMenuHost.tsx`
