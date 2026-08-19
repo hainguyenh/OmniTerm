@@ -28,15 +28,15 @@ Defines the live "running" indicator's busy/idle signal (backend-driven), the pa
 
 ## What
 
-A live pane presents a status indicator whose busy/idle state is owned by the backend's per-session activity probe (no user-typing heuristic), and the pane header renders an oscillating main dot plus two ghost-trail dots while busy. A platform link-modifier click (Ctrl on Windows/Linux, Cmd on macOS) + left-button on a detected URL or file path in the terminal surface first offers a focused overlay menu (Copy Link / Open Link, or Copy Path / Open in OS); modifier clicks that miss any detection fall through to xterm's normal selection. Right-click keeps its long-standing copy-selection / paste behaviour unchanged.
+A live pane presents a status indicator whose busy/idle state is owned by the backend's per-session activity probe. Ordinary shells remain process-tree driven; recognized AI-agent TUIs use their OSC 0/2 title, recent autonomous PTY output, and process-tree growth above the agent's idle baseline while suppressing immediate local-input echo. The pane header renders an oscillating main dot plus two ghost-trail dots while busy. A platform link-modifier click (Ctrl on Windows/Linux, Cmd on macOS) + left-button on a detected URL or file path in the terminal surface first offers a focused overlay menu (Copy Link / Open Link, or Copy Path / Open in OS); modifier clicks that miss any detection fall through to xterm's normal selection. Right-click keeps its long-standing copy-selection / paste behaviour unchanged.
 
 ## Why
 
-The prior user-typing heuristic confused "I am typing" with "something is running"; ~1.2s of inactivity shortly flicked the dot between states during long AI-agent output. The backend activity channel already emits a stable, conventional idle window, so routing the busy state through it keeps the indicator meaningful for shells, agents, and long-output sessions alike. The link-modifier-click overlay gives the pane a discoverable gesture that disambiguates "copy selection" vs. "open this link" without taking over right-click (which keeps its predictability for paste users). xterm's own `linkHandler` is downgraded to a no-op so the modifier click no longer direct-opens URLs underneath the overlay, and the plain-URL linkifier is retained purely for its underline-on-hover cue — both paths share the same platform modifier check (`isTerminalLinkModifierClick`).
+The prior user-typing heuristic confused "I am typing" with "something is running", while a pure process-tree probe also treated a long-lived AI-agent TUI itself as permanent work. Keeping the renderer event-only and making the daemon agent-aware preserves conventional shell detection while letting an idle agent and user typing read idle; autonomous output and newly spawned tool processes still read running. The link-modifier-click overlay gives the pane a discoverable gesture that disambiguates "copy selection" vs. "open this link" without taking over right-click (which keeps its predictability for paste users). xterm's own `linkHandler` is downgraded to a no-op so the modifier click no longer direct-opens URLs underneath the overlay, and the plain-URL linkifier is retained purely for its underline-on-hover cue — both paths share the same platform modifier check (`isTerminalLinkModifierClick`).
 
 ## How
 
-`attachTerminalStream` wires `onLocalActivity(busy)` up-front and never converts bytes to a "busy" short-circuit; backend activity is the only edge that toggles busy. The pane header passes `runningStyle='oscillate'` to `SessionStatusIndicator`, which renders a fixed-width bay (`w-10 h-2`) holding three absolutely-positioned dots; a CSS keyframe drives the main dot's oscillation across the bay, and ghost `animation-delay`s produce the trailing fade image. `createTerminalContextMenu` returns two handlers: `onContextMenu` (paste-fallback only — copy-selection if a range is set, otherwise paste) and `onLinkClick` (a `mousedown` listener that requires `isTerminalLinkModifierClick(e)` + `button === 0`, then runs `findLinkOrPathInTerminal` against the click target — a detection invokes `setLinkMenu`). xterm's `linkHandler` and the plain-URL linkifier's `ILink.activate` are both no-ops so the modifier click never direct-opens the URL underneath the overlay; the linkifier stays for the hover-underline cue only. `open_in_system` is the OS-open command the "Open in OS" item calls; `validate_path_for_open` pure-validates the trimmed path on the Rust side before being opened via `opener::open`.
+`attachTerminalStream` wires `onLocalActivity(busy)` up-front and never converts renderer-side bytes to a "busy" short-circuit; backend activity is the only edge that toggles busy. In `session-core`, `AgentActivityTracker` recognizes known agents from OSC 0/2 titles, records local input before the PTY write, immediately clears prior autonomous-output activity while the user is typing, suppresses output inside the short input-echo window, and retains a short tail after later autonomous output. The activity poller keeps process-tree detection for ordinary shells; for agents it snapshots the idle descendant count and treats later descendant growth as tool/internal-process work. The pane header passes `runningStyle='oscillate'` to `SessionStatusIndicator`, which renders a fixed-width bay (`w-10 h-2`) holding three absolutely-positioned dots; a CSS keyframe drives the main dot's oscillation across the bay, and ghost `animation-delay`s produce the trailing fade image. `createTerminalContextMenu` returns two handlers: `onContextMenu` (paste-fallback only — copy-selection if a range is set, otherwise paste) and `onLinkClick` (a `mousedown` listener that requires `isTerminalLinkModifierClick(e)` + `button === 0`, then runs `findLinkOrPathInTerminal` against the click target — a detection invokes `setLinkMenu`). xterm's `linkHandler` and the plain-URL linkifier's `ILink.activate` are both no-ops so the modifier click never direct-opens the URL underneath the overlay; the linkifier stays for the hover-underline cue only. `open_in_system` is the OS-open command the "Open in OS" item calls; `validate_path_for_open` pure-validates the trimmed path on the Rust side before being opened via `opener::open`.
 
 ## When
 
@@ -44,8 +44,10 @@ From the first observed `onLocalActivity` event right after a session starts, th
 
 ## Behavior
 
-- Busy/idle is only driven by the backend activity channel. Bytes do not flip it; neither does silent or stalled output.
-- Idle wins over a fresh busy edge while no active signal is in flight; mid-arrival output does not supersede the idle window.
+- Renderer busy/idle is only driven by the backend activity channel; renderer-side typing or output bytes never flip it directly.
+- Ordinary local shells keep the process-tree busy signal. A recognized agent's own long-lived TUI process becomes its idle baseline instead of pinning the session to running.
+- Local input immediately clears a recognized agent's prior output-busy state; agent output inside the following 500 ms echo window is ignored. Later autonomous output keeps the agent busy for a 1.5 s tail, and descendant growth above the learned idle baseline marks spawned tool/internal-process work busy.
+- Two idle poll ticks are still required before a running session reports idle, preventing animation chatter between output chunks.
 - Remote panes (SSH/RDP) never receive `onLocalActivity`; their busy state is unknown and the indicator stays solid.
 - The oscillating running style is wired to the pane header only. Picker dropdown and tab indicators keep the legacy `ping` running style.
 - A platform link-modifier + left click (Ctrl on Windows/Linux, Cmd on macOS) on a detected URL surfaces Copy Link and Open Link. The same modifier click on a detected path surfaces Copy Path and Open in OS; the Open in OS item is hidden when the pane is not `LOCAL`, since the backend open runs on this host, not the remote one.
@@ -55,7 +57,8 @@ From the first observed `onLocalActivity` event right after a session starts, th
 
 ## Functionalities
 
-- `attachTerminalStream` — extended: Phase A removes the bytes-driven activity debounce; busy/idle now driven only by `onLocalActivity`.
+- `attachTerminalStream` — extended: renderer busy/idle is driven only by `onLocalActivity`.
+- `AgentActivityTracker` / daemon activity poller — recognize agent OSC titles, suppress input echo, track recent autonomous output, and compare agent descendant counts against the idle baseline.
 - `SessionStatusIndicator` — extended: Phase B adds `runningStyle='ping' | 'oscillate'` prop + the oscillate branch with two ghost-trail dots.
 - `PaneHeader` — extended: Phase B passes `runningStyle='oscillate'` to the indicator on the pane header.
 - `findLinkOrPathAt`, `findLinkOrPathInTerminal`, `TerminalLinkMenuKind`, `DetectedLinkOrPath` — Phase C detection surface for URLs and filesystem paths.
@@ -69,7 +72,8 @@ From the first observed `onLocalActivity` event right after a session starts, th
 
 | Component | What | Why | How | When |
 |---|---|---|---|---|
-| `attachTerminalStream` | Drive pane busy/idle from backend activity. | Keep the indicator meaningful under shells, agents, and long sessions. | Wire `onLocalActivity(busy)` only; remove the bytes-driven debounce. | Throughout a session's live IO. |
+| `attachTerminalStream` | Drive pane busy/idle from backend activity. | Keep the renderer from equating typing with work. | Wire `onLocalActivity(busy)` only; renderer bytes never set activity. | Throughout a session's live IO. |
+| `AgentActivityTracker` / daemon activity poller | Derive agent-aware busy/idle. | An idle agent process must not look permanently busy while real output/tools must still animate. | Parse OSC 0/2 titles, force idle on fresh local input, suppress immediate input echo, tail later autonomous output, and compare descendant count with the learned agent baseline; ordinary shells keep process-tree detection. | Every local-session activity tick and PTY IO edge. |
 | `SessionStatusIndicator` | Render running indicator (animated oscillate branch). | Show ongoing running state without strobing under user-typing. | Bay with main dot (oscillating keyframe) plus two ghost-trail dots with staggered animation-delay. | On every pane header, picker dropdown, and tab indicator that needs the running state. |
 | `PaneHeader` | Pass `runningStyle='oscillate'` to the indicator. | Use the oscillating running style on the prominent pane header. | Forward `runningStyle` prop to `SessionStatusIndicator` only on the pane header. | Whenever a pane header is rendered. |
 | `findLinkOrPathAt` / `findLinkOrPathInTerminal` / `isTerminalLinkModifierClick` | Detect URL or file path under a link-modifier click; gate the platform modifier. | Disambiguate copy-selection vs. modifier-click-open when on actionable text. | URL-first lookup via `PLAIN_URL_RE` then `FILE_PATH_RE`; map click coords to terminal buffer col; shared modifier check (Cmd on macOS, Ctrl elsewhere). | On every terminal pane modifier-click handled via `createTerminalContextMenu.onLinkClick`. |
@@ -82,7 +86,7 @@ From the first observed `onLocalActivity` event right after a session starts, th
 
 - Pane busy/idle state: accessible via the `onLocalActivity(busy)` callback; the pane's setter dedupes edge transitions.
 - `linkMenu` overlay state on the host pane: `{ x, y, kind: 'url' | 'path', text } | null`; `open` action routes through the host glue's `copyText` / `openUrl` / `openPath` callbacks defined once.
-- Backend `activity` session event from the per-session process-tree probe (segment interval 500ms, idle confirm 1s, command grace ~2s).
+- Backend `activity` session event from the hybrid per-session probe (poll interval 500 ms, idle confirm 1 s, command grace ~2 s, agent input-echo quiet 500 ms, agent output tail 1.5 s).
 
 ## Errors and edge cases
 
@@ -113,6 +117,10 @@ From the first observed `onLocalActivity` event right after a session starts, th
 ## Source map
 
 - `ui/utils/terminalStream.ts`
+- `crates/session-core/src/agent_activity.rs`
+- `crates/session-core/src/activity.rs`
+- `crates/session-core/src/output.rs`
+- `crates/session-core/src/manager.rs`
 - `ui/components/SessionStatusIndicator.tsx`
 - `ui/components/PaneHeader.tsx`
 - `ui/utils/terminalLinks.ts`
