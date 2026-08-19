@@ -1,19 +1,30 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use app_core::proc_activity::ProcTable;
 use sysinfo::System;
 
 use crate::manager::SessionManager;
+use crate::output::Output;
 
 const TICK: Duration = Duration::from_millis(500);
 const IDLE_CONFIRM_TICKS: u8 = 2;
 const COMMAND_GRACE_TICKS: u8 = 4;
 
+#[derive(Debug, Clone, Copy)]
+struct ActivitySample {
+    descendant_count: usize,
+    is_agent: bool,
+    recent_output: bool,
+    recent_input: bool,
+}
+
 struct ActivityState {
     reported: Option<bool>,
     idle_streak: u8,
     command_grace: u8,
+    agent_baseline_descendants: Option<usize>,
 }
 
 impl ActivityState {
@@ -26,14 +37,36 @@ impl ActivityState {
             } else {
                 0
             },
+            agent_baseline_descendants: None,
         }
     }
 
-    fn observe(&mut self, has_descendant: bool) -> Option<bool> {
+    fn observe(&mut self, sample: ActivitySample) -> Option<bool> {
+        if sample.is_agent && sample.recent_input {
+            self.command_grace = 0;
+            self.idle_streak = IDLE_CONFIRM_TICKS;
+            if self.reported == Some(false) {
+                return None;
+            }
+            self.reported = Some(false);
+            return Some(false);
+        }
         if self.command_grace > 0 {
             self.command_grace -= 1;
         }
-        let busy = has_descendant || self.command_grace > 0;
+        let observed_busy = if sample.is_agent {
+            let baseline = self
+                .agent_baseline_descendants
+                .get_or_insert(sample.descendant_count);
+            if sample.descendant_count < *baseline {
+                *baseline = sample.descendant_count;
+            }
+            sample.recent_output || sample.descendant_count > *baseline
+        } else {
+            self.agent_baseline_descendants = None;
+            sample.descendant_count > 0
+        };
+        let busy = observed_busy || self.command_grace > 0;
         if busy {
             self.idle_streak = 0;
         } else {
@@ -54,6 +87,13 @@ impl ActivityState {
     }
 }
 
+struct ActivityTarget {
+    id: String,
+    pid: Option<u32>,
+    launched_with_command: bool,
+    output: Arc<Mutex<Output>>,
+}
+
 pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut system = Some(System::new());
@@ -66,18 +106,17 @@ pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
                 states.clear();
                 continue;
             }
-            let targets: Vec<_> = manager
+            let targets: Vec<ActivityTarget> = manager
                 .sessions
                 .iter()
-                .map(|entry| {
-                    (
-                        entry.key().clone(),
-                        entry.pid,
-                        entry.launched_with_command,
-                    )
+                .map(|entry| ActivityTarget {
+                    id: entry.key().clone(),
+                    pid: entry.pid,
+                    launched_with_command: entry.launched_with_command,
+                    output: Arc::clone(&entry.output),
                 })
                 .collect();
-            states.retain(|id, _| targets.iter().any(|target| &target.0 == id));
+            states.retain(|id, _| targets.iter().any(|target| &target.id == id));
             let owned = system.take().unwrap_or_default();
             let snapshot = tokio::task::spawn_blocking(move || {
                 let mut owned = owned;
@@ -90,15 +129,38 @@ pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
                 continue;
             };
             system = Some(owned);
-            for (id, pid, launched) in targets {
+            for target in targets {
                 let state = states
-                    .entry(id.clone())
-                    .or_insert_with(|| ActivityState::new(launched));
-                let busy = pid.is_some_and(|root| table.has_descendant(root));
-                if let Some(next) = state.observe(busy) {
-                    manager.update_activity(&id, next);
+                    .entry(target.id.clone())
+                    .or_insert_with(|| ActivityState::new(target.launched_with_command));
+                let agent = target
+                    .output
+                    .lock()
+                    .map(|output| output.agent_activity())
+                    .unwrap_or_default();
+                let descendant_count = target.pid.map_or(0, |root| {
+                    if agent.is_agent {
+                        table.descendants(root).len()
+                    } else if table.has_descendant(root) {
+                        1
+                    } else {
+                        0
+                    }
+                });
+                let sample = ActivitySample {
+                    descendant_count,
+                    is_agent: agent.is_agent,
+                    recent_output: agent.recent_output,
+                    recent_input: agent.recent_input,
+                };
+                if let Some(next) = state.observe(sample) {
+                    manager.update_activity(&target.id, next);
                 }
             }
         }
     })
 }
+
+#[cfg(test)]
+#[path = "activity_tests.rs"]
+mod tests;

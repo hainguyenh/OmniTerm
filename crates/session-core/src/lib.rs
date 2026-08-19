@@ -1,6 +1,7 @@
 //! Persistent terminal session daemon core. This crate deliberately has no Tauri dependency.
 
 mod activity;
+mod agent_activity;
 mod client;
 mod manager;
 mod manifest;

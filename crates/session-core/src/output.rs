@@ -5,6 +5,8 @@ use std::sync::{Arc, Mutex};
 use session_protocol::{AttachSnapshot, DaemonStatus, ServerMessage, SessionLifecycle};
 use tokio::sync::broadcast;
 
+use crate::agent_activity::{AgentActivitySample, AgentActivityTracker};
+
 const BUFFER_CAP: usize = 256 * 1024;
 const LINE_SCAN_LIMIT: usize = 8 * 1024;
 const STREAM_CAP: usize = 1024;
@@ -21,6 +23,7 @@ pub(crate) struct Output {
     lifecycle: Lifecycle,
     busy: bool,
     stream: broadcast::Sender<ServerMessage>,
+    agent_activity: AgentActivityTracker,
 }
 
 impl Output {
@@ -31,6 +34,7 @@ impl Output {
             lifecycle: Lifecycle::Ready { label },
             busy,
             stream,
+            agent_activity: AgentActivityTracker::default(),
         }
     }
 
@@ -44,6 +48,7 @@ impl Output {
     }
 
     pub(crate) fn push(&mut self, bytes: &[u8]) {
+        self.agent_activity.observe_output(bytes);
         self.buffer.extend(bytes);
         self.trim();
         let _ = self.stream.send(ServerMessage::Data {
@@ -100,6 +105,14 @@ impl Output {
         (self.snapshot(generation), replay, receiver)
     }
 
+    pub(crate) fn note_input(&mut self) {
+        self.agent_activity.note_input();
+    }
+
+    pub(crate) fn agent_activity(&self) -> AgentActivitySample {
+        self.agent_activity.sample()
+    }
+
     pub(crate) fn busy(&self) -> bool {
         self.busy
     }
@@ -119,7 +132,6 @@ impl Output {
         }
     }
 }
-
 
 pub(crate) fn spawn_reader(
     mut reader: Box<dyn Read + Send>,
