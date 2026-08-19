@@ -105,7 +105,9 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
         key={node.path}
         ref={registerRow(wsId, node.path)}
         className={`group flex items-center gap-2 pr-1 py-1 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
-          highlighted ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]' : ''
+          highlighted
+            ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]'
+            : ''
         }`}
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => { if (openable) onOpenScript(wsId, openable) }}

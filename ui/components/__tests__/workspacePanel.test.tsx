@@ -26,6 +26,26 @@ describe('WorkspacePanel', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 
+  it('paints every workspace row with the sidebar theme background styling', async () => {
+    mockScan([dir('folder#1')], [file('folder#1/run.bat', 'bat', 'cmd')])
+    const { container } = render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    await screen.findByText('my-project')
+    // Root row: the theme's sidebar background token.
+    const root = container.querySelector('[data-workspace-id="ws#1"]') as HTMLElement
+    expect(root.className).toContain('bg-[var(--theme-sidebar-bg)]')
+    expect(root.className).not.toContain('bg-[var(--theme-bg)]')
+
+    fireEvent.click(screen.getByText('my-project'))
+    await screen.findByText('run.bat')
+    // Folder rows and file rows keep transparent backgrounds with hover highlight.
+    const folderRow = screen.getByText('folder#1').closest('div.group')
+    const fileRow = screen.getByText('run.bat').closest('div.group')
+    expect(folderRow?.className).not.toContain('bg-[var(--theme-bg)]')
+    expect(folderRow?.className).toContain('hover:bg-[var(--theme-hover-bg)]')
+    expect(fileRow?.className).not.toContain('bg-[var(--theme-bg)]')
+    expect(fileRow?.className).toContain('hover:bg-[var(--theme-hover-bg)]')
+  })
+
   it('confirms before removing a workspace', async () => {
     const remove = vi.fn(async () => {})
     mockOmnitermAPI({ workspace: { list: async () => [WS], remove } })

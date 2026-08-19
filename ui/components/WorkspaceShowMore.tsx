@@ -19,7 +19,7 @@ interface WorkspaceShowMoreProps {
  * silent truncation. The scripts and selected-file views skip this row — they are fully loaded.
  */
 const WorkspaceShowMore: React.FC<WorkspaceShowMoreProps> = ({ wsId, total, loaded, loading, onLoadMore }) => (
-  <div className="px-2 py-1">
+  <div className="px-2 py-1 bg-[var(--theme-bg)]">
     <button
       type="button"
       disabled={loading}
