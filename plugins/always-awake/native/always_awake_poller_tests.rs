@@ -52,6 +52,22 @@ fn asking_the_poller_to_stop_ends_the_thread_and_releases_the_request() {
 }
 
 #[test]
+fn an_empty_session_manager_still_runs_one_poll_tick() {
+    let app = test_support::mock_app();
+    assert!(app.manage(AlwaysAwakeState::new()));
+    assert!(app.manage(crate::pty::PtyManager::new()));
+    let state = app.state::<AlwaysAwakeState>();
+
+    let poller = spawn_poller(app.handle().clone());
+    std::thread::sleep(Duration::from_millis(600));
+    state.begin_shutdown();
+
+    poller
+        .join()
+        .expect("the empty-manager poller should stop cleanly");
+}
+
+#[test]
 fn shutting_down_hands_the_sleep_request_back() {
     let state = AlwaysAwakeState::new();
     state.native_asserted.store(true, Ordering::Release);

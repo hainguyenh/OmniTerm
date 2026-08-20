@@ -30,6 +30,12 @@ test('Rust coverage excludes only explicit adapter paths', () => {
   assert.match(coverageScript, /src-tauri[^\r\n]*src[^\r\n]*win_job[^\r\n]*test_support/)
 })
 
+test('Rust coverage removes test and dependency records before writing the gate summary', () => {
+  assert.ok(coverageScript.includes('_tests?\\\\.rs'))
+  assert.match(coverageScript, /cargo.*registry/)
+  assert.match(coverageScript, /report\.data\?\.\[0\]/)
+})
+
 test('Rust binary coverage smoke runs with a virtual X display in CI', () => {
   const rustCoverageJob = workflow.slice(workflow.indexOf('  rust-coverage:'), workflow.indexOf('  coverage-gate:'))
   assert.match(rustCoverageJob, /\bxvfb\b/)

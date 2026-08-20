@@ -20,7 +20,9 @@ pub struct AttachedSession {
     pub replay: Vec<u8>,
     pub receiver: broadcast::Receiver<ServerMessage>,
 }
-
+#[cfg(test)]
+#[path = "manager_tests.rs"]
+mod tests;
 pub(crate) struct Session {
     master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
@@ -396,4 +398,3 @@ impl SessionManager {
         }
     }
 }
-
