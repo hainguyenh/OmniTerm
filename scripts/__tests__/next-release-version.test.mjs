@@ -216,3 +216,53 @@ test('portable packaging verifies the bundled plugin is present in the archive',
   assert.match(packaging, /plugins\\always-awake/)
   assert.match(packaging, /plugins\\blur/)
 })
+
+test('release notes generator extracts exact target tag and falls back to Unreleased', () => {
+  assert.match(workflow, /function extractChangelogSection\(targetTag\)/)
+  assert.match(workflow, /sections\.has\('Unreleased'\)/)
+  assert.match(workflow, /<details>\s*\\n<summary>Click to view full changelog<\/summary>/)
+  assert.match(workflow, /## Contributors/)
+  assert.match(workflow, /function getContributors\(targetTag\)/)
+
+  const sampleChangelog = `# Changelog
+
+## [Unreleased]
+- Unreleased feature
+
+## [v0.1.5] — 2026-08-15
+- Version 0.1.5 fix
+
+## [0.1.0] — 2026-07-31
+- Initial release
+`
+  function extractChangelog(content, targetTag) {
+    const cleanTag = (targetTag || '').trim()
+    const bareVersion = cleanTag.replace(/^v/, '')
+    const lines = content.split(/\r?\n/)
+    const sections = new Map()
+    let currentHeading = null
+    let currentLines = []
+    for (const line of lines) {
+      const match = /^##\s+\[(.*?)\]/.exec(line)
+      if (match) {
+        if (currentHeading) sections.set(currentHeading, currentLines.join('\n').trim())
+        currentHeading = match[1].trim()
+        currentLines = []
+      } else if (currentHeading) {
+        currentLines.push(line)
+      }
+    }
+    if (currentHeading) sections.set(currentHeading, currentLines.join('\n').trim())
+    for (const [heading, body] of sections.entries()) {
+      const norm = heading.replace(/^v/, '').trim()
+      if ((norm === bareVersion || heading === cleanTag) && body) return body
+    }
+    if (sections.has('Unreleased')) return sections.get('Unreleased')
+    return ''
+  }
+
+  assert.equal(extractChangelog(sampleChangelog, 'v0.1.5'), '- Version 0.1.5 fix')
+  assert.equal(extractChangelog(sampleChangelog, '0.1.5'), '- Version 0.1.5 fix')
+  assert.equal(extractChangelog(sampleChangelog, 'v0.1.0'), '- Initial release')
+  assert.equal(extractChangelog(sampleChangelog, 'v0.2.0'), '- Unreleased feature')
+})

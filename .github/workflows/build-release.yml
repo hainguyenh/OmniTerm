@@ -440,6 +440,7 @@ jobs:
           cat << 'EOF' > generate-notes.mjs
           import { readdirSync, statSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
           import { join, basename } from 'node:path';
+          import { execFileSync } from 'node:child_process';
 
           const tag = process.env.TAG || 'v0.0.0';
           const repo = process.env.REPO || 'hainguyenh/OmniTerm';
@@ -448,26 +449,76 @@ jobs:
           function extractChangelogSection(targetTag) {
             if (!existsSync('CHANGELOG.md')) return '';
             const content = readFileSync('CHANGELOG.md', 'utf8');
-            const bareVersion = targetTag.replace(/^v/, '').trim();
+            const cleanTag = (targetTag || '').trim();
+            const bareVersion = cleanTag.replace(/^v/, '');
 
             const lines = content.split(/\r?\n/);
-            let capturing = false;
-            let sectionLines = [];
+            const sections = new Map();
+            let currentHeading = null;
+            let currentLines = [];
 
             for (const line of lines) {
               const match = /^##\s+\[(.*?)\]/.exec(line);
               if (match) {
-                const headingVer = match[1].trim().replace(/^v/, '');
-                if (capturing) break;
-                if (headingVer === bareVersion || headingVer === targetTag || headingVer === 'Unreleased') {
-                  capturing = true;
-                  continue;
+                if (currentHeading) {
+                  sections.set(currentHeading, currentLines.join('\n').trim());
                 }
-              } else if (capturing) {
-                sectionLines.push(line);
+                currentHeading = match[1].trim();
+                currentLines = [];
+              } else if (currentHeading) {
+                currentLines.push(line);
               }
             }
-            return sectionLines.join('\n').trim();
+            if (currentHeading) {
+              sections.set(currentHeading, currentLines.join('\n').trim());
+            }
+
+            // 1. Direct or normalized version match
+            for (const [heading, body] of sections.entries()) {
+              const norm = heading.replace(/^v/, '').trim();
+              if ((norm === bareVersion || heading === cleanTag) && body) {
+                return body;
+              }
+            }
+
+            // 2. Fallback to Unreleased when releasing new un-sectioned commits
+            if (sections.has('Unreleased')) {
+              return sections.get('Unreleased');
+            }
+
+            return '';
+          }
+
+          function getContributors(targetTag) {
+            try {
+              let range = 'HEAD';
+              try {
+                const tagsRaw = execFileSync('git', ['tag', '--list', 'v*', '--sort=-v:refname'], { encoding: 'utf8' });
+                const tags = tagsRaw.split('\n').map(t => t.trim()).filter(Boolean);
+                const cleanTag = (targetTag || '').trim();
+                const tagIndex = tags.indexOf(cleanTag);
+                if (tagIndex >= 0 && tagIndex < tags.length - 1) {
+                  range = `${tags[tagIndex + 1]}..${cleanTag}`;
+                } else if (tags.length > 0) {
+                  range = `${tags[0]}..HEAD`;
+                }
+              } catch {
+                range = 'HEAD';
+              }
+
+              const logOutput = execFileSync('git', ['log', range, '--pretty=format:%an|%ae'], { encoding: 'utf8' });
+              const authors = new Set();
+              for (const line of logOutput.split('\n')) {
+                const [name] = line.trim().split('|');
+                const cleanName = (name || '').trim();
+                if (cleanName && !cleanName.toLowerCase().includes('github-actions') && !cleanName.toLowerCase().includes('[bot]')) {
+                  authors.add(cleanName);
+                }
+              }
+              return Array.from(authors);
+            } catch {
+              return [];
+            }
           }
 
           function getFiles(dir) {
@@ -492,7 +543,7 @@ jobs:
           let md = '';
           const changelog = extractChangelogSection(tag);
           if (changelog) {
-            md += `## Changelog\n\n${changelog}\n\n`;
+            md += `## What's Changed\n\n<details>\n<summary>Click to view full changelog</summary>\n\n${changelog}\n\n</details>\n\n`;
           }
 
           md += `## Downloads\n\n`;
@@ -553,6 +604,18 @@ jobs:
             }
             md += `\n`;
           }
+
+          const contributors = getContributors(tag);
+          if (contributors.length > 0) {
+            md += `## Contributors\n\n`;
+            md += `Thank you to all contributors who helped with this release:\n\n`;
+            for (const c of contributors) {
+              const handle = c.startsWith('@') ? c : (c.includes(' ') ? c : `@${c}`);
+              md += `- ${handle}\n`;
+            }
+            md += `\n`;
+          }
+
           writeFileSync('release_notes.md', md, 'utf8');
           console.log('Generated release_notes.md:\n' + md);
           EOF
