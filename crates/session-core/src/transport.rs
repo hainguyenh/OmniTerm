@@ -116,6 +116,10 @@ pub(crate) async fn connect(state_dir: &Path) -> Result<BoxedStream, String> {
     }
 }
 
+#[cfg(test)]
+#[path = "transport_tests.rs"]
+mod transport_tests;
+
 #[cfg(all(test, windows))]
 mod windows_tests {
     use super::*;

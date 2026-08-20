@@ -46,6 +46,7 @@ export function attach(overrides: Partial<Parameters<typeof attachTerminalStream
   const { channel, fire, unsubscribe } = makeChannel();
   const spies = {
     onStatus: vi.fn(),
+    onUnavailable: vi.fn(),
     onExit: vi.fn(),
     onMetrics: vi.fn(),
     onActivity: vi.fn(),

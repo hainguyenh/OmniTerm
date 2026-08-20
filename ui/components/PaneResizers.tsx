@@ -43,24 +43,52 @@ export function PaneResizers({
     invert: boolean,
     minFraction?: number,
     maxFraction?: number,
+    pointerMinFraction?: number,
+    pointerMaxFraction?: number,
+    pointerToRatio?: (fraction: number) => number,
   ) => {
     e.preventDefault()
     const handle = e.currentTarget
     // The pane area, not the handle: the fraction is relative to the space being divided.
-    const area = handle.parentElement?.getBoundingClientRect()
-    if (!area) return
+    const areaElement = handle.parentElement
+    if (!areaElement) return
     handle.setPointerCapture(e.pointerId)
+    let frameId: number | null = null
+    let pending: SplitRatios | null = null
+
+    const flush = () => {
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+        frameId = null
+      }
+      const nextRatios = pending
+      pending = null
+      if (nextRatios) onChange(nextRatios)
+    }
 
     const move = (ev: PointerEvent) => {
-      const next = axis === 'x'
-        ? fractionFromPointer(ev.clientX, area.left, area.width, invert, minFraction, maxFraction)
-        : fractionFromPointer(ev.clientY, area.top, area.height, invert, minFraction, maxFraction)
-      onChange(setDividerRatio(latest.current, mode, key, next))
+      const area = areaElement.getBoundingClientRect()
+      const pointerFraction = axis === 'x'
+        ? fractionFromPointer(ev.clientX, area.left, area.width, invert, pointerMinFraction ?? minFraction, pointerMaxFraction ?? maxFraction)
+        : fractionFromPointer(ev.clientY, area.top, area.height, invert, pointerMinFraction ?? minFraction, pointerMaxFraction ?? maxFraction)
+      const next = pointerToRatio?.(pointerFraction) ?? pointerFraction
+      const nextRatios = setDividerRatio(latest.current, mode, key, next)
+      latest.current = nextRatios
+      pending = nextRatios
+      if (frameId === null) {
+        frameId = window.requestAnimationFrame(() => {
+          frameId = null
+          const scheduled = pending
+          pending = null
+          if (scheduled) onChange(scheduled)
+        })
+      }
     }
     const end = () => {
       handle.removeEventListener('pointermove', move)
       handle.removeEventListener('pointerup', end)
       handle.removeEventListener('pointercancel', end)
+      flush()
       onCommit(latest.current)
     }
     handle.addEventListener('pointermove', move)
@@ -72,15 +100,25 @@ export function PaneResizers({
     <>
       {dividers.map(divider => {
         const vertical = divider.axis === 'x'
-        // `main` measured from the right edge in the mirrored 3-pane layout.
-        const invert = divider.key === 'main' && mode === 3 && split3Style === 'right'
+        // `main` is measured from the right edge in every mirrored main-pane layout.
+        const invert = divider.key === 'main' && (mode === 3 || mode === 5 || mode === 7) && split3Style === 'right'
         return (
           <div
             key={divider.key}
             role="separator"
             aria-orientation={vertical ? 'vertical' : 'horizontal'}
             aria-label={divider.key.startsWith('column-') ? 'Resize columns' : divider.key.startsWith('row-') ? 'Resize rows' : divider.key === 'main' ? 'Resize panes' : 'Resize stacked panes'}
-            onPointerDown={(e) => startDrag(e, divider.key, divider.axis, invert, divider.minFraction, divider.maxFraction)}
+            onPointerDown={(e) => startDrag(
+              e,
+              divider.key,
+              divider.axis,
+              invert,
+              divider.minFraction,
+              divider.maxFraction,
+              divider.pointerMinFraction,
+              divider.pointerMaxFraction,
+              divider.pointerToRatio,
+            )}
             className={`absolute z-20 group ${vertical ? 'cursor-col-resize' : 'cursor-row-resize'}`}
             style={{
               ...divider.style,

@@ -72,3 +72,30 @@ fn launch_grace_is_preserved_for_command_started_sessions() {
     assert_eq!(state.observe(sample(0, true, false)), None);
     assert_eq!(state.observe(sample(0, true, false)), Some(false));
 }
+
+#[test]
+fn repeated_agent_input_after_idle_suppresses_duplicate_idle_reports() {
+    let mut state = ActivityState::new(false);
+
+    // Agent autonomous output reports busy, then local input forces idle.
+    assert_eq!(state.observe(sample(1, true, true)), Some(true));
+    assert_eq!(state.observe(typing_sample(1)), Some(false));
+    // A second local input while already reported idle is suppressed so the
+    // daemon does not re-emit a redundant idle event.
+    assert_eq!(state.observe(typing_sample(1)), None);
+}
+
+#[test]
+fn agent_descendant_shrink_lowers_the_busy_baseline() {
+    let mut state = ActivityState::new(false);
+
+    // First agent sample sets the baseline to 2 descendants.
+    let _ = state.observe(sample(2, true, false));
+    // Fewer descendants than the stored baseline shrinks it, so we do not
+    // keep reporting spurious busy ticks from a long-lived agent's initial
+    // process count.
+    assert_eq!(state.observe(sample(1, true, false)), None);
+    // After the baseline shrinks to 1, a fresh two-descendant process is busy
+    // again (2 > 1), confirming the baseline was updated.
+    assert_eq!(state.observe(sample(2, true, false)), Some(true));
+}

@@ -49,6 +49,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [meta, setMeta] = useState<Meta | null>(null)
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
+  const [restartKey, setRestartKey] = useState(0)
   const [windowActive, setWindowActive] = useState(true)
   const { available: blurAvailable } = useBlurPlugin()
   const windowRounded = useWindowRounding()
@@ -103,6 +104,11 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
 
   const applyTheme = (nextThemeId: string) => {
     saveAppearance({ themeId: nextThemeId })
+  }
+
+  const restartSession = () => {
+    setStatus('connecting')
+    setRestartKey(previous => previous + 1)
   }
 
   return (
@@ -172,9 +178,11 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
           </div>
         ) : meta ? (
           <TerminalView
+            key={`${meta.sessionId}:${restartKey}`}
             id={meta.sessionId}
             connection={meta.connection}
-            mode="attach"
+            mode={restartKey > 0 ? 'connect' : 'attach'}
+            onRestart={restartSession}
             onStatus={setStatus}
             onTitleChange={(title) => {
               const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)

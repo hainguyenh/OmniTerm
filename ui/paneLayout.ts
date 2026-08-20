@@ -32,6 +32,22 @@ export const DEFAULT_RATIOS: SplitRatios = { main: 0.5, cross: 0.5 }
  * pane cannot be dragged back out because its divider would be off the edge.
  */
 export const MIN_FRACTION = 0.15
+export const MIN_PANE_WIDTH = 200
+
+export function paneAreaMinWidth(
+  mode: LayoutMode,
+  split3Style: 'left' | 'right' | 'top' = 'left',
+  split2Style: 'columns' | 'rows' = 'columns',
+): number {
+  if (mode === 1) return 0
+  if (mode === 2) return (split2Style === 'rows' ? 1 : 2) * MIN_PANE_WIDTH
+  if (mode === 3) return 2 * MIN_PANE_WIDTH
+  if (mode === 4) return 2 * MIN_PANE_WIDTH
+  if (mode === 5) return (split3Style === 'top' ? 2 : 3) * MIN_PANE_WIDTH
+  if (mode === 6) return 3 * MIN_PANE_WIDTH
+  if (mode === 7) return (split3Style === 'top' ? 3 : 4) * MIN_PANE_WIDTH
+  return 4 * MIN_PANE_WIDTH
+}
 
 export function clampFraction(value: number): number {
   if (!Number.isFinite(value)) return 0.5
@@ -138,17 +154,19 @@ export function paneRect(
 
   if (mode === 5 || mode === 7) {
     const subColumns = mode === 5 ? 2 : 3
-    const subColumnBoundaries = evenBoundaries(subColumns)
+    const { columns: subColumnBoundaries, rows } = gridBoundaries(mode, ratios)
     const subIndex = i - 1
     if (split3Style === 'top') {
       if (i === 0) return { left: '0%', top: '0%', width: '100%', height: pct(main) }
       const column = subIndex % subColumns
       const row = Math.floor(subIndex / subColumns)
+      const rowStart = row === 0 ? 0 : rows[0]
+      const rowEnd = rows[row] ?? 1
       return {
         left: pct(column === 0 ? 0 : subColumnBoundaries[column - 1]),
-        top: pct(main + row * (1 - main) / 2),
+        top: pct(main + rowStart * (1 - main)),
         width: pct((subColumnBoundaries[column] ?? 1) - (subColumnBoundaries[column - 1] ?? 0)),
-        height: pct((1 - main) / 2),
+        height: pct((rowEnd - rowStart) * (1 - main)),
       }
     }
     const onLeft = split3Style === 'left'
@@ -159,11 +177,13 @@ export function paneRect(
     }
     const column = subIndex % subColumns
     const row = Math.floor(subIndex / subColumns)
+    const rowStart = row === 0 ? 0 : rows[0]
+    const rowEnd = rows[row] ?? 1
     return {
       left: pct((onLeft ? main : 0) + (subColumnBoundaries[column - 1] ?? 0) * (1 - main)),
-      top: pct(row / 2),
+      top: pct(rowStart),
       width: pct(((subColumnBoundaries[column] ?? 1) - (subColumnBoundaries[column - 1] ?? 0)) * (1 - main)),
-      height: '50%',
+      height: pct(rowEnd - rowStart),
     }
   }
 
@@ -200,6 +220,10 @@ export interface PaneDivider {
   axis: 'x' | 'y'
   minFraction?: number
   maxFraction?: number
+  /** Bounds and transform for pointer coordinates when the divider lives inside a sub-group. */
+  pointerMinFraction?: number
+  pointerMaxFraction?: number
+  pointerToRatio?: (fraction: number) => number
   /** Position and extent of the *track* the handle is drawn on, as CSS percentages. */
   style: CSSProperties
 }
@@ -260,9 +284,18 @@ export function paneDividers(
         ...columns.map((position, index) => ({
           key: `column-${index + 1}` as PaneDividerKey,
           axis: 'x' as const,
+          pointerMinFraction: 0,
+          pointerMaxFraction: 1,
           style: { left: pct(position), top: pct(main), height: pct(1 - main) },
         })),
-        { key: 'row-1', axis: 'y', style: { left: '0%', top: pct(main + (1 - main) * rows[0]), width: '100%' } },
+        {
+          key: 'row-1',
+          axis: 'y',
+          pointerMinFraction: 0,
+          pointerMaxFraction: 1,
+          pointerToRatio: fraction => (fraction - main) / (1 - main),
+          style: { left: '0%', top: pct(main + (1 - main) * rows[0]), width: '100%' },
+        },
       ]
     }
     const onLeft = split3Style === 'left'
@@ -272,9 +305,12 @@ export function paneDividers(
       ...columns.map((position, index) => ({
         key: `column-${index + 1}` as PaneDividerKey,
         axis: 'x' as const,
+        pointerMinFraction: 0,
+        pointerMaxFraction: 1,
+        pointerToRatio: (fraction: number) => (fraction - stackLeft) / subWidth,
         style: { left: pct(stackLeft + subWidth * position), top: '0%', height: '100%' },
       })),
-      { key: 'row-1', axis: 'y', style: { left: pct(stackLeft), top: '50%', width: pct(subWidth) } },
+      { key: 'row-1', axis: 'y', style: { left: pct(stackLeft), top: pct(rows[0]), width: pct(subWidth) } },
     ]
   }
 

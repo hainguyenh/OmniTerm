@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Palette, Check, Sparkles, Database, BookOpen, Flame, Moon, Triangle, Zap } from 'lucide-react'
+import { Palette, Check, Sparkles, Database, BookOpen, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
 import type { AppTheme } from '../themes'
 import { Tooltip } from './Tooltip'
 
@@ -32,6 +32,44 @@ interface AppearanceMenuProps {
   onRemix?: () => void
   /** Smaller footprint for the pane header, where the row is already tight. */
   compact?: boolean
+  /** Render only the theme trigger; callers can place font sizing separately. */
+  hideFontSize?: boolean
+  /** Render a full menu row instead of compact terminal chrome. */
+  menuItem?: boolean
+}
+
+export const FontSizeControl: React.FC<{
+  fontSize: number
+  scopeLabel: string
+  onFontSizeChange: (delta: number) => void
+  compact?: boolean
+  fullWidth?: boolean
+}> = ({ fontSize, scopeLabel, onFontSizeChange, compact, fullWidth }) => {
+  const stepSize = compact ? 'w-4 h-4' : 'w-5 h-5'
+  if (fullWidth) {
+    return (
+      <div className="flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-xs text-theme-fg">
+        <TextCursorInput className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" />
+        <span className="flex-1">Font size</span>
+        <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
+          <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
+          <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} title={scopeLabel}>{fontSize}</span>
+          <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
+      <Tooltip content="Decrease font size" placement="bottom">
+        <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
+      </Tooltip>
+      <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} title={scopeLabel}>{fontSize}</span>
+      <Tooltip content="Increase font size" placement="bottom">
+        <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
+      </Tooltip>
+    </div>
+  )
 }
 
 /**
@@ -41,7 +79,7 @@ interface AppearanceMenuProps {
  */
 const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   themes, themeId, fontSize, darkMode, scopeLabel, buttonTitle,
-  onThemeApply, onFontSizeChange, onApplyToAll, onRemix, compact,
+  onThemeApply, onFontSizeChange, onApplyToAll, onRemix, compact, hideFontSize, menuItem,
 }) => {
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
@@ -63,24 +101,30 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
 
   const btnSize = compact ? 'w-4 h-4' : 'w-6 h-6'
   const iconSize = compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
-  const stepSize = compact ? 'w-4 h-4' : 'w-5 h-5'
+  const triggerLabel = menuItem ? 'Theme' : buttonTitle ?? 'Appearance — theme & font size'
 
   return (
     <>
-      <div className="relative flex-shrink-0">
-        <Tooltip content={buttonTitle ?? 'Appearance — theme & font size'} placement="bottom">
+      <div className={`relative ${menuItem ? 'w-full' : 'flex-shrink-0'}`}>
+        <Tooltip content={triggerLabel} placement="bottom">
           <button
             ref={btnRef}
             type="button"
-            aria-label={buttonTitle ?? 'Appearance — theme & font size'}
+            role={menuItem ? 'menuitem' : undefined}
+            aria-label={triggerLabel}
+            aria-haspopup={menuItem ? 'menu' : undefined}
+            aria-expanded={menuItem ? open : undefined}
             onClick={() => setOpen(v => !v)}
-            className={`inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
+            className={menuItem
+              ? 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover'
+              : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
               open
                 ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
                 : 'border-theme-border text-inherit opacity-70 hover:opacity-100'
-            }`}
+              }`}
           >
             <Palette className={iconSize} />
+            {menuItem && <span>Theme</span>}
           </button>
         </Tooltip>
         {open && (
@@ -143,15 +187,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
-        <Tooltip content="Decrease font size" placement="bottom">
-          <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
-        </Tooltip>
-        <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} title={scopeLabel}>{fontSize}</span>
-        <Tooltip content="Increase font size" placement="bottom">
-          <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
-        </Tooltip>
-      </div>
+      {!hideFontSize && <FontSizeControl fontSize={fontSize} scopeLabel={scopeLabel} onFontSizeChange={onFontSizeChange} compact={compact} />}
     </>
   )
 }
