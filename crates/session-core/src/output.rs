@@ -11,6 +11,15 @@ const BUFFER_CAP: usize = 256 * 1024;
 const LINE_SCAN_LIMIT: usize = 8 * 1024;
 const STREAM_CAP: usize = 1024;
 
+// Compile-time check that `trim`'s scan window stays inside the buffer. `trim`
+// peeks up to LINE_SCAN_LIMIT bytes into the tail starting at `len - BUFFER_CAP`,
+// which is exactly BUFFER_CAP bytes long, so requiring BUFFER_CAP to be greater
+// than LINE_SCAN_LIMIT guarantees the iterator's `take(LINE_SCAN_LIMIT)` window
+// never runs past the buffer regardless of buffer length. The `.min` clamp in
+// `trim` keeps `drain` safe even if a future edit breaks this, but this
+// assertion fails the build before that can happen.
+const _: () = assert!(BUFFER_CAP > LINE_SCAN_LIMIT);
+
 #[derive(Debug, Clone)]
 enum Lifecycle {
     Ready { label: String },
@@ -60,21 +69,20 @@ impl Output {
         if self.buffer.len() <= BUFFER_CAP {
             return;
         }
-        let mut drop_to = self.buffer.len() - BUFFER_CAP;
-        let mut scanned = 0;
-        while scanned < LINE_SCAN_LIMIT {
-            match self.buffer.get(drop_to) {
-                Some(&b'\n') => {
-                    drop_to += 1;
-                    break;
-                }
-                Some(_) => {
-                    drop_to += 1;
-                    scanned += 1;
-                }
-                None => break,
-            }
-        }
+        // `BUFFER_CAP > LINE_SCAN_LIMIT` holds (enforced at compile time at the
+        // top of this file), so the scan window of `LINE_SCAN_LIMIT` bytes past
+        // `len - BUFFER_CAP` can never reach past the buffer. The `.min` clamp
+        // keeps `drain` safe even if a future edit breaks that invariant.
+        let start = self.buffer.len() - BUFFER_CAP;
+        let drop_extra = self
+            .buffer
+            .iter()
+            .skip(start)
+            .take(LINE_SCAN_LIMIT)
+            .position(|&b| b == b'\n')
+            .map(|idx| idx + 1)
+            .unwrap_or(LINE_SCAN_LIMIT);
+        let drop_to = (start + drop_extra).min(self.buffer.len());
         self.buffer.drain(..drop_to);
     }
 
@@ -163,3 +171,7 @@ pub(crate) fn spawn_reader(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "output_tests.rs"]
+mod tests;

@@ -153,6 +153,12 @@ async fn write_result(stream: &mut dyn AsyncStream, result: Result<(), String>) 
     let _ = write_frame(stream, &message).await;
 }
 
+// `run_platform_server` is the daemon's accept loop. Both variants bind a
+// listening socket/pipe and then `loop { ... accept().await; spawn(...) }`
+// forever, so the function never returns under normal operation. Setup lines
+// are exercised indirectly through `tests/client_daemon.rs`; the tail accept
+// loop is daemon-only and excluded from coverage.
+#[cfg_attr(coverage, coverage(off))]
 #[cfg(unix)]
 async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
@@ -178,6 +184,7 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
     }
 }
 
+#[cfg_attr(coverage, coverage(off))]
 #[cfg(windows)]
 async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Result<(), String> {
     use tokio::net::windows::named_pipe::ServerOptions;
@@ -199,3 +206,7 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
         tokio::spawn(handle_connection(manager.clone(), connected));
     }
 }
+
+#[cfg(test)]
+#[path = "server_tests.rs"]
+mod tests;

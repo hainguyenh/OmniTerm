@@ -182,3 +182,7 @@ pub(crate) fn load_interrupted(state_dir: &Path) -> Vec<SessionManifest> {
     }
     manifests
 }
+
+#[cfg(test)]
+#[path = "manifest_tests.rs"]
+mod tests;

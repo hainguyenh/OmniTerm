@@ -122,6 +122,7 @@ describe('navigation and empty-session shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select Shell' }))
     expect(onNewSession).toHaveBeenCalledOnce()
     expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
+    expect(screen.queryByRole('button', { name: 'Terminal workspace' })).not.toBeInTheDocument()
     expect(container.querySelector('img')).toBeNull()
     expect(screen.getByTestId('idle-art').parentElement).toHaveClass('pointer-events-none')
 
@@ -138,7 +139,7 @@ describe('navigation and empty-session shell', () => {
       />,
     )
     expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Terminal workspace' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Terminal workspace' })).not.toBeInTheDocument()
     expect(screen.queryByText('Ctrl+N')).not.toBeInTheDocument()
     expect(container.querySelector('img')).toHaveAttribute('src', 'asset://idle.png')
     expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })

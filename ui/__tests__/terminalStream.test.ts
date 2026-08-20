@@ -191,9 +191,10 @@ describe("attachTerminalStream — attach mode", () => {
 
   it("surfaces a session that no longer exists", async () => {
     resumeWith(null);
-    const { term, onStatus } = attach({ mode: "attach" });
+    const { term, onStatus, onUnavailable } = attach({ mode: "attach" });
 
     await vi.waitFor(() => expect(onStatus).toHaveBeenLastCalledWith("error"));
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(written(term)).toContain("session is no longer available");
   });
 

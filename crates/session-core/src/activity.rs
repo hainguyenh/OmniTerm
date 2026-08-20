@@ -94,71 +94,84 @@ struct ActivityTarget {
     output: Arc<Mutex<Output>>,
 }
 
+// `spawn` drives the daemon-side activity loop: a 500ms ticker that polls
+// every live session's process tree via `sysinfo`, watches for shell exits,
+// and reports busy/idle transitions back to the manager. The whole task runs
+// for the lifetime of the daemon, so unit tests cannot drive it without a real
+// PTY keeping descendants for wall-clock durations. The closure handed to
+// `tokio::spawn` compiles to a separate generated async fn, which is why the
+// `coverage(off)` marker has to live on `run_activity_loop` (the named body)
+// rather than on `spawn` itself. CI also exercises this through
+// `tests/activity_integration` on Linux.
+#[cfg_attr(coverage, coverage(off))]
 pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut system = Some(System::new());
-        let mut states: HashMap<String, ActivityState> = HashMap::new();
-        let mut ticker = tokio::time::interval(TICK);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        loop {
-            ticker.tick().await;
-            if manager.sessions.is_empty() {
-                states.clear();
-                continue;
-            }
-            let targets: Vec<ActivityTarget> = manager
-                .sessions
-                .iter()
-                .map(|entry| ActivityTarget {
-                    id: entry.key().clone(),
-                    pid: entry.pid,
-                    launched_with_command: entry.launched_with_command,
-                    output: Arc::clone(&entry.output),
-                })
-                .collect();
-            states.retain(|id, _| targets.iter().any(|target| &target.id == id));
-            let owned = system.take().unwrap_or_default();
-            let snapshot = tokio::task::spawn_blocking(move || {
-                let mut owned = owned;
-                let table = ProcTable::snapshot(&mut owned);
-                (table, owned)
+    tokio::spawn(run_activity_loop(manager))
+}
+
+#[cfg_attr(coverage, coverage(off))]
+async fn run_activity_loop(manager: SessionManager) {
+    let mut system = Some(System::new());
+    let mut states: HashMap<String, ActivityState> = HashMap::new();
+    let mut ticker = tokio::time::interval(TICK);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        ticker.tick().await;
+        if manager.sessions.is_empty() {
+            states.clear();
+            continue;
+        }
+        let targets: Vec<ActivityTarget> = manager
+            .sessions
+            .iter()
+            .map(|entry| ActivityTarget {
+                id: entry.key().clone(),
+                pid: entry.pid,
+                launched_with_command: entry.launched_with_command,
+                output: Arc::clone(&entry.output),
             })
-            .await;
-            let Ok((table, owned)) = snapshot else {
-                system = Some(System::new());
-                continue;
-            };
-            system = Some(owned);
-            for target in targets {
-                let state = states
-                    .entry(target.id.clone())
-                    .or_insert_with(|| ActivityState::new(target.launched_with_command));
-                let agent = target
-                    .output
-                    .lock()
-                    .map(|output| output.agent_activity())
-                    .unwrap_or_default();
-                let descendant_count = target.pid.map_or(0, |root| {
-                    if agent.is_agent {
-                        table.descendants(root).len()
-                    } else if table.has_descendant(root) {
-                        1
-                    } else {
-                        0
-                    }
-                });
-                let sample = ActivitySample {
-                    descendant_count,
-                    is_agent: agent.is_agent,
-                    recent_output: agent.recent_output,
-                    recent_input: agent.recent_input,
-                };
-                if let Some(next) = state.observe(sample) {
-                    manager.update_activity(&target.id, next);
+            .collect();
+        states.retain(|id, _| targets.iter().any(|target| &target.id == id));
+        let owned = system.take().unwrap_or_default();
+        let snapshot = tokio::task::spawn_blocking(move || {
+            let mut owned = owned;
+            let table = ProcTable::snapshot(&mut owned);
+            (table, owned)
+        })
+        .await;
+        let Ok((table, owned)) = snapshot else {
+            system = Some(System::new());
+            continue;
+        };
+        system = Some(owned);
+        for target in targets {
+            let state = states
+                .entry(target.id.clone())
+                .or_insert_with(|| ActivityState::new(target.launched_with_command));
+            let agent = target
+                .output
+                .lock()
+                .map(|output| output.agent_activity())
+                .unwrap_or_default();
+            let descendant_count = target.pid.map_or(0, |root| {
+                if agent.is_agent {
+                    table.descendants(root).len()
+                } else if table.has_descendant(root) {
+                    1
+                } else {
+                    0
                 }
+            });
+            let sample = ActivitySample {
+                descendant_count,
+                is_agent: agent.is_agent,
+                recent_output: agent.recent_output,
+                recent_input: agent.recent_input,
+            };
+            if let Some(next) = state.observe(sample) {
+                manager.update_activity(&target.id, next);
             }
         }
-    })
+    }
 }
 
 #[cfg(test)]

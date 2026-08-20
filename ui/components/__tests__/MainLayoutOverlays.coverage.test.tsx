@@ -161,15 +161,16 @@ describe('MainLayoutOverlays', () => {
     expect(screen.getByText('Multi - B')).toBeInTheDocument()
     fireEvent.click(screen.getByText('One - One'))
     expect(shell.setSelectedWorkspaceId).toHaveBeenCalledWith('one::f1')
-    expect(shell.setShellMenu).toHaveBeenCalledWith(null)
+    expect(shell.setShellMenu).not.toHaveBeenCalled()
+    expect(screen.getByRole('searchbox', { name: 'Search workspace or folder' })).toBeInTheDocument()
   })
 
   it('keeps the shell options menu inside the viewport near the bottom edge', () => {
     const shell = model({ shellMenu: { x: 900, y: 700 } })
     render(<MainLayoutOverlays model={shell} />)
 
-    const menu = screen.getByText('Workspace').parentElement as HTMLElement
-    expect(menu).toHaveStyle({ bottom: '76px', maxHeight: '752px' })
+    const menu = screen.getByTestId('new-terminal-menu')
+    expect(menu).toHaveStyle({ bottom: '76px' })
     expect(menu.style.top).toBe('')
     expect(menu).toHaveClass('overflow-y-auto')
   })

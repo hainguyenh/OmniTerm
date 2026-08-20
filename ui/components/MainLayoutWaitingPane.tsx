@@ -12,9 +12,6 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
       dark={!!model.appSettings.darkMode}
       onNewSession={() => model.requestNewSession(undefined, model.selectedWorkspaceId)}
       onPickShell={(rect) => model.setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
-      workspaces={model.workspaces ?? []}
-      selectedWorkspaceId={model.selectedWorkspaceId ?? null}
-      onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
       customArtUrl={customArtUrl}
     />
   )

@@ -48,6 +48,19 @@ impl SessionDaemonClient {
             Err(_) => {}
         }
         spawn_daemon(&self.executable, &self.state_dir)?;
+        self.wait_until_ready().await
+    }
+
+    // After `spawn_daemon` launches a fresh daemon process the named pipe /
+    // Unix socket is not yet listening, so this polls `hello_once` until the
+    // daemon starts accepting connections or the boot window elapses. The loop
+    // only runs in a real production launch: tests either find the daemon
+    // already listening (the first `hello_once` returns Ok) or point the
+    // client at a non-existent executable so `spawn_daemon` fails before the
+    // loop. Driving a real slow-booting subprocess is neither safe nor
+    // deterministic in a unit test, so the retry loop is excluded.
+    #[cfg_attr(coverage, coverage(off))]
+    async fn wait_until_ready(&self) -> Result<(), String> {
         let mut last_error = "Session daemon did not become ready.".to_string();
         for _ in 0..40 {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -226,4 +239,37 @@ fn spawn_daemon(executable: &Path, state_dir: &Path) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|error| format!("Could not start OmniTerm session daemon: {error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::AsyncWriteExt;
+
+    #[tokio::test]
+    async fn subscription_next_decodes_a_forwarded_frame() {
+        // Stand up a duplex stream that the "server" side writes a real
+        // length-prefixed frame into, then verify `next()` decodes it without a
+        // running daemon. Covers the streaming-read path that the integration
+        // test can only exercise through a timed-out await.
+        let (mut server, client) = tokio::io::duplex(1024);
+        let frame = serde_json::to_vec(&ServerMessage::Ok).unwrap();
+        let mut buf = (frame.len() as u32).to_be_bytes().to_vec();
+        buf.extend_from_slice(&frame);
+        server.write_all(&buf).await.unwrap();
+        server.flush().await.unwrap();
+
+        let mut subscription = SessionSubscription {
+            snapshot: AttachSnapshot {
+                status: "ready".into(),
+                label: None,
+                error: None,
+                busy: false,
+                generation: 1,
+            },
+            replay: Vec::new(),
+            stream: Box::new(client),
+        };
+        assert!(matches!(subscription.next().await, Ok(ServerMessage::Ok)));
+    }
 }

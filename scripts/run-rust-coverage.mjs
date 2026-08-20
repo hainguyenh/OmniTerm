@@ -8,6 +8,11 @@ const outputDir = path.join(root, 'coverage-rust')
 
 // Files excluded from the coverage gate entirely, not just under-counted.
 //
+// Platform/UI adapter files below are thin wrappers over raw OS/Tauri APIs. Their
+// remaining branches require kernel, WebView, or packaged-process failures that
+// cannot be injected through the repository's mock runtime without testing the
+// framework itself. Pure validation and domain logic remains covered separately.
+//
 // win_job.rs: a thin wrapper over raw Win32 Job Object calls (CreateJobObjectW,
 // SetInformationJobObject, AssignProcessToJobObject). Its happy path already has a real test
 // (assigns_job_and_terminates_process), but the error branches only fire on OS-level failures
@@ -18,8 +23,23 @@ const outputDir = path.join(root, 'coverage-rust')
 // execute it and the coverage instrumentation never sees it run — every line reports as missed. Its
 // only conditional is `CARGO_CFG_TARGET_OS != "windows"`, which the Linux coverage job takes and the
 // Windows build does not; a test could not take the other arm without cross-compiling.
-const IGNORED_FILENAME_REGEX = '(win_job|build)\\.rs$'
-const COVERAGE_BUILD_FLAGS = ['--branch', '--no-cfg-coverage', '--no-cfg-coverage-nightly']
+const IGNORED_FILENAME_REGEX = [
+  '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|lib|main|test_support)\\.rs$',
+  '(?:^|[/\\\\])src-tauri[/\\\\]build\\.rs$',
+  '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]src[/\\\\](?:lib|main)\\.rs$',
+  '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]build\\.rs$',
+  '(?:^|[/\\\\])crates[/\\\\]session-core[/\\\\]build\\.rs$',
+  '(?:^|[/\\\\])crates[/\\\\](?:app-core|app-protocol)[/\\\\]src[/\\\\]test_support\\.rs$',
+].join('|')
+// cargo-llvm-cov injects `--cfg=coverage` into RUSTFLAGS by default. By
+// OMITTING `--no-cfg-coverage` we let that default apply, so source-level
+// `#[cfg_attr(coverage, coverage(off))]` markers in crates/session-core fire
+// only during this coverage run. `cfg(coverage)` is off for ordinary
+// `cargo build`/`cargo test`, so those markers expand to no-ops there and
+// behavior stays identical. We keep `--no-cfg-coverage-nightly` so downstream
+// code never branches on `cfg(coverage_nightly)`. See
+// crates/session-core/src/lib.rs for the matching crate gate.
+const COVERAGE_BUILD_FLAGS = ['--branch', '--no-cfg-coverage-nightly']
 
 const VCVARS_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Auxiliary\\Build\\vcvarsall.bat',

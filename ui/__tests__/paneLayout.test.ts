@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  clampFraction, fractionFromPointer, paneDividers, paneOrder, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
+  clampFraction, fractionFromPointer, paneAreaMinWidth, paneDividers, paneOrder, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
 } from '../paneLayout'
 import type { LayoutMode } from '../themes'
 
@@ -80,6 +80,29 @@ describe('paneRect', () => {
     }
   })
 
+  it.each([5, 7] as LayoutMode[])('applies resized sub-grid boundaries in the %i-pane layout', mode => {
+    const ratios = {
+      main: 0.4,
+      cross: 0.5,
+      columns: mode === 5 ? [0.3] : [0.2, 0.6],
+      rows: [0.65],
+    }
+
+    const left = Array.from({ length: mode }, (_, index) => paneRect(index, mode, 'left', 'columns', ratios))
+    expect(num(left[1].left)).toBeCloseTo(40)
+    expect(num(left[1].width)).toBeCloseTo(mode === 5 ? 18 : 12)
+    expect(num(left[1].height)).toBeCloseTo(65)
+    expect(num(left[mode - 1].top)).toBeCloseTo(65)
+    expect(num(left[mode - 1].height)).toBeCloseTo(35)
+
+    const top = Array.from({ length: mode }, (_, index) => paneRect(index, mode, 'top', 'columns', ratios))
+    expect(num(top[1].top)).toBeCloseTo(40)
+    expect(num(top[1].width)).toBeCloseTo(mode === 5 ? 30 : 20)
+    expect(num(top[1].height)).toBeCloseTo(39)
+    expect(num(top[mode - 1].top)).toBeCloseTo(79)
+    expect(num(top[mode - 1].height)).toBeCloseTo(21)
+  })
+
   it.each([4, 5, 6, 7, 8] as LayoutMode[])('supports custom boundaries in the %i-pane grid', mode => {
     const skewed = { main: 0.2, cross: 0.8, columns: mode <= 5 ? [0.3, 0.7].slice(0, mode === 4 ? 1 : 2) : mode === 6 ? [0.2, 0.7] : [0.2, 0.5, 0.8], rows: [0.65] }
     const rects = Array.from({ length: mode }, (_, i) => paneRect(i, mode, 'left', 'columns', skewed))
@@ -93,6 +116,16 @@ describe('paneRect', () => {
     expect(paneOrder(3, 'top')).toEqual([0, 1, 2])
     expect(paneOrder(2, 'left', 'rows')).toEqual([0, 1])
     expect(paneOrder(4)).toEqual([0, 1, 2, 3])
+  })
+})
+
+describe('paneAreaMinWidth', () => {
+  it('uses a smaller canvas minimum without changing pane percentage geometry', () => {
+    expect(paneAreaMinWidth(5, 'left')).toBe(600)
+    expect(paneAreaMinWidth(5, 'top')).toBe(400)
+    expect(paneAreaMinWidth(7, 'left')).toBe(800)
+    expect(paneAreaMinWidth(7, 'top')).toBe(600)
+    expect(paneAreaMinWidth(8)).toBe(800)
   })
 })
 
@@ -164,6 +197,16 @@ describe('paneDividers', () => {
     expect(first.maxFraction).toBeCloseTo(.55)
     expect(second.minFraction).toBeCloseTo(.35)
     expect(second.maxFraction).toBeCloseTo(1 - MIN_FRACTION)
+  })
+
+  it.each([5, 7] as LayoutMode[])('draws the %i-pane sub-grid row grabber at its saved boundary', mode => {
+    const rowDivider = paneDividers(mode, 'left', 'columns', {
+      main: 0.4,
+      cross: 0.5,
+      rows: [0.65],
+    }).find(divider => divider.key === 'row-1')
+
+    expect(num(rowDivider?.style.top)).toBeCloseTo(65)
   })
 })
 

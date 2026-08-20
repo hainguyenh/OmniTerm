@@ -5,7 +5,6 @@ import type { Connection, SessionStatus } from '@omniterm/contract'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 import type { DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
-import AppearanceMenu from './AppearanceMenu'
 import type { AppTheme } from '../themes'
 import { formatTerminalTitle } from '../utils/agentTitle'
 import SessionStatusIndicator from './SessionStatusIndicator'
@@ -64,6 +63,8 @@ interface PaneHeaderProps {
     darkMode: boolean
     onThemeApply: (themeId: string) => void
     onFontSizeChange: (delta: number) => void
+    scopeLabel?: string
+    buttonTitle?: string
   }
 }
 
@@ -113,14 +114,14 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                 ? <Monitor className="w-3 h-3 flex-shrink-0" />
                 : <Terminal className="w-3 h-3 flex-shrink-0" />
             }
-            <span className="truncate font-medium min-w-0 flex-1 flex items-baseline gap-1">
-              <span className={`truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
+            <span className="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
+              <span className={`min-w-0 shrink truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
                 {formattedTitle.isAgent
                   ? `${formattedTitle.agentName}${formattedTitle.folderName ? ` - ${formattedTitle.folderName}` : ''}`
                   : (formattedTitle.folderName ?? formattedTitle.displayTitle)}
               </span>
               {formattedTitle.shellLabel && (
-                <span className="text-[9px] text-theme-dim flex-shrink-0 font-normal">
+                <span className="min-w-0 max-w-[45%] shrink truncate text-[9px] text-theme-dim font-normal">
                   // {formattedTitle.shellLabel}
                 </span>
               )}
@@ -137,20 +138,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span className="ml-auto flex items-center gap-0.5 flex-shrink-0" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
-          {appearance && (
-            <AppearanceMenu
-              themes={appearance.themes}
-              themeId={appearance.themeId}
-              fontSize={appearance.fontSize}
-              darkMode={appearance.darkMode}
-              scopeLabel={`Pane ${paneIndex + 1}`}
-              buttonTitle={`Appearance — theme & font size (Pane ${paneIndex + 1})`}
-              onThemeApply={appearance.onThemeApply}
-              onFontSizeChange={appearance.onFontSizeChange}
-              compact
-            />
-          )}
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[12rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && (
             <SessionControlButtons
               conn={conn}
@@ -162,6 +150,11 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               detachWhere="pane"
               fullscreen={fullscreen}
               onToggleFullscreen={onToggleFullscreen}
+              appearance={appearance ? {
+                ...appearance,
+                scopeLabel: `Pane ${paneIndex + 1}`,
+                buttonTitle: `Appearance — theme & font size (Pane ${paneIndex + 1})`,
+              } : undefined}
             />
           )}
           {conn && sessionId && onClose && (

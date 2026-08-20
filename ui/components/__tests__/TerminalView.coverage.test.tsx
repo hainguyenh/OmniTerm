@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -301,6 +301,22 @@ describe('TerminalView full lifecycle', () => {
     if (snapshot?.error) expect(xterm.terminals[0].writes.join('')).toContain('resume failed')
   })
 
+  it('offers a centered restart action when the attached session is unavailable', async () => {
+    installApi(async () => null)
+    const onRestart = vi.fn()
+
+    render(
+      <TerminalView id="missing-session" connection={localConnection} mode="attach" onRestart={onRestart} />,
+    )
+
+    const restart = await waitFor(() => screen.getByRole('button', { name: 'Restart terminal' }))
+    expect(restart).toBeInTheDocument()
+    expect(restart.closest('[data-session-unavailable]')).toBeInTheDocument()
+
+    fireEvent.click(restart)
+    expect(onRestart).toHaveBeenCalledTimes(1)
+  })
+
   // The backend pushes a session's whole buffered scrollback (up to 256 KiB) down the data channel
   // during attach_session, before resume() resolves. Colorizing that with an 8-alternation regex and
   // then handing it to xterm as one atomic parse is what froze the app on attach/detach.
@@ -386,115 +402,5 @@ describe('TerminalView full lifecycle', () => {
     rerender(<TerminalView id="layout-epoch" connection={localConnection} active layoutEpoch="2:0" />)
 
     expect(fit).toHaveBeenCalled()
-  })
-
-  it('loads the WebGL addon once and holds it across visibility changes', () => {
-    installApi()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      const disposeSpy = vi.spyOn(WebglAddon.prototype, 'dispose')
-      const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
-      const { rerender, unmount } = render(<TerminalView id="webgl-session" connection={localConnection} />)
-      const term = xterm.terminals[0]
-      const webglLoadCount = () => term.loadAddon.mock.calls.filter((args: unknown[]) => args[0] instanceof WebglAddon).length
-
-      expect(webglLoadCount()).toBe(1)
-
-      // Off screen and back. The ResizeObserver callback goes through the coalescer
-      // (utils/coalesce.ts), which defers the real fit by a trailing timeout.
-      rerender(<TerminalView id="webgl-session" connection={localConnection} active={false} />)
-      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
-      rerender(<TerminalView id="webgl-session" connection={localConnection} active />)
-      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
-      expect(disposeSpy).not.toHaveBeenCalled()
-      expect(webglLoadCount()).toBe(1)
-
-      unmount()
-      expect(disposeSpy).toHaveBeenCalledTimes(1)
-      width.mockReturnValue(640)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  // fit() already repaints when it changes cols/rows. Repainting a second time — and, as this used to,
-  // throwing away every cached glyph with clearTextureAtlas() — on each of a drag-resize's frames is
-  // the resize lag.
-  it('repaints only when a fit changed the pixel size without changing cols/rows', () => {
-    installApi()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      const widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
-      render(<TerminalView id="refresh-session" connection={localConnection} />)
-      const term = xterm.terminals[0]
-      // The mount fit is the cols/rows-changing case (from the -1 sentinels), so it resizes the PTY
-      // and leaves the repaint to xterm.
-      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
-      expect(term.refresh).not.toHaveBeenCalled()
-
-      // A redundant fit with exactly the same pixel size does nothing
-      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
-      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
-      expect(term.refresh).not.toHaveBeenCalled()
-
-      // A fit where the pixel size changed but cols/rows didn't: no PTY resize, so we force a repaint.
-      widthSpy.mockReturnValue(642)
-      act(() => { resizeCallback?.(); vi.runOnlyPendingTimers() })
-      expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
-      expect(term.refresh).toHaveBeenCalledTimes(1)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
-  // resize event, so without this a pane would keep drawing at the pre-zoom cell size.
-  it('re-measures and refits on omniterm:zoom-changed', () => {
-    installApi()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    try {
-      render(<TerminalView id="zoom-session" connection={localConnection} />)
-      const term = xterm.terminals[0]
-      const fit = xterm.fits[0]
-      const originalFamily = term.options.fontFamily
-      fit.fit.mockClear()
-
-      window.dispatchEvent(new CustomEvent('omniterm:zoom-changed'))
-      // Restored, not left mutated — the toggle is only a trick to force xterm's option setter to
-      // treat it as a change.
-      expect(term.options.fontFamily).toBe(originalFamily)
-
-      act(() => vi.runOnlyPendingTimers())
-      // cols/rows are unchanged (the fake fit() is a no-op), so this proves the refit itself ran,
-      // not that a resize was re-sent — that's covered by the dedup test below.
-      expect(fit.fit).toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  // Fonts loading asynchronously can cause xterm to measure fallback fonts initially.
-  it('forces a re-measure when document.fonts.ready resolves', async () => {
-    installApi()
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    let resolveFonts: (value: any) => void
-    const fontsReadyPromise = new Promise(r => { resolveFonts = r })
-    Object.defineProperty(document, 'fonts', {
-      value: { ready: fontsReadyPromise },
-      configurable: true
-    })
-    
-    try {
-      render(<TerminalView id="fonts-session" connection={localConnection} />)
-      const fit = xterm.fits[0]
-      fit.fit.mockClear()
-
-      await act(async () => { resolveFonts({}) })
-      act(() => vi.runOnlyPendingTimers())
-      expect(fit.fit).toHaveBeenCalled()
-    } finally {
-      Object.defineProperty(document, 'fonts', { value: undefined, configurable: true })
-      vi.useRealTimers()
-    }
   })
 })

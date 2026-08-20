@@ -16,7 +16,7 @@ vi.mock('../FileBrowser', () => ({ default: (p: any) => <div data-testid="files"
 vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onPickPane?.({ left: 6, bottom: 7 })}>pick-pane</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
 vi.mock('../WaitingPane', () => ({ default: (p: any) => <div data-testid={p.compact ? `waiting-${p.paneIndex}` : 'waiting'}><button onClick={p.onNewSession}>new-wait</button><button onClick={() => p.onPickShell({ left: 4, bottom: 5 })}>shell-wait</button>{p.onChooseSession && <button onClick={p.onChooseSession}>choose-wait</button>}</div> }))
 vi.mock('../ScriptViewer', () => ({ default: (p: any) => <div data-testid="editor"><button onClick={p.onRun}>run-editor</button><button onClick={p.onClose}>close-editor</button><button onClick={() => p.onDirtyChange(true)}>dirty-editor</button><button onClick={() => p.onDirtyChange(false)}>clean-editor</button></div> }))
-vi.mock('../TerminalView', () => ({ default: (p: any) => <div data-testid={`terminal-${p.id}`} data-mode={p.mode} data-font={p.fontSize}><button onClick={() => p.onStatus('connected')}>terminal-status</button><button onClick={() => p.onMetrics({ latency: 7 })}>terminal-metrics</button><button onClick={() => p.onActivity(true)}>terminal-busy</button><button onClick={() => p.onExit(0)}>terminal-exit</button>{p.onFontSizeChange && <button onClick={() => p.onFontSizeChange(p.fontSize + 2)}>terminal-font</button>}</div> }))
+vi.mock('../TerminalView', () => ({ default: (p: any) => <div data-testid={`terminal-${p.id}`} data-mode={p.mode} data-font={p.fontSize}><button onClick={() => p.onStatus('connected')}>terminal-status</button><button onClick={() => p.onMetrics({ latency: 7 })}>terminal-metrics</button><button onClick={() => p.onActivity(true)}>terminal-busy</button><button onClick={() => p.onExit(0)}>terminal-exit</button><button onClick={p.onRestart}>terminal-restart</button>{p.onFontSizeChange && <button onClick={() => p.onFontSizeChange(p.fontSize + 2)}>terminal-font</button>}</div> }))
 vi.mock('../RDPView', () => ({ default: (p: any) => <div data-testid={`rdp-${p.id}`} data-active={String(p.active)}><button onClick={() => p.onStatus('connected')}>rdp-status</button><button onClick={() => p.onLatency(33)}>rdp-latency</button></div> }))
 vi.mock('../ConnectingOverlay', () => ({ default: () => <div data-testid="connecting" /> }))
 vi.mock('../DetachedPlaceholder', () => ({ default: (p: any) => <div data-testid="detached"><button onClick={p.onFocus}>focus-detached</button><button onClick={p.onReattach}>reattach-detached</button></div> }))
@@ -317,6 +317,7 @@ describe('MainLayoutView coverage', () => {
     fireEvent.click(within(localTerminal).getByText('terminal-busy'))
     fireEvent.click(within(localTerminal).getByText('terminal-font'))
     fireEvent.click(within(localTerminal).getByText('terminal-exit'))
+    fireEvent.click(within(localTerminal).getByText('terminal-restart'))
     expect(localTerminal).toHaveAttribute('data-mode', 'attach')
     expect(screen.getAllByTestId('connecting')).toHaveLength(2)
     expect(m.scriptRuns.run).toHaveBeenCalled()
@@ -329,6 +330,7 @@ describe('MainLayoutView coverage', () => {
     expect(m.setBusy).toHaveBeenCalledWith('local-tab', true)
     expect(m.onFontSizeChange).toHaveBeenCalled()
     expect(m.closeTabs).toHaveBeenCalledWith(['local-tab'], true)
+    expect(m.reconnectSession).toHaveBeenCalledWith('local-tab')
     // Off-screen sessions keep their layout box (`.pane-offscreen`, not `display: none`) so xterm
     // holds on to its scroll position and cell grid across a tab switch — see index.css.
     expect(container.querySelector('.pane-offscreen')).toBeInTheDocument()

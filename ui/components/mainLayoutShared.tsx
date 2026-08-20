@@ -83,19 +83,27 @@ export const Grid6Icon = ({ className }: { className?: string }) => (
   </svg>
 )
 
+export const Grid3Icon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="3" width="8" height="18" rx="1" /><rect x="14" y="3" width="7" height="8" rx="1" />
+    <rect x="14" y="13" width="7" height="8" rx="1" />
+  </svg>
+)
+
 export const Grid5Icon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="3" y="3" width="7" height="18" rx="1" /><rect x="12" y="3" width="9" height="8" rx="1" />
-    <rect x="12" y="13" width="9" height="8" rx="1" />
+    <rect x="3" y="3" width="8" height="18" rx="2" />
+    <path d="M14 3h7v18h-7M14 12h7" />
   </svg>
 )
 
 export const Grid7Icon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
     strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <rect x="3" y="3" width="5" height="18" rx="1" /><rect x="10" y="3" width="11" height="8" rx="1" />
-    <path d="M13.67 3v8M17.33 3v8M10 13h11M13.67 13v8M17.33 13v8" />
+    <rect x="3" y="3" width="6" height="18" rx="2" />
+    <path d="M12 3h9v18h-9M15 3v18M18 3v18M12 12h9" />
   </svg>
 )
 

@@ -14,14 +14,14 @@ import { SessionFooterBar } from './SessionFooterBar'
 import SessionTabs from './SessionTabs'
 import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
-import { Columns2, LayoutGrid, PanelLeft, RotateCw, Square } from 'lucide-react'
+import { Columns2, LayoutGrid, RotateCw, Square } from 'lucide-react'
 import { paneIdentity } from '../paneIdentity'
-import { draggedPaneIndex, paneRect } from '../paneLayout'
+import { draggedPaneIndex, paneAreaMinWidth, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { workspaceForConnection } from '../utils/workspaceIdentity'
-import { Grid5Icon, Grid6Icon, Grid7Icon, Grid8Icon } from './mainLayoutShared'
+import { Grid3Icon, Grid5Icon, Grid6Icon, Grid7Icon, Grid8Icon } from './mainLayoutShared'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import FullscreenRestoreControl from './FullscreenRestoreControl'
 import MainLayoutWaitingPane from './MainLayoutWaitingPane'
@@ -157,11 +157,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               {([
                 [1, Square, 'Single view'],
                 [2, Columns2, 'Split 2'],
-                [3, PanelLeft, 'Split 3'],
+                [3, Grid3Icon, 'Split 3'],
                 [4, LayoutGrid, 'Grid 4'],
-                [5, Grid5Icon, 'Grid 5'],
+                [5, Grid5Icon, 'Split 5'],
                 [6, Grid6Icon, 'Grid 6'],
-                [7, Grid7Icon, 'Grid 7'],
+                [7, Grid7Icon, 'Split 7'],
                 [8, Grid8Icon, 'Grid 8']
               ] as const).map(([m, Icon, label]) => {
                 const disabled = m > 1 && activeGroupId === 'ungrouped' && visibleTabs.length === 0
@@ -205,7 +205,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                           }`
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${((m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows') || ((m === 5 || m === 7) && layoutMode === m && appSettings.split3Style === 'top')) ? 'rotate-90' : ''}`} />
+                      <Icon className={`w-4 h-4 ${((m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows') || ((m === 3 || m === 5 || m === 7) && layoutMode === m && appSettings.split3Style === 'top')) ? 'rotate-90' : ''}`} />
                       {m === 3 && layoutMode === 3 && (
                         <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
                       )}
@@ -277,7 +277,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             </div>
           )}
           {/* Session content; hidden panes remain mounted to preserve terminal scroll state. */}
-          <div className="flex-1 relative isolate min-h-0 mt-1">
+          <div className="flex-1 min-w-0 min-h-0 mt-1 overflow-x-auto overflow-y-hidden">
+          <div
+            className="relative isolate h-full"
+            style={{ minWidth: paneAreaMinWidth(layoutMode, appSettings.split3Style, appSettings.split2Style) || undefined }}
+          >
             {fullscreenTabId && <FullscreenRestoreControl sessionName={activeTabs.find(tab => tab.id === fullscreenTabId)?.name} onRestore={() => setFullscreenPane(null)} />}
             {activeTabs.length === 0 ? (
               waitingPane
@@ -318,7 +322,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             openSessionCount={visibleTabs.length}
                             onNewSession={() => { setFocusedPane(i); requestNewSession(undefined, model.selectedWorkspaceId) }}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
-                            workspaces={model.workspaces ?? []} selectedWorkspaceId={model.selectedWorkspaceId ?? null} onWorkspaceChange={model.setSelectedWorkspaceId ?? (() => {})}
                             onChooseSession={(rect) => { setPanePickerAnchor(rect); setPanePicker(i) }}
                             customArtUrl={idleArtUrl}
                           />
@@ -382,6 +385,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     <TerminalView
                       key={`${tab.id}:${reconnectKeys[tab.id] ?? 0}`} id={tab.id} connection={conn!}
                       mode={resumeMode[tab.id] ? 'attach' : 'connect'}
+                      onRestart={() => reconnectSession(tab.id)}
                       // A hidden pane keeps its layout box, so it can no longer infer this from its
                       // own size — it has to be told. Drives focus and the scroll-tail restore.
                       active={visible}
@@ -436,6 +440,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 })}
               </>
             )}
+          </div>
           </div>
         </div>
         {/* ── Connection form modal ────────────────────────────────────────── */}

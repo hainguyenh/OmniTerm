@@ -1,8 +1,6 @@
 import React from 'react'
 import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
 import { DefaultIdleArt } from '../assets/defaultArt'
-import WorkspaceSelect from './WorkspaceSelect'
-import type { Workspace } from '@omniterm/contract'
 
 /**
  * The "nothing here yet" page. Used both for the whole content area (no tabs at all) and inside every
@@ -15,9 +13,6 @@ interface WaitingPaneProps {
   /** Rendered inside a split pane: smaller art, no keyboard hint. */
   compact?: boolean
   onNewSession: () => void
-  workspaces?: Workspace[]
-  selectedWorkspaceId?: string | null
-  onWorkspaceChange?: (id: string | null) => void
   onPickShell: (rect: DOMRect) => void
   /** Omitted in single view, where there is no other pane to adopt a session from. */
   onChooseSession?: (rect: DOMRect) => void
@@ -30,7 +25,7 @@ interface WaitingPaneProps {
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
-  dark, compact = false, onNewSession, onPickShell, onChooseSession, workspaces = [], selectedWorkspaceId = null, onWorkspaceChange = () => {}, openSessionCount = 0, customArtUrl,
+  dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, customArtUrl,
 }) => (
   <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
     <div className={`min-h-full w-full flex flex-col items-center justify-center ${
@@ -76,7 +71,6 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
         </div>
 
         <div className="flex flex-col items-center justify-center gap-3 max-w-full flex-shrink-0">
-          <WorkspaceSelect workspaces={workspaces} value={selectedWorkspaceId} onChange={onWorkspaceChange} compact />
           <div className="flex items-center justify-center flex-wrap gap-2.5 w-full">
             <div className="flex items-center gap-1">
               <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">

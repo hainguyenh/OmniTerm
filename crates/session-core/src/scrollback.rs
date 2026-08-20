@@ -52,17 +52,33 @@ pub(crate) fn flush(manager: &SessionManager) -> Result<(), String> {
     Ok(())
 }
 
+// `spawn` runs the durable scrollback flush loop forever. `flush` itself is
+// covered by `persistence.rs`, but the surrounding ticker/loop is daemon-only
+// and cannot be exercised from a unit test; the `log::warn!` arm fires only
+// when the daemon's installed subscriber logs I/O failures during disk pressure
+// (never in tests, which install no subscriber). The closure handed to
+// `tokio::spawn` compiles to a separate generated async fn that the outer
+// marker would not catch, so we lift the body into `run_durable_flush_loop`
+// and mark that helper itself. Both are excluded from coverage.
+#[cfg_attr(coverage, coverage(off))]
 pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut ticker = tokio::time::interval(FLUSH_INTERVAL);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        loop {
-            ticker.tick().await;
-            let manager = manager.clone();
-            let result = tokio::task::spawn_blocking(move || flush(&manager)).await;
-            if let Ok(Err(error)) = result {
-                log::warn!("[sessiond] durable scrollback flush failed: {error}");
-            }
-        }
-    })
+    tokio::spawn(run_durable_flush_loop(manager))
 }
+
+#[cfg_attr(coverage, coverage(off))]
+async fn run_durable_flush_loop(manager: SessionManager) {
+    let mut ticker = tokio::time::interval(FLUSH_INTERVAL);
+    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        ticker.tick().await;
+        let manager = manager.clone();
+        let result = tokio::task::spawn_blocking(move || flush(&manager)).await;
+        if let Ok(Err(error)) = result {
+            log::warn!("[sessiond] durable scrollback flush failed: {error}");
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "scrollback_tests.rs"]
+mod tests;

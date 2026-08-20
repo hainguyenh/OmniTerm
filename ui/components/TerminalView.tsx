@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
 import { clipboardActionFor } from '../utils/paste'
-import { enterSequenceFor, EnterModes, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
+import { enterSequenceFor, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
 import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
@@ -14,76 +14,20 @@ import { createTerminalClipboard } from '../utils/terminalClipboard'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
-import { Connection, SessionStatus } from './MainLayout'
-import { TerminalTheme, TOKYO_NIGHT } from '../themes'
+import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
+import SessionUnavailableOverlay from './SessionUnavailableOverlay'
+import type { TerminalViewProps } from './TerminalView.types'
 
 export { DEFAULT_MONO_STACK }
 
-interface TerminalViewProps {
-  id: string
-  connection: Connection
-  onStatus?: (status: SessionStatus) => void
-  /** Live session metrics (latency + remote CPU/RAM/disk) pushed from the main process. */
-  onMetrics?: (m: SessionMetrics) => void
-  /**
-   * The shell started/stopped running something. LOCAL only (it needs a process-tree probe on the
-   * host), and only under the Tauri backend — elsewhere it simply never fires.
-   */
-  onActivity?: (busy: boolean) => void
-  /** Receives OSC title updates emitted by shells and interactive agents. */
-  onTitleChange?: (title: string) => void
-  /**
-   * The pane's process ended, carrying its exit status. Separate from `onStatus('closed')` because the
-   * status alone cannot tell a script that finished from one that failed — see sessionExit.ts.
-   */
-  onExit?: (code: number) => void
-  theme?: TerminalTheme
-  /** Appearance hint passed to locally spawned CLI tools so their palette matches xterm. */
-  darkMode?: boolean
-  fontSize?: number
-  /** Client-side editor-style coloring of plain output (errors, numbers, paths…). */
-  smartColors?: boolean
-  fontFamilyMono?: string
-  /**
-   * Reports a font-size change made inside the terminal (Ctrl+wheel) as an absolute size, so the
-   * owner can persist the override and keep its own display in sync. Without this the wheel would
-   * mutate only this xterm instance and the change would be lost on the next remount.
-   */
-  onFontSizeChange?: (size: number) => void
-  /**
-   * 'connect' (default) starts a fresh SSH/PTY session. 'attach' binds to an already-running
-   * session owned by the main process (used when a session is popped out into a detached window
-   * or folded back into the main window): it replays the buffered output and subscribes to live
-   * data WITHOUT reconnecting, so the underlying process is never duplicated.
-   */
-  mode?: 'connect' | 'attach'
-  /**
-   * Is this pane currently on screen? Panes not in a visible slot stay mounted (so their session
-   * keeps streaming) but are hidden with `visibility: hidden`, which — unlike `display: none` —
-   * leaves clientWidth/Height intact. That is what keeps xterm's scroll position and cell grid
-   * correct across a tab switch, and it is also why the pane's own geometry can no longer tell it
-   * whether it is visible: this prop is the signal instead. Defaults to true for owners with a
-   * single always-visible pane (DetachedTerminalWindow).
-   */
-  active?: boolean
-  /** Changes when the pane geometry changes without changing session visibility. */
-  layoutEpoch?: string
-  shortcuts?: ShortcutBindings
-  /**
-   * What Shift+Enter and Ctrl+Enter send. xterm collapses both to a bare `\r`, so AI agents cannot
-   * tell them from a plain Enter without the app injecting a sequence — see utils/enterKeys.ts.
-   */
-  enterModes?: EnterModes
-  blurStrength?: number
-}
-
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
   const [isHovered, setIsHovered] = React.useState(false)
+  const [sessionUnavailable, setSessionUnavailable] = React.useState(false)
   // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
   // host (Escape / outside click / item picked).
   const [linkMenu, setLinkMenu] = React.useState<TerminalLinkMenuState | null>(null)
@@ -108,6 +52,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const onStatusRef = useRef(onStatus)
   onStatusRef.current = onStatus
 
+  const onRestartRef = useRef(onRestart)
+  onRestartRef.current = onRestart
+
   const onMetricsRef = useRef(onMetrics)
   onMetricsRef.current = onMetrics
 
@@ -122,6 +69,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   const onFontSizeChangeRef = useRef(onFontSizeChange)
   onFontSizeChangeRef.current = onFontSizeChange
+
+  useEffect(() => {
+    setSessionUnavailable(false)
+  }, [id, mode])
 
   // The main effect's deps are [id, connection, mode], so its key handler closes over whatever these
   // were at mount. Reading them through refs is the only way a settings change reaches a live pane.
@@ -200,7 +151,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // the `active` prop), so geometry cannot distinguish "off screen" from "on screen". Focus is
     // driven by `active` alone — deriving it from geometry here would let a pane that mounted while
     // hidden steal focus from the visible one.
-    let wasUnsized = true
     // Skip re-sending identical dimensions: a ConPTY resize is expensive and each one makes a
     // full-screen TUI repaint, so a fit() that lands on the same cols/rows (e.g. a pixel-size change
     // that didn't cross a cell boundary) must not trigger one.
@@ -211,7 +161,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const safeFit = () => {
       const el = terminalRef.current
       if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
-        wasUnsized = true
         return
       }
 
@@ -219,13 +168,15 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       lastClientWidth = el.clientWidth
       lastClientHeight = el.clientHeight
 
-      if (wasUnsized) {
-        wasUnsized = false
-        // First real dimensions: the renderer can measure a cell now.
-      }
-      if (activeRef.current) webglController.load()
       try {
         fitAddon.fit()
+        // Load the WebGL renderer AFTER fit(), so its first frame rasterizes at the real
+        // cols/rows. Loading it before fit() committed a first frame at the default 80x24
+        // grid; fit()'s subsequent resize repaint was then deduped against that frame, leaving
+        // a freshly-launched full-screen TUI (claude, codex…) misaligned until a font-size
+        // change forced a non-deduped repaint. Idempotent once held, and the same path
+        // re-acquires after a context loss (drop() re-arms retryLoad).
+        if (activeRef.current) webglController.load()
         if (term.cols !== lastCols || term.rows !== lastRows) {
           lastCols = term.cols
           lastRows = term.rows
@@ -388,6 +339,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const stream = attachTerminalStream({
       term, api, id, isLocal, host: connection.host, mode,
       onStatus: (s) => onStatusRef.current?.(s),
+      onUnavailable: () => setSessionUnavailable(true),
       onExit: (code) => onExitRef.current?.(code),
       onMetrics: (m) => onMetricsRef.current?.(m),
       onActivity: (busy) => onActivityRef.current?.(busy),
@@ -468,7 +420,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   return (
     <div
-      className="terminal-pane h-full w-full"
+      className="terminal-pane relative h-full w-full"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
@@ -488,6 +440,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />
+      {sessionUnavailable && onRestartRef.current && (
+        <SessionUnavailableOverlay onRestart={() => onRestartRef.current?.()} />
+      )}
       <TerminalViewLinkMenuHost
         menu={linkMenu}
         isLocal={connection.type === 'LOCAL'}
