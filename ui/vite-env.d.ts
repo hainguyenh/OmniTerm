@@ -19,7 +19,9 @@ interface ShortcutBindings {
   layout2: string
   layout3: string
   layout4: string
+  layout5: string
   layout6: string
+  layout7: string
   layout8: string
   toggleSidebar: string
   commandPalette: string

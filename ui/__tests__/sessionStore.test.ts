@@ -123,7 +123,7 @@ describe('sessionStore', () => {
 
     it('returns null when viewGroup has invalid layoutMode', () => {
       const bad = makeSnapshot()
-      bad.viewGroups[0].layoutMode = 5 as never
+      bad.viewGroups[0].layoutMode = 9 as never
       storage[SNAPSHOT_KEY] = JSON.stringify(bad)
       expect(loadSnapshot()).toBeNull()
     })
@@ -135,7 +135,7 @@ describe('sessionStore', () => {
     })
 
     it('accepts all valid layout modes', () => {
-      for (const mode of [1, 2, 3, 4, 6, 8] as const) {
+      for (const mode of [1, 2, 3, 4, 5, 6, 7, 8] as const) {
         const snap = makeSnapshot({ layoutMode: mode })
         saveSnapshot(snap)
         const loaded = loadSnapshot()

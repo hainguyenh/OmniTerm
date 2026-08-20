@@ -33,7 +33,7 @@ describe('WorkspacePanel', () => {
     // Root row: the theme's sidebar background token.
     const root = container.querySelector('[data-workspace-id="ws#1"]') as HTMLElement
     expect(root.className).toContain('bg-[var(--theme-sidebar-bg)]')
-    expect(root.className).not.toContain('bg-[var(--theme-bg)]')
+    expect(root.className.split(/\s+/)).not.toContain('bg-[var(--theme-bg)]')
 
     fireEvent.click(screen.getByText('my-project'))
     await screen.findByText('run.bat')

@@ -95,7 +95,8 @@ describe('WorkspaceRootRow', () => {
     const { container } = render(<WorkspaceRootRow {...props()} />)
     const row = container.querySelector('[data-workspace-id="w1"]') as HTMLElement
     expect(row.className).toContain('bg-[var(--theme-sidebar-bg)]')
-    expect(row.className).not.toContain('bg-[var(--theme-bg)]')
-    expect(row.className).toContain('hover:bg-[var(--theme-hover-bg)]')
+    expect(row.className.split(/\s+/)).not.toContain('bg-[var(--theme-bg)]')
+    expect(row.className).toContain('hover:bg-[var(--theme-bg)]')
+    expect(row.className).not.toContain('hover:bg-[var(--theme-hover-bg)]')
   })
 })

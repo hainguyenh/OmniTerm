@@ -21,7 +21,7 @@ import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { workspaceForConnection } from '../utils/workspaceIdentity'
-import { Grid6Icon, Grid8Icon } from './mainLayoutShared'
+import { Grid5Icon, Grid6Icon, Grid7Icon, Grid8Icon } from './mainLayoutShared'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import FullscreenRestoreControl from './FullscreenRestoreControl'
 import MainLayoutWaitingPane from './MainLayoutWaitingPane'
@@ -159,14 +159,17 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 [2, Columns2, 'Split 2'],
                 [3, PanelLeft, 'Split 3'],
                 [4, LayoutGrid, 'Grid 4'],
+                [5, Grid5Icon, 'Grid 5'],
                 [6, Grid6Icon, 'Grid 6'],
+                [7, Grid7Icon, 'Grid 7'],
                 [8, Grid8Icon, 'Grid 8']
               ] as const).map(([m, Icon, label]) => {
                 const disabled = m > 1 && activeGroupId === 'ungrouped' && visibleTabs.length === 0
-                const tooltipText = disabled
+                  const tooltipText = disabled
                   ? 'Cannot select multi-view when ungrouped with no open tabs'
                   : m === 3 && layoutMode === 3 ? `${label} (${appSettings.split3Style || 'left'}) - Click to cycle`
                   : m === 2 && layoutMode === 2 ? `${label} (${appSettings.split2Style || 'columns'}) - Click to toggle`
+                  : (m === 5 || m === 7) && layoutMode === m ? `${label} (${appSettings.split3Style === 'top' ? 'horizontal' : 'vertical'}) - Click to switch`
                   : label
                 return (
                   <Tooltip key={m} content={tooltipText} shortcut={disabled ? undefined : `Ctrl+${m}`} placement="bottom">
@@ -185,6 +188,10 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                           const nextStyle = (appSettings.split2Style || 'columns') === 'columns' ? 'rows' : 'columns'
                           setAppSettings({ ...appSettings, split2Style: nextStyle })
                           window.omnitermAPI.settings.save({ split2Style: nextStyle })
+                        } else if ((m === 5 || m === 7) && layoutMode === m) {
+                          const nextStyle = appSettings.split3Style === 'top' ? 'left' : 'top'
+                          setAppSettings({ ...appSettings, split3Style: nextStyle })
+                          window.omnitermAPI.settings.save({ split3Style: nextStyle })
                         } else {
                           changeLayoutMode(m)
                         }
@@ -198,11 +205,14 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                           }`
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows' ? 'rotate-90' : ''}`} />
+                      <Icon className={`w-4 h-4 ${((m === 2 && layoutMode === 2 && appSettings.split2Style === 'rows') || ((m === 5 || m === 7) && layoutMode === m && appSettings.split3Style === 'top')) ? 'rotate-90' : ''}`} />
                       {m === 3 && layoutMode === 3 && (
                         <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
                       )}
                       {m === 2 && layoutMode === 2 && (
+                        <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
+                      )}
+                      {(m === 5 || m === 7) && layoutMode === m && (
                         <RotateCw className="absolute -top-1 -right-1 w-2.5 h-2.5 text-theme-accent" />
                       )}
                     </button>

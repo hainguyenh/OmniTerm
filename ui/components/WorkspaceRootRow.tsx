@@ -90,7 +90,7 @@ export default function WorkspaceRootRow({
     <div
       draggable={!isEditing}
       data-workspace-id={workspace.id}
-      className="group sticky top-0 z-10 bg-[var(--theme-sidebar-bg)] flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+      className="group sticky top-0 z-10 bg-[var(--theme-sidebar-bg)] flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-bg)]"
       style={{ paddingLeft: 8 + depth * 12 }}
       onClick={onToggle}
       onDragStart={isEditing ? undefined : onDragStart}

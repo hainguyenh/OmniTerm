@@ -63,12 +63,29 @@ describe('paneRect', () => {
     expect(num(paneRect(1, 3, 'right', 'columns', ratios).left)).toBeCloseTo(0)
   })
 
-  it.each([4, 6, 8] as LayoutMode[])('supports custom boundaries in the %i-pane grid', mode => {
-    const skewed = { main: 0.2, cross: 0.8, columns: mode === 4 ? [0.3] : mode === 6 ? [0.2, 0.7] : [0.2, 0.5, 0.8], rows: [0.65] }
+  it.each([5, 7] as LayoutMode[])('uses one dominant pane and a complete sub-grid for %i panes', mode => {
+    const ratios = { main: 0.4, cross: 0.5 }
+    for (const style of ['left', 'top'] as const) {
+      const rects = Array.from({ length: mode }, (_, i) => paneRect(i, mode, style, 'columns', ratios))
+      expect(rects.reduce((s, r) => s + num(r.width) * num(r.height), 0)).toBeCloseTo(100 * 100, 0)
+      if (style === 'left') {
+        expect(num(rects[0].width)).toBeCloseTo(40)
+        expect(num(rects[0].height)).toBeCloseTo(100)
+        expect(num(rects[1].left)).toBeCloseTo(40)
+      } else {
+        expect(num(rects[0].width)).toBeCloseTo(100)
+        expect(num(rects[0].height)).toBeCloseTo(40)
+        expect(num(rects[1].top)).toBeCloseTo(40)
+      }
+    }
+  })
+
+  it.each([4, 5, 6, 7, 8] as LayoutMode[])('supports custom boundaries in the %i-pane grid', mode => {
+    const skewed = { main: 0.2, cross: 0.8, columns: mode <= 5 ? [0.3, 0.7].slice(0, mode === 4 ? 1 : 2) : mode === 6 ? [0.2, 0.7] : [0.2, 0.5, 0.8], rows: [0.65] }
     const rects = Array.from({ length: mode }, (_, i) => paneRect(i, mode, 'left', 'columns', skewed))
     expect(rects.reduce((s, r) => s + num(r.width) * num(r.height), 0)).toBeCloseTo(100 * 100, 0)
     expect(num(rects[0].width)).toBeCloseTo(mode === 4 ? 30 : 20)
-    expect(num(rects[0].height)).toBeCloseTo(65)
+    expect(num(rects[0].height)).toBeCloseTo(mode === 5 || mode === 7 ? 100 : 65)
   })
 
   it('orders panes by their window positions', () => {
@@ -115,7 +132,9 @@ describe('paneDividers', () => {
   it('offers no divider for a single pane and all boundaries for grids', () => {
     expect(paneDividers(1)).toEqual([])
     expect(paneDividers(4).map(d => d.key)).toEqual(['column-1', 'row-1'])
+    expect(paneDividers(5).map(d => d.key)).toEqual(['main', 'column-1', 'row-1'])
     expect(paneDividers(6).map(d => d.key)).toEqual(['column-1', 'column-2', 'row-1'])
+    expect(paneDividers(7).map(d => d.key)).toEqual(['main', 'column-1', 'column-2', 'row-1'])
     expect(paneDividers(8).map(d => d.key)).toEqual(['column-1', 'column-2', 'column-3', 'row-1'])
   })
 

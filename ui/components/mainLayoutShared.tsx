@@ -38,7 +38,9 @@ export const shortcutLabels = {
   layout2: 'Grid 2 Layout',
   layout3: 'Grid 3 Layout',
   layout4: 'Grid 4 Layout',
+  layout5: 'Grid 5 Layout',
   layout6: 'Grid 6 Layout',
+  layout7: 'Grid 7 Layout',
   layout8: 'Grid 8 Layout',
   toggleSidebar: 'Toggle Sidebar',
   commandPalette: 'Command Palette',
@@ -56,7 +58,9 @@ export const DEFAULT_SHORTCUTS = {
   layout2: 'Ctrl+2',
   layout3: 'Ctrl+3',
   layout4: 'Ctrl+4',
+  layout5: 'Ctrl+5',
   layout6: 'Ctrl+6',
+  layout7: 'Ctrl+7',
   layout8: 'Ctrl+8',
   toggleSidebar: 'Ctrl+B',
   commandPalette: 'Ctrl+P',
@@ -76,6 +80,22 @@ export const Grid6Icon = ({ className }: { className?: string }) => (
     strokeLinecap="round" strokeLinejoin="round" className={className}>
     <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M9 3v18" />
     <path d="M15 3v18" /><path d="M3 12h18" />
+  </svg>
+)
+
+export const Grid5Icon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="3" width="7" height="18" rx="1" /><rect x="12" y="3" width="9" height="8" rx="1" />
+    <rect x="12" y="13" width="9" height="8" rx="1" />
+  </svg>
+)
+
+export const Grid7Icon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+    strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <rect x="3" y="3" width="5" height="18" rx="1" /><rect x="10" y="3" width="11" height="8" rx="1" />
+    <path d="M13.67 3v8M17.33 3v8M10 13h11M13.67 13v8M17.33 13v8" />
   </svg>
 )
 

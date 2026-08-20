@@ -32,7 +32,7 @@ const settings: AppSettings = {
     zoomIn: 'Ctrl+=', zoomOut: 'Ctrl+-', zoomReset: 'Ctrl+0', newSession: 'Ctrl+N',
     newFolder: 'Ctrl+Shift+N', openSettings: 'Ctrl+,', toggleThemeMode: 'Ctrl+/',
     layout1: 'Ctrl+1', layout2: 'Ctrl+2', layout3: 'Ctrl+3', layout4: 'Ctrl+4',
-    layout6: 'Ctrl+6', layout8: 'Ctrl+8', toggleSidebar: 'Ctrl+B',
+    layout5: 'Ctrl+5', layout6: 'Ctrl+6', layout7: 'Ctrl+7', layout8: 'Ctrl+8', toggleSidebar: 'Ctrl+B',
     commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W',
   },
 }
