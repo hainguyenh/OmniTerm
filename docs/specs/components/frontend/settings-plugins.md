@@ -49,6 +49,7 @@ When Settings/Plugin surfaces are open or user changes/saves customization/lifec
 
 ## Functionalities
 
+- `SettingsModal` — owned by this spec.
 - `GeneralSettings` — owned by this spec.
 - `AppearanceMenu` — owned by this spec.
 - `ThemeRemixModal` — owned by this spec.
@@ -63,6 +64,7 @@ When Settings/Plugin surfaces are open or user changes/saves customization/lifec
 
 | Component | What | Why | How | When |
 |---|---|---|---|---|
+| `SettingsModal` | Render consolidated settings modal dialog. | Modular tabbed configuration UX with categorized settings. | Renders vertical-tabbed layout for General, Appearance, Plugins, Updates, and Shortcuts. | Settings modal active. |
 | `GeneralSettings` | Render general preferences. | Main configuration UX. | Bind effective/draft values and save callbacks. | Settings route. |
 | `AppearanceMenu` | Render appearance choices. | Fast visual selection. | Bind theme/mode state. | Appearance control. |
 | `ThemeRemixModal` | Edit/preview custom theme. | Advanced visual customization. | Maintain draft and invoke theme save. | Remix open. |
@@ -95,6 +97,7 @@ When Settings/Plugin surfaces are open or user changes/saves customization/lifec
 
 ## Source map
 
+- `ui/components/SettingsModal.tsx`
 - `ui/components/GeneralSettings.tsx`
 - `ui/components/ThemeRemixModal.tsx`
 - `ui/components/UpdateSettings.tsx`

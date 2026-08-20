@@ -57,10 +57,12 @@ When editing/launching connections or rendering/updating live sessions.
 - `ConnectingOverlay` — owned by this spec.
 - `WaitingPane` — owned by this spec.
 - `SessionMetricsChips` — owned by this spec.
-- `SessionControlButtons` — owned by this spec.
+- `SessionControlButtons` / `sessionControlOverflow` — owned by this spec.
 - `SessionPersistenceMenu` — owned by this spec.
 - `SessionStatusIndicator` — owned by this spec.
 - `SessionFooterBar` — owned by this spec.
+- `SessionUnavailableOverlay` — owned by this spec.
+- `NewTerminalMenu` — owned by this spec.
 - `TerminalLinkMenu` / `TerminalViewLinkMenuHost` — owned by this spec.
 
 ## Components and functions
@@ -76,10 +78,12 @@ When editing/launching connections or rendering/updating live sessions.
 | `ConnectingOverlay` | Show async connection progress. | User feedback. | Render launch status. | Connecting. |
 | `WaitingPane` | Render no/awaiting session state. | Clear empty-pane UX. | Present placeholder/action. | No active content. |
 | `SessionMetricsChips` | Render session metrics. | Expose activity/health. | Map native metrics to chips. | Metrics available. |
-| `SessionControlButtons` | Shared session header/footer actions. | Keep Stop, Clear, Fullscreen, Detach actions uniform. | Render shared buttons and forward actions to owning session. | Pane header or active footer bar rendered. |
+| `SessionControlButtons` / `sessionControlOverflow` | Shared session header/footer actions with responsive overflow handling. | Keep Stop, Clear, Fullscreen, Detach, and Persistence actions uniform and responsive to narrow panes. | Renders action icon buttons, measures container overflow via `controlsOverflow`, and collapses hidden items into an overflow popup menu. | Pane header or active footer bar rendered. |
 | `SessionPersistenceMenu` | Per-terminal persistence policy selector. | Configure lifetime policy (None, Window, Hybrid, App). | Open dropdown menu and invoke daemon persistence updates. | User clicks persistence indicator. |
 | `SessionStatusIndicator` | Render session status dot/animation. | Visual cue for connected/busy/idle/disconnected. | Render status indicator with oscillate or ping styles. | Pane header, footer, or tabs. |
 | `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls and status. | Compose status, persistence menu, and session controls. | Active session in focused pane. |
+| `SessionUnavailableOverlay` | Render unavailable-session recovery feedback and restart action. | Provide clear user recovery when an attached session is lost or disconnected. | Renders an opaque recovery prompt and triggers the supplied restart action. | When an attached session is no longer available. |
+| `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces, available shells, and opens target. | When clicking the new terminal `+` dropdown. |
 | `TerminalLinkMenu` / `TerminalViewLinkMenuHost` | Modifier-click link/path context menu. | Copy or open detected URLs and file paths. | Portal overlay menu triggered by Ctrl/Cmd+click on actionable spans. | User modifier-clicks detected link or path. |
 
 ## State and data
@@ -113,8 +117,11 @@ When editing/launching connections or rendering/updating live sessions.
 - `ui/components/TerminalView.tsx`
 - `ui/components/RDPView.tsx`
 - `ui/components/SessionControlButtons.tsx`
+- `ui/components/sessionControlOverflow.ts`
 - `ui/components/SessionPersistenceMenu.tsx`
 - `ui/components/SessionStatusIndicator.tsx`
 - `ui/components/SessionFooterBar.tsx`
+- `ui/components/SessionUnavailableOverlay.tsx`
+- `ui/components/NewTerminalMenu.tsx`
 - `ui/components/TerminalLinkMenu.tsx`
 - `ui/components/TerminalViewLinkMenuHost.tsx`
