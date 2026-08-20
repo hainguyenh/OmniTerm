@@ -25,6 +25,7 @@ export interface TerminalStreamOptions {
   /** 'attach' binds to an already-running session and replays its buffer; 'connect' starts one. */
   mode: 'connect' | 'attach'
   onStatus: (status: SessionStatus) => void
+  onUnavailable: () => void
   onExit: (code: number) => void
   onMetrics: (m: SessionMetrics) => void
   onActivity: (busy: boolean) => void
@@ -41,6 +42,11 @@ export interface TerminalStreamOptions {
    */
   scrollbackKey?: string
 }
+
+const UNAVAILABLE_SESSION_MESSAGE = 'session is no longer available'
+
+export const isUnavailableSessionError = (error: string) =>
+  error.trim().toLowerCase().includes(UNAVAILABLE_SESSION_MESSAGE)
 
 /** Feed `text` to xterm in pieces it can parse without blocking a frame. */
 const writeChunked = (term: Terminal, text: string) => {
@@ -60,7 +66,7 @@ export interface TerminalStream {
 /** Subscribe to a session and start (or attach to) it. */
 export const attachTerminalStream = ({
   term, api, id, isLocal, host, mode,
-  onStatus, onExit, onMetrics, onActivity, smartColors, refit, isCurrent, scrollbackKey,
+  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, refit, isCurrent, scrollbackKey,
 }: TerminalStreamOptions): TerminalStream => {
   // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell behind it can
   // take much longer to actually produce a prompt — a cold WSL VM boot in particular can take several
@@ -170,6 +176,7 @@ export const attachTerminalStream = ({
   const cleanupError = api.onError((err: string) => {
     setStreamActive(false)
     onStatus('error')
+    if (isUnavailableSessionError(err)) onUnavailable()
     term.write('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
   })
 
@@ -241,6 +248,7 @@ export const attachTerminalStream = ({
         if (!isCurrent()) return // torn down while awaiting
         if (!snapshot) {
           onStatus('error')
+          onUnavailable()
           term.write('\r\n\x1b[31mError: session is no longer available\x1b[0m\r\n')
           return
         }

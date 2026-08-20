@@ -11,6 +11,7 @@ interface SessionPersistenceMenuProps {
   sessionId: string
   isAgent: boolean
   placement?: 'top' | 'bottom'
+  menuItem?: boolean
 }
 
 const OPTIONS: Array<{ value: TerminalPersistencePolicy; label: string }> = [
@@ -33,6 +34,7 @@ export default function SessionPersistenceMenu({
   sessionId,
   isAgent,
   placement = 'bottom',
+  menuItem = false,
 }: SessionPersistenceMenuProps) {
   const [policy, setPolicy] = useState<TerminalPersistencePolicy>(() =>
     getPersistencePolicy(sessionId, isAgent),
@@ -80,18 +82,22 @@ export default function SessionPersistenceMenu({
   const tooltip = activeLabel ? `Session persistence: ${activeLabel}` : 'Session persistence'
 
   return (
-    <div className="relative flex-shrink-0">
+    <div className={`relative ${menuItem ? 'w-full' : 'flex-shrink-0'}`}>
       <Tooltip content={tooltip} placement={placement}>
         <button
           ref={btnRef}
           type="button"
+          role={menuItem ? 'menuitem' : undefined}
           aria-label="Session persistence"
           aria-haspopup="menu"
           aria-expanded={open}
           onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
-          className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+          className={menuItem
+            ? 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover'
+            : 'w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors'}
         >
           <Save className="w-3 h-3" />
+          {menuItem && <span>Session persistence</span>}
         </button>
       </Tooltip>
       {open && (

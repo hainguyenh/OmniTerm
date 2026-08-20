@@ -54,3 +54,4 @@ coverage-rust/
 lcov.info
 push-hainguyenh.*
 target/
+cov-html7/
