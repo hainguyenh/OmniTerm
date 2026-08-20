@@ -9,6 +9,8 @@ describe('MainLayout shortcut defaults', () => {
   it('includes the shortcuts added by the rebased settings schema', () => {
     expect(DEFAULT_SHORTCUTS.zoomReset).toBe('Ctrl+0')
     expect(DEFAULT_SHORTCUTS.layout3).toBe('Ctrl+3')
+    expect(DEFAULT_SHORTCUTS.layout5).toBe('Ctrl+5')
+    expect(DEFAULT_SHORTCUTS.layout7).toBe('Ctrl+7')
     expect(DEFAULT_SHORTCUTS.closeTab).toBe('Ctrl+W')
   })
 })

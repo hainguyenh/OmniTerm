@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { matchShortcut } from '../utils/keyboard'
 import { resolveShortcuts, survivesTerminalFocus } from '../utils/shortcuts'
 
-const LAYOUT_KEYS = ['layout1', 'layout2', 'layout3', 'layout4', 'layout6', 'layout8'] as const
+const LAYOUT_KEYS = ['layout1', 'layout2', 'layout3', 'layout4', 'layout5', 'layout6', 'layout7', 'layout8'] as const
 
 export interface UseAppShortcutsInput {
   appSettings: AppSettings

@@ -23,6 +23,13 @@ describe("resolveShortcuts", () => {
     expect(resolved.closeTab).toBe("Ctrl+Shift+W");
     expect(resolved.zoomIn).toBe(FALLBACK_SHORTCUTS.zoomIn);
   });
+
+  it("provides shortcuts for the 5- and 7-pane layouts", () => {
+    expect(FALLBACK_SHORTCUTS.layout5).toBe("Ctrl+5");
+    expect(FALLBACK_SHORTCUTS.layout7).toBe("Ctrl+7");
+    expect(resolveShortcuts({}).layout5).toBe("Ctrl+5");
+    expect(resolveShortcuts({}).layout7).toBe("Ctrl+7");
+  });
 });
 
 describe("survivesTerminalFocus", () => {
