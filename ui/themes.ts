@@ -79,7 +79,7 @@ export interface AppTheme {
 }
 
 /** Pane-layout column counts. Single source for both the type and runtime validation. */
-export const LAYOUT_MODES = [1, 2, 3, 4, 6, 8] as const
+export const LAYOUT_MODES = [1, 2, 3, 4, 5, 6, 7, 8] as const
 
 export type LayoutMode = (typeof LAYOUT_MODES)[number]
 

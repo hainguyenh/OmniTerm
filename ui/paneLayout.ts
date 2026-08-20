@@ -17,9 +17,9 @@ export interface SplitRatios {
   main: number
   /** The secondary split: where the two stacked panes of a 3-pane layout meet. */
   cross: number
-  /** Cumulative vertical boundaries for the 4/6/8-pane grids. */
+  /** Cumulative vertical boundaries for the 4/5/6/7/8-pane grids. */
   columns?: number[]
-  /** Cumulative horizontal boundaries for the 4/6/8-pane grids. */
+  /** Cumulative horizontal boundaries for the 4/5/6/7/8-pane grids. */
   rows?: number[]
 }
 
@@ -66,7 +66,7 @@ function normalizeBoundaries(saved: unknown): number[] | undefined {
 }
 
 function gridColumnCount(mode: LayoutMode): number {
-  return mode === 4 ? 2 : mode === 6 ? 3 : 4
+  return mode === 4 || mode === 5 ? 2 : mode === 6 || mode === 7 ? 3 : 4
 }
 
 function evenBoundaries(count: number): number[] {
@@ -90,7 +90,7 @@ const pct = (fraction: number): string => `${(fraction * 100).toFixed(3)}%`
  * Percentage rect (left/top/width/height) for pane `i`.
  *
  * 1 → full; 2 → two columns or rows split at `main`; 3 → one full-height (or full-width) pane at
- * `main` with the other two stacked and split at `cross`; 4 → 2×2; 6 → 3×2; 8 → 4×2.
+ * `main` with the other two stacked and split at `cross`; 4 → 2×2; 5/6 → 3×2; 7/8 → 4×2.
  */
 export function paneRect(
   i: number,
@@ -134,6 +134,37 @@ export function paneRect(
     }
     if (i === 1) return { left: stackLeft, top: '0%', width: stackWidth, height: pct(cross) }
     return { left: stackLeft, top: pct(cross), width: stackWidth, height: pct(1 - cross) }
+  }
+
+  if (mode === 5 || mode === 7) {
+    const subColumns = mode === 5 ? 2 : 3
+    const subColumnBoundaries = evenBoundaries(subColumns)
+    const subIndex = i - 1
+    if (split3Style === 'top') {
+      if (i === 0) return { left: '0%', top: '0%', width: '100%', height: pct(main) }
+      const column = subIndex % subColumns
+      const row = Math.floor(subIndex / subColumns)
+      return {
+        left: pct(column === 0 ? 0 : subColumnBoundaries[column - 1]),
+        top: pct(main + row * (1 - main) / 2),
+        width: pct((subColumnBoundaries[column] ?? 1) - (subColumnBoundaries[column - 1] ?? 0)),
+        height: pct((1 - main) / 2),
+      }
+    }
+    const onLeft = split3Style === 'left'
+    if (i === 0) {
+      return onLeft
+        ? { left: '0%', top: '0%', width: pct(main), height: '100%' }
+        : { left: pct(1 - main), top: '0%', width: pct(main), height: '100%' }
+    }
+    const column = subIndex % subColumns
+    const row = Math.floor(subIndex / subColumns)
+    return {
+      left: pct((onLeft ? main : 0) + (subColumnBoundaries[column - 1] ?? 0) * (1 - main)),
+      top: pct(row / 2),
+      width: pct(((subColumnBoundaries[column] ?? 1) - (subColumnBoundaries[column - 1] ?? 0)) * (1 - main)),
+      height: '50%',
+    }
   }
 
   const { columns, rows } = gridBoundaries(mode, ratios)
@@ -217,6 +248,33 @@ export function paneDividers(
         axis: 'y',
         style: { left: onLeft ? pct(main) : '0%', top: pct(cross), width: pct(1 - main) },
       },
+    ]
+  }
+
+  if (mode === 5 || mode === 7) {
+    const subWidth = 1 - main
+    const { columns, rows } = gridBoundaries(mode, ratios)
+    if (split3Style === 'top') {
+      return [
+        { key: 'main', axis: 'y', style: { left: '0%', top: pct(main), width: '100%' } },
+        ...columns.map((position, index) => ({
+          key: `column-${index + 1}` as PaneDividerKey,
+          axis: 'x' as const,
+          style: { left: pct(position), top: pct(main), height: pct(1 - main) },
+        })),
+        { key: 'row-1', axis: 'y', style: { left: '0%', top: pct(main + (1 - main) * rows[0]), width: '100%' } },
+      ]
+    }
+    const onLeft = split3Style === 'left'
+    const stackLeft = onLeft ? main : 0
+    return [
+      { key: 'main', axis: 'x', style: { left: pct(onLeft ? main : 1 - main), top: '0%', height: '100%' } },
+      ...columns.map((position, index) => ({
+        key: `column-${index + 1}` as PaneDividerKey,
+        axis: 'x' as const,
+        style: { left: pct(stackLeft + subWidth * position), top: '0%', height: '100%' },
+      })),
+      { key: 'row-1', axis: 'y', style: { left: pct(stackLeft), top: '50%', width: pct(subWidth) } },
     ]
   }
 
