@@ -59,7 +59,6 @@ When the Workspaces activity mounts or any workspace/tree/filter/pin/move/import
 - `WorkspaceSearchBar` — owned by this spec.
 - `WorkspaceTreeToolbar` — owned by this spec.
 - `WorkspaceShowMore` — owned by this spec.
-- `WorkspaceSelect` — owned by this spec.
 - `WorkspaceAddConnectionButton` — owned by this spec.
 - `useWorkspaceMutations` — owned by this spec.
 - `useWorkspaceScan` — owned by this spec.
@@ -78,7 +77,6 @@ When the Workspaces activity mounts or any workspace/tree/filter/pin/move/import
 | `WorkspaceSearchBar` | Render tree text search. | Quick tree narrowing. | Update query. | Workspace tree. |
 | `WorkspaceTreeToolbar` | Render tree controls. | Central tree actions. | Bind expand/filter/menu callbacks. | Tree active. |
 | `WorkspaceShowMore` | Load next page. | Large folder scalability. | Call paged scan callback. | Page has more. |
-| `WorkspaceSelect` | Select workspace for contextual action. | Reusable ordered selector. | Render eligible rows. | Action requires workspace. |
 | `WorkspaceAddConnectionButton` | Start project connection flow. | Contextual connection creation. | Open form with workspace/folder. | Workspace connections. |
 | `useWorkspaceMutations` | Own create/import/add/move/rename/pin callbacks. | Centralize authoritative list synchronization. | Invoke API then refresh/replace state. | Workspace mutation. |
 | `useWorkspaceScan` | Own skeleton/page scan state. | Separate async scanning from JSX. | Invoke scan endpoints and merge results. | Selection/expansion. |

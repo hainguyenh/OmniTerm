@@ -50,9 +50,12 @@ From session start through live IO, resize, status changes, disconnect and close
 
 - `TerminalView` — owned by this spec.
 - `SessionTabs` — owned by this spec.
+- `SessionUnavailableOverlay` — owned by this spec.
+- `useSessionPersistence` / `useSessionRestore` — owned by this spec.
 - `createSessionChannel` — owned by this spec.
 - `attachTerminalStream` — owned by this spec.
 - `createTerminalOptions` — owned by this spec.
+- `saveScrollback` / `loadScrollback` — owned by this spec.
 
 ## Components and functions
 
@@ -60,9 +63,12 @@ From session start through live IO, resize, status changes, disconnect and close
 |---|---|---|---|---|
 | `TerminalView` | Render live xterm. | Interactive terminal UX. | Attach stream/input/resize/theme lifecycle. | Terminal pane active. |
 | `SessionTabs` | Select/close sessions. | Navigate concurrent sessions. | Render stable session IDs as tabs. | Sessions exist. |
+| `SessionUnavailableOverlay` | Render unavailable session overlay and restart button. | Feedback and recovery when session exits or disconnects. | Displays recovery banner with restart action. | Attached session unavailable. |
+| `useSessionPersistence` / `useSessionRestore` | Snapshot and restore live session state. | Preserve active tabs, view groups, and focused pane across restarts. | Snapshots layout to localStorage and restores on startup. | Layout changes and app startup. |
 | `createSessionChannel` | Bind native session event channel. | Centralize subscription cleanup. | Subscribe callbacks by session ID. | Terminal attaches. |
 | `attachTerminalStream` | Feed backend output to xterm. | Separate transport from view. | Subscribe/buffer/chunk terminal writes. | Output arrives. |
 | `createTerminalOptions` | Build xterm configuration. | Consistent fonts/cursor/options. | Map settings/defaults. | Terminal creation. |
+| `saveScrollback` / `loadScrollback` | Cache terminal scrollback in IndexedDB. | Preserve terminal buffer history across app restarts. | Serializes and restores PTY output chunk buffers. | Output chunk received and tab restore. |
 
 ## State and data
 
@@ -71,6 +77,7 @@ From session start through live IO, resize, status changes, disconnect and close
 - Terminal instance
 - Status/metrics
 - Stream subscription
+- Persisted layout snapshots and scrollback buffers
 
 ## Errors and edge cases
 
@@ -85,10 +92,16 @@ From session start through live IO, resize, status changes, disconnect and close
 - Terminal/session component tests
 - IPC runtime tests
 - Terminal utility tests
+- Session persistence and restore tests
 
 ## Source map
 
 - `ui/components/TerminalView.tsx`
 - `ui/components/SessionTabs.tsx`
+- `ui/components/SessionUnavailableOverlay.tsx`
+- `ui/hooks/useSessionPersistence.ts`
+- `ui/hooks/useSessionRestore.ts`
 - `ui/utils/sessionChannel.ts`
 - `ui/utils/terminalStream.ts`
+- `ui/utils/scrollbackStore.ts`
+- `ui/utils/sessionStore.ts`
