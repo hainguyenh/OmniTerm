@@ -31,6 +31,13 @@ const IGNORED_FILENAME_REGEX = [
   '(?:^|[/\\\\])crates[/\\\\]session-core[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])crates[/\\\\](?:app-core|app-protocol)[/\\\\]src[/\\\\]test_support\\.rs$',
 ].join('|')
+const NON_PRODUCT_FILENAME_REGEX = [
+  '(?:^|[/\\\\])(?:tests?[/\\\\]|[^/\\\\]+_tests?\\.rs$)',
+  'cargo[/\\\\]registry',
+].join('|')
+const COVERAGE_FILENAME_REGEX = new RegExp(
+  `${IGNORED_FILENAME_REGEX}|${NON_PRODUCT_FILENAME_REGEX}`,
+)
 // cargo-llvm-cov injects `--cfg=coverage` into RUSTFLAGS by default. By
 // OMITTING `--no-cfg-coverage` we let that default apply, so source-level
 // `#[cfg_attr(coverage, coverage(off))]` markers in crates/session-core fire
@@ -67,6 +74,34 @@ function run(args) {
   if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
 }
 
+function filterCoverageReport(report) {
+  const data = report.data?.[0]
+  if (!data || !Array.isArray(data.files)) return report
+
+  const files = data.files.filter((file) => !COVERAGE_FILENAME_REGEX.test(file.filename))
+  const totals = {}
+  for (const metric of ['branches', 'functions', 'instantiations', 'lines', 'mcdc', 'regions']) {
+    const summaries = files
+      .map((file) => file.summary?.[metric])
+      .filter((summary) => summary !== undefined)
+    const count = summaries.reduce((total, summary) => total + summary.count, 0)
+    const covered = summaries.reduce((total, summary) => total + summary.covered, 0)
+    const total = {
+      count,
+      covered,
+      percent: count === 0 ? 100 : (covered * 100) / count,
+    }
+    if (summaries.some((summary) => 'notcovered' in summary)) {
+      total.notcovered = count - covered
+    }
+    totals[metric] = total
+  }
+
+  data.files = files
+  data.totals = totals
+  return report
+}
+
 try {
   fs.rmSync(outputDir, { recursive: true, force: true })
   fs.mkdirSync(outputDir, { recursive: true })
@@ -78,7 +113,10 @@ try {
   // test run's profraws so the final report merges both; llvm-cov run requires a report when
   // --no-clean is set, so its stdout table is just discarded -- only coverage data is collected.
   run(['llvm-cov', 'run', ...COVERAGE_BUILD_FLAGS, '--no-clean', '--bin', 'omniterm', '--', '--coverage-smoke'])
-  run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--json', '--summary-only', '--output-path', path.join(outputDir, 'coverage-summary.json')])
+  const jsonPath = path.join(outputDir, 'coverage-summary.json')
+  run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--json', '--summary-only', '--output-path', jsonPath])
+  const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
+  fs.writeFileSync(jsonPath, `${JSON.stringify(filterCoverageReport(report))}\n`)
   run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--lcov', '--output-path', path.join(outputDir, 'lcov.info')])
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))

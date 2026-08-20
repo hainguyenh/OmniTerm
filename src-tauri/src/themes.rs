@@ -210,7 +210,7 @@ mod tests {
         if let Err(ref e) = save_result {
             assert!(!e.contains("missing string"), "unexpected id error: {e}");
         }
-        assert!(delete_result.is_ok() || delete_result.is_err());
+        let _ = delete_result;
     }
 
     #[test]
