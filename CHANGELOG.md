@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [v1.1.6] — 2026-08-20
+## [v0.1.6] — 2026-08-20
 
 ### Terminal & Sessions
 - **Interactive link and path menu**: Modifier-clicking (Ctrl on Windows/Linux, Cmd on macOS) on detected URLs or filesystem paths opens an overlay menu to copy the link/path or open it in the default browser or OS handler. The legacy right-click action remains dedicated to copying selections and pasting.

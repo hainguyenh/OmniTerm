@@ -1,6 +1,6 @@
 [package]
 name = "omniterm"
-version = "1.1.6"
+version = "0.1.6"
 description = "OmniTerm: a multi-window terminal hub"
 authors = ["OmniTerm Contributors"]
 license = "Apache-2.0"
