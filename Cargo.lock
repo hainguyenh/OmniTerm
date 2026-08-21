@@ -2629,7 +2629,7 @@ dependencies = [
 
 [[package]]
 name = "omniterm"
-version = "1.1.6"
+version = "0.1.6"
 dependencies = [
  "dashmap",
  "dunce",
@@ -2661,7 +2661,7 @@ dependencies = [
 
 [[package]]
 name = "omniterm-core"
-version = "1.1.6"
+version = "0.1.6"
 dependencies = [
  "dunce",
  "log",
@@ -2675,7 +2675,7 @@ dependencies = [
 
 [[package]]
 name = "omniterm-protocol"
-version = "1.1.6"
+version = "0.1.6"
 dependencies = [
  "serde",
  "serde_json",
