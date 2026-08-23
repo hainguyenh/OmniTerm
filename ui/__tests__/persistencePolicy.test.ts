@@ -1,31 +1,29 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+/** @vitest-environment jsdom */
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
   getPersistencePolicy,
-  hasExplicitPersistencePolicy,
+  isPersistencePolicy,
   setPersistencePolicyOverride,
 } from '../utils/persistencePolicy'
 
-describe('terminal persistence policy', () => {
-  let storage: Record<string, string>
-
+describe('persistencePolicy', () => {
   beforeEach(() => {
-    storage = {}
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => storage[key] ?? null,
-      setItem: (key: string, value: string) => { storage[key] = value },
-    })
+    localStorage.clear()
   })
 
-  afterEach(() => vi.unstubAllGlobals())
-
-  it('defaults agents to reboot recovery and ordinary terminals to keep-running', () => {
-    expect(getPersistencePolicy('agent-1', true)).toBe('recover-after-reboot')
-    expect(getPersistencePolicy('shell-1', false)).toBe('keep-running')
+  it('accepts freeze-while-closed as an override', () => {
+    setPersistencePolicyOverride('tab-9', 'freeze-while-closed')
+    expect(getPersistencePolicy('tab-9')).toBe('freeze-while-closed')
   })
 
-  it('persists an explicit per-session override', () => {
-    setPersistencePolicyOverride('agent-1', 'close-with-app')
-    expect(hasExplicitPersistencePolicy('agent-1')).toBe(true)
-    expect(getPersistencePolicy('agent-1', true)).toBe('close-with-app')
+  it('defaults every terminal to close-with-app', () => {
+    expect(getPersistencePolicy('tab-shell')).toBe('close-with-app')
+    expect(getPersistencePolicy('tab-agent')).toBe('close-with-app')
+  })
+
+  it('validates policy values strictly', () => {
+    expect(isPersistencePolicy('freeze-while-closed')).toBe(true)
+    expect(isPersistencePolicy('freeze')).toBe(false)
+    expect(isPersistencePolicy(null)).toBe(false)
   })
 })

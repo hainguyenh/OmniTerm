@@ -44,7 +44,10 @@ async fn reboot_generation_replays_durable_tail_before_new_output() {
         .find(|session| session.id == "session")
         .expect("recover-after-reboot record should survive daemon restart");
     assert_eq!(interrupted.generation, 1);
-    assert_eq!(interrupted.lifecycle, session_protocol::SessionLifecycle::Interrupted);
+    assert_eq!(
+        interrupted.lifecycle,
+        session_protocol::SessionLifecycle::Interrupted
+    );
     assert_eq!(interrupted.policy, PersistencePolicy::RecoverAfterReboot);
 
     restarted

@@ -51,7 +51,6 @@ describe('SessionControlButtons', () => {
           conn={local}
           sessionId="s1"
           busy
-          isAgent={false}
           detach="detach"
           onToggleDetach={vi.fn()}
           onToggleFullscreen={vi.fn()}
@@ -96,7 +95,6 @@ describe('SessionControlButtons', () => {
           conn={local}
           sessionId="s1"
           busy
-          isAgent={false}
           detach={null}
           onToggleDetach={vi.fn()}
           appearance={{
@@ -157,7 +155,6 @@ describe('SessionControlButtons', () => {
             conn={local}
             sessionId="s1"
             busy
-            isAgent={false}
             detach="detach"
             onToggleDetach={vi.fn()}
             onToggleFullscreen={vi.fn()}
@@ -209,7 +206,6 @@ describe('SessionControlButtons', () => {
             conn={local}
             sessionId="s1"
             busy
-            isAgent={false}
             detach="detach"
             onToggleDetach={vi.fn()}
             onToggleFullscreen={vi.fn()}
@@ -234,7 +230,6 @@ describe('SessionControlButtons', () => {
         conn={local}
         sessionId="s1"
         busy
-        isAgent
         detach="detach"
         onToggleDetach={vi.fn()}
         fullscreen={false}
@@ -256,7 +251,6 @@ describe('SessionControlButtons', () => {
         conn={local}
         sessionId="s1"
         busy
-        isAgent={false}
         detach={null}
         onToggleDetach={vi.fn()}
       />,
@@ -271,7 +265,6 @@ describe('SessionControlButtons', () => {
         conn={ssh}
         sessionId="s2"
         busy
-        isAgent={false}
         detach={null}
         onToggleDetach={vi.fn()}
       />,
@@ -288,7 +281,6 @@ describe('SessionControlButtons', () => {
         conn={local}
         sessionId="s1"
         busy={false}
-        isAgent={false}
         detach={null}
         onToggleDetach={vi.fn()}
       />,
@@ -303,7 +295,6 @@ describe('SessionControlButtons', () => {
         conn={rdp}
         sessionId="s3"
         busy={false}
-        isAgent={false}
         detach="detach"
         onToggleDetach={vi.fn()}
         fullscreen={false}

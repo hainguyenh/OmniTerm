@@ -182,7 +182,8 @@ impl SessionDaemonClient {
 
     pub async fn disconnect(&self, session_id: String) -> Result<(), String> {
         self.ensure_running().await?;
-        self.expect_ok(ClientRequest::Disconnect { session_id }).await
+        self.expect_ok(ClientRequest::Disconnect { session_id })
+            .await
     }
 
     pub async fn set_policy(

@@ -111,7 +111,7 @@ describe('sessionStore', () => {
       expect(loaded?.activeTabs[0]).toMatchObject({
         sessionId: 'agent-tab',
         generation: 1,
-        persistencePolicy: 'recover-after-reboot',
+        persistencePolicy: 'close-with-app',
       })
     })
 

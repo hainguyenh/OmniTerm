@@ -19,6 +19,15 @@ pub(crate) struct SessionManifest {
     pub busy: bool,
     pub launched_with_command: bool,
     pub ssh: bool,
+    /// True while the session tree is suspended under FreezeWhileClosed.
+    #[serde(default)]
+    pub(crate) frozen: bool,
+    /// Root pid recorded at freeze time, used by the boot orphan sweep.
+    #[serde(default)]
+    pub(crate) pid: Option<u32>,
+    /// Root process start time at freeze time; guards the sweep against pid reuse.
+    #[serde(default)]
+    pub(crate) start_time: Option<u64>,
 }
 
 impl SessionManifest {
@@ -41,6 +50,9 @@ impl SessionManifest {
             busy,
             launched_with_command,
             ssh,
+            frozen: false,
+            pid: None,
+            start_time: None,
         }
     }
 
@@ -55,6 +67,7 @@ impl SessionManifest {
             busy: self.busy,
             launched_with_command: self.launched_with_command,
             ssh: self.ssh,
+            frozen: self.frozen,
         }
     }
 }
@@ -91,8 +104,8 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8], label: &str) -> Result<(), 
         std::process::id(),
         uuid::Uuid::new_v4()
     ));
-    let mut file = fs::File::create(&temp)
-        .map_err(|error| format!("Could not create {label}: {error}"))?;
+    let mut file =
+        fs::File::create(&temp).map_err(|error| format!("Could not create {label}: {error}"))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

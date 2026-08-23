@@ -133,7 +133,7 @@ function createTauriAPI(): any {
       // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
       onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
       listLocalSessions: () => invoke<any[]>('list_local_sessions').catch(() => []),
-      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') =>
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed') =>
         invoke<void>('set_session_persistence', { id, policy }),
 
       // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt

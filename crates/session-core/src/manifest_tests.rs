@@ -97,3 +97,43 @@ fn atomic_write_round_trips_bytes_through_replace() {
     atomic_write(&target, b"second", "coverage sink").unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"second");
 }
+
+#[test]
+fn manifest_without_freeze_fields_reads_as_not_frozen() {
+    let legacy = r#"{
+        "version": 1,
+        "id": "legacy",
+        "generation": 1,
+        "policy": "keep-running",
+        "lifecycle": "live",
+        "label": "PowerShell",
+        "busy": false,
+        "launchedWithCommand": false,
+        "ssh": false
+    }"#;
+    let parsed: SessionManifest = serde_json::from_str(legacy).unwrap();
+    assert!(!parsed.frozen);
+    assert!(parsed.start_time.is_none());
+    assert!(parsed.pid.is_none());
+}
+
+#[test]
+fn manifest_freeze_fields_round_trip() {
+    let mut record = SessionManifest::live(
+        "frozen-one".to_string(),
+        3,
+        PersistencePolicy::FreezeWhileClosed,
+        "PowerShell".to_string(),
+        false,
+        false,
+        false,
+    );
+    record.frozen = true;
+    record.pid = Some(4242);
+    record.start_time = Some(1_700_000_000);
+    let data = serde_json::to_vec(&record).unwrap();
+    let parsed: SessionManifest = serde_json::from_slice(&data).unwrap();
+    assert!(parsed.frozen);
+    assert_eq!(parsed.pid, Some(4242));
+    assert_eq!(parsed.start_time, Some(1_700_000_000));
+}

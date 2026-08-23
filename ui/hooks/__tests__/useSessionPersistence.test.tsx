@@ -10,7 +10,7 @@ function makeStoredSnapshot(overrides: Partial<SessionSnapshot> = {}): SessionSn
   return {
     version: SNAPSHOT_VERSION,
     activeTabs: [{
-      id: 'tab-1', sessionId: 'tab-1', generation: 1, persistencePolicy: 'keep-running',
+      id: 'tab-1', sessionId: 'tab-1', generation: 1, persistencePolicy: 'close-with-app',
       connId: 'adhoc-1', name: 'PowerShell',
     }],
     ephemeralConns: [{ id: 'adhoc-1', name: 'PowerShell', type: 'LOCAL', ephemeral: true, shell: 'powershell' }],
@@ -90,10 +90,10 @@ describe('useSessionPersistence', () => {
     }))
 
     expect(loadSnapshot()?.activeTabs[0]).toMatchObject({
-      id: 'tab-1', sessionId: 'tab-1', persistencePolicy: 'keep-running',
+      id: 'tab-1', sessionId: 'tab-1', persistencePolicy: 'close-with-app',
     })
     expect(listLocalSessions).not.toHaveBeenCalled()
-    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-1', 'keep-running')
+    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-1', 'close-with-app')
   })
 
   it('flushes the latest pane layout on pagehide without waiting for the debounce', () => {
@@ -123,14 +123,14 @@ describe('useSessionPersistence', () => {
 
     const saved = loadSnapshot()
     expect(saved?.activeTabs[0]).toMatchObject({
-      id: 'tab-1', sessionId: 'tab-1', generation: 7, persistencePolicy: 'keep-running',
+      id: 'tab-1', sessionId: 'tab-1', generation: 7, persistencePolicy: 'close-with-app',
       scrollbackKey: 'sb-tab-1',
     })
     expect(saved?.ephemeralConns[0]).toMatchObject({ type: 'LOCAL', ephemeral: true, shell: 'powershell' })
-    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-1', 'keep-running')
+    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-1', 'close-with-app')
   })
 
-  it('defaults AI agent tabs to reboot recovery with a safe resume command', async () => {
+  it('defaults agent tabs to close-with-app but still checkpoints a safe resume command', async () => {
     const agentConn = {
       id: 'adhoc-agent', name: 'claude', type: 'LOCAL' as const, host: '', port: '', user: '',
       shell: 'powershell' as const, localCwd: 'F:/repo',
@@ -144,9 +144,9 @@ describe('useSessionPersistence', () => {
     await flushDebounce()
 
     const saved = loadSnapshot()
-    expect(saved?.activeTabs[0].persistencePolicy).toBe('recover-after-reboot')
+    expect(saved?.activeTabs[0].persistencePolicy).toBe('close-with-app')
     expect(saved?.ephemeralConns[0].initialCommand).toBe('claude --continue')
-    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-agent', 'recover-after-reboot')
+    expect(setPersistencePolicy).toHaveBeenCalledWith('tab-agent', 'close-with-app')
   })
 
   it('persists SSH terminals and keeps them in pane layout metadata', async () => {

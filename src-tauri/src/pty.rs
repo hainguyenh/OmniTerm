@@ -194,7 +194,7 @@ pub async fn start_local_session<R: Runtime>(
     let policy = previous
         .as_ref()
         .map(|session| session.policy)
-        .unwrap_or(PersistencePolicy::KeepRunning);
+        .unwrap_or(PersistencePolicy::CloseWithApp);
     let summary = client
         .create(id.clone(), generation, policy, spec)
         .await?;

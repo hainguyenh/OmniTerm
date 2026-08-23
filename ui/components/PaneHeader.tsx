@@ -144,7 +144,6 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               conn={conn}
               sessionId={sessionId}
               busy={busy}
-              isAgent={formattedTitle.isAgent}
               detach={detach}
               onToggleDetach={onToggleDetach}
               detachWhere="pane"

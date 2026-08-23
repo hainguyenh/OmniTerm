@@ -91,7 +91,7 @@ describe('PaneHeader remaining behavior', () => {
 
   it('offers all Hybrid persistence modes from a button popover and persists a selection', () => {
     setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
-    // Default for a non-agent SSH pane is keep-running per persistencePolicy.ts.
+    // Default for every terminal pane is close-with-app per persistencePolicy.ts.
     const trigger = screen.getByRole('button', { name: 'Session persistence' })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
@@ -102,9 +102,9 @@ describe('PaneHeader remaining behavior', () => {
     const keep = screen.getByRole('menuitemradio', { name: 'Keep running' })
     const recover = screen.getByRole('menuitemradio', { name: 'Recover after reboot' })
     expect(close).toBeInTheDocument()
-    // 'keep-running' is the default-effective policy, so it shows the radio check.
-    expect(keep).toHaveAttribute('aria-checked', 'true')
-    expect(close).toHaveAttribute('aria-checked', 'false')
+    // 'close-with-app' is the default-effective policy, so it shows the radio check.
+    expect(close).toHaveAttribute('aria-checked', 'true')
+    expect(keep).toHaveAttribute('aria-checked', 'false')
     expect(recover).toHaveAttribute('aria-checked', 'false')
 
     fireEvent.click(recover)
