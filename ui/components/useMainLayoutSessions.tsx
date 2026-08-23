@@ -476,7 +476,23 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
         ? getShellLabel(shellOptions ?? [], conn.shell)
         : undefined
       const paneBusy = conn?.type === 'LOCAL' && sessionId ? (activity[sessionId] ?? false) : undefined
-      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} shellLabel={paneShellLabel} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={(anchor) => { if (panePicker === paneIndex) setPanePicker(null); else { setPanePickerAnchor(anchor); setPanePicker(paneIndex) } }} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance} busy={paneBusy}/>
+      // Live working directory from OSC 7 / OSC 9;9. When it sits inside (or is) an aliased
+      // workspace folder, show that alias instead of the raw basename.
+      const rawCwd = sessionId ? base.sessionCwds[sessionId] : undefined
+      let liveFolder: string | undefined
+      if (rawCwd) {
+        const normalized = rawCwd.replace(/[\\/]+$/, '')
+        const aliased = base.workspaces
+          .flatMap(workspace => workspace.folders)
+          .find(folder => {
+            const root = folder.path.replace(/[\\/]+$/, '')
+            return normalized === root || normalized.startsWith(root + '/') || normalized.startsWith(root + '\\')
+          })
+        liveFolder = aliased
+          ? aliased.name
+          : normalized.slice(Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\')) + 1)
+      }
+      return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} liveFolder={liveFolder} shellLabel={paneShellLabel} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={(anchor) => { if (panePicker === paneIndex) setPanePicker(null); else { setPanePickerAnchor(anchor); setPanePicker(paneIndex) } }} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance} busy={paneBusy}/>
   }
   return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
 }

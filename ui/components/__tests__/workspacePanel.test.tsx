@@ -16,7 +16,8 @@ describe('WorkspacePanel', () => {
     await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument())
   })
 
-  it('suppresses the browser context menu outside supported workspace targets', async () => {
+  
+it('suppresses the browser context menu outside supported workspace targets', async () => {
     mockOmnitermAPI({ workspace: { list: async () => [WS] } })
     const { container } = render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await screen.findByText('my-project')
@@ -131,7 +132,7 @@ describe('WorkspacePanel', () => {
 
     fireEvent.contextMenu(folder)
     const menu = screen.getByRole('group', { name: 'Folder filter' })
-    expect(menu).toHaveTextContent('FILTER my-project Folder')
+    expect(menu).toHaveTextContent('FILTER folder#1 Folder')
     expect(within(menu).getByLabelText('Same as workspace')).toBeChecked()
     fireEvent.click(within(menu).getByLabelText('Scripts only'))
 

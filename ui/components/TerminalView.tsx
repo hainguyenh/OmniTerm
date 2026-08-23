@@ -22,7 +22,7 @@ import type { TerminalViewProps } from './TerminalView.types'
 
 export { DEFAULT_MONO_STACK }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const [isFocused, setIsFocused] = React.useState(false)
@@ -63,6 +63,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
   const onTitleChangeRef = useRef(onTitleChange)
   onTitleChangeRef.current = onTitleChange
+
+  const onCwdChangeRef = useRef(onCwdChange)
+  onCwdChangeRef.current = onCwdChange
 
   const onExitRef = useRef(onExit)
   onExitRef.current = onExit
@@ -131,6 +134,37 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => onTitleChangeRef.current?.(title))
       : { dispose: () => {} }
+    // Shell-reported working directory. OSC 7 is the standards-track form
+    // (`file://host/path`); Windows shells and pwsh emit the OSC 9;9
+    // notification instead. Both feed onCwdChange; shells that emit neither
+    // simply never set a cwd label.
+    const cwdDisposables: Array<{ dispose: () => void }> = []
+    const parser = (term as unknown as {
+      parser?: {
+        registerOscHandler?: (
+          ident: number,
+          callback: (data: string) => boolean | Promise<boolean>,
+        ) => { dispose: () => void }
+      }
+    }).parser
+    if (parser?.registerOscHandler && onCwdChangeRef.current !== undefined) {
+      const report = (rawPath: string) => {
+        const cleaned = decodeURIComponent(rawPath).trim()
+        if (!cleaned) return true
+        const withoutScheme = cleaned.startsWith('file://')
+          ? cleaned.replace(/^file:\/\/[^/]*/, '')
+          : cleaned
+        if (withoutScheme) onCwdChangeRef.current?.(withoutScheme)
+        return false
+      }
+      const osc7 = parser.registerOscHandler(7, data => report(data))
+      // ConEmu/Windows style CWD notification: ESC ] 9 ; 9 ; "path" ESC \ — the
+      // handler for ident 9 receives everything after the first `9;`.
+      const osc999 = parser.registerOscHandler(9, data =>
+        data.startsWith('9;') ? report(data.slice(2).replace(/^"|"$/g, '')) : false,
+      )
+      cwdDisposables.push(osc7, osc999)
+    }
     const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
@@ -369,6 +403,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
+      for (const disposable of cwdDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
       termEl.removeEventListener('mousedown', onLinkClick)
       termEl.removeEventListener('paste', onNativePaste, true)

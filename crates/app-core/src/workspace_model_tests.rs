@@ -267,3 +267,18 @@ fn namespace_path_with_slash_only_relative_returns_folder_id() {
     assert_eq!(namespace_path("root", "/"), "root");
     assert_eq!(namespace_path("f", "///"), "f");
 }
+
+#[test]
+fn rename_folder_sets_alias_and_rejects_blank_or_unknown_ids() {
+    let mut ws = workspace("ws", None, 0);
+    rename_folder(&mut ws, "folder-ws", "  Backend API  ").expect("alias applies to known folder");
+    assert_eq!(ws.folders[0].name, "Backend API");
+    // Path and id are untouched: the alias is display-only.
+    assert_eq!(ws.folders[0].path, "/tmp");
+
+    let err = rename_folder(&mut ws, "folder-ws", "   ").expect_err("blank alias is rejected");
+    assert!(err.contains("cannot be empty"));
+
+    let err = rename_folder(&mut ws, "folder-missing", "X").expect_err("unknown folder is rejected");
+    assert!(err.contains("Unknown workspace folder"));
+}

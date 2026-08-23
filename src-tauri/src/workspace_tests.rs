@@ -2,6 +2,7 @@
 //! the module that owns them; workspace-scoped connection profiles in workspace_connections_tests.rs.
 
 use super::*;
+use crate::workspace_folders::{add_workspace_folder, remove_workspace_folder};
 
 #[test]
 fn workspaces_serialize_with_camel_case_fields() {

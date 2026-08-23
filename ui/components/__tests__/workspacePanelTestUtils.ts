@@ -2,7 +2,7 @@ import { vi } from 'vitest'
 import type { WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
 import { mockOmnitermAPI } from '../../testUtils'
 
-export const WS = { id: 'ws#1', name: 'my-project', folders: [{ id: 'folder#1', name: 'my-project', path: 'C:/proj' }], order: 0, pins: [] }
+export const WS = { id: 'ws#1', name: 'my-project', folders: [{ id: 'folder#1', name: 'folder#1', path: 'C:/proj' }], order: 0, pins: [] }
 
 export const dir = (id: string): WorkspaceEntry => ({
   id,

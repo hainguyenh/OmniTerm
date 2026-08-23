@@ -205,6 +205,26 @@ pub fn normalize_workspace_orders(workspaces: &mut [Workspace]) {
     }
 }
 
+/// Set a workspace folder's display alias. The path, id and every pin keep
+/// resolving to the same directory — only the rendered name changes.
+pub fn rename_folder(
+    workspace: &mut Workspace,
+    folder_id: &str,
+    name: &str,
+) -> Result<(), String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Folder name cannot be empty.".to_string());
+    }
+    let folder = workspace
+        .folders
+        .iter_mut()
+        .find(|folder| folder.id == folder_id)
+        .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\""))?;
+    folder.name = name.to_string();
+    Ok(())
+}
+
 pub fn set_entry_pinned(
     workspace: &mut Workspace,
     folder_id: &str,

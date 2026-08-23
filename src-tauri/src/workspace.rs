@@ -14,6 +14,7 @@ use app_core::workspace_model::{
     normalize_workspace_orders, parse_workspace_import, set_entry_pinned,
 };
 pub use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
+use crate::workspace_folders::{canonical_dir, new_folder};
 use std::fs;
 use std::path::Path;
 use tauri::{AppHandle, Manager, Runtime};
@@ -25,14 +26,6 @@ pub(crate) use crate::workspace_persistence::workspaces_file;
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 mod tests;
-
-fn canonical_dir(path: &str) -> Result<String, String> {
-    let canonical = dunce::canonicalize(path).map_err(|_| "That path is not a folder.".to_string())?;
-    if !canonical.is_dir() {
-        return Err("That path is not a folder.".to_string());
-    }
-    Ok(canonical.to_string_lossy().into_owned())
-}
 
 fn display_name(path: &str) -> String {
     Path::new(path)
@@ -50,14 +43,6 @@ fn next_root_order(list: &[Workspace]) -> usize {
         .map_or(0, |order| order.saturating_add(1))
 }
 
-fn new_folder(path: String, name: Option<String>) -> WorkspaceFolder {
-    WorkspaceFolder {
-        id: format!("folder#{}", Uuid::new_v4()),
-        name: name.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| display_name(&path)),
-        path,
-        color: None,
-    }
-}
 
 fn new_workspace(name: String, folders: Vec<WorkspaceFolder>, order: usize) -> Workspace {
     Workspace {
@@ -109,40 +94,6 @@ pub async fn add_workspace<R: Runtime>(app: AppHandle<R>, path: String) -> Resul
     list.push(workspace.clone());
     write_workspaces(&app, &list)?;
     Ok(workspace)
-}
-
-#[tauri::command]
-pub async fn add_workspace_folder<R: Runtime>(app: AppHandle<R>, workspace_id: String, path: String) -> Result<Workspace, String> {
-    let path = canonical_dir(&path)?;
-    let mut list = read_workspaces(&app)?;
-    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
-    if !workspace.folders.iter().any(|folder| folder.path == path) {
-        workspace.folders.push(new_folder(path, None));
-    }
-    let result = workspace.clone();
-    write_workspaces(&app, &list)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn remove_workspace_folder<R: Runtime>(
-    app: AppHandle<R>,
-    workspace_id: String,
-    folder_id: String,
-) -> Result<Workspace, String> {
-    let mut list = read_workspaces(&app)?;
-    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
-    let original_len = workspace.folders.len();
-    workspace.folders.retain(|folder| folder.id != folder_id);
-    if workspace.folders.len() == original_len {
-        return Err(format!("Unknown workspace folder \"{folder_id}\""));
-    }
-    workspace.pins.retain(|pin| pin.folder_id != folder_id);
-    let result = workspace.clone();
-    write_workspaces(&app, &list)?;
-    Ok(result)
 }
 
 #[tauri::command]
