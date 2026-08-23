@@ -45,7 +45,8 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 
 - Layout changes preserve session IDs.
 - Detach never starts a second PTY.
-- Split ratios remain bounded.
+- Split ratios remain bounded (`MIN_FRACTION`); panes are percentage geometry with no pixel floor.
+- Pane area and pane frames clip overflow (`overflow-hidden`) — an oversized xterm canvas never scrolls or paints outside the desktop.
 - 1 to 8 pane layouts are selectable via shortcuts (`Ctrl+1` to `Ctrl+8`) or UI buttons. Modes 2, 3, 5, 7 support orientation rotation on repeat clicks.
 - Window rounding applies an 8px border radius on supported platforms when not maximized.
 
