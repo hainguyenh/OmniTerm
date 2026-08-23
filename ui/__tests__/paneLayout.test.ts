@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  clampFraction, fractionFromPointer, paneAreaMinWidth, paneDividers, paneOrder, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
+  clampFraction, fractionFromPointer, paneDividers, paneOrder, paneRect, toRatios, MIN_FRACTION, DEFAULT_RATIOS,
 } from '../paneLayout'
 import type { LayoutMode } from '../themes'
 
@@ -116,16 +116,6 @@ describe('paneRect', () => {
     expect(paneOrder(3, 'top')).toEqual([0, 1, 2])
     expect(paneOrder(2, 'left', 'rows')).toEqual([0, 1])
     expect(paneOrder(4)).toEqual([0, 1, 2, 3])
-  })
-})
-
-describe('paneAreaMinWidth', () => {
-  it('uses a smaller canvas minimum without changing pane percentage geometry', () => {
-    expect(paneAreaMinWidth(5, 'left')).toBe(600)
-    expect(paneAreaMinWidth(5, 'top')).toBe(400)
-    expect(paneAreaMinWidth(7, 'left')).toBe(800)
-    expect(paneAreaMinWidth(7, 'top')).toBe(600)
-    expect(paneAreaMinWidth(8)).toBe(800)
   })
 })
 
