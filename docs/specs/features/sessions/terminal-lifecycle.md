@@ -45,6 +45,8 @@ From session start through live IO, resize, status changes, disconnect and close
 - Session ID remains stable through pane/view changes.
 - Renderer cleanup does not invent a new session.
 - Input/output are runtime stream data, not profile persistence.
+- Every terminal defaults to `close-with-app`; `keep-running`, `freeze-while-closed` and `recover-after-reboot` are per-session overrides via the persistence menu.
+- `freeze-while-closed` suspends the daemon-owned process tree on last-client exit and resumes it before any attach or mutation; explicit pane close still kills outright.
 
 ## Functionalities
 

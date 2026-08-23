@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Terminal & Sessions
+- **Freeze while closed**: New per-session persistence policy. When OmniTerm closes, the session's whole process tree is suspended (nothing runs: no CPU, no output, no file edits); reopening resumes it exactly where it stopped, with buffered output replayed first. Suspension uses `NtSuspendProcess` on Windows and `SIGSTOP` on Unix; a boot sweep reaps frozen orphans after a daemon crash.
+- **Close with OmniTerm is the default lifetime**: Every new terminal — plain shells and AI agent sessions alike — now terminates when the app closes. Keep running, Freeze while closed, and Recover after reboot remain one click away in the persistence menu, and agent resume commands (`claude --continue`, etc.) are still remembered for recovery.
+- **Safer session resume bookkeeping**: Frozen-session manifests are rewritten immediately on resume, and freeze/resume never signal a recycled process id.
+
+### Windowing & Layouts
+- **No horizontal scrollbar in split layouts**: Dragging a divider no longer scrolls the terminal desktop. Panes are pure percentage geometry that clips inside its frame — oversized terminals stay contained instead of pushing the container wide.
+
 ## [v0.1.6] — 2026-08-20
 
 ### Terminal & Sessions
