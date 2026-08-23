@@ -16,7 +16,7 @@ import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
 import { Columns2, LayoutGrid, RotateCw, Square } from 'lucide-react'
 import { paneIdentity } from '../paneIdentity'
-import { draggedPaneIndex, paneAreaMinWidth, paneRect } from '../paneLayout'
+import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
@@ -276,11 +276,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
             </div>
           )}
-          {/* Session content; hidden panes remain mounted to preserve terminal scroll state. */}
-          <div className="flex-1 min-w-0 min-h-0 mt-1 overflow-x-auto overflow-y-hidden">
+          {/* Session content; hidden panes remain mounted to preserve terminal scroll state.
+              overflow-hidden clips oversized xterm canvases instead of scrolling the whole
+              desktop — panes must stay inside the container, never scroll it. */}
+          <div className="flex-1 min-w-0 min-h-0 mt-1 overflow-hidden">
           <div
             className="relative isolate h-full"
-            style={{ minWidth: paneAreaMinWidth(layoutMode, appSettings.split3Style, appSettings.split2Style) || undefined }}
           >
             {fullscreenTabId && <FullscreenRestoreControl sessionName={activeTabs.find(tab => tab.id === fullscreenTabId)?.name} onRestore={() => setFullscreenPane(null)} />}
             {activeTabs.length === 0 ? (
@@ -299,7 +300,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   return (
                     <div
                       key={`frame-${i}`}
-                      className="absolute z-10 p-0.5"
+                      className="absolute z-10 p-0.5 overflow-hidden"
                       style={paneRect(i, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
                       onDrop={(e) => { e.preventDefault(); onPaneDrop(e, i) }}
@@ -420,7 +421,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       onDrop={split ? (e) => { e.preventDefault(); onPaneDrop(e, paneIdx) } : undefined}
                       // `pane-offscreen`, not Tailwind's `hidden`: `display: none` destroys an
                       // xterm pane's scroll position and forces a re-fit on every tab switch — see the rule's own comment in index.css.
-                      className={`absolute ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''}`}
+                      className={`absolute overflow-hidden ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''}`}
                       style={style}
                     >
                       <div
