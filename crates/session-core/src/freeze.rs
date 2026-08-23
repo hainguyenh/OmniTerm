@@ -62,7 +62,10 @@ pub(crate) fn freeze(manager: &SessionManager, id: &str, session: &Session) {
     if !session.frozen.swap(true, Ordering::AcqRel) {
         return;
     }
-    if let Err(error) = crate::suspend::suspend_tree(pid) {
+    // One whole-machine snapshot serves both the descendant walk and the
+    // start-time read — never enumerate the process table twice.
+    let index = crate::suspend::index_processes();
+    if let Err(error) = crate::suspend::suspend_tree(&index, pid) {
         log::debug!("[sessiond] could not freeze {id}: {error}");
         session.frozen.store(false, Ordering::Release);
         return;
@@ -71,7 +74,7 @@ pub(crate) fn freeze(manager: &SessionManager, id: &str, session: &Session) {
         *slot = session.pid;
     }
     if let Ok(mut slot) = session.start_time.lock() {
-        *slot = crate::suspend::process_start_time(pid);
+        *slot = crate::suspend::process_start_time(&index, pid);
     }
     manager.persist(id, session);
 }
@@ -97,8 +100,12 @@ pub(crate) fn ensure_resumed(manager: &SessionManager, id: &str, session: &Sessi
             *slot = None;
         }
         persist_now = true;
-    } else {
-        match session.pid.map(crate::suspend::resume_tree) {
+    } else if session.pid.is_some() {
+        let index = crate::suspend::index_processes();
+        match session
+            .pid
+            .map(|pid| crate::suspend::resume_tree(&index, pid))
+        {
             Some(Ok(())) | None => {
                 if let Ok(mut slot) = session.start_time.lock() {
                     *slot = None;
