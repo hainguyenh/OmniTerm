@@ -155,3 +155,25 @@ async fn spawn_reader_marks_error_on_read_failure() {
     let snapshot = output.lock().unwrap().snapshot(1);
     assert_eq!(snapshot.status, "error");
 }
+
+#[test]
+fn flush_snapshot_skips_unchanged_buffers() {
+    let mut output = Output::new("test".into(), false);
+    let initial = output
+        .take_flush_snapshot()
+        .expect("first flush always writes");
+    assert!(
+        initial.is_empty(),
+        "fresh session starts with an empty tail"
+    );
+    output.push(b"hello");
+    let first = output.take_flush_snapshot().expect("first change flushes");
+    assert_eq!(first, b"hello");
+    assert!(
+        output.take_flush_snapshot().is_none(),
+        "idle buffer must not flush again"
+    );
+    output.push(b" world");
+    let second = output.take_flush_snapshot().expect("new bytes flush");
+    assert_eq!(second, b"hello world");
+}

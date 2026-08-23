@@ -1,11 +1,11 @@
+#[path = "../../plugins/always-awake/native/always_awake.rs"]
+pub mod always_awake;
 mod app_utils;
 mod launcher;
 mod os_actions;
 mod settings;
 mod themes;
 mod window_control;
-#[path = "../../plugins/always-awake/native/always_awake.rs"]
-pub mod always_awake;
 
 #[cfg(test)]
 mod command_coverage_tests;
@@ -19,38 +19,39 @@ pub mod adhoc;
 pub mod connections;
 // Re-exported from the shared protocol crate so every intra‑crate
 // `crate::shell_spec::*` / `crate::openshell::*` path keeps resolving unchanged.
-pub use app_protocol::{openshell, shell_spec, session_status};
+pub use app_protocol::{openshell, session_status, shell_spec};
 
 // Re-exported from the core crate so every intra‑crate
 // `crate::launch::*` / `crate::tree_validate::*` / `crate::workspace_launch::*` path keeps resolving.
-pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 #[cfg(windows)]
 pub use app_core::win_job;
+pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 pub mod pty;
 pub mod pty_resolve;
 pub mod safepath_command;
 pub use app_core::safepath;
 pub use app_core::workspace_scan;
-pub mod shell_probe;
-pub mod terminal_window;
-pub mod workspace;
-pub mod workspace_appearance;
-pub mod workspace_folders;
-mod workspace_persistence;
-pub mod workspace_connections;
+pub mod custom_art;
 pub mod plugin_host;
 pub mod plugin_host_api;
 pub mod plugin_management;
 pub mod rdp_embed;
-pub mod custom_art;
+pub mod shell_probe;
+pub mod terminal_window;
+pub mod workspace;
+pub mod workspace_appearance;
+pub mod workspace_connections;
+pub mod workspace_folders;
+pub mod workspace_lifecycle;
+mod workspace_persistence;
 
 use adhoc::AdhocRegistry;
+use always_awake::AlwaysAwakeState;
 use plugin_host::PluginHost;
 use pty::PtyManager;
 use rdp_embed::RdpSessionManager;
 use tauri::{Emitter, Manager, RunEvent, State};
 use terminal_window::DetachRegistry;
-use always_awake::AlwaysAwakeState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -231,9 +232,9 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace_folders::add_workspace_folder,
         workspace_folders::remove_workspace_folder,
         workspace_folders::rename_workspace_folder,
-        workspace::import_workspace_file,
-        workspace::remove_workspace,
-        workspace::rename_workspace,
+        workspace_lifecycle::import_workspace_file,
+        workspace_lifecycle::remove_workspace,
+        workspace_lifecycle::rename_workspace,
         workspace_appearance::set_workspace_appearance,
         workspace_appearance::set_workspace_folder_color,
         workspace::move_workspace,
@@ -296,7 +297,10 @@ fn handle_second_instance<R: tauri::Runtime>(app: &tauri::AppHandle<R>, argv: &[
 // ── Plugin Host Commands ──────────────────────────────────────────────
 
 #[tauri::command]
-async fn plugin_available<R: tauri::Runtime>(app: tauri::AppHandle<R>, host: State<'_, PluginHost>) -> Result<bool, String> {
+async fn plugin_available<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    host: State<'_, PluginHost>,
+) -> Result<bool, String> {
     host.start(&app).await?;
     Ok(host.is_available().await)
 }

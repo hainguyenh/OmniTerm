@@ -33,6 +33,10 @@ pub(crate) struct Output {
     busy: bool,
     stream: broadcast::Sender<ServerMessage>,
     agent_activity: AgentActivityTracker,
+    /// Monotonic buffer-change counter; the durable flusher compares it
+    /// against its last-written value to skip idle sessions entirely.
+    revision: u64,
+    flushed_revision: Option<u64>,
 }
 
 impl Output {
@@ -44,14 +48,30 @@ impl Output {
             busy,
             stream,
             agent_activity: AgentActivityTracker::default(),
+            revision: 0,
+            flushed_revision: None,
         }
     }
 
     pub(crate) fn seed(&mut self, bytes: &[u8]) {
         self.buffer.extend(bytes);
         self.trim();
+        self.revision += 1;
     }
 
+    /// Bytes to persist, but only when the buffer changed since the last
+    /// durable flush. Idle sessions cost zero disk I/O.
+    pub(crate) fn take_flush_snapshot(&mut self) -> Option<Vec<u8>> {
+        if self.flushed_revision == Some(self.revision) {
+            return None;
+        }
+        self.flushed_revision = Some(self.revision);
+        Some(self.buffer.iter().copied().collect())
+    }
+
+    /// Test-only full-buffer read; production reads go through
+    /// [`Self::take_flush_snapshot`] or [`Self::attach`].
+    #[cfg(test)]
     pub(crate) fn replay(&self) -> Vec<u8> {
         self.buffer.iter().copied().collect()
     }
@@ -60,6 +80,7 @@ impl Output {
         self.agent_activity.observe_output(bytes);
         self.buffer.extend(bytes);
         self.trim();
+        self.revision += 1;
         let _ = self.stream.send(ServerMessage::Data {
             data: bytes.to_vec(),
         });

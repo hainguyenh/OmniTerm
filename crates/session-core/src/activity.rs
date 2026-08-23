@@ -9,6 +9,10 @@ use crate::manager::SessionManager;
 use crate::output::Output;
 
 const TICK: Duration = Duration::from_millis(500);
+/// After this many consecutive all-idle passes the probe backs off to a
+/// multiple of TICK — an idle machine should not pay full-rate enumeration.
+const IDLE_BACKOFF_TICKS: u32 = 20;
+const BACKOFF_MULTIPLIER: u32 = 4;
 const IDLE_CONFIRM_TICKS: u8 = 2;
 const COMMAND_GRACE_TICKS: u8 = 4;
 
@@ -112,12 +116,20 @@ pub(crate) fn spawn(manager: SessionManager) -> tokio::task::JoinHandle<()> {
 async fn run_activity_loop(manager: SessionManager) {
     let mut system = Some(System::new());
     let mut states: HashMap<String, ActivityState> = HashMap::new();
-    let mut ticker = tokio::time::interval(TICK);
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut idle_streak: u32 = 0;
+    // Sleep-based cadence (not `interval`) so the delay can stretch when every
+    // session has been idle for a sustained stretch. Missed-tick semantics of
+    // the old interval are preserved by doing the work after the sleep.
     loop {
-        ticker.tick().await;
+        let delay = if idle_streak >= IDLE_BACKOFF_TICKS {
+            TICK * BACKOFF_MULTIPLIER
+        } else {
+            TICK
+        };
+        tokio::time::sleep(delay).await;
         if manager.sessions.is_empty() {
             states.clear();
+            idle_streak = 0;
             continue;
         }
         let targets: Vec<ActivityTarget> = manager
@@ -143,7 +155,7 @@ async fn run_activity_loop(manager: SessionManager) {
             continue;
         };
         system = Some(owned);
-        for target in targets {
+        for target in &targets {
             let state = states
                 .entry(target.id.clone())
                 .or_insert_with(|| ActivityState::new(target.launched_with_command));
@@ -170,6 +182,19 @@ async fn run_activity_loop(manager: SessionManager) {
             if let Some(next) = state.observe(sample) {
                 manager.update_activity(&target.id, next);
             }
+        }
+        // Adaptive cadence: the 500 ms probe is only needed while something is
+        // busy or in a grace window. Sustained all-idle stretches back off to
+        // 2 s; any transition (observe() reporting) resets it immediately.
+        if targets.iter().all(|target| {
+            states
+                .get(&target.id)
+                .map(|state| !state.reported.unwrap_or(true))
+                .unwrap_or(false)
+        }) {
+            idle_streak = idle_streak.saturating_add(1);
+        } else {
+            idle_streak = 0;
         }
     }
 }
