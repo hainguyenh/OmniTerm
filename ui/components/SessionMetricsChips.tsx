@@ -40,7 +40,6 @@ const UptimeChip: React.FC<{ since: number; compact?: boolean }> = ({ since, com
       setLabel(prev => (prev === next ? prev : next))
     }, 1000)
     return () => clearInterval(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `since` is stable for a session
   }, [since])
   return (
     <MetricChip

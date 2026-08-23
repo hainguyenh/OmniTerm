@@ -253,6 +253,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         app_utils::reveal_log,
         app_utils::clear_log,
         app_utils::get_version,
+        app_utils::save_temp_image,
         app_utils::open_in_system,
         // Ad-hoc shells + launcher
         adhoc::shells_ready,

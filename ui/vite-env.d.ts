@@ -241,6 +241,8 @@ interface Window {
     clipboard: {
       writeText: (text: string) => Promise<void>
       readText: () => Promise<string>
+      /** Persist clipboard-image bytes to a temp PNG; resolves to its absolute path. */
+      saveImageTemp: (bytes: Uint8Array) => Promise<string>
     }
     sftp: {
       home: (id: string) => Promise<string>
