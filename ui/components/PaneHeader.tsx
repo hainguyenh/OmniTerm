@@ -143,7 +143,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[12rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[15rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && (
             <SessionControlButtons
               conn={conn}
