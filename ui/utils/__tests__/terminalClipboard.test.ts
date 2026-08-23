@@ -19,13 +19,42 @@ describe('terminal clipboard', () => {
       onSelectionChange: selection,
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
     await clipboard.copySelection()
 
     expect(writeText).toHaveBeenCalledWith('agent output')
     expect(browserWrite).toHaveBeenCalledWith('agent output')
+    clipboard.dispose()
+  })
+
+  it('inserts a temp-file path when the clipboard holds an image instead of text', async () => {
+    const pngItem = {
+      types: ['image/png'],
+      getType: async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }),
+    }
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { read: async () => [pngItem] },
+    })
+    const saveImageTemp = vi.fn().mockResolvedValue('C:/temp/omniterm-paste-1.png')
+    const onBeforePaste = vi.fn()
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: { writeText: vi.fn(), readText: async () => '', saveImageTemp },
+    }
+
+    const clipboard = createTerminalClipboard(term, onBeforePaste)
+    await clipboard.paste()
+
+    expect(saveImageTemp).toHaveBeenCalledOnce()
+    expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-1.png')
+    expect(onBeforePaste).toHaveBeenCalled()
     clipboard.dispose()
   })
 
@@ -36,7 +65,7 @@ describe('terminal clipboard', () => {
       onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText: vi.fn(), readText } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText: vi.fn(), readText, saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
     const first = clipboard.paste()
@@ -61,7 +90,7 @@ describe('terminal clipboard', () => {
       }),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
 
@@ -97,7 +126,7 @@ describe('terminal clipboard', () => {
       }),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
     selectionCb?.()

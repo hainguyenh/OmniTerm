@@ -223,6 +223,7 @@ function createTauriAPI(): any {
     clipboard: {
       writeText: (text: string) => writeText(text),
       readText: () => readText(),
+      saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
     },
 
     // SFTP rides on SSH, so it arrives with it.

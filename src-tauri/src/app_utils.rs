@@ -132,3 +132,22 @@ pub async fn open_in_system(path: String) -> Result<(), String> {
     let validated = validate_path_for_open(&path)?;
     opener::open(validated).map_err(|e| e.to_string())
 }
+
+/// Persist pasted clipboard image bytes as a PNG in the OS temp directory and
+/// return the absolute path, so terminal agents can attach it by path. The
+/// renderer never names the file — this command owns naming and location.
+#[tauri::command]
+pub async fn save_temp_image<R: Runtime>(_app: AppHandle<R>, bytes: Vec<u8>) -> Result<String, String> {
+    if bytes.is_empty() {
+        return Err("Clipboard image payload is empty.".to_string());
+    }
+    let path = std::env::temp_dir().join(format!("omniterm-paste-{}.png", chrono_like_stamp()));
+    fs::write(&path, &bytes).map_err(|error| format!("Could not write pasted image: {error}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Millisecond timestamp strong enough to avoid paste-file collisions.
+fn chrono_like_stamp() -> u128 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+}

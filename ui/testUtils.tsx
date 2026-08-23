@@ -208,6 +208,7 @@ const defaults: Api = {
   clipboard: {
     writeText: async () => {},
     readText: async () => "",
+    saveImageTemp: async () => "C:/temp/omniterm-paste-mock.png",
   },
   sftp: {
     home: async () => "/home",

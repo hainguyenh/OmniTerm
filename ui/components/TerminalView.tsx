@@ -10,7 +10,7 @@ import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
-import { createTerminalClipboard } from '../utils/terminalClipboard'
+import { createNativePasteGate, createTerminalClipboard } from '../utils/terminalClipboard'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
@@ -257,12 +257,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       setLinkMenu,
       setSuppressPaste: () => { suppressNativePasteUntil = performance.now() + 250 },
     })
-    const onNativePaste = (e: ClipboardEvent) => {
-      if (performance.now() > suppressNativePasteUntil) return
-      e.preventDefault()
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-    }
+    const onNativePaste = createNativePasteGate({
+      term,
+      noteLocalEcho: () => noteLocalEcho(),
+      isSuppressed: () => performance.now() <= suppressNativePasteUntil,
+    })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
     termEl.addEventListener('mousedown', onLinkClick)
