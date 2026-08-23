@@ -131,6 +131,7 @@ const defaults: Api = {
     add: async () => null,
     addFolder: async () => null,
     removeFolder: async () => ({ id: 'ws#removed-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
+    renameFolder: async () => ({ id: 'ws#renamed-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
     importFile: async () => null,
     remove: async () => {},
     rename: async (id: string, name: string) => ({ id, name, folders: [], order: 0, pins: [] }),

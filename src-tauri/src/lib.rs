@@ -35,6 +35,7 @@ pub mod shell_probe;
 pub mod terminal_window;
 pub mod workspace;
 pub mod workspace_appearance;
+pub mod workspace_folders;
 mod workspace_persistence;
 pub mod workspace_connections;
 pub mod plugin_host;
@@ -227,8 +228,9 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace::list_workspaces,
         workspace::create_workspace,
         workspace::add_workspace,
-        workspace::add_workspace_folder,
-        workspace::remove_workspace_folder,
+        workspace_folders::add_workspace_folder,
+        workspace_folders::remove_workspace_folder,
+        workspace_folders::rename_workspace_folder,
         workspace::import_workspace_file,
         workspace::remove_workspace,
         workspace::rename_workspace,

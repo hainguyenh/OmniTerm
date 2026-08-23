@@ -178,6 +178,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     removeFolderFromWorkspace,
     removeWorkspace,
     renameWorkspace,
+    renameFolder,
     setWorkspaceAppearance,
     setWorkspaceFolderColor,
     togglePinned,
@@ -383,14 +384,13 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                   onOpenScript={onOpenScript}
                   onRunScript={runScript}
                   onOpenTerminal={openTerminal}
+                  onRenameFolder={renameFolder}
                   onSetFolderPendingRemoval={setFolderPendingRemoval}
                   onOpenFolderFilterMenu={openFolderFilterMenu}
                   renderConnectionAction={addConnectionButton}
                   onConnectWorkspaceConnection={onConnectWorkspaceConnection}
-                  onEditWorkspaceConnection={onEditWorkspaceConnection
-                    ? (workspace, parentPath, conn) =>
-                      onEditWorkspaceConnection(targetFor(workspace, parentPath), conn)
-                    : undefined}
+                  onEditWorkspaceConnection={(workspace, parentPath, conn) =>
+                    onEditWorkspaceConnection?.(targetFor(workspace, parentPath), conn)}
                   onDeleteWorkspaceConnection={deleteConnection}
                   isHighlighted={isHighlighted}
                   registerRow={registerRow}

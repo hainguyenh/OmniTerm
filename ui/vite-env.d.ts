@@ -291,6 +291,7 @@ interface Window {
       add: () => Promise<import('@omniterm/contract').Workspace | null>
       addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
       removeFolder: (workspaceId: string, folderId: string) => Promise<import('@omniterm/contract').Workspace>
+      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
       importFile: () => Promise<import('@omniterm/contract').Workspace | null>
       remove: (id: string) => Promise<void>
       rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>

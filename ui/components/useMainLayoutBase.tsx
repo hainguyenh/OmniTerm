@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { Connection, SessionStatus, Workspace, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
 import type { ActivityView } from './ActivityBar'
 import type { WorkspaceConnectionTarget } from './WorkspacePanel'
 import { useDialog } from '../hooks/useDialog'
@@ -13,7 +13,8 @@ import { useViewGroups } from '../hooks/useViewGroups'
 import { useCustomArt } from '../hooks/useCustomArt'
 import { visibleTabsForGroup } from '../viewGroups'
 import { paneOrder } from '../paneLayout'
-import { decodeWorkspaceSelection, normalizeWorkspaceSelection } from '../utils/workspaceSelection'
+import { decodeWorkspaceSelection } from '../utils/workspaceSelection'
+import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
@@ -24,10 +25,8 @@ export function useMainLayoutBase({
   const appSettingsRef = useRef(appSettings)
   appSettingsRef.current = appSettings
   const shellOptionsRef = useRef<ShellOption[]>([])
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
-      try { return localStorage.getItem('omniterm:last-workspace') } catch { return null }
-  })
+  const workspaceCatalog = useWorkspaceCatalog()
+  const { selectedWorkspaceId } = workspaceCatalog
   const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
       const workspaceId = requestedWorkspaceId === undefined ? selectedWorkspaceId : requestedWorkspaceId;
@@ -378,13 +377,6 @@ export function useMainLayoutBase({
           setShellOptions(opts);
       });
   }, []);
-  const refreshWorkspaces = useCallback(async () => {
-      await window.omnitermAPI.workspace.list().then(list => {
-          setWorkspaces(list)
-          setSelectedWorkspaceId(current => normalizeWorkspaceSelection(list, current))
-      }).catch(() => setWorkspaces([]))
-  }, [])
-  useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
   useEffect(() => {
       let cancelled = false;
       void (async () => {
@@ -494,5 +486,5 @@ export function useMainLayoutBase({
           await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
       }
   };
-  return { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, restoreGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, workspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
+  return { ...workspaceCatalog, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, restoreGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
 }

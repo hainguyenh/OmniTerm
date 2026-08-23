@@ -24,6 +24,8 @@ interface PaneHeaderProps {
   /** Null while the pane is empty. */
   conn: Connection | null
   sessionTitle?: string
+  /** Live shell working directory label (OSC 7 / OSC 9;9), alias-resolved. Overrides title folder. */
+  liveFolder?: string
   /** Human-readable shell label, e.g. "PowerShell 7" — shown in agent mode. */
   shellLabel?: string
   focused: boolean
@@ -69,7 +71,7 @@ interface PaneHeaderProps {
 }
 
 const PaneHeader: React.FC<PaneHeaderProps> = ({
-  paneIndex, conn, sessionTitle, shellLabel, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
+  paneIndex, conn, sessionTitle, liveFolder, shellLabel, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
   onAssign, onClear, onClose, fullscreen, onToggleFullscreen, appearance, busy,
 }) => {
@@ -85,6 +87,9 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
     : false
   // Derive agent and folder context from the live OSC title, connection name, or local cwd
   const formattedTitle = formatTerminalTitle(sessionTitle, shellLabel, conn?.name, conn?.localCwd)
+  // A shell-reported cwd (OSC 7 / 9;9) is the freshest folder signal — it wins
+  // over the title-derived one and updates as the user moves around.
+  const folderLabel = liveFolder ?? formattedTitle.folderName
   return (
     <div className="relative flex-shrink-0">
       <div
@@ -117,8 +122,8 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
             <span className="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
               <span className={`min-w-0 shrink truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
                 {formattedTitle.isAgent
-                  ? `${formattedTitle.agentName}${formattedTitle.folderName ? ` - ${formattedTitle.folderName}` : ''}`
-                  : (formattedTitle.folderName ?? formattedTitle.displayTitle)}
+                  ? `${formattedTitle.agentName}${folderLabel ? ` - ${folderLabel}` : ''}`
+                  : (folderLabel ?? formattedTitle.displayTitle)}
               </span>
               {formattedTitle.shellLabel && (
                 <span className="min-w-0 max-w-[45%] shrink truncate text-[9px] text-theme-dim font-normal">

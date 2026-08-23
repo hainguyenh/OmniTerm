@@ -123,6 +123,7 @@ function useHarness(initial: Initial = {}) {
   const switchViewGroup = initial.useActualGroups ? actualGroups.switchViewGroup : switchMockViewGroup
   const createNewViewGroup = initial.useActualGroups ? actualGroups.createNewViewGroup : createMockViewGroup
   const base: any = {
+  sessionCwds: {}, workspaces: [],
     appSettings, setAppSettings, themes: [TOKYO_NIGHT], resolveAppearance: vi.fn(() => ({ themeId: TOKYO_NIGHT.id, fontSize: 17 })),
     onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen: initial.settingsOpen ?? false,
     activeTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId,
