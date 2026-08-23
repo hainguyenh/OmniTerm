@@ -2,12 +2,14 @@ export type TerminalPersistencePolicy =
   | 'close-with-app'
   | 'keep-running'
   | 'recover-after-reboot'
+  | 'freeze-while-closed'
 
 const STORAGE_KEY = 'omniterm:terminal-persistence-policies'
 const VALID = new Set<TerminalPersistencePolicy>([
   'close-with-app',
   'keep-running',
   'recover-after-reboot',
+  'freeze-while-closed',
 ])
 
 type StoredPolicies = Record<string, TerminalPersistencePolicy>
@@ -34,11 +36,8 @@ export function hasExplicitPersistencePolicy(sessionId: string): boolean {
   return readPolicies()[sessionId] !== undefined
 }
 
-export function getPersistencePolicy(
-  sessionId: string,
-  isAgent: boolean,
-): TerminalPersistencePolicy {
-  return readPolicies()[sessionId] ?? (isAgent ? 'recover-after-reboot' : 'keep-running')
+export function getPersistencePolicy(sessionId: string): TerminalPersistencePolicy {
+  return readPolicies()[sessionId] ?? 'close-with-app'
 }
 
 export function setPersistencePolicyOverride(

@@ -5,7 +5,6 @@ import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
 import { clearSnapshot, type PersistedConn, type SessionSnapshot } from '../utils/sessionStore'
 import { diag } from '../diag'
-import { parseAgentTitle } from '../utils/agentTitle'
 import {
   getPersistencePolicy,
   hasExplicitPersistencePolicy,
@@ -67,8 +66,7 @@ export function useSessionRestore({
         const daemonSession = daemonById.get(tab.sessionId)
         const live = daemonSession?.lifecycle === 'live'
         const savedConn = savedConnById.get(tab.connId)
-        const isAgent = (parseAgentTitle(tab.name) ?? parseAgentTitle(savedConn?.name)) !== null
-        const localPolicy = getPersistencePolicy(tab.id, isAgent)
+        const localPolicy = getPersistencePolicy(tab.id)
         const policy = daemonSession?.policy
           ?? (hasExplicitPersistencePolicy(tab.id) ? localPolicy : tab.persistencePolicy)
         let conn = resolveConnection?.(tab.connId) ?? (savedConn ? connectionFromSnapshot(savedConn) : undefined)

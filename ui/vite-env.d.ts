@@ -206,15 +206,16 @@ interface Window {
       listLocalSessions: () => Promise<Array<{
         id: string
         generation: number
-        policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot'
+        policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed'
         lifecycle: 'live' | 'interrupted' | 'closed' | 'error'
         pid?: number | null
         label: string
         busy: boolean
         launchedWithCommand: boolean
         ssh: boolean
+        frozen: boolean
       }>>
-      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') => Promise<void>
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed') => Promise<void>
     }
     // Multi-window terminal detach/reattach. `detachedSessionId` is non-null only inside a
     // popped-out window (from its --omniterm-detached=<id> launch arg); the primary reads null.

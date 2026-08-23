@@ -9,7 +9,6 @@ import { Tooltip } from './Tooltip'
 
 interface SessionPersistenceMenuProps {
   sessionId: string
-  isAgent: boolean
   placement?: 'top' | 'bottom'
   menuItem?: boolean
 }
@@ -18,6 +17,7 @@ const OPTIONS: Array<{ value: TerminalPersistencePolicy; label: string }> = [
   { value: 'close-with-app', label: 'Close with OmniTerm' },
   { value: 'keep-running', label: 'Keep running' },
   { value: 'recover-after-reboot', label: 'Recover after reboot' },
+  { value: 'freeze-while-closed', label: 'Freeze while closed' },
 ]
 
 /**
@@ -27,25 +27,25 @@ const OPTIONS: Array<{ value: TerminalPersistencePolicy; label: string }> = [
  * borderless icon button.
  *
  * Selecting a policy writes a localStorage override and forwards the live update to the session
- * daemon via `connect.setPersistencePolicy`. Reads default to `recover-after-reboot` for AI agents
- * and `keep-running` for ordinary PTY panes (`utils/persistencePolicy`).
+ * daemon via `connect.setPersistencePolicy`. Every terminal defaults to `close-with-app`
+ * (`utils/persistencePolicy`); keep-running, freeze-while-closed and recover-after-reboot are
+ * opt-in per session.
  */
 export default function SessionPersistenceMenu({
   sessionId,
-  isAgent,
   placement = 'bottom',
   menuItem = false,
 }: SessionPersistenceMenuProps) {
   const [policy, setPolicy] = useState<TerminalPersistencePolicy>(() =>
-    getPersistencePolicy(sessionId, isAgent),
+    getPersistencePolicy(sessionId),
   )
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
-    setPolicy(getPersistencePolicy(sessionId, isAgent))
-  }, [isAgent, sessionId])
+    setPolicy(getPersistencePolicy(sessionId))
+  }, [sessionId])
 
   // Mirror AppearanceMenu's outside-click / Escape dismissal so the menu never relies on hover
   // away. Both listeners are installed only while the menu is open.

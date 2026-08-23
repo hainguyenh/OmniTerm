@@ -47,7 +47,7 @@ function buildSnapshot(
   const persistedTabs: PersistedTab[] = ptyTabs.map(tab => {
     const conn = connectionFor(tab.connId)
     const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
-    const policy = getPersistencePolicy(tab.id, agent !== null)
+    const policy = getPersistencePolicy(tab.id)
     const resumeCommand = agent ? formatAgentResumeCommand(agent.agentName) : null
     // Safe allowlisted agent recipes can be checkpointed regardless of the current policy. Restore
     // still gates execution on recover-after-reboot, so a later policy toggle cannot lose the recipe.
@@ -151,9 +151,7 @@ export function useSessionPersistence({
     // A new/renamed PTY is checkpointed synchronously. This closes the one-second window where the
     // daemon could keep a brand-new PTY alive after GUI exit but the next GUI had no tab id to attach.
     const structuralSignature = ptyTabs.map(tab => {
-      const conn = connectionFor(tab.connId)
-      const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
-      return `${tab.id}\0${tab.connId}\0${tab.name}\0${getPersistencePolicy(tab.id, agent !== null)}`
+      return `${tab.id}\0${tab.connId}\0${tab.name}\0${getPersistencePolicy(tab.id)}`
     }).join('\u0001')
     if (structuralSignatureRef.current !== structuralSignature) {
       structuralSignatureRef.current = structuralSignature
@@ -162,9 +160,7 @@ export function useSessionPersistence({
 
     // Policy synchronization is immediate; it must not depend on the debounced rich checkpoint.
     for (const tab of ptyTabs) {
-      const conn = connectionFor(tab.connId)
-      const agent = parseAgentTitle(tab.name) ?? parseAgentTitle(conn?.name)
-      const policy = getPersistencePolicy(tab.id, agent !== null)
+      const policy = getPersistencePolicy(tab.id)
       const update = window.omnitermAPI?.connect?.setPersistencePolicy?.(tab.id, policy)
       void update?.catch(() => {})
     }

@@ -12,7 +12,6 @@ interface SessionControlButtonsProps {
   conn: Connection
   sessionId: string
   busy?: boolean
-  isAgent: boolean
   detach: DetachAction | null
   onToggleDetach: () => void
   fullscreen?: boolean
@@ -40,7 +39,6 @@ export default function SessionControlButtons({
   conn,
   sessionId,
   busy,
-  isAgent,
   detach,
   onToggleDetach,
   fullscreen = false,
@@ -185,7 +183,7 @@ export default function SessionControlButtons({
       {isVisible('font') && fontControl}
       {isVisible('stop') && stopControl}
       {isVisible('clear') && clearControl}
-      {isVisible('persistence') && conn.type !== 'RDP' && <SessionPersistenceMenu sessionId={sessionId} isAgent={isAgent} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
+      {isVisible('persistence') && conn.type !== 'RDP' && <SessionPersistenceMenu sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
       {isVisible('detach') && detachControl}
       {isVisible('fullscreen') && fullscreenControl}
       {hiddenControls.length > 0 && (
@@ -200,7 +198,7 @@ export default function SessionControlButtons({
               {hiddenControls.includes('theme') && overflowThemeControl}
               {hiddenControls.includes('stop') && <button type="button" role="menuitem" disabled={!busy} onClick={stop} className={menuItemClass}><Square className="h-3.5 w-3.5 flex-shrink-0" />Stop current process</button>}
               {hiddenControls.includes('clear') && <button type="button" role="menuitem" onClick={clear} className={menuItemClass}><Eraser className="h-3.5 w-3.5 flex-shrink-0" />Clear terminal</button>}
-              {hiddenControls.includes('persistence') && <SessionPersistenceMenu sessionId={sessionId} isAgent={isAgent} placement="bottom" menuItem />}
+              {hiddenControls.includes('persistence') && <SessionPersistenceMenu sessionId={sessionId} placement="bottom" menuItem />}
               {hiddenControls.includes('detach') && <button type="button" role="menuitem" onClick={toggleDetach} className={menuItemClass}>{detach === 'attach' ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />}{detachTitle(detach!, detachWhere)}</button>}
               {hiddenControls.includes('fullscreen') && <button type="button" role="menuitem" onClick={toggleFullscreen} className={menuItemClass}>{fullscreen ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <Maximize2 className="h-3.5 w-3.5 flex-shrink-0" />}{fullscreen ? 'Restore view mode' : 'Focus pane full screen'}</button>}
               {hiddenControls.includes('font') && appearance && <div className="mt-1 border-t border-theme-border pt-1"><FontSizeControl fontSize={appearance.fontSize} scopeLabel={appearance.scopeLabel ?? 'this terminal'} onFontSizeChange={appearance.onFontSizeChange} compact fullWidth /></div>}

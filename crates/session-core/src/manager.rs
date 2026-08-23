@@ -1,5 +1,6 @@
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use dashmap::DashMap;
@@ -34,10 +35,13 @@ pub(crate) struct Session {
     pub(crate) generation: u64,
     pub(crate) launch: LaunchSpec,
     pub(crate) policy: Mutex<PersistencePolicy>,
-    owner_client: Mutex<String>,
+    pub(crate) owner_client: Mutex<String>,
     pub(crate) lifecycle: Arc<Mutex<SessionLifecycle>>,
+    pub(crate) frozen: AtomicBool,
+    pub(crate) frozen_pid: Mutex<Option<u32>>,
+    pub(crate) start_time: Mutex<Option<u64>>,
     #[cfg(windows)]
-    job: Option<Arc<app_core::win_job::JobHandle>>,
+    pub(crate) job: Option<Arc<app_core::win_job::JobHandle>>,
 }
 
 #[derive(Clone)]
@@ -56,6 +60,7 @@ impl SessionManager {
         for record in manifest::load_interrupted(&state_dir) {
             interrupted.insert(record.id.clone(), record);
         }
+        crate::freeze::kill_frozen_orphans_sweep(&interrupted);
         Ok(Self {
             sessions: Arc::new(DashMap::new()),
             interrupted: Arc::new(interrupted),
@@ -128,8 +133,14 @@ impl SessionManager {
         };
 
         drop(pair.slave);
-        let reader = pair.master.try_clone_reader().map_err(|error| error.to_string())?;
-        let writer = pair.master.take_writer().map_err(|error| error.to_string())?;
+        let reader = pair
+            .master
+            .try_clone_reader()
+            .map_err(|error| error.to_string())?;
+        let writer = pair
+            .master
+            .take_writer()
+            .map_err(|error| error.to_string())?;
         let killer = child.clone_killer();
         let pid = child.process_id();
         let mut output_state = Output::new(launch.label.clone(), launch.launched_with_command);
@@ -152,55 +163,25 @@ impl SessionManager {
             policy: Mutex::new(policy),
             owner_client: Mutex::new(client_id.to_string()),
             lifecycle: Arc::new(Mutex::new(SessionLifecycle::Live)),
+            frozen: AtomicBool::new(false),
+            frozen_pid: Mutex::new(None),
+            start_time: Mutex::new(None),
             #[cfg(windows)]
             job: job.clone(),
         });
-        self.sessions.insert(session_id.to_string(), Arc::clone(&session));
+        self.sessions
+            .insert(session_id.to_string(), Arc::clone(&session));
         self.interrupted.remove(session_id);
         self.requests
             .insert(request_id.to_string(), session_id.to_string());
         self.persist(session_id, &session);
 
         spawn_reader(reader, Arc::clone(&output), Arc::clone(&session.lifecycle));
-        self.spawn_exit_watcher(session_id.to_string(), child, session);
+        crate::exit_watcher::spawn(self.clone(), session_id.to_string(), child, session);
         self.sessions
             .get(session_id)
             .map(|entry| crate::summary::session_summary(session_id, &entry))
             .ok_or_else(|| "Session disappeared during startup".to_string())
-    }
-
-    fn spawn_exit_watcher(
-        &self,
-        id: String,
-        mut child: Box<dyn portable_pty::Child + Send + Sync>,
-        session: Arc<Session>,
-    ) {
-        let manager = self.clone();
-        tokio::spawn(async move {
-            let code = tokio::task::spawn_blocking(move || {
-                child.wait().map(|status| status.exit_code()).unwrap_or(0)
-            })
-            .await
-            .unwrap_or(0);
-            #[cfg(windows)]
-            if let Some(job) = &session.job {
-                job.terminate(code);
-            }
-            if let Ok(mut lifecycle) = session.lifecycle.lock() {
-                *lifecycle = SessionLifecycle::Closed;
-            }
-            if let Ok(mut output) = session.output.lock() {
-                output.status(DaemonStatus::Closed { code });
-            }
-            // Do not let an explicit disconnect's late exit watcher recreate/overwrite its manifest.
-            let still_current = manager
-                .sessions
-                .get(&id)
-                .is_some_and(|current| Arc::ptr_eq(current.value(), &session));
-            if still_current {
-                manager.persist(&id, &session);
-            }
-        });
     }
 
     pub fn attach(&self, client_id: &str, session_id: &str) -> Result<AttachedSession, String> {
@@ -211,12 +192,17 @@ impl SessionManager {
         if let Ok(mut owner) = session.owner_client.lock() {
             *owner = client_id.to_string();
         }
+        self.ensure_resumed(session_id, &session);
         let mut output = session
             .output
             .lock()
             .map_err(|_| "Session output lock is poisoned".to_string())?;
         let (snapshot, replay, receiver) = output.attach(session.generation);
-        Ok(AttachedSession { snapshot, replay, receiver })
+        Ok(AttachedSession {
+            snapshot,
+            replay,
+            receiver,
+        })
     }
 
     pub fn input(&self, session_id: &str, data: &str) -> Result<(), String> {
@@ -224,6 +210,7 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
+        self.ensure_resumed(session_id, &session);
         if let Ok(mut output) = session.output.lock() {
             output.note_input();
         }
@@ -231,7 +218,9 @@ impl SessionManager {
             .writer
             .lock()
             .map_err(|_| "Session writer lock is poisoned".to_string())?;
-        writer.write_all(data.as_bytes()).map_err(|error| error.to_string())?;
+        writer
+            .write_all(data.as_bytes())
+            .map_err(|error| error.to_string())?;
         writer.flush().map_err(|error| error.to_string())
     }
 
@@ -243,6 +232,7 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
+        self.ensure_resumed(session_id, &session);
         let master = session
             .master
             .lock()
@@ -308,6 +298,7 @@ impl SessionManager {
         policy: PersistencePolicy,
     ) -> Result<(), String> {
         if let Some(session) = self.sessions.get(session_id) {
+            self.ensure_resumed(session_id, &session);
             if let Ok(mut owner) = session.owner_client.lock() {
                 *owner = client_id.to_string();
             }
@@ -333,26 +324,7 @@ impl SessionManager {
     }
 
     pub fn client_disconnected(&self, client_id: &str) {
-        let ids: Vec<String> = self
-            .sessions
-            .iter()
-            .filter_map(|entry| {
-                let close = entry
-                    .policy
-                    .lock()
-                    .map(|policy| *policy == PersistencePolicy::CloseWithApp)
-                    .unwrap_or(false);
-                let owned = entry
-                    .owner_client
-                    .lock()
-                    .map(|owner| owner.as_str() == client_id)
-                    .unwrap_or(false);
-                (close && owned).then(|| entry.key().clone())
-            })
-            .collect();
-        for id in ids {
-            let _ = self.disconnect(&id);
-        }
+        crate::freeze::on_client_disconnected(self, client_id);
     }
 
     pub(crate) fn update_activity(&self, session_id: &str, busy: bool) {
@@ -371,7 +343,7 @@ impl SessionManager {
         }
     }
 
-    fn persist(&self, id: &str, session: &Session) {
+    pub(crate) fn persist(&self, id: &str, session: &Session) {
         let policy = session
             .policy
             .lock()
@@ -382,7 +354,11 @@ impl SessionManager {
             .lock()
             .map(|value| *value)
             .unwrap_or(SessionLifecycle::Error);
-        let busy = session.output.lock().map(|value| value.busy()).unwrap_or(false);
+        let busy = session
+            .output
+            .lock()
+            .map(|value| value.busy())
+            .unwrap_or(false);
         let mut record = SessionManifest::live(
             id.to_string(),
             session.generation,
@@ -393,8 +369,15 @@ impl SessionManager {
             session.ssh,
         );
         record.lifecycle = lifecycle;
+        record.frozen = session.frozen.load(Ordering::Acquire);
+        record.pid = session.frozen_pid.lock().ok().and_then(|slot| *slot);
+        record.start_time = session.start_time.lock().ok().and_then(|slot| *slot);
         if let Err(error) = manifest::write(&self.state_dir, &record) {
             log::warn!("[sessiond] could not persist {id}: {error}");
         }
+    }
+
+    fn ensure_resumed(&self, id: &str, session: &Arc<Session>) {
+        crate::freeze::ensure_resumed(self, id, session);
     }
 }
