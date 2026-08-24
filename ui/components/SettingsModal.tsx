@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
-import type { ConnectionProviderCapabilities } from '@omniterm/contract'
+import type { ConnectionProviderCapabilities, Workspace } from '@omniterm/contract'
 import type { UseDialogReturn } from '../hooks/useDialog'
 import GeneralSettings from './GeneralSettings'
 import PluginManager from './PluginManager'
@@ -21,6 +21,8 @@ export interface SettingsModalProps {
   appSettings: AppSettings
   setAppSettings: (settings: AppSettings) => void
   shellOptions: ShellOption[]
+  /** Workspace catalog for the "default workspace for new terminals" setting. */
+  workspaces?: Workspace[]
   activeSessionCount: number
   hasConnectionProvider: boolean
   setHasConnectionProvider: (active: boolean) => void
@@ -59,6 +61,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   appSettings,
   setAppSettings,
   shellOptions,
+  workspaces = [],
   activeSessionCount,
   hasConnectionProvider,
   setHasConnectionProvider,
@@ -151,6 +154,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 appSettings={appSettings}
                 setAppSettings={setAppSettings}
                 shellOptions={shellOptions}
+                workspaces={workspaces}
+                showAlert={showAlert}
                 onCloseSettings={onClose}
               />
             )}
