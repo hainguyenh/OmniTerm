@@ -29,6 +29,9 @@ pub(crate) use crate::workspace_persistence::{read_workspaces, write_workspaces}
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_command_validation_tests.rs"]
+mod command_validation_tests;
 
 fn display_name(path: &str) -> String {
     Path::new(path)
