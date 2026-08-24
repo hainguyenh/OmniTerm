@@ -8,6 +8,7 @@ import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { applyThemeVars, themeCssVars } from './utils/themeVars'
 import { diag } from './diag'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
+import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
 
 interface AppSettings {
@@ -20,6 +21,8 @@ interface AppSettings {
   perConn?: Record<string, TerminalAppearance>
   /** Any id from `shells.list`; the picker falls back when it is no longer available. */
   defaultShell?: string
+  /** Where new terminals land when the launch site does not name a workspace itself. */
+  defaultWorkspace?: DefaultWorkspaceSetting
   shortcuts?: ShortcutBindings
   zoomFactor?: number
   blurInactiveWindow?: number
@@ -51,8 +54,22 @@ function App() {
   // Which terminal the TitleBar's theme/font controls target — reported up by MainLayout.
   const [activeTerminal, setActiveTerminal] = useState<{ id: string; connId: string } | null>(null)
   const [windowActive, setWindowActive] = useState(true)
+  // Whole-app fullscreen: native OS fullscreen plus chrome hidden. Not persisted — a fresh launch
+  // always starts windowed, matching browser/terminal conventions. Escape is the secondary exit.
+  const [chromeFullscreen, setChromeFullscreen] = useState(false)
+  const toggleChromeFullscreen = useCallback(() => setChromeFullscreen(v => !v), [])
+  useEffect(() => {
+    window.omnitermAPI?.windowControl?.setFullscreen?.(chromeFullscreen)?.catch((error: unknown) =>
+      diag.warn('[window] set_fullscreen failed', error))
+  }, [chromeFullscreen])
+  useEffect(() => {
+    if (!chromeFullscreen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setChromeFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [chromeFullscreen])
   const { available: blurAvailable } = useBlurPlugin()
-  const windowRounded = useWindowRounding()
+  const windowRounded = useWindowRounding() && !chromeFullscreen
   const startupUpdateChecked = useRef(false)
   useEffect(() => {
     const onFocus = () => setWindowActive(true)
@@ -281,6 +298,7 @@ function App() {
 
   useAppShortcuts({
     appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom,
+    onToggleFullscreen: toggleChromeFullscreen,
     isDetached: isDetachedWindow,
   })
 
@@ -300,21 +318,24 @@ function App() {
 
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
-      <TitleBar
-        appSettings={appSettings}
-        setAppSettings={(s) => setAppSettings(s)}
-        themes={themes}
-        setThemeRemixOpen={setThemeRemixOpen}
-        appVersion={appVersion}
-        zoomFactor={appSettings.zoomFactor ?? 1}
-        onZoomReset={resetZoom}
-        onFontSizeChange={changeFontSize}
-        onThemeApply={applyThemeToAll}
-        onApplyToAll={applyFontSizeToAll}
-      />
+      {!chromeFullscreen && (
+        <TitleBar
+          appSettings={appSettings}
+          setAppSettings={(s) => setAppSettings(s)}
+          themes={themes}
+          setThemeRemixOpen={setThemeRemixOpen}
+          appVersion={appVersion}
+          zoomFactor={appSettings.zoomFactor ?? 1}
+          onZoomReset={resetZoom}
+          onFontSizeChange={changeFontSize}
+          onThemeApply={applyThemeToAll}
+          onApplyToAll={applyFontSizeToAll}
+        />
+      )}
       <div className="flex-1 min-h-0 relative">
         <div className="h-full w-full" style={{ filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
           <MainLayout
+          chromeHidden={chromeFullscreen}
           appSettings={appSettings}
           setAppSettings={setAppSettings}
           currentTheme={currentTheme}

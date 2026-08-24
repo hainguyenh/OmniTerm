@@ -175,15 +175,33 @@ describe('useMainLayoutBase complete behavior', () => {
     act(() => result.current.popOutTerminal('session'))
     await waitFor(() => expect(result.current.poppedOut.session).toBe(true))
     expect(result.current.resumeMode.session).toBe(true)
-    act(() => result.current.reattachTerminal('session'))
+    // Slot-move reattach: the session lands in the requested pane, swapping occupants, and focus
+    // follows it. Without a target the call passes straight through.
+    act(() => {
+      result.current.setPanes(['session', 'other', null, null])
+    })
+    act(() => result.current.reattachTerminal('session', 1))
     expect(window.omnitermAPI.terminalWindow.reattach).toHaveBeenCalledWith('session')
+    expect(result.current.panes[1]).toBe('session')
+    expect(result.current.panes[0]).toBe('other')
+    expect(result.current.focusedPane).toBe(1)
     act(() => emitReattached?.('session'))
     expect(result.current.poppedOut.session).toBe(false)
     expect(reload).toHaveBeenCalledWith('session')
+    // The receiving pane pulses so the eye lands on the fold-back target.
+    expect(result.current.pulsePaneId).toBe('session')
 
     const dispatch = vi.spyOn(window, 'dispatchEvent')
     act(() => result.current.focusTerminal('session'))
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'omniterm:focus-terminal' }))
+  })
+
+  it('reattach without a target slot leaves the pane layout untouched', () => {
+    const { result } = renderHook(() => useMainLayoutBase(props()))
+    act(() => { result.current.setPanes(['a', 'b', null, null]) })
+    act(() => result.current.reattachTerminal('b'))
+    expect(result.current.panes).toEqual(['a', 'b', null, null])
+    expect(window.omnitermAPI.terminalWindow.reattach).toHaveBeenCalledWith('b')
   })
 
   it('rejects invalid pop-out targets and a backend detach refusal', async () => {

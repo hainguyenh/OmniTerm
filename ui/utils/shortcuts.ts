@@ -29,6 +29,7 @@ export const FALLBACK_SHORTCUTS: ShortcutBindings = {
   toggleSidebar: 'Ctrl+B',
   commandPalette: 'CommandOrControl+P',
   closeTab: 'Ctrl+W',
+  toggleAppFullscreen: 'F11',
 }
 
 /** Layered so a saved-but-stale `shortcuts` object (missing a binding added since) still resolves. */
@@ -38,10 +39,9 @@ export const resolveShortcuts = (saved?: Partial<ShortcutBindings>): ShortcutBin
 })
 
 /**
- * Bindings that survive terminal focus even though they aren't Ctrl+Shift+*: the three zoom keys.
- * Zoom over a terminal changes that terminal's own font size (TerminalView owns that separately),
- * so unlike every other binding here it never collides with a shell control key — Ctrl+= and Ctrl+-
- * are not readline/shell defaults, and Ctrl+0 has no shell meaning either.
+ * Bindings that survive terminal focus even though they aren't Ctrl+Shift/Alt+*: the three zoom keys
+ * and bare function keys. Zoom over a terminal changes that terminal's own font size, and function
+ * keys carry no shell meaning — unlike every other binding here they never collide with the shell.
  */
 const TERMINAL_SAFE_KEYS: ReadonlySet<keyof ShortcutBindings> = new Set(['zoomIn', 'zoomOut', 'zoomReset'])
 
@@ -55,8 +55,15 @@ const hasShiftOrAlt = (combo: string): boolean => {
   return parts.includes('shift') || parts.includes('alt')
 }
 
+/**
+ * A bare function key (F1–F12) sends nothing useful to a normal shell but is how apps like this
+ * one expose whole-window actions, so it survives terminal focus like the zoom trio does.
+ */
+const isBareFunctionKey = (combo: string): boolean =>
+  /^f(?:[1-9]|1[0-2])$/.test(combo.trim().toLowerCase())
+
 export const survivesTerminalFocus = (key: keyof ShortcutBindings, combo: string): boolean =>
-  TERMINAL_SAFE_KEYS.has(key) || hasShiftOrAlt(combo)
+  TERMINAL_SAFE_KEYS.has(key) || hasShiftOrAlt(combo) || isBareFunctionKey(combo)
 
 /**
  * Whether `e` matches any chrome shortcut that should fire — and, when `inTerminal` is true, is

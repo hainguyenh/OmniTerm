@@ -33,7 +33,7 @@ const settings: AppSettings = {
     newFolder: 'Ctrl+Shift+N', openSettings: 'Ctrl+,', toggleThemeMode: 'Ctrl+/',
     layout1: 'Ctrl+1', layout2: 'Ctrl+2', layout3: 'Ctrl+3', layout4: 'Ctrl+4',
     layout5: 'Ctrl+5', layout6: 'Ctrl+6', layout7: 'Ctrl+7', layout8: 'Ctrl+8', toggleSidebar: 'Ctrl+B',
-    commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W',
+    commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W', toggleAppFullscreen: 'F11',
   },
 }
 
