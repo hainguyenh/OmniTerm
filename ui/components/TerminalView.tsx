@@ -10,12 +10,15 @@ import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
-import { createNativePasteGate, createTerminalClipboard } from '../utils/terminalClipboard'
+import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
 import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
+import { registerCwdReporting } from '../utils/terminalCwdReporting'
+import { altClickArrows, buildArrowBurst, cellFromPointer } from '../terminal/altClickNavigation'
+import { createLastOutputTracker, parseTerminalCopyEvent, viewportText } from '../utils/terminalCopyExtract'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import type { TerminalViewProps } from './TerminalView.types'
@@ -134,37 +137,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => onTitleChangeRef.current?.(title))
       : { dispose: () => {} }
-    // Shell-reported working directory. OSC 7 is the standards-track form
-    // (`file://host/path`); Windows shells and pwsh emit the OSC 9;9
-    // notification instead. Both feed onCwdChange; shells that emit neither
-    // simply never set a cwd label.
-    const cwdDisposables: Array<{ dispose: () => void }> = []
-    const parser = (term as unknown as {
-      parser?: {
-        registerOscHandler?: (
-          ident: number,
-          callback: (data: string) => boolean | Promise<boolean>,
-        ) => { dispose: () => void }
-      }
-    }).parser
-    if (parser?.registerOscHandler && onCwdChangeRef.current !== undefined) {
-      const report = (rawPath: string) => {
-        const cleaned = decodeURIComponent(rawPath).trim()
-        if (!cleaned) return true
-        const withoutScheme = cleaned.startsWith('file://')
-          ? cleaned.replace(/^file:\/\/[^/]*/, '')
-          : cleaned
-        if (withoutScheme) onCwdChangeRef.current?.(withoutScheme)
-        return false
-      }
-      const osc7 = parser.registerOscHandler(7, data => report(data))
-      // ConEmu/Windows style CWD notification: ESC ] 9 ; 9 ; "path" ESC \ — the
-      // handler for ident 9 receives everything after the first `9;`.
-      const osc999 = parser.registerOscHandler(9, data =>
-        data.startsWith('9;') ? report(data.slice(2).replace(/^"|"$/g, '')) : false,
-      )
-      cwdDisposables.push(osc7, osc999)
-    }
+    const cwdDisposables = registerCwdReporting(term, onCwdChangeRef.current)
     const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
@@ -235,6 +208,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
+      copyTracker.noteInput(data)
       api.input(data)
     })
 
@@ -248,6 +222,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
     const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
+    // Powers the pane-header copy menu's "last output" slice; fed from term.onData below.
+    // The wrapper (not `.active`) is handed over so every read resolves the current buffer —
+    // xterm's active view can be swapped underneath by resets/replays.
+    const copyTracker = createLastOutputTracker(term.buffer)
     let suppressNativePasteUntil = 0
 
     const { onContextMenu, onLinkClick } = createTerminalContextMenu({
@@ -265,6 +243,23 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
     termEl.addEventListener('mousedown', onLinkClick)
+    // Alt+Click moves the cursor by emitting the equivalent arrow-key burst — but only when the
+    // program has NOT enabled mouse reporting (plain clicks keep native selection either way).
+    const onAltClickMove = (event: MouseEvent) => {
+      if (!altClickArrows(event, term.modes?.mouseTrackingMode)) return
+      const rowsEl = term.element?.querySelector('.xterm-rows') as HTMLElement | null
+      if (!rowsEl || !term.cols || !term.rows) return
+      const cursorX = term.buffer.active.cursorX
+      const cursorY = term.buffer.active.cursorY
+      const target = cellFromPointer(event.clientX, event.clientY, rowsEl.getBoundingClientRect(), term.cols, term.rows)
+      const burst = buildArrowBurst(
+        { col: cursorX, row: cursorY },
+        target,
+        term.modes?.applicationCursorKeysMode === true,
+      )
+      if (burst) api.input(burst)
+    }
+    termEl.addEventListener('mousedown', onAltClickMove)
     termEl.addEventListener('paste', onNativePaste, true)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
     termEl.addEventListener('mouseup', onMouseUp)
@@ -278,6 +273,18 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       if ((e as CustomEvent).detail?.id === id) term.focus()
     }
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
+
+    // The pane-header copy menu (TerminalCopyMenu) asks for this pane's text by session id; the
+    // xterm instance lives only here, so the extraction runs at the request site.
+    const onCopyRequest = (event: Event) => {
+      const request = parseTerminalCopyEvent(event)
+      if (!request || request.sessionId !== id || termRef.current !== term) return
+      const text = request.action === 'last-output'
+        ? copyTracker.lastOutputText()
+        : viewportText(term.buffer, term.rows)
+      if (text) void writeClipboardText(text)
+    }
+    window.addEventListener('omniterm:copy-terminal', onCopyRequest)
 
     // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
     // resize event, so xterm's cached char measurement goes stale — part of why detaching a window
@@ -405,10 +412,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       for (const disposable of cwdDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
       termEl.removeEventListener('mousedown', onLinkClick)
+      termEl.removeEventListener('mousedown', onAltClickMove)
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
+      window.removeEventListener('omniterm:copy-terminal', onCopyRequest)
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
       safeFitRef.current = () => {}

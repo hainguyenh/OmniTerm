@@ -138,14 +138,15 @@ describe('PaneHeader remaining behavior', () => {
     expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
   })
 
-  it('sends Ctrl+C from the Stop button while busy and disables it while idle', () => {
+  it('sends Ctrl+C from the Stop button while busy and keeps it enabled once a live session goes idle', () => {
     const x = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true })
     const stop = screen.getByRole('button', { name: 'Stop current process' })
     expect(stop).toBeEnabled()
     fireEvent.click(stop)
     expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x03')
     x.rerender(<PaneHeader {...x.props} busy={false} />)
-    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeDisabled()
+    // The idle probe misreads WSL/fast commands, so a still-connected session keeps Stop enabled.
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
   })
 
   it('clears the terminal via the same input channel as cls, even while idle', () => {

@@ -149,6 +149,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               conn={conn}
               sessionId={sessionId}
               busy={busy}
+              sessionLive={(statuses[sessionId] ?? 'connecting') === 'connected'}
               detach={detach}
               onToggleDetach={onToggleDetach}
               detachWhere="pane"
