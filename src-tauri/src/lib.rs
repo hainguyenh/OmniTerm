@@ -4,7 +4,9 @@ mod app_utils;
 mod launcher;
 mod os_actions;
 mod settings;
+mod settings_transfer;
 mod themes;
+mod update_manager;
 mod window_control;
 
 #[cfg(test)]
@@ -64,7 +66,19 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_os::init());
+    // Native updater. The plugin REQUIRES a valid `plugins.updater` object at initialization —
+    // registered unconditionally it panics every build whose conf lacks one ("invalid type: null").
+    // Release builds inject that config via scripts/configure-tauri-updater.mjs from
+    // OMNITERM_UPDATER_PUBKEY, so gate on the same variable: set here means the configure step ran
+    // and the merged config carries real endpoints. Without it the updater commands still answer
+    // with their typed "updater-disabled" results (update_manager.rs).
+    let builder = if std::env::var_os("OMNITERM_UPDATER_PUBKEY").is_some() {
+        builder.plugin(tauri_plugin_updater::Builder::new().build())
+    } else {
+        builder
+    };
+    let builder = builder
         .manage(PtyManager::new())
         .manage(AdhocRegistry::new())
         .manage(DetachRegistry::new())
@@ -204,6 +218,12 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         // Settings
         settings::get_settings,
         settings::save_settings,
+        // Settings transfer (export / import envelope)
+        settings_transfer::export_settings,
+        settings_transfer::import_settings,
+        // Native updater
+        update_manager::check_for_native_update,
+        update_manager::download_and_install_update,
         // Themes
         themes::list_themes,
         themes::save_theme,
@@ -225,6 +245,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         window_control::close_window,
         window_control::is_maximized,
         window_control::set_webview_zoom,
+        window_control::set_fullscreen,
         // Workspace
         workspace::list_workspaces,
         workspace::create_workspace,
