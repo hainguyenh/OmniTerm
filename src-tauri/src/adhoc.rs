@@ -25,6 +25,9 @@ use uuid::Uuid;
 #[cfg(test)]
 #[path = "adhoc_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "adhoc_queue_overflow_tests.rs"]
+mod queue_overflow_tests;
 
 /// Cap on opens queued while the renderer is not yet listening. The queue exists to cover the
 /// unlock/cold-start window; any local process can drive `--open-shell`, so it stays bounded.
@@ -237,13 +240,14 @@ pub fn quick_shell_request(shell: Option<&str>) -> Result<OpenShellRequest, Stri
     })
 }
 
-
 fn quick_shell_workspace_folder<'a>(
     workspace: &'a crate::workspace::Workspace,
     folder_id: Option<&str>,
 ) -> Result<&'a crate::workspace::WorkspaceFolder, String> {
     if let Some(folder_id) = folder_id.map(str::trim).filter(|id| !id.is_empty()) {
-        return workspace.folders.iter()
+        return workspace
+            .folders
+            .iter()
             .find(|folder| folder.id == folder_id)
             .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\"."));
     }

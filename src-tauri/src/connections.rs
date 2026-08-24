@@ -13,12 +13,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 
-#[cfg(test)]
-#[path = "connections_tests.rs"]
-mod tests;
 #[cfg(all(test, unix))]
 #[path = "connections_coverage_tail_tests.rs"]
 mod coverage_tail_tests;
+#[cfg(test)]
+#[path = "connections_tests.rs"]
+mod tests;
+#[cfg(test)]
+#[path = "connections_save_load_tests.rs"]
+mod save_load_tests;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,11 +149,15 @@ fn has_legacy_secret(raw: &Value) -> bool {
 /// Best-effort by design. A failure here must not stop the app from launching, so it is logged and
 /// swallowed; the tree still loads without the secret either way, it just stays on disk.
 pub fn scrub_stored_secrets<R: Runtime>(app: &AppHandle<R>) {
-    let Ok(path) = connections_path(app) else { return };
+    let Ok(path) = connections_path(app) else {
+        return;
+    };
     if !path.exists() {
         return;
     }
-    let Ok(text) = fs::read_to_string(&path) else { return };
+    let Ok(text) = fs::read_to_string(&path) else {
+        return;
+    };
     let Ok(raw) = serde_json::from_str::<Value>(&text) else {
         // Corrupt file: `read_tree` reports this to the user with the path intact. Rewriting it here
         // would destroy whatever is salvageable.
@@ -161,7 +168,9 @@ pub fn scrub_stored_secrets<R: Runtime>(app: &AppHandle<R>) {
     }
 
     // Round-trip through `ConnectionTree`, which has no field for a secret to survive in.
-    let Ok(tree) = serde_json::from_value::<ConnectionTree>(raw) else { return };
+    let Ok(tree) = serde_json::from_value::<ConnectionTree>(raw) else {
+        return;
+    };
     let rewritten = serde_json::to_string_pretty(&tree)
         .map_err(|e| e.to_string())
         .and_then(|json| fs::write(&path, json).map_err(|e| e.to_string()));
@@ -178,7 +187,10 @@ pub fn scrub_stored_secrets<R: Runtime>(app: &AppHandle<R>) {
 }
 
 #[tauri::command]
-pub async fn load_connections<R: Runtime>(app: AppHandle<R>, host: tauri::State<'_, crate::plugin_host::PluginHost>) -> Result<ConnectionTree, String> {
+pub async fn load_connections<R: Runtime>(
+    app: AppHandle<R>,
+    host: tauri::State<'_, crate::plugin_host::PluginHost>,
+) -> Result<ConnectionTree, String> {
     if let Ok(Some(remote_data)) = host.load_connections().await {
         if let Ok(tree) = serde_json::from_value(remote_data) {
             return Ok(tree);
@@ -187,22 +199,36 @@ pub async fn load_connections<R: Runtime>(app: AppHandle<R>, host: tauri::State<
     read_tree(&app)
 }
 
-#[tauri::command]
-pub async fn save_connections<R: Runtime>(app: AppHandle<R>, host: tauri::State<'_, crate::plugin_host::PluginHost>, data: ConnectionTree) -> Result<(), String> {
+pub(crate) fn write_tree<R: Runtime>(
+    app: &AppHandle<R>,
+    data: &ConnectionTree,
+) -> Result<(), String> {
     // Validate on the way in. This is the choke point every import path funnels through.
-    let as_value = serde_json::to_value(&data).map_err(|e| e.to_string())?;
+    let as_value = serde_json::to_value(data).map_err(|e| e.to_string())?;
     tree_validate::validate_tree(&as_value["folders"], &as_value["connections"])?;
 
-    if let Ok(true) = host.save_connections(as_value).await {
+    let path = connections_path(app)?;
+    // Serialized from `ConnectionTree`, not from the caller's JSON — a webview that posts an extra
+    // `password` key gets it dropped at deserialization rather than written back out.
+    let json = serde_json::to_string_pretty(data).map_err(|e| e.to_string())?;
+    fs::write(path, json).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn save_connections<R: Runtime>(
+    app: AppHandle<R>,
+    host: tauri::State<'_, crate::plugin_host::PluginHost>,
+    data: ConnectionTree,
+) -> Result<(), String> {
+    if let Ok(true) = host
+        .save_connections(serde_json::to_value(&data).map_err(|e| e.to_string())?)
+        .await
+    {
         // Handled by plugin host
         return Ok(());
     }
 
-    let path = connections_path(&app)?;
-    // Serialized from `ConnectionTree`, not from the caller's JSON — a webview that posts an extra
-    // `password` key gets it dropped at deserialization rather than written back out.
-    let json = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())
+    write_tree(&app, &data)
 }
 
 /// Read a user-chosen file, refusing anything oversized before the bytes are pulled into memory.
@@ -230,10 +256,12 @@ pub fn parse_import_content(text: &str) -> Result<ImportOutcome, String> {
         serde_json::from_str(text).map_err(|_| "Invalid JSON file — cannot import.".to_string())?;
 
     if parsed.get("encrypted") == Some(&json!(true)) {
-        return Err("This is an encrypted vault backup, which this build cannot read — it ships no \
+        return Err(
+            "This is an encrypted vault backup, which this build cannot read — it ships no \
                     credential storage. Export a plain JSON file from the version that created it, \
                     or install a connection-manager plugin."
-            .to_string());
+                .to_string(),
+        );
     }
 
     let folders = parsed.get("folders").cloned().unwrap_or_else(|| json!([]));
