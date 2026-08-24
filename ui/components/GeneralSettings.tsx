@@ -1,6 +1,14 @@
-import React, { useEffect, useState } from 'react'
-import { FileText, Info, Lock, Plus, X } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { Download, FileText, Info, Lock, Plus, Upload, X } from 'lucide-react'
+import type { Workspace } from '@omniterm/contract'
 import { pickShell, type ShellOption } from '../shellOptions'
+import type { UseDialogReturn } from '../hooks/useDialog'
+import {
+  decodeWorkspaceSelection,
+  defaultWorkspaceToSelection,
+  encodeWorkspaceSelection,
+  type DefaultWorkspaceSetting,
+} from '../utils/workspaceSelection'
 import { Tooltip } from './Tooltip'
 
 /**
@@ -18,6 +26,27 @@ const MIN_OPEN_FILE_MB = 1
 const MAX_OPEN_FILE_MB = 25
 
 /**
+ * Select-value encoding for the default-workspace setting: `unset` (follow last-used), `home`,
+ * or `sel:<encoded workspace[::folder] selection>`. Kept as plain strings so the native select
+ * stays a controlled input with no extra state.
+ */
+const defaultWorkspaceOptionValue = (setting: DefaultWorkspaceSetting | undefined): string => {
+  if (!setting) return 'unset'
+  if (setting.mode === 'home') return 'home'
+  const selection = defaultWorkspaceToSelection(setting)
+  return selection ? `sel:${selection}` : 'unset'
+}
+
+const parseDefaultWorkspaceOption = (value: string): DefaultWorkspaceSetting | undefined => {
+  if (value === 'unset') return undefined
+  if (value === 'home') return { mode: 'home' }
+  const decoded = decodeWorkspaceSelection(value.slice(4))
+  return decoded?.folderId
+    ? { mode: 'folder', workspaceId: decoded.workspaceId, folderId: decoded.folderId }
+    : { mode: 'workspace', workspaceId: decoded?.workspaceId ?? '' }
+}
+
+/**
  * Common text extensions offered as one-click toggles in "Excluded file types" — everything else is
  * reachable through the custom-extension input beside them. Curated rather than derived from a scan
  * (unlike the workspace filter's `discoverKinds`): this list is global, not tied to one workspace's
@@ -30,20 +59,34 @@ interface GeneralSettingsProps {
   appSettings: any
   setAppSettings: (settings: any) => void
   shellOptions: ShellOption[]
+  /** Workspace catalog feeding the "default workspace for new terminals" select. */
+  workspaces?: Workspace[]
   /** Closes the settings panel — the log button opens an OS folder behind it. */
   onCloseSettings: () => void
+  /** Shared notifier (useDialog) for backup success and failure messages. */
+  showAlert?: UseDialogReturn['showAlert']
 }
 
 const LABEL_CLS = 'text-[10px] text-theme-fg uppercase font-bold tracking-widest ml-0.5'
 const FIELD_CLS =
   'bg-theme-bg border border-theme-border rounded-lg text-xs text-white focus:outline-none focus:border-theme-accent transition-colors'
+const backupButtonClass =
+  'flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-fg hover:text-theme-accent bg-theme-bg border border-theme-border rounded-lg transition-colors'
+
+/** Renderer-owned persistence-policy overrides ride inside the envelope's `sections`. */
+const POLICIES_SECTION = 'persistencePolicies'
+const POLICIES_STORAGE_KEY = 'omniterm:terminal-persistence-policies'
 
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   appSettings,
   setAppSettings,
   shellOptions,
+  workspaces = [],
   onCloseSettings,
+  showAlert,
 }) => {
+  const importInputRef = useRef<HTMLInputElement>(null)
+  const [pendingImport, setPendingImport] = useState<SettingsTransferEnvelope | null>(null)
   /** Apply a patch locally and persist just that patch. */
   const patch = (fields: Record<string, unknown>) => {
     setAppSettings({ ...appSettings, ...fields })
@@ -72,6 +115,68 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     if (!ext || systemExcluded.includes(ext) || excludedExts.includes(ext)) { setCustomExt(''); return }
     patch({ excludedViewableExts: [...excludedExts, ext] })
     setCustomExt('')
+  }
+
+  const notify = async (message: string, options?: { title?: string; tone?: 'error' }) => {
+    if (showAlert) await showAlert(message, options)
+  }
+
+  /** Backend builds the envelope; the renderer-owned policy overrides ride along as a section. */
+  const handleExport = async () => {
+    try {
+      const envelope = await window.omnitermAPI.settings.exportAll()
+      let policies: Record<string, unknown> = {}
+      try { policies = JSON.parse(localStorage.getItem(POLICIES_STORAGE_KEY) ?? '{}') } catch { /* storage optional */ }
+      const withPolicies = { ...envelope, sections: { ...envelope.sections, [POLICIES_SECTION]: policies } }
+      const blob = new Blob([JSON.stringify(withPolicies, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `omniterm-settings-${new Date().toISOString().slice(0, 10)}.json`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      await notify('Settings exported.')
+    } catch (error) {
+      await notify(`Export failed: ${error instanceof Error ? error.message : String(error)}`, { tone: 'error' })
+    }
+  }
+
+  /**
+   * Validate client-side, then hand the envelope to the backend once the user picks a strategy
+   * (rendered below when `pendingImport` is set). The backend rejects unknown sections and wrong
+   * versions; this pre-parse only catches obvious non-JSON files before any store is touched.
+   */
+  const acceptImportFile = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      setPendingImport(JSON.parse(await file.text()) as SettingsTransferEnvelope)
+    } catch {
+      await notify('Import failed: not a valid JSON settings backup.', { tone: 'error' })
+    }
+  }
+
+  const runImport = async (strategy: 'merge' | 'replace') => {
+    if (!pendingImport) return
+    try {
+      // Persistence policies are renderer-owned: lift them out before the backend sees an
+      // unknown section, then apply them after the stores land.
+      const sections = { ...pendingImport.sections } as Record<string, unknown>
+      const policies = sections[POLICIES_SECTION]
+      delete sections[POLICIES_SECTION]
+      const report = await window.omnitermAPI.settings.importAll(
+        { ...pendingImport, sections: sections as SettingsTransferEnvelope['sections'] },
+        strategy,
+      )
+      if (policies && typeof policies === 'object') {
+        localStorage.setItem(POLICIES_STORAGE_KEY, JSON.stringify(policies))
+      }
+      const counts = Object.entries(report.imported).map(([k, n]) => `${k}: ${n}`).join(', ') || 'nothing'
+      await notify(`Settings imported (${strategy}) — ${counts}.`)
+    } catch (error) {
+      await notify(`Import failed: ${error instanceof Error ? error.message : String(error)}`, { tone: 'error' })
+    } finally {
+      setPendingImport(null)
+    }
   }
 
   // Suggestions offered while typing (native <datalist>) — only extensions not already excluded one
@@ -114,6 +219,44 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           >
             {shellOptions.map(opt => (
               <option key={opt.id} value={opt.id}>{opt.label}</option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-theme-dim">
+            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      {/* Where a new terminal lands when its launch site does not name a workspace. "Last used"
+          leaves the setting unset so the existing fallback chain keeps working. */}
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="default-workspace" className={LABEL_CLS}>Default workspace for new terminals</label>
+        <div className="relative">
+          <select
+            id="default-workspace"
+            value={defaultWorkspaceOptionValue(appSettings.defaultWorkspace)}
+            onChange={(e) => patch({ defaultWorkspace: parseDefaultWorkspaceOption(e.target.value) })}
+            className={`w-full py-2 pl-3 pr-8 appearance-none cursor-pointer ${FIELD_CLS}`}
+          >
+            <option value="unset">Last used</option>
+            <option value="home">System home</option>
+            {workspaces.map(workspace => (
+              workspace.folders?.length
+                ? (
+                  <optgroup key={workspace.id} label={workspace.name}>
+                    <option value={`sel:${encodeWorkspaceSelection(workspace.id)}`}>{workspace.name} (root)</option>
+                    {workspace.folders.map(folder => (
+                      <option key={folder.id} value={`sel:${encodeWorkspaceSelection(workspace.id, folder.id)}`}>
+                        {workspace.name} / {folder.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )
+                : (
+                  <option key={workspace.id} value={`sel:${encodeWorkspaceSelection(workspace.id)}`}>
+                    {workspace.name}
+                  </option>
+                )
             ))}
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-theme-dim">
@@ -244,6 +387,51 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
                 </Tooltip>
               </span>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Settings backup. The envelope is produced and applied by the backend; this UI only
+          stitches the renderer-owned persistence-policy overrides around those two calls.
+          Secrets cannot be in the file: the connection store holds none (connections.rs). */}
+      <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
+        <span className={LABEL_CLS}>Backup &amp; restore</span>
+        <p className="text-[11px] text-theme-dim -mt-0.5">
+          Export or import app settings, connections, themes, workspaces, and persistence policies
+          as one JSON file. Connection credentials are never stored, so none are ever exported.
+        </p>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={handleExport} className={backupButtonClass}>
+            <Download className="w-3.5 h-3.5" /> Export settings
+          </button>
+          <button type="button" onClick={() => importInputRef.current?.click()} className={backupButtonClass}>
+            <Upload className="w-3.5 h-3.5" /> Import settings
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; void acceptImportFile(file) }}
+          />
+        </div>
+        {pendingImport && (
+          <div className="flex flex-wrap items-center gap-2 mt-1 p-2 rounded-lg border border-theme-border bg-theme-bg">
+            {/* Three-way import choice: the shared dialog is boolean-only, so an inline row is
+                the honest shape for merge / replace / cancel. Replace is listed last and styled
+                destructive because it discards everything absent from the backup. */}
+            <span className="text-[11px] text-theme-dim flex-1 min-w-0 truncate">
+              Import “{pendingImport.exportedAt || 'backup'}”?
+            </span>
+            <button type="button" onClick={() => void runImport('merge')} className={backupButtonClass}>Merge</button>
+            <button
+              type="button"
+              onClick={() => void runImport('replace')}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-error hover:text-theme-error bg-theme-bg border border-theme-error rounded-lg transition-colors"
+            >
+              Replace all
+            </button>
+            <button type="button" onClick={() => setPendingImport(null)} className={backupButtonClass}>Cancel</button>
           </div>
         )}
       </div>
