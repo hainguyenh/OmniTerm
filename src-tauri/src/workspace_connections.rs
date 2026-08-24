@@ -89,7 +89,11 @@ fn local_connection(
     }
     let prefix = format!("{}/", folder.id);
     if let Some(relative) = parent.strip_prefix(&prefix) {
-        connection.parent_id = if relative.is_empty() { None } else { Some(relative.to_string()) };
+        connection.parent_id = if relative.is_empty() {
+            None
+        } else {
+            Some(relative.to_string())
+        };
         return Ok(Some(connection));
     }
     Ok(None)
@@ -105,8 +109,14 @@ fn validate_connection_targets(workspace: &Workspace, data: &[Connection]) -> Re
             continue;
         }
         let folder_id = parent.split('/').next().unwrap_or_default();
-        if !workspace.folders.iter().any(|folder| folder.id == folder_id) {
-            return Err(format!("Connection targets unknown workspace folder \"{folder_id}\"."));
+        if !workspace
+            .folders
+            .iter()
+            .any(|folder| folder.id == folder_id)
+        {
+            return Err(format!(
+                "Connection targets unknown workspace folder \"{folder_id}\"."
+            ));
         }
     }
     Ok(())
@@ -143,7 +153,10 @@ async fn save_for_folder(
         folders: Vec::new(),
     };
     let value = serde_json::to_value(&tree).map_err(|error| error.to_string())?;
-    if let Ok(true) = host.save_scoped_connections(scope(workspace, folder), value).await {
+    if let Ok(true) = host
+        .save_scoped_connections(scope(workspace, folder), value)
+        .await
+    {
         return Ok(());
     }
     write_at(&folder.path, connections)
@@ -153,7 +166,10 @@ pub fn find_by_id<R: Runtime>(app: &AppHandle<R>, conn_id: &str) -> Option<Conne
     for workspace in crate::workspace::read_workspaces(app).ok()? {
         for folder in workspace.folders {
             if let Ok(connections) = read_at(&folder.path) {
-                if let Some(found) = connections.into_iter().find(|connection| connection.id == conn_id) {
+                if let Some(found) = connections
+                    .into_iter()
+                    .find(|connection| connection.id == conn_id)
+                {
                     return Some(found);
                 }
             }

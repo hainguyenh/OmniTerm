@@ -29,7 +29,9 @@ pub fn is_allowed_plugin_url(url: &str) -> bool {
     }
     // A control character or whitespace in the authority means the string was not a URL to begin
     // with; some openers split on it and act on the remainder.
-    !authority.chars().any(|c| c.is_whitespace() || c.is_control())
+    !authority
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control())
 }
 
 /// Whether this build keeps a log at all — true only with debug assertions on.
@@ -111,10 +113,13 @@ fn validate_path_for_open(path: &str) -> Result<&str, String> {
     if let Some(idx) = trimmed.find(':') {
         let scheme = &trimmed[..idx];
         let after_is_path_sep = trimmed[idx + 1..].starts_with(['/', '\\']);
-        let is_windows_drive =
-            scheme.len() == 1 && scheme.starts_with(|c: char| c.is_ascii_alphabetic()) && after_is_path_sep;
+        let is_windows_drive = scheme.len() == 1
+            && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+            && after_is_path_sep;
         let is_url_scheme = !scheme.is_empty()
-            && scheme.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
+            && scheme
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'));
         if is_url_scheme && !is_windows_drive {
             return Err("URLs are not routed through open_in_system.".to_string());
         }
@@ -137,7 +142,10 @@ pub async fn open_in_system(path: String) -> Result<(), String> {
 /// return the absolute path, so terminal agents can attach it by path. The
 /// renderer never names the file — this command owns naming and location.
 #[tauri::command]
-pub async fn save_temp_image<R: Runtime>(_app: AppHandle<R>, bytes: Vec<u8>) -> Result<String, String> {
+pub async fn save_temp_image<R: Runtime>(
+    _app: AppHandle<R>,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
     if bytes.is_empty() {
         return Err("Clipboard image payload is empty.".to_string());
     }
@@ -149,5 +157,8 @@ pub async fn save_temp_image<R: Runtime>(_app: AppHandle<R>, bytes: Vec<u8>) -> 
 /// Millisecond timestamp strong enough to avoid paste-file collisions.
 fn chrono_like_stamp() -> u128 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0)
 }

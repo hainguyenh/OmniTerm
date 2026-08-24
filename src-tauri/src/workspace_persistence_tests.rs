@@ -24,7 +24,10 @@ fn read_workspaces_migrates_a_legacy_format_and_rewrites_the_file() {
 
     // The file on disk must now be in the new format (has a "folders" key).
     let on_disk = std::fs::read_to_string(&path).unwrap_or_default();
-    assert!(on_disk.contains("folders"), "migrated file must use new format");
+    assert!(
+        on_disk.contains("folders"),
+        "migrated file must use new format"
+    );
 
     let _ = std::fs::remove_file(path);
 }
