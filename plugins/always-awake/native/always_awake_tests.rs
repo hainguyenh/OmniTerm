@@ -212,7 +212,11 @@ fn an_unchanged_tick_emits_nothing() {
 
     emit_status(&fixture.handle(), &fixture.state(), 0);
     emit_status(&fixture.handle(), &fixture.state(), 0);
-    assert_eq!(*seen.lock().unwrap(), 1, "the second identical status is dropped");
+    assert_eq!(
+        *seen.lock().unwrap(),
+        1,
+        "the second identical status is dropped"
+    );
 
     emit_status(&fixture.handle(), &fixture.state(), 1);
     assert_eq!(*seen.lock().unwrap(), 2, "a changed active count is sent");
@@ -283,7 +287,10 @@ fn reconcile_disables_and_persists_an_expired_schedule() {
 
     reconcile(&fixture.handle(), &state, &table());
 
-    assert!(!state.stored.lock().unwrap().enabled, "an expired schedule turns itself off");
+    assert!(
+        !state.stored.lock().unwrap().enabled,
+        "an expired schedule turns itself off"
+    );
     let persisted = fs::read_to_string(fixture.state_file()).expect("expiry is written to disk");
     assert!(
         persisted.contains("\"enabled\": false"),
@@ -329,7 +336,10 @@ fn set_state_rejects_an_expiry_that_has_already_passed() {
     ))
     .expect_err("a past expiry is not a schedule");
     assert!(error.contains("future"), "unexpected message: {error}");
-    assert!(!fixture.state_file().exists(), "a rejected schedule is not persisted");
+    assert!(
+        !fixture.state_file().exists(),
+        "a rejected schedule is not persisted"
+    );
 }
 
 #[test]
@@ -346,7 +356,10 @@ fn enabling_reports_the_platform_it_needs() {
         let status = result.expect("Windows accepts a future schedule");
         assert!(status.enabled);
         assert_eq!(status.expires_at_ms, 4_102_444_800_000);
-        assert!(fixture.state_file().exists(), "an accepted schedule is persisted");
+        assert!(
+            fixture.state_file().exists(),
+            "an accepted schedule is persisted"
+        );
     } else {
         let error = result.expect_err("Always Awake is Windows-only");
         assert!(error.contains("Windows"), "unexpected message: {error}");
@@ -362,7 +375,10 @@ fn disabling_clears_the_deadline_and_is_allowed_on_every_platform() {
 
     let status = block_on(disable(fixture.handle(), fixture.state())).expect("disable");
     assert!(!status.enabled);
-    assert_eq!(status.expires_at_ms, 0, "a disabled schedule carries no deadline");
+    assert_eq!(
+        status.expires_at_ms, 0,
+        "a disabled schedule carries no deadline"
+    );
     assert_eq!(status.mode, AwakeMode::ActiveOnly);
     assert!(!fixture.state().stored.lock().unwrap().enabled);
 }

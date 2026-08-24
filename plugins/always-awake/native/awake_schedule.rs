@@ -85,9 +85,7 @@ pub(super) fn active_session_count(
 }
 
 pub(super) fn should_keep_awake(stored: &StoredState, active_count: usize) -> bool {
-    stored.enabled
-        && (stored.mode == AwakeMode::Always || active_count > 0)
-        && cfg!(windows)
+    stored.enabled && (stored.mode == AwakeMode::Always || active_count > 0) && cfg!(windows)
 }
 
 pub(super) fn is_expired(stored: &StoredState, now: i64) -> bool {
