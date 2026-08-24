@@ -112,7 +112,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   }
 
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
+    <div className={`detach-window-enter h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       {/* The window is built with decorations off, so this strip is the title bar; the drag region
           is Tauri's, declared on the element rather than via a CSS property. */}
       <div
