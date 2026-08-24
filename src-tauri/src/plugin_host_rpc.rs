@@ -8,7 +8,11 @@ impl PluginHost {
         if !self.started.load(Ordering::SeqCst) {
             return false;
         }
-        self.call("plugin.available", json!({})).await.unwrap_or(Value::Bool(false)).as_bool().unwrap_or(false)
+        self.call("plugin.available", json!({}))
+            .await
+            .unwrap_or(Value::Bool(false))
+            .as_bool()
+            .unwrap_or(false)
     }
     pub async fn list_plugins(&self) -> Result<Vec<Value>, String> {
         if !self.started.load(Ordering::SeqCst) {
@@ -20,10 +24,14 @@ impl PluginHost {
     }
 
     pub async fn set_enabled(&self, id: String, enabled: bool) -> Result<Value, String> {
-        self.call("plugin.setEnabled", json!({ "id": id, "enabled": enabled })).await
+        self.call("plugin.setEnabled", json!({ "id": id, "enabled": enabled }))
+            .await
     }
 
-    pub async fn select_connection_provider(&self, id: Option<String>) -> Result<Vec<Value>, String> {
+    pub async fn select_connection_provider(
+        &self,
+        id: Option<String>,
+    ) -> Result<Vec<Value>, String> {
         let res = self
             .call("plugin.selectConnectionProvider", json!({ "id": id }))
             .await?;
@@ -48,7 +56,8 @@ impl PluginHost {
     }
 
     pub async fn invoke(&self, method: String, args: Vec<Value>) -> Result<Value, String> {
-        self.call("plugin.invoke", json!({ "method": method, "args": args })).await
+        self.call("plugin.invoke", json!({ "method": method, "args": args }))
+            .await
     }
 
     pub async fn auth_gate(&self) -> Result<bool, String> {
@@ -75,7 +84,9 @@ impl PluginHost {
         if !self.started.load(Ordering::SeqCst) {
             return Ok(false);
         }
-        let res = self.call("connections.save", json!({ "data": data })).await?;
+        let res = self
+            .call("connections.save", json!({ "data": data }))
+            .await?;
         Ok(res.as_bool().unwrap_or(false))
     }
 
@@ -83,7 +94,9 @@ impl PluginHost {
         if !self.started.load(Ordering::SeqCst) {
             return Ok(None);
         }
-        let res = self.call("connections.resolve", json!({ "connId": conn_id })).await?;
+        let res = self
+            .call("connections.resolve", json!({ "connId": conn_id }))
+            .await?;
         if res.is_null() {
             Ok(None)
         } else {
@@ -95,7 +108,9 @@ impl PluginHost {
         if !self.started.load(Ordering::SeqCst) {
             return Ok(None);
         }
-        let res = self.call("connections.loadScoped", json!({ "scope": scope })).await?;
+        let res = self
+            .call("connections.loadScoped", json!({ "scope": scope }))
+            .await?;
         Ok((!res.is_null()).then_some(res))
     }
 
@@ -104,7 +119,10 @@ impl PluginHost {
             return Ok(false);
         }
         let res = self
-            .call("connections.saveScoped", json!({ "scope": scope, "data": data }))
+            .call(
+                "connections.saveScoped",
+                json!({ "scope": scope, "data": data }),
+            )
             .await?;
         Ok(res.as_bool().unwrap_or(false))
     }
@@ -171,7 +189,8 @@ impl PluginHost {
             return Err(error.to_string());
         }
 
-        rx.await.map_err(|_| "Plugin host response channel dropped".to_string())?
+        rx.await
+            .map_err(|_| "Plugin host response channel dropped".to_string())?
     }
 }
 
@@ -192,8 +211,14 @@ mod tests {
         assert!(block_on(host.auth_gate()).unwrap());
         assert_eq!(block_on(host.load_connections()).unwrap(), None);
         assert!(!block_on(host.save_connections(json!([]))).unwrap());
-        assert_eq!(block_on(host.resolve_connection("x".to_string())).unwrap(), None);
-        assert_eq!(block_on(host.load_scoped_connections(json!({}))).unwrap(), None);
+        assert_eq!(
+            block_on(host.resolve_connection("x".to_string())).unwrap(),
+            None
+        );
+        assert_eq!(
+            block_on(host.load_scoped_connections(json!({}))).unwrap(),
+            None
+        );
         assert!(!block_on(host.save_scoped_connections(json!({}), json!([]))).unwrap());
         assert_eq!(
             block_on(host.resolve_scoped_connection(json!({}), "x".to_string())).unwrap(),
@@ -257,8 +282,11 @@ mod tests {
         let pending = Arc::clone(&host.pending);
         tauri::async_runtime::spawn(async move {
             while let Some(line) = stdin_rx.recv().await {
-                let msg: Value = serde_json::from_str(&line).expect("a well-formed JSON-RPC request");
-                let id = msg["id"].as_u64().expect("request should carry a numeric id");
+                let msg: Value =
+                    serde_json::from_str(&line).expect("a well-formed JSON-RPC request");
+                let id = msg["id"]
+                    .as_u64()
+                    .expect("request should carry a numeric id");
                 if let Some((_, tx)) = pending.remove(&id) {
                     let _ = tx.send(Ok(json!({ "echoedMethod": msg["method"] })));
                 }
@@ -294,8 +322,10 @@ mod tests {
                 let id = msg["id"].as_u64().unwrap();
                 let result = match msg["method"].as_str().unwrap() {
                     "plugin.list" | "plugin.selectConnectionProvider" => json!({}),
-                    "connections.capabilities" | "connections.load" |
-                    "connections.loadScoped" | "connections.resolveLaunch" => Value::Null,
+                    "connections.capabilities"
+                    | "connections.load"
+                    | "connections.loadScoped"
+                    | "connections.resolveLaunch" => Value::Null,
                     "connections.resolve" | "connections.resolveScoped" => json!({"id":"found"}),
                     "plugin.setEnabled" | "plugin.invoke" => json!({"ok":true}),
                     _ => json!("not-a-boolean"),
@@ -308,18 +338,36 @@ mod tests {
 
         assert!(!block_on(host.is_available()));
         assert!(block_on(host.list_plugins()).is_err());
-        assert_eq!(block_on(host.set_enabled("x".into(), true)).unwrap()["ok"], true);
+        assert_eq!(
+            block_on(host.set_enabled("x".into(), true)).unwrap()["ok"],
+            true
+        );
         assert!(block_on(host.select_connection_provider(None)).is_err());
         assert_eq!(block_on(host.connection_capabilities()).unwrap(), None);
         assert!(block_on(host.uninstall("x".into())).unwrap());
-        assert_eq!(block_on(host.invoke("x".into(), vec![])).unwrap()["ok"], true);
+        assert_eq!(
+            block_on(host.invoke("x".into(), vec![])).unwrap()["ok"],
+            true
+        );
         assert!(block_on(host.auth_gate()).unwrap());
         assert_eq!(block_on(host.load_connections()).unwrap(), None);
         assert!(!block_on(host.save_connections(json!({}))).unwrap());
-        assert!(block_on(host.resolve_connection("x".into())).unwrap().is_some());
-        assert_eq!(block_on(host.load_scoped_connections(json!({}))).unwrap(), None);
+        assert!(block_on(host.resolve_connection("x".into()))
+            .unwrap()
+            .is_some());
+        assert_eq!(
+            block_on(host.load_scoped_connections(json!({}))).unwrap(),
+            None
+        );
         assert!(!block_on(host.save_scoped_connections(json!({}), json!({}))).unwrap());
-        assert!(block_on(host.resolve_scoped_connection(json!({}), "x".into())).unwrap().is_some());
-        assert_eq!(block_on(host.resolve_connection_launch(json!({}), "x".into())).unwrap(), None);
+        assert!(
+            block_on(host.resolve_scoped_connection(json!({}), "x".into()))
+                .unwrap()
+                .is_some()
+        );
+        assert_eq!(
+            block_on(host.resolve_connection_launch(json!({}), "x".into())).unwrap(),
+            None
+        );
     }
 }

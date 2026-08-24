@@ -71,7 +71,6 @@ fn installation_reports_a_plugins_root_that_is_a_file() {
     assert!(install_validated_archive(&mut zip, &plugins, &manifest).is_err());
 }
 
-
 #[cfg(unix)]
 #[test]
 fn removal_reports_an_installed_manifest_that_cannot_be_read() {
