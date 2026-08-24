@@ -1,5 +1,6 @@
 use super::*;
 use crate::manager::SessionManager;
+use session_protocol::PersistencePolicy;
 
 fn write_manifest(state_dir: &Path, json: &str) {
     let dir = manifests_dir(state_dir);
@@ -136,4 +137,39 @@ fn manifest_freeze_fields_round_trip() {
     assert!(parsed.frozen);
     assert_eq!(parsed.pid, Some(4242));
     assert_eq!(parsed.start_time, Some(1_700_000_000));
+}
+
+#[test]
+fn write_reports_an_uncreatable_manifest_directory() {
+    // The state "directory" is a regular file, so create_dir_all cannot turn it
+    // into the manifests parent; write must surface that instead of panicking.
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = dir.path().join("blocker");
+    std::fs::write(&blocker, b"not a directory").unwrap();
+    let record = SessionManifest::live(
+        "blocked".to_string(),
+        1,
+        PersistencePolicy::CloseWithApp,
+        "origin".to_string(),
+        false,
+        false,
+        false,
+    );
+    let error = write(&blocker, &record).expect_err("directory creation must fail");
+    assert!(
+        error.contains("manifest directory"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn atomic_write_reports_a_commit_failure_when_target_is_a_directory() {
+    // rename(file -> existing directory) fails on every platform, exercising
+    // the final commit arm without OS-specific mocks.
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("target");
+    std::fs::create_dir_all(&target).unwrap();
+    let error = atomic_write(&target, b"payload", "session manifest")
+        .expect_err("committing over a directory must fail");
+    assert!(error.contains("commit"), "unexpected error: {error}");
 }

@@ -138,6 +138,159 @@ async fn import_rejects_secrets_arriving_inside_the_envelope_itself() {
 }
 
 #[tokio::test]
+async fn import_rejects_an_envelope_without_a_sections_object() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(app.handle().clone(), json!({ "version": 1 }), "merge".into())
+        .await
+        .expect_err("a sectionless envelope must be refused");
+
+    assert!(error.contains("'sections'"), "unexpected error: {error}");
+}
+
+#[tokio::test]
+async fn import_rejects_an_unknown_strategy() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": {} }),
+        "upsert".into(),
+    )
+    .await
+    .expect_err("an unknown strategy must be refused");
+
+    assert!(
+        error.contains("Unknown import strategy 'upsert'"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn import_rejects_non_object_app_settings() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": { "appSettings": [1, 2] } }),
+        "merge".into(),
+    )
+    .await
+    .expect_err("a non-object appSettings must be refused");
+
+    assert!(
+        error.contains("'appSettings' must be an object"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn import_rejects_theme_entries_without_a_string_id() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": { "themes": [{ "name": "idless" }] } }),
+        "merge".into(),
+    )
+    .await
+    .expect_err("a theme without an id must be refused");
+
+    assert!(error.contains("string 'id'"), "unexpected error: {error}");
+}
+
+#[tokio::test]
+async fn import_rejects_malformed_connection_trees() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": { "connections": { "folders": "nope" } } }),
+        "merge".into(),
+    )
+    .await
+    .expect_err("a malformed connection tree must be refused");
+
+    assert!(
+        error.contains("Rejected connection tree"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn import_rejects_malformed_workspace_catalogs() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": { "workspaces": [{ "id": "only-id" }] } }),
+        "merge".into(),
+    )
+    .await
+    .expect_err("a malformed workspace catalog must be refused");
+
+    assert!(
+        error.contains("Rejected workspace catalog"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn merge_import_skips_workspace_ids_that_already_exist() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+    // Existing store wins on collision: "a" keeps its name while "b" lands.
+    let seeded = json!([{ "id": "a", "name": "Original", "path": "C:\\a" }]);
+    let path = crate::workspace_persistence::workspaces_file(app.handle()).expect("store path");
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    std::fs::write(&path, serde_json::to_string(&seeded).expect("serialize")).expect("seed");
+
+    let report = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1, "sections": { "workspaces": [
+            { "id": "a", "name": "Incoming", "path": "C:\\a" },
+            { "id": "b", "name": "New", "path": "C:\\b" }
+        ] } }),
+        "merge".into(),
+    )
+    .await
+    .expect("merge import succeeds");
+
+    assert_eq!(report["imported"]["workspaces"], 2);
+    let stored =
+        crate::workspace_persistence::read_workspaces(app.handle()).expect("reread");
+    assert_eq!(stored.len(), 2, "duplicate id must not create a second row");
+    assert_eq!(stored[0].name, "Original", "existing entry must win the merge");
+    // The mock app directory is shared across the process; drop the seed so
+    // independently scheduled tests start from an empty store.
+    std::fs::remove_file(path).expect("cleanup seeded store");
+}
+
+#[tokio::test]
+async fn export_surfaces_a_corrupt_workspace_store() {
+    let _guard = crate::test_support::lock();
+    let app = mock_app();
+    let path = crate::workspace_persistence::workspaces_file(app.handle()).expect("store path");
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    std::fs::write(&path, "{not json").expect("seed corrupt store");
+
+    let error = export_settings(app.handle().clone())
+        .await
+        .expect_err("a corrupt workspace store must fail the export");
+
+    assert!(!error.is_empty(), "the underlying error text must surface");
+    // The mock app directory is shared across the process; drop the poison so
+    // independently scheduled tests start from an empty store.
+    std::fs::remove_file(path).expect("cleanup corrupt store");
+}
+
+#[tokio::test]
 async fn replace_overwrites_stores_while_merge_appends_without_colliding() {
     let _guard = crate::test_support::lock();
     let app = mock_app();
