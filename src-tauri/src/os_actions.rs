@@ -60,7 +60,6 @@ impl ExternalLauncher for SystemExternalLauncher {
                 .arg(path)
                 .spawn()
                 .map_err(|spawn_error| spawn_error.to_string())?;
-
         }
 
         Ok(())

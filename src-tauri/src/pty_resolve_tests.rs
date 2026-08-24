@@ -6,9 +6,9 @@
 use super::*;
 use crate::connections::{Connection, ConnectionTree};
 use crate::plugin_host::PluginHost;
+use crate::test_support;
 use std::fs;
 use std::path::PathBuf;
-use crate::test_support;
 use std::sync::MutexGuard;
 use tauri::test::MockRuntime;
 use tauri::Manager;
@@ -135,14 +135,24 @@ fn an_override_shell_wins_over_the_saved_one() {
     let t = tree(serde_json::json!([{
         "id": "c3", "name": "Shell", "type": "LOCAL", "shell": native_shell(),
     }]));
-    let other = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
+    let other = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "sh"
+    };
     let launch = launch_from_tree(t, "c3", Some(other.to_string())).expect("should resolve");
     assert_eq!(launch.shell.as_str(), other);
 }
 
 #[test]
 fn ssh_values_accept_only_the_native_client_safe_subset() {
-    for valid in ["host", "user@example.test", "10.0.0.1", "[::1]", r"domain\user"] {
+    for valid in [
+        "host",
+        "user@example.test",
+        "10.0.0.1",
+        "[::1]",
+        r"domain\user",
+    ] {
         assert!(safe_ssh_value(valid), "expected valid: {valid}");
     }
     for invalid in ["", "bad host", "host;echo", "host&echo", "host\nnext"] {
@@ -237,14 +247,24 @@ fn workspace_connections_are_launchable_and_non_ssh_prepare_is_rejected() {
 fn native_batch_provider_is_optional() {
     let fixture = Fixture::new(false);
     assert_eq!(
-        block_on(native_batch_launch(&fixture.handle(), "missing", "terminal")).unwrap(),
+        block_on(native_batch_launch(
+            &fixture.handle(),
+            "missing",
+            "terminal"
+        ))
+        .unwrap(),
         None
     );
 
     drop(fixture);
     let fixture = Fixture::new(true);
     assert_eq!(
-        block_on(native_batch_launch(&fixture.handle(), "missing", "terminal")).unwrap(),
+        block_on(native_batch_launch(
+            &fixture.handle(),
+            "missing",
+            "terminal"
+        ))
+        .unwrap(),
         None
     );
 }
@@ -315,7 +335,10 @@ fn save_one(app: &AppHandle<MockRuntime>, conn: Connection) {
     block_on(connections::save_connections(
         app.clone(),
         app.state::<PluginHost>(),
-        ConnectionTree { connections: vec![conn], folders: vec![] },
+        ConnectionTree {
+            connections: vec![conn],
+            folders: vec![],
+        },
     ))
     .unwrap();
 }
@@ -330,10 +353,19 @@ fn prepare_ssh_session_defaults_user_and_port() {
     save_one(&app, conn);
 
     if cfg!(target_os = "windows") && require_windows_client("ssh.exe", "").is_ok() {
-        assert!(block_on(prepare_ssh_session(app.clone(), "ssh-default-user-port".to_string())).is_ok());
-        let adhoc = app.state::<AdhocRegistry>().get("ssh-default-user-port").unwrap();
+        assert!(block_on(prepare_ssh_session(
+            app.clone(),
+            "ssh-default-user-port".to_string()
+        ))
+        .is_ok());
+        let adhoc = app
+            .state::<AdhocRegistry>()
+            .get("ssh-default-user-port")
+            .unwrap();
         assert_eq!(adhoc.name, "Server ssh-default-user-port");
-        assert!(adhoc.command.unwrap().contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
+        assert!(adhoc
+            .command
+            .unwrap()
+            .contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
     }
 }
-
