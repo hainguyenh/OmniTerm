@@ -567,3 +567,31 @@ textarea.code-editor-textarea {
   animation-fill-mode: backwards;
   opacity: 0.2;
 }
+
+/* ── Detach window-mode transitions (CSS only, reduced-motion safe) ──
+   Detached windows and their source-pane placeholders fade/slide in on open; the pane that
+   receives a folded-back session pulses its ring for ~600 ms so the eye lands on the target. */
+@keyframes detach-window-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+.detach-window-enter {
+  animation: detach-window-enter 220ms ease-out;
+}
+
+@keyframes pane-focus-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  40%      { box-shadow: 0 0 0 2px var(--accent-ring, #7aa2f7); }
+}
+
+.pane-focus-pulse {
+  animation: pane-focus-pulse 600ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detach-window-enter,
+  .pane-focus-pulse {
+    animation: none;
+  }
+}

@@ -9,6 +9,7 @@ import SettingsModal from './SettingsModal'
 // parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
 const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
 import { CtxItem } from './mainLayoutShared'
+import { pickShell } from '../shellOptions'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
@@ -31,6 +32,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             appSettings={appSettings}
             setAppSettings={setAppSettings}
             shellOptions={shellOptions}
+            workspaces={workspaces}
             activeSessionCount={activeTabs.length}
             hasConnectionProvider={hasConnectionProvider}
             setHasConnectionProvider={setHasConnectionProvider}
@@ -98,6 +100,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
               shellOptions={shellOptions}
               workspaces={workspaces}
               selectedWorkspaceId={selectedWorkspaceId}
+              defaultShellId={pickShell(shellOptions, appSettings.defaultShell)}
               onSelectWorkspace={setSelectedWorkspaceId}
               onLaunchShell={shell => {
                 if (selectedWorkspaceId) requestNewSession(shell, selectedWorkspaceId)

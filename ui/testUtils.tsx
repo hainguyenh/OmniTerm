@@ -44,7 +44,8 @@ const defaultSettings: AppSettings = {
     layout8: "Ctrl+8",
     toggleSidebar: "Ctrl+B",
     commandPalette: "CommandOrControl+P",
-    closeTab: "Ctrl+W"
+    closeTab: "Ctrl+W",
+    toggleAppFullscreen: "F11"
   },
 };
 
@@ -184,6 +185,7 @@ const defaults: Api = {
     onSessionMetrics: noopSub,
     local: () => {},
     localDisconnect: () => {},
+    forceKillSession: async () => {},
     localInput: () => {},
     localResize: () => {},
     listLocalSessions: async () => [],
@@ -240,6 +242,8 @@ const defaults: Api = {
   settings: {
     get: async () => defaultSettings,
     save: async () => {},
+    exportAll: async () => ({ version: 1, exportedAt: new Date().toISOString(), sections: {} }),
+    importAll: async () => ({ imported: {} }),
     onChanged: noopSub,
     systemExcludedViewExts: async () => [],
   },
@@ -251,6 +255,8 @@ const defaults: Api = {
     showSaveDialog: async () => null,
     downloadPortable: async () => {},
     downloadInstaller: async () => {},
+    nativeCheck: async () => ({ available: false, reason: 'updater-disabled' }),
+    nativeInstall: async () => {},
     onState: noopSub,
   },
   themes: {
@@ -264,6 +270,7 @@ const defaults: Api = {
     toggleMaximize: async () => {},
     close: async () => {},
     isMaximized: async () => false,
+    setFullscreen: async () => {},
     onMaximizedState: noopSub,
   },
   shells: {
