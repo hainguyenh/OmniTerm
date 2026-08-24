@@ -11,17 +11,17 @@ use std::time::Duration;
 use sysinfo::System;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-#[path = "native.rs"]
-mod native;
-#[path = "awake_schedule.rs"]
-mod awake_schedule;
 #[path = "awake_poller.rs"]
 mod awake_poller;
+#[path = "awake_schedule.rs"]
+mod awake_schedule;
+#[path = "native.rs"]
+mod native;
 
-pub use awake_schedule::{AwakeMode, AwakeStatus, AwakeTarget};
-use awake_schedule::{active_session_count, is_expired, now_ms, should_keep_awake, StoredState};
-pub use awake_poller::spawn_poller;
 use awake_poller::ensure_poller;
+pub use awake_poller::spawn_poller;
+use awake_schedule::{active_session_count, is_expired, now_ms, should_keep_awake, StoredState};
+pub use awake_schedule::{AwakeMode, AwakeStatus, AwakeTarget};
 
 const TICK: Duration = Duration::from_millis(500);
 const JIGGLE_MIN_INTERVAL_MS: i64 = 30_000;
@@ -107,7 +107,8 @@ fn load_state<R: Runtime>(app: &AppHandle<R>, state: &AlwaysAwakeState) -> Resul
 fn save_state<R: Runtime>(app: &AppHandle<R>, stored: &StoredState) -> Result<(), String> {
     let path = state_path(app)?;
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Could not create app data directory: {e}"))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create app data directory: {e}"))?;
     }
     let text = serde_json::to_string_pretty(stored).map_err(|e| e.to_string())?;
     fs::write(path, text).map_err(|e| format!("Could not save Always Awake state: {e}"))
@@ -235,7 +236,9 @@ fn reconcile<R: Runtime>(
     if should_assert != currently_asserted {
         match native::apply_assertion(should_assert) {
             Ok(()) => {
-                state.native_asserted.store(should_assert, Ordering::Release);
+                state
+                    .native_asserted
+                    .store(should_assert, Ordering::Release);
                 set_error(state, None);
             }
             Err(error) => set_error(state, Some(error)),
@@ -243,7 +246,8 @@ fn reconcile<R: Runtime>(
     }
 
     if should_assert {
-        if let (Ok(Some(timeout)), Ok(idle)) = (cached_sleep_timeout(state), native::idle_seconds()) {
+        if let (Ok(Some(timeout)), Ok(idle)) = (cached_sleep_timeout(state), native::idle_seconds())
+        {
             if idle >= timeout / 2 {
                 let now = now_ms();
                 let should_jiggle = state
@@ -317,4 +321,3 @@ pub async fn disable<R: Runtime>(
 #[cfg(test)]
 #[path = "always_awake_tests.rs"]
 mod tests;
-
