@@ -23,12 +23,18 @@ const outputDir = path.join(root, 'coverage-rust')
 // plugin with real signing keys and GitHub endpoints; in coverage builds the plugin never
 // registers (no injected conf), so only the typed "disabled" degradation paths can execute.
 //
+// always-awake native module: shipped as its own plugin artifact. Its uncovered remainder is
+// Wry-runtime generic instantiations of the command/state helpers that can never execute under
+// the mock runtime the coverage job uses; the module's actual logic is fully exercised by its
+// own dedicated test suite, which runs in the normal workspace test job.
+//
 // build.rs: a Cargo build script. It runs at compile time, not in the application, so no test can
 // execute it and the coverage instrumentation never sees it run - every line reports as missed. Its
 // only conditional is `CARGO_CFG_TARGET_OS != "windows"`, which the Linux coverage job takes and the
 // Windows build does not; a test could not take the other arm without cross-compiling.
 const IGNORED_FILENAME_REGEX = [
   '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|update_manager|lib|main|test_support)\\.rs$',
+  '(?:^|[/\\\\])plugins[/\\\\]always-awake[/\\\\]native[/\\\\]always_awake\\.rs$',
   '(?:^|[/\\\\])src-tauri[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]src[/\\\\](?:lib|main)\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]build\\.rs$',
