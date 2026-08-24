@@ -47,6 +47,8 @@ From session start through live IO, resize, status changes, disconnect and close
 - Input/output are runtime stream data, not profile persistence.
 - Every terminal defaults to `close-with-app`; `keep-running`, `freeze-while-closed` and `recover-after-reboot` are per-session overrides via the persistence menu.
 - `freeze-while-closed` suspends the daemon-owned process tree on last-client exit and resumes it before any attach or mutation; explicit pane close still kills outright.
+- Stop is gated by an explicit live-session flag from the hosting header/footer, not by the activity probe — the probe misreads idle on WSL and fast commands, so a connected session keeps Stop pressable.
+- A Stop press sends SIGINT (`Ctrl+C`) first; if the process survives an escalation delay it re-arms into a Force-kill action that tears the daemon session down, surfacing failures through a host callback.
 
 ## Functionalities
 
@@ -58,6 +60,7 @@ From session start through live IO, resize, status changes, disconnect and close
 - `attachTerminalStream` — owned by this spec.
 - `createTerminalOptions` — owned by this spec.
 - `saveScrollback` / `loadScrollback` — owned by this spec.
+- Stop escalation (`sessionLive` gate, SIGINT then Force kill) — owned by this spec.
 
 ## Components and functions
 
@@ -80,6 +83,7 @@ From session start through live IO, resize, status changes, disconnect and close
 - Status/metrics
 - Stream subscription
 - Persisted layout snapshots and scrollback buffers
+- Session-control escalation state (armed Force-kill timer)
 
 ## Errors and edge cases
 
@@ -107,3 +111,4 @@ From session start through live IO, resize, status changes, disconnect and close
 - `ui/utils/terminalStream.ts`
 - `ui/utils/scrollbackStore.ts`
 - `ui/utils/sessionStore.ts`
+- `ui/components/SessionControlButtons.tsx`
