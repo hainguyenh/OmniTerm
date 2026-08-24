@@ -102,16 +102,26 @@ pub fn validate_theme_id(id: &str) -> Result<(), String> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
     {
-        return Err(
-            "Theme id may only contain letters, digits, '-', '_' and '.'.".to_string(),
-        );
+        return Err("Theme id may only contain letters, digits, '-', '_' and '.'.".to_string());
     }
     Ok(())
 }
 
 #[tauri::command]
-pub async fn save_theme<R: Runtime>(app: AppHandle<R>, theme: serde_json::Value) -> Result<(), String> {
-    let themes_dir = get_themes_dir(&app)?;
+pub async fn save_theme<R: Runtime>(
+    app: AppHandle<R>,
+    theme: serde_json::Value,
+) -> Result<(), String> {
+    write_user_theme(&app, theme)
+}
+
+/// Persist one user theme, validating its id before it can touch the filesystem.
+/// Shared by `save_theme` and the settings-transfer importer.
+pub(crate) fn write_user_theme<R: Runtime>(
+    app: &AppHandle<R>,
+    theme: serde_json::Value,
+) -> Result<(), String> {
+    let themes_dir = get_themes_dir(app)?;
 
     let id = theme
         .get("id")
@@ -127,6 +137,32 @@ pub async fn save_theme<R: Runtime>(app: AppHandle<R>, theme: serde_json::Value)
     fs::write(&theme_path, contents).map_err(|e| format!("Failed to write theme file: {e}"))?;
 
     Ok(())
+}
+
+/// The user's own themes (never the bundled built-ins) — the exportable set.
+pub(crate) fn user_theme_files<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Vec<serde_json::Value>, String> {
+    Ok(read_theme_dir(&get_themes_dir(app)?))
+}
+
+/// Remove every user theme file. Returns how many were deleted. Used by replace-mode import;
+/// built-in themes are untouched because they live in the resource dir, not here.
+pub(crate) fn clear_user_themes<R: Runtime>(app: &AppHandle<R>) -> Result<usize, String> {
+    let themes_dir = get_themes_dir(app)?;
+    let mut removed = 0usize;
+    if themes_dir.exists() {
+        for entry in fs::read_dir(&themes_dir)
+            .map_err(|e| e.to_string())?
+            .flatten()
+        {
+            if entry.path().extension().is_some_and(|ext| ext == "json") {
+                fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
+                removed += 1;
+            }
+        }
+    }
+    Ok(removed)
 }
 
 #[tauri::command]
@@ -148,7 +184,14 @@ mod tests {
 
     #[test]
     fn accepts_the_ids_the_built_in_themes_use() {
-        for id in ["tokyo-night", "tokyo_hot", "claude", "voltAgent", "theme.v2", "a"] {
+        for id in [
+            "tokyo-night",
+            "tokyo_hot",
+            "claude",
+            "voltAgent",
+            "theme.v2",
+            "a",
+        ] {
             assert!(validate_theme_id(id).is_ok(), "{id} should be accepted");
         }
     }
@@ -237,8 +280,11 @@ mod tests {
     fn delete_theme_rejects_invalid_id() {
         let _guard = crate::test_support::lock();
         let app = crate::test_support::mock_app();
-        let err = tauri::async_runtime::block_on(delete_theme(app.handle().clone(), "../evil".to_string()))
-            .expect_err("must reject traversal id");
+        let err = tauri::async_runtime::block_on(delete_theme(
+            app.handle().clone(),
+            "../evil".to_string(),
+        ))
+        .expect_err("must reject traversal id");
         assert!(!err.is_empty());
     }
 
@@ -262,7 +308,6 @@ mod tests {
         assert!(!themes.iter().any(|theme| theme["id"] == "ignored"));
         let _ = fs::remove_dir_all(dir);
     }
-
 
     #[test]
     fn theme_commands_surface_filesystem_failures_without_partial_success() {
@@ -294,14 +339,23 @@ mod tests {
         let _guard = crate::test_support::lock();
         let app = crate::test_support::mock_app();
         let data_dir = app.path().app_data_dir().unwrap();
-        let _ = fs::remove_dir_all(&data_dir);
-        if let Some(parent) = data_dir.parent() {
-            fs::create_dir_all(parent).unwrap();
+        // Right after a fresh build the security stack often holds a scan handle inside the newly
+        // written artifacts' directories, so the swap to a plain file can transiently fail with a
+        // sharing violation. Bounded retries keep this test about list_themes' error contract,
+        // which is all it exists to check.
+        let mut prepared = false;
+        for _ in 0..20 {
+            let _ = fs::remove_dir_all(&data_dir);
+            let _ = fs::remove_file(&data_dir);
+            if fs::write(&data_dir, b"not a directory").is_ok() {
+                prepared = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        fs::write(&data_dir, b"not a directory").unwrap();
+        assert!(prepared, "could not turn the app-data path into a plain file");
 
-        let error = tauri::async_runtime::block_on(list_themes(app.handle().clone()))
-            .unwrap_err();
+        let error = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap_err();
         assert!(error.contains("Failed to create themes directory"));
 
         fs::remove_file(&data_dir).unwrap();
