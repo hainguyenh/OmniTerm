@@ -43,8 +43,13 @@ fn asking_the_poller_to_stop_ends_the_thread_and_releases_the_request() {
     while !poller.is_finished() && std::time::Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(poller.is_finished(), "the poller must stop when the app asks it to");
-    poller.join().expect("the poller thread should stop cleanly");
+    assert!(
+        poller.is_finished(),
+        "the poller must stop when the app asks it to"
+    );
+    poller
+        .join()
+        .expect("the poller thread should stop cleanly");
     assert!(
         !state.native_asserted.load(Ordering::Acquire),
         "quitting must hand the sleep request back, not leave the machine awake"

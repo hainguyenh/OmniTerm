@@ -78,6 +78,16 @@ export function useWorkspaceMutations({
     }
   }, [onWorkspacesChanged, reportFailure, setWorkspaces])
 
+  const renameFolder = useCallback(async (workspaceId: string, folderId: string, name: string) => {
+    try {
+      const updated = await window.omnitermAPI.workspace.renameFolder(workspaceId, folderId, name)
+      setWorkspaces(previous => previous.map(workspace => workspace.id === updated.id ? updated : workspace))
+      await onWorkspacesChanged?.()
+    } catch (error) {
+      reportFailure(error, 'Could not rename folder')
+    }
+  }, [onWorkspacesChanged, reportFailure, setWorkspaces])
+
   const setWorkspaceAppearance = useCallback(async (
     workspaceId: string,
     color: WorkspaceColor | undefined,
@@ -139,6 +149,7 @@ export function useWorkspaceMutations({
     moveWorkspace,
     removeWorkspace,
     renameWorkspace,
+    renameFolder,
     setWorkspaceAppearance,
     setWorkspaceFolderColor,
     togglePinned,

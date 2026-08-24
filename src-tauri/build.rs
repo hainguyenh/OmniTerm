@@ -1,12 +1,12 @@
 fn main() {
-  println!("cargo:rerun-if-changed=icons/icon.ico");
-  // The Windows app manifest is embedded here instead (see `embed_windows_app_manifest`), so ask
-  // tauri-build not to embed its own — two RT_MANIFEST resources with the same id is a hard
-  // `CVT1100: duplicate resource` at link time.
-  let attributes = tauri_build::Attributes::new()
-    .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
-  tauri_build::try_build(attributes).expect("failed to run tauri-build");
-  embed_windows_app_manifest();
+    println!("cargo:rerun-if-changed=icons/icon.ico");
+    // The Windows app manifest is embedded here instead (see `embed_windows_app_manifest`), so ask
+    // tauri-build not to embed its own — two RT_MANIFEST resources with the same id is a hard
+    // `CVT1100: duplicate resource` at link time.
+    let attributes = tauri_build::Attributes::new()
+        .windows_attributes(tauri_build::WindowsAttributes::new_without_app_manifest());
+    tauri_build::try_build(attributes).expect("failed to run tauri-build");
+    embed_windows_app_manifest();
 }
 
 /// Embed `windows-app-manifest.xml` into every Windows artifact, test harnesses included.
@@ -24,23 +24,27 @@ fn main() {
 /// `--lib` unittest binary. Hence the unscoped, all-artifacts form that `compile_for_everything`
 /// emits.
 fn embed_windows_app_manifest() {
-  if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
-    return;
-  }
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
+        return;
+    }
 
-  let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
-  println!("cargo:rerun-if-changed={}", manifest.display());
+    let manifest =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
+    println!("cargo:rerun-if-changed={}", manifest.display());
 
-  // 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID and 24 is RT_MANIFEST.
-  let script = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR is always set"))
-    .join("app-manifest.rc");
-  std::fs::write(
-    &script,
-    format!("1 24 \"{}\"\n", manifest.display().to_string().replace('\\', "\\\\")),
-  )
-  .expect("failed to write the app manifest resource script");
+    // 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID and 24 is RT_MANIFEST.
+    let script = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR is always set"))
+        .join("app-manifest.rc");
+    std::fs::write(
+        &script,
+        format!(
+            "1 24 \"{}\"\n",
+            manifest.display().to_string().replace('\\', "\\\\")
+        ),
+    )
+    .expect("failed to write the app manifest resource script");
 
-  embed_resource::compile_for_everything(&script, embed_resource::NONE)
-    .manifest_required()
-    .expect("failed to embed the Windows app manifest");
+    embed_resource::compile_for_everything(&script, embed_resource::NONE)
+        .manifest_required()
+        .expect("failed to embed the Windows app manifest");
 }

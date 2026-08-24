@@ -128,7 +128,15 @@ pub async fn save_settings<R: Runtime>(app: AppHandle<R>, settings: Value) -> Re
     }
 
     let merged = merge_shallow(&read_settings(&app), &settings);
-    let path = settings_path(&app)?;
+    write_settings_raw(&app, merged)
+}
+
+/// Overwrite the stored settings file wholesale and broadcast the change.
+///
+/// Only transfer/import paths call this directly; the renderer's `save_settings` merges instead,
+/// because renderer patches are partial by contract (see the module doc above).
+pub fn write_settings_raw<R: Runtime>(app: &AppHandle<R>, merged: Value) -> Result<(), String> {
+    let path = settings_path(app)?;
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent)

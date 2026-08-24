@@ -46,6 +46,7 @@ At app startup, settings load/save, appearance changes, theme remix, custom-art/
 - Missing settings fall back to defaults.
 - Theme identifiers validate before file operations.
 - Theme/update state have separate persistence concerns.
+- General settings persist the default-workspace preference (`unset`/home/workspace/folder) consumed by the new-terminal targeting chain.
 
 ## Functionalities
 

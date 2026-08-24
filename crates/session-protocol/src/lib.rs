@@ -13,6 +13,7 @@ pub enum PersistencePolicy {
     CloseWithApp,
     KeepRunning,
     RecoverAfterReboot,
+    FreezeWhileClosed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +49,8 @@ pub struct SessionSummary {
     pub busy: bool,
     pub launched_with_command: bool,
     pub ssh: bool,
+    /// True while the session's process tree is suspended under FreezeWhileClosed.
+    pub frozen: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +64,11 @@ pub struct AttachSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum DaemonStatus {
     Ready { label: String },
     Error { message: String },
@@ -70,7 +77,11 @@ pub enum DaemonStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ClientRequest {
     Hello {
         protocol_version: u32,
@@ -111,17 +122,33 @@ pub enum ClientRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ServerMessage {
-    Hello { protocol_version: u32 },
+    Hello {
+        protocol_version: u32,
+    },
     Ok,
-    Error { message: String },
-    Created { session: SessionSummary },
-    Sessions { sessions: Vec<SessionSummary> },
+    Error {
+        message: String,
+    },
+    Created {
+        session: SessionSummary,
+    },
+    Sessions {
+        sessions: Vec<SessionSummary>,
+    },
     Attached {
         snapshot: AttachSnapshot,
         replay: Vec<u8>,
     },
-    Data { data: Vec<u8> },
-    Status { status: DaemonStatus },
+    Data {
+        data: Vec<u8>,
+    },
+    Status {
+        status: DaemonStatus,
+    },
 }

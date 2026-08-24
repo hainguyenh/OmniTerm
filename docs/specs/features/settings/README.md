@@ -5,6 +5,7 @@ Routing for this product feature.
 ## Navigation
 
 - [Settings/themes/updates](settings-themes-updates.md) — preferences and appearance/update behavior
+- [Settings transfer](settings-transfer.md) — whole-settings export/import envelopes
 
 ## Spec conventions
 

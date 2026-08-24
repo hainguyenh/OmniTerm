@@ -50,11 +50,8 @@ fn valid_ssh_profiles_reach_the_platform_client_boundary() {
             },
         ))
         .unwrap();
-        let error = tauri::async_runtime::block_on(prepare_ssh_session(
-            handle.clone(),
-            id,
-        ))
-        .unwrap_err();
+        let error =
+            tauri::async_runtime::block_on(prepare_ssh_session(handle.clone(), id)).unwrap_err();
         assert_eq!(error, "ssh.exe is available only on Windows.");
     }
     let _ = std::fs::remove_dir_all(data_dir);

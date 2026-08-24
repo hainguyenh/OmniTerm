@@ -47,6 +47,7 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 - One native session per session ID.
 - Detach preserves process/session identity.
 - Replay is emitted before the live daemon stream, preserving output ordering across attach/restart.
+- `FreezeWhileClosed` sessions suspend their whole process tree when the owning GUI client disconnects (NtSuspendProcess per pid on Windows, `SIGSTOP` on the Unix process group) and resume before the next attach or mutation; a Unix boot sweep reaps verified frozen orphans via manifest pid + start-time match.
 
 ## Functionalities
 

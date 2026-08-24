@@ -6,7 +6,10 @@
 
 #[tauri::command]
 pub fn system_excluded_view_exts() -> Vec<String> {
-    app_core::safepath::VIEW_DENY_EXTS.iter().map(|s| s.to_string()).collect()
+    app_core::safepath::VIEW_DENY_EXTS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 #[cfg(test)]
@@ -21,6 +24,9 @@ mod tests {
             app_core::safepath::VIEW_DENY_EXTS.to_vec(),
             "the Settings UI and the viewer must source the same deny-list"
         );
-        assert!(!excluded.is_empty(), "the deny-list is non-empty in production");
+        assert!(
+            !excluded.is_empty(),
+            "the deny-list is non-empty in production"
+        );
     }
 }

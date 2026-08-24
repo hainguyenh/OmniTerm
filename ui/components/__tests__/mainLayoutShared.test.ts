@@ -12,5 +12,6 @@ describe('MainLayout shortcut defaults', () => {
     expect(DEFAULT_SHORTCUTS.layout5).toBe('Ctrl+5')
     expect(DEFAULT_SHORTCUTS.layout7).toBe('Ctrl+7')
     expect(DEFAULT_SHORTCUTS.closeTab).toBe('Ctrl+W')
+    expect(DEFAULT_SHORTCUTS.toggleAppFullscreen).toBe('F11')
   })
 })

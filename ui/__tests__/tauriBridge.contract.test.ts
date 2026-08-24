@@ -296,6 +296,8 @@ describe('settings and plugins', () => {
     expect(lastInvoke()).toEqual(['delete_theme', { id: 'mine' }])
     await api.windowControl.toggleMaximize()
     expect(lastInvoke()[0]).toBe('toggle_maximize')
+    await api.windowControl.setFullscreen(true)
+    expect(lastInvoke()).toEqual(['set_fullscreen', { on: true }])
   })
 
   it('forwards connection load and save', async () => {

@@ -12,18 +12,17 @@ use crate::workspace_connections;
 use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(test)]
-#[path = "pty_resolve_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "pty_resolve_coverage_tests.rs"]
 mod coverage_tests;
+#[cfg(test)]
+#[path = "pty_resolve_tests.rs"]
+mod tests;
 
 fn safe_ssh_value(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 255
         && value.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || matches!(c, '.' | '_' | '-' | ':' | '[' | ']' | '@' | '\\')
+            c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | ':' | '[' | ']' | '@' | '\\')
         })
 }
 
@@ -81,7 +80,9 @@ pub(crate) async fn native_batch_launch<R: Runtime>(
         let raw = spec
             .get("path")
             .and_then(|value| value.as_str())
-            .ok_or_else(|| "The connection provider returned an invalid launcher path.".to_string())?;
+            .ok_or_else(|| {
+                "The connection provider returned an invalid launcher path.".to_string()
+            })?;
         if raw
             .chars()
             .any(|value| matches!(value, '&' | '|' | '<' | '>' | '^' | '%' | '!' | '\r' | '\n'))
@@ -97,7 +98,11 @@ pub(crate) async fn native_batch_launch<R: Runtime>(
             scope
                 .get("workspacePath")
                 .and_then(|value| value.as_str())
-                .map(|root| std::path::Path::new(root).join(".omniterm").join("launchers"))
+                .map(|root| {
+                    std::path::Path::new(root)
+                        .join(".omniterm")
+                        .join("launchers")
+                })
         } else {
             app.path()
                 .app_data_dir()
@@ -108,7 +113,10 @@ pub(crate) async fn native_batch_launch<R: Runtime>(
             .and_then(|root| std::fs::canonicalize(root).ok())
             .ok_or_else(|| "The launcher directory is unavailable.".to_string())?;
         if !launcher.starts_with(allowed) {
-            return Err("The connection provider returned a launcher outside its allowed directory.".to_string());
+            return Err(
+                "The connection provider returned a launcher outside its allowed directory."
+                    .to_string(),
+            );
         }
         return Ok(Some(launcher.to_string_lossy().into_owned()));
     }

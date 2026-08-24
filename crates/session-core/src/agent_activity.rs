@@ -88,9 +88,9 @@ impl AgentActivityTracker {
                 .last_input
                 .is_some_and(|input| now.saturating_duration_since(input) < INPUT_ECHO_QUIET);
         let recent_output = self.is_agent
-            && self.last_autonomous_output.is_some_and(|output| {
-                now.saturating_duration_since(output) <= OUTPUT_BUSY_TAIL
-            });
+            && self
+                .last_autonomous_output
+                .is_some_and(|output| now.saturating_duration_since(output) <= OUTPUT_BUSY_TAIL);
         AgentActivitySample {
             is_agent: self.is_agent,
             recent_output,
@@ -113,7 +113,8 @@ impl AgentActivityTracker {
                 find_osc_terminator(&self.osc_buffer[title_start..])
             else {
                 if self.osc_buffer.len() > OSC_BUFFER_LIMIT {
-                    self.osc_buffer.drain(..self.osc_buffer.len() - OSC_BUFFER_LIMIT);
+                    self.osc_buffer
+                        .drain(..self.osc_buffer.len() - OSC_BUFFER_LIMIT);
                 }
                 return;
             };
@@ -165,8 +166,11 @@ pub(crate) fn title_is_agent(title: &str) -> bool {
     AGENT_ALIASES.iter().any(|&alias| {
         let alias_bytes = alias.as_bytes();
         lower.match_indices(alias).any(|(index, _)| {
-            is_boundary(index.checked_sub(1).and_then(|before| bytes.get(before).copied()))
-                && is_boundary(bytes.get(index + alias_bytes.len()).copied())
+            is_boundary(
+                index
+                    .checked_sub(1)
+                    .and_then(|before| bytes.get(before).copied()),
+            ) && is_boundary(bytes.get(index + alias_bytes.len()).copied())
         })
     })
 }

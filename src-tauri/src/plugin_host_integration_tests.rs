@@ -1,16 +1,15 @@
 //! Cross-module provider integration through the real `PluginHost::call` transport.
 
 use super::*;
-use crate::connections::{Connection, ConnectionTree};
-use crate::{connections, pty_resolve, workspace, workspace_connections};
+use crate::connections::Connection;
 use std::fs;
 use tauri::Manager;
 
-fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
+pub(super) fn block_on<T>(future: impl std::future::Future<Output = T>) -> T {
     tauri::async_runtime::block_on(future)
 }
 
-fn connection(id: &str) -> Connection {
+pub(super) fn connection(id: &str) -> Connection {
     Connection {
         id: id.into(),
         name: format!("provider {id}"),
@@ -29,7 +28,7 @@ fn connection(id: &str) -> Connection {
     }
 }
 
-struct ProviderPaths {
+pub(super) struct ProviderPaths {
     personal: String,
     workspace: String,
     non_bat: String,
@@ -37,7 +36,7 @@ struct ProviderPaths {
     missing: String,
 }
 
-fn start_provider(host: &PluginHost, paths: ProviderPaths, malformed_loads: bool) {
+pub(super) fn start_provider(host: &PluginHost, paths: ProviderPaths, malformed_loads: bool) {
     host.started.store(true, Ordering::SeqCst);
     let (stdin_tx, mut stdin_rx) = mpsc::channel::<String>(32);
     block_on(async { *host.stdin_tx.lock().await = Some(stdin_tx) });
@@ -60,20 +59,24 @@ fn start_provider(host: &PluginHost, paths: ProviderPaths, malformed_loads: bool
                 }),
                 "plugin.authGate" => json!(false),
                 "plugin.uninstall" => json!(true),
-                "connections.load" => if malformed_loads {
-                    json!("invalid tree")
-                } else {
-                    json!({"connections": [connection("remote-global")], "folders": []})
-                },
+                "connections.load" => {
+                    if malformed_loads {
+                        json!("invalid tree")
+                    } else {
+                        json!({"connections": [connection("remote-global")], "folders": []})
+                    }
+                }
                 "connections.save" | "connections.saveScoped" => json!(!malformed_loads),
-                "connections.loadScoped" => if malformed_loads {
-                    json!("invalid tree")
-                } else {
-                    json!({
-                        "connections": [connection("remote-workspace"), connection("remove-me")],
-                        "folders": []
-                    })
-                },
+                "connections.loadScoped" => {
+                    if malformed_loads {
+                        json!("invalid tree")
+                    } else {
+                        json!({
+                            "connections": [connection("remote-workspace"), connection("remove-me")],
+                            "folders": []
+                        })
+                    }
+                }
                 "connections.resolveScoped" => match params["connId"].as_str() {
                     Some("scoped-provider") => json!(connection("scoped-provider")),
                     _ => Value::Null,
@@ -86,15 +89,31 @@ fn start_provider(host: &PluginHost, paths: ProviderPaths, malformed_loads: bool
                     let conn_id = params["connId"].as_str().unwrap_or_default();
                     let workspace_scope = params["scope"]["kind"] == "workspace";
                     match conn_id {
-                        "batch-good" => json!({"kind":"batch","presentation":"terminal","path":&paths.personal}),
-                        "batch-kind" => json!({"kind":"native","presentation":"terminal","path":&paths.personal}),
-                        "batch-mismatch" => json!({"kind":"batch","presentation":"window","path":&paths.personal}),
-                        "batch-danger" => json!({"kind":"batch","presentation":"terminal","path":"bad&launcher.bat"}),
+                        "batch-good" => {
+                            json!({"kind":"batch","presentation":"terminal","path":&paths.personal})
+                        }
+                        "batch-kind" => {
+                            json!({"kind":"native","presentation":"terminal","path":&paths.personal})
+                        }
+                        "batch-mismatch" => {
+                            json!({"kind":"batch","presentation":"window","path":&paths.personal})
+                        }
+                        "batch-danger" => {
+                            json!({"kind":"batch","presentation":"terminal","path":"bad&launcher.bat"})
+                        }
                         "batch-no-path" => json!({"kind":"batch","presentation":"terminal"}),
-                        "batch-missing" => json!({"kind":"batch","presentation":"terminal","path":&paths.missing}),
-                        "batch-non-bat" => json!({"kind":"batch","presentation":"terminal","path":&paths.non_bat}),
-                        "batch-outside" => json!({"kind":"batch","presentation":"terminal","path":&paths.outside}),
-                        "batch-no-root" => json!({"kind":"batch","presentation":"terminal","path":&paths.outside}),
+                        "batch-missing" => {
+                            json!({"kind":"batch","presentation":"terminal","path":&paths.missing})
+                        }
+                        "batch-non-bat" => {
+                            json!({"kind":"batch","presentation":"terminal","path":&paths.non_bat})
+                        }
+                        "batch-outside" => {
+                            json!({"kind":"batch","presentation":"terminal","path":&paths.outside})
+                        }
+                        "batch-no-root" => {
+                            json!({"kind":"batch","presentation":"terminal","path":&paths.outside})
+                        }
                         "workspace-batch" if workspace_scope => json!({
                             "kind":"batch","presentation":"terminal","path":&paths.workspace
                         }),
@@ -110,7 +129,11 @@ fn start_provider(host: &PluginHost, paths: ProviderPaths, malformed_loads: bool
     });
 }
 
-fn setup() -> (tauri::App<tauri::test::MockRuntime>, tempfile::TempDir, ProviderPaths) {
+pub(super) fn setup() -> (
+    tauri::App<tauri::test::MockRuntime>,
+    tempfile::TempDir,
+    ProviderPaths,
+) {
     let app = crate::test_support::mock_app();
     assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
     assert!(app.manage(PluginHost::new()));
@@ -133,208 +156,11 @@ fn setup() -> (tauri::App<tauri::test::MockRuntime>, tempfile::TempDir, Provider
         workspace: workspace.to_string_lossy().into_owned(),
         non_bat: non_bat.to_string_lossy().into_owned(),
         outside: outside.to_string_lossy().into_owned(),
-        missing: personal_dir.join("missing.bat").to_string_lossy().into_owned(),
+        missing: personal_dir
+            .join("missing.bat")
+            .to_string_lossy()
+            .into_owned(),
     };
     (app, workspace_root, paths)
 }
 
-#[test]
-fn provider_data_drives_global_workspace_and_resolution_fallbacks() {
-    let _guard = crate::test_support::lock();
-    let (app, workspace_root, paths) = setup();
-    let handle = app.handle().clone();
-    let workspace = block_on(workspace::add_workspace(
-        handle.clone(),
-        workspace_root.path().to_string_lossy().into_owned(),
-    ))
-    .unwrap();
-    let host = app.state::<PluginHost>();
-    start_provider(host.inner(), paths, false);
-
-    let global = block_on(connections::load_connections(handle.clone(), host.clone())).unwrap();
-    assert_eq!(global.connections[0].id, "remote-global");
-    block_on(connections::save_connections(
-        handle.clone(),
-        host.clone(),
-        ConnectionTree { connections: vec![connection("saved")], folders: vec![] },
-    ))
-    .unwrap();
-    assert!(!connections::connections_path(&handle).unwrap().exists());
-
-    let scoped = block_on(workspace_connections::load_workspace_connections(
-        handle.clone(), host.clone(), workspace.id.clone(),
-    ))
-    .unwrap();
-    assert_eq!(scoped.len(), 2);
-    block_on(workspace_connections::save_workspace_connections(
-        handle.clone(), host.clone(), workspace.id.clone(), vec![connection("saved-scoped")],
-    ))
-    .unwrap();
-    block_on(workspace_connections::delete_workspace_connection(
-        handle.clone(), host.clone(), workspace.id, "remove-me".into(),
-    ))
-    .unwrap();
-    assert!(!workspace_root.path().join(".omniterm/connections.json").exists());
-
-    assert_eq!(
-        block_on(pty_resolve::resolve_connection_by_id(&handle, "scoped-provider"))
-            .unwrap().id,
-        "scoped-provider"
-    );
-    assert_eq!(
-        block_on(pty_resolve::resolve_connection_by_id(&handle, "personal-provider"))
-            .unwrap().id,
-        "personal-provider"
-    );
-}
-
-#[test]
-fn provider_batch_launches_are_confined_and_schema_checked() {
-    let _guard = crate::test_support::lock();
-    let (app, workspace_root, paths) = setup();
-    let handle = app.handle().clone();
-    block_on(workspace::add_workspace(
-        handle.clone(), workspace_root.path().to_string_lossy().into_owned(),
-    ))
-    .unwrap();
-    start_provider(app.state::<PluginHost>().inner(), paths, false);
-
-    assert!(block_on(pty_resolve::native_batch_launch(&handle, "batch-good", "terminal"))
-        .unwrap().unwrap().ends_with("personal.bat"));
-    assert_eq!(
-        block_on(pty_resolve::native_batch_launch(&handle, "batch-mismatch", "terminal")).unwrap(),
-        None
-    );
-    assert_eq!(
-        block_on(pty_resolve::native_batch_launch(&handle, "batch-kind", "terminal")).unwrap(),
-        None
-    );
-    assert!(block_on(pty_resolve::native_batch_launch(&handle, "workspace-batch", "terminal"))
-        .unwrap().unwrap().ends_with("workspace.bat"));
-
-    for (id, expected) in [
-        ("batch-danger", "unsupported command characters"),
-        ("batch-no-path", "invalid launcher path"),
-        ("batch-missing", "launcher is missing"),
-        ("batch-non-bat", "non-BAT launcher"),
-        ("batch-outside", "outside its allowed directory"),
-    ] {
-        let error = block_on(pty_resolve::native_batch_launch(&handle, id, "terminal")).unwrap_err();
-        assert!(error.contains(expected), "{id}: {error}");
-    }
-
-    fs::remove_dir_all(handle.path().app_data_dir().unwrap().join("plugin-storage")).unwrap();
-    let error = block_on(pty_resolve::native_batch_launch(&handle, "batch-no-root", "terminal"))
-        .unwrap_err();
-    assert!(error.contains("launcher directory is unavailable"), "{error}");
-}
-
-#[test]
-fn malformed_or_declined_provider_results_fall_back_to_local_files() {
-    let _guard = crate::test_support::lock();
-    let (app, workspace_root, paths) = setup();
-    let handle = app.handle().clone();
-    let workspace = block_on(workspace::add_workspace(
-        handle.clone(),
-        workspace_root.path().to_string_lossy().into_owned(),
-    ))
-    .unwrap();
-    let host = app.state::<PluginHost>();
-
-    block_on(connections::save_connections(
-        handle.clone(),
-        host.clone(),
-        ConnectionTree { connections: vec![connection("disk-global")], folders: vec![] },
-    ))
-    .unwrap();
-    block_on(workspace_connections::save_workspace_connections(
-        handle.clone(),
-        host.clone(),
-        workspace.id.clone(),
-        vec![connection("disk-workspace"), connection("delete-local")],
-    ))
-    .unwrap();
-
-    start_provider(host.inner(), paths, true);
-    assert_eq!(
-        block_on(connections::load_connections(handle.clone(), host.clone()))
-            .unwrap().connections[0].id,
-        "disk-global"
-    );
-    block_on(connections::save_connections(
-        handle.clone(),
-        host.clone(),
-        ConnectionTree { connections: vec![connection("disk-replaced")], folders: vec![] },
-    ))
-    .unwrap();
-    assert_eq!(connections::read_tree(&handle).unwrap().connections[0].id, "disk-replaced");
-
-    assert_eq!(
-        block_on(workspace_connections::load_workspace_connections(
-            handle.clone(), host.clone(), workspace.id.clone(),
-        ))
-        .unwrap()[0]
-        .id,
-        "disk-workspace"
-    );
-    block_on(workspace_connections::delete_workspace_connection(
-        handle.clone(), host.clone(), workspace.id.clone(), "delete-local".into(),
-    ))
-    .unwrap();
-    assert_eq!(workspace_connections::read_at(&workspace.folders[0].path).unwrap().len(), 1);
-    block_on(workspace_connections::save_workspace_connections(
-        handle, host, workspace.id, vec![connection("disk-scoped-replaced")],
-    ))
-    .unwrap();
-    assert_eq!(workspace_connections::read_at(&workspace.folders[0].path).unwrap()[0].id, "disk-scoped-replaced");
-}
-
-
-#[test]
-fn live_provider_covers_every_plugin_command_wrapper() {
-    let _guard = crate::test_support::lock();
-    let (app, _workspace_root, paths) = setup();
-    let handle = app.handle().clone();
-    let host = app.state::<PluginHost>();
-    start_provider(host.inner(), paths, false);
-
-    assert!(block_on(crate::plugin_available(handle.clone(), host.clone())).unwrap());
-    assert_eq!(
-        block_on(crate::plugin_list(handle, host.clone())).unwrap()[0]["id"],
-        "provider.test"
-    );
-    assert_eq!(
-        block_on(crate::plugin_set_enabled(
-            host.clone(),
-            "provider.test".into(),
-            false,
-        ))
-        .unwrap()["enabled"],
-        false
-    );
-    assert_eq!(
-        block_on(crate::plugin_select_connection_provider(
-            host.clone(),
-            Some("provider.test".into()),
-        ))
-        .unwrap()[0]["id"],
-        "provider.test"
-    );
-    assert_eq!(
-        block_on(crate::connection_provider_capabilities(host.clone()))
-            .unwrap()
-            .unwrap()["protocols"][0],
-        "SSH"
-    );
-    assert_eq!(
-        block_on(crate::plugin_invoke(
-            host.clone(),
-            "provider.echo".into(),
-            vec![json!(7)],
-        ))
-        .unwrap(),
-        json!({"method":"provider.echo","args":[7]})
-    );
-    assert!(!block_on(crate::plugin_auth_gate(host.clone())).unwrap());
-    assert!(block_on(host.uninstall("provider.test".into())).unwrap());
-}

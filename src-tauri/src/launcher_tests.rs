@@ -142,7 +142,10 @@ fn setup_launcher_creates_shim_files() {
     match tauri::async_runtime::block_on(setup_launcher(app.handle().clone())) {
         Ok(bin_dir_str) => {
             // Verify the returned path ends with 'bin'.
-            assert!(bin_dir_str.ends_with("bin"), "expected bin dir, got: {bin_dir_str}");
+            assert!(
+                bin_dir_str.ends_with("bin"),
+                "expected bin dir, got: {bin_dir_str}"
+            );
             // Verify shim files were created.
             let bin = std::path::Path::new(&bin_dir_str);
             assert!(bin.join("nc-open.cmd").exists(), "nc-open.cmd must exist");
@@ -164,7 +167,11 @@ fn setup_launcher_is_idempotent() {
     let r1 = tauri::async_runtime::block_on(setup_launcher(app.handle().clone()));
     let r2 = tauri::async_runtime::block_on(setup_launcher(app.handle().clone()));
     // Both succeed or both fail (mock fs); the important thing is no panic.
-    assert_eq!(r1.is_ok(), r2.is_ok(), "idempotency: both calls should have same success/error state");
+    assert_eq!(
+        r1.is_ok(),
+        r2.is_ok(),
+        "idempotency: both calls should have same success/error state"
+    );
 }
 
 #[test]

@@ -33,7 +33,8 @@ describe("clipboardActionFor", () => {
     expect(clipboardActionFor(key("KeyC", { ctrlKey: true }), false)).toBeNull();
   });
 
-  it("ignores combos that include Alt", () => {
+  it("ignores combos that include Alt — except Alt+V, the image-paste binding", () => {
+    expect(clipboardActionFor(key("KeyV", { altKey: true }), false)).toBe("paste");
     expect(clipboardActionFor(key("KeyV", { ctrlKey: true, altKey: true }), false)).toBeNull();
     expect(clipboardActionFor(key("KeyC", { ctrlKey: true, shiftKey: true, altKey: true }), false)).toBeNull();
   });

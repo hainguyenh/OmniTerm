@@ -8,7 +8,11 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     let workspace_dir = tempfile::tempdir().unwrap();
     fs::create_dir_all(workspace_dir.path().join("scripts/tools")).unwrap();
     fs::create_dir_all(workspace_dir.path().join("node_modules/ignored")).unwrap();
-    fs::write(workspace_dir.path().join("scripts/build.sh"), "echo before\n").unwrap();
+    fs::write(
+        workspace_dir.path().join("scripts/build.sh"),
+        "echo before\n",
+    )
+    .unwrap();
     fs::write(workspace_dir.path().join("scripts/notes.txt"), "notes\n").unwrap();
     fs::write(
         workspace_dir.path().join("scripts/tools/deploy.ps1"),
@@ -22,7 +26,10 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         json!({ "path": workspace_dir.path().to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
-    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
+    let folder_id = workspace["folders"][0]["id"]
+        .as_str()
+        .expect("folder id")
+        .to_string();
     let scripts_path = format!("{folder_id}/scripts");
     let tools_path = format!("{folder_id}/scripts/tools");
     let build_path = format!("{folder_id}/scripts/build.sh");
@@ -34,7 +41,14 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         )["id"],
         workspace_id
     );
-    assert_eq!(fixture.ok("list_workspaces", json!({})).as_array().unwrap().len(), 1);
+    assert_eq!(
+        fixture
+            .ok("list_workspaces", json!({}))
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
 
     let scripts = fixture.ok("scan_scripts", json!({ "workspaceId": workspace_id }));
     assert!(scripts.as_array().is_some_and(|items| !items.is_empty()));
@@ -52,9 +66,9 @@ fn ipc_manages_workspaces_and_workspace_connections() {
     assert_eq!(scripts_folder["isDir"], true);
     assert_eq!(scripts_folder["path"], scripts_path);
     assert!(folders.iter().any(|item| item["id"] == tools_path));
-    assert!(!folders
-        .iter()
-        .any(|item| item["id"].as_str().is_some_and(|id| id.starts_with("node_modules"))));
+    assert!(!folders.iter().any(|item| item["id"]
+        .as_str()
+        .is_some_and(|id| id.starts_with("node_modules"))));
     let entries = fixture.ok(
         "scan_workspace_entries",
         json!({
@@ -223,10 +237,7 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         Value::Null
     );
     assert_eq!(
-        fixture.ok(
-            "remove_workspace",
-            json!({ "id": workspace_id }),
-        ),
+        fixture.ok("remove_workspace", json!({ "id": workspace_id }),),
         Value::Null
     );
     assert_eq!(fixture.ok("list_workspaces", json!({})), json!([]));

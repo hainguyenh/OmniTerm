@@ -19,8 +19,12 @@ fn pane_path_prepends_launcher_directory_and_preserves_path() {
     let combined = path_with_helper(&handle).expect("PATH should be composed");
     let parts = std::env::split_paths(&combined).collect::<Vec<_>>();
     assert_eq!(parts.first(), Some(&launcher::launcher_bin_dir(&handle)));
-    assert!(parts.iter().any(|path| path == std::path::Path::new("/one")));
-    assert!(parts.iter().any(|path| path == std::path::Path::new("/two")));
+    assert!(parts
+        .iter()
+        .any(|path| path == std::path::Path::new("/one")));
+    assert!(parts
+        .iter()
+        .any(|path| path == std::path::Path::new("/two")));
 
     match original {
         Some(value) => std::env::set_var("PATH", value),
@@ -54,9 +58,13 @@ fn manager_cache_tracks_live_summary_and_drops_interrupted_summary() {
         busy: true,
         launched_with_command: true,
         ssh: false,
+        frozen: false,
     };
     manager.cache_summary(&live);
-    let cached = manager.sessions.get("session-1").expect("live session cached");
+    let cached = manager
+        .sessions
+        .get("session-1")
+        .expect("live session cached");
     assert_eq!(cached.generation, 4);
     assert_eq!(cached.policy, PersistencePolicy::RecoverAfterReboot);
     assert!(cached.busy);

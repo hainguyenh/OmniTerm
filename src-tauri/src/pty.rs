@@ -55,11 +55,8 @@ impl PtyManager {
                 .join("sessiond");
             let executable = std::env::current_exe()
                 .map_err(|error| format!("Could not resolve OmniTerm executable: {error}"))?;
-            let client = SessionDaemonClient::new(
-                state_dir,
-                executable,
-                format!("gui-{}", Uuid::new_v4()),
-            );
+            let client =
+                SessionDaemonClient::new(state_dir, executable, format!("gui-{}", Uuid::new_v4()));
             let _ = self.client.set(client);
         }
         self.ensure_lease();
@@ -75,11 +72,22 @@ impl PtyManager {
             return;
         };
         tauri::async_runtime::spawn(async move {
+            // Exponential backoff between lease attempts. A daemon that is up
+            // re-accepts instantly (failures reset), but a dead or uninstallable
+            // daemon must not be hammered with connect/spawn attempts at 4 Hz.
+            const BASE_RETRY_MS: u64 = 250;
+            const MAX_BACKOFF_SHIFT: u32 = 5; // 250ms * 2^5 = 8s ceiling
+            let mut failures: u32 = 0;
             loop {
-                if let Err(error) = client.hold_lease().await {
-                    log::debug!("[sessiond] client lease ended: {error}");
+                match client.hold_lease().await {
+                    Ok(()) => failures = 0,
+                    Err(error) => {
+                        failures = failures.saturating_add(1);
+                        log::debug!("[sessiond] client lease ended: {error}");
+                    }
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                let delay = BASE_RETRY_MS << failures.min(MAX_BACKOFF_SHIFT);
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
             }
         });
     }
@@ -194,10 +202,8 @@ pub async fn start_local_session<R: Runtime>(
     let policy = previous
         .as_ref()
         .map(|session| session.policy)
-        .unwrap_or(PersistencePolicy::KeepRunning);
-    let summary = client
-        .create(id.clone(), generation, policy, spec)
-        .await?;
+        .unwrap_or(PersistencePolicy::CloseWithApp);
+    let summary = client.create(id.clone(), generation, policy, spec).await?;
     state.cache_summary(&summary);
     let mut subscription = client.attach(id.clone()).await?;
     if !subscription.replay.is_empty() {
@@ -300,7 +306,10 @@ fn send_initial_status(
     match snapshot.status.as_str() {
         "ready" => {
             let _ = on_status.send(SessionStatus::Ready {
-                label: snapshot.label.clone().unwrap_or_else(|| "Terminal".to_string()),
+                label: snapshot
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| "Terminal".to_string()),
             });
             let _ = on_status.send(SessionStatus::Activity {
                 busy: snapshot.busy,

@@ -41,13 +41,22 @@ fn active_only_waits_for_activity() {
 
 #[test]
 fn always_mode_does_not_require_a_session() {
-    assert_eq!(should_keep_awake(&stored(true, AwakeMode::Always, 100), 0), cfg!(windows));
+    assert_eq!(
+        should_keep_awake(&stored(true, AwakeMode::Always, 100), 0),
+        cfg!(windows)
+    );
 }
 
 #[test]
 fn a_disabled_schedule_never_keeps_the_machine_awake() {
-    assert!(!should_keep_awake(&stored(false, AwakeMode::Always, 100), 5));
-    assert!(!should_keep_awake(&stored(false, AwakeMode::ActiveOnly, 100), 5));
+    assert!(!should_keep_awake(
+        &stored(false, AwakeMode::Always, 100),
+        5
+    ));
+    assert!(!should_keep_awake(
+        &stored(false, AwakeMode::ActiveOnly, 100),
+        5
+    ));
 }
 
 #[test]
@@ -67,8 +76,14 @@ fn an_open_ended_or_disabled_schedule_never_expires() {
 
 #[test]
 fn mode_wire_names_are_stable() {
-    assert_eq!(serde_json::to_string(&AwakeMode::ActiveOnly).unwrap(), "\"activeOnly\"");
-    assert_eq!(serde_json::to_string(&AwakeMode::Always).unwrap(), "\"always\"");
+    assert_eq!(
+        serde_json::to_string(&AwakeMode::ActiveOnly).unwrap(),
+        "\"activeOnly\""
+    );
+    assert_eq!(
+        serde_json::to_string(&AwakeMode::Always).unwrap(),
+        "\"always\""
+    );
     assert_eq!(AwakeMode::default(), AwakeMode::ActiveOnly);
 }
 
@@ -90,12 +105,18 @@ fn now_ms_is_a_positive_wall_clock_reading() {
 
 #[test]
 fn a_shell_running_a_child_process_is_active() {
-    assert!(session_is_active(&target(false, false, Some(100)), &table()));
+    assert!(session_is_active(
+        &target(false, false, Some(100)),
+        &table()
+    ));
 }
 
 #[test]
 fn a_shell_at_its_prompt_is_not_active() {
-    assert!(!session_is_active(&target(false, false, Some(200)), &table()));
+    assert!(!session_is_active(
+        &target(false, false, Some(200)),
+        &table()
+    ));
 }
 
 #[test]

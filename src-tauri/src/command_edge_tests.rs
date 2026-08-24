@@ -1,7 +1,7 @@
 use super::*;
 use serde_json::json;
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 #[test]
 fn workspace_commands_reject_deleted_roots_and_oversized_connection_files() {
@@ -17,9 +17,21 @@ fn workspace_commands_reject_deleted_roots_and_oversized_connection_files() {
     .unwrap();
 
     fs::remove_dir_all(&project).unwrap();
-    assert!(block_on(workspace::scan_scripts(app.clone(), workspace.id.clone())).unwrap().is_empty());
-    let folders = block_on(workspace::scan_workspace_folders(app.clone(), workspace.id.clone())).unwrap();
-    assert_eq!(folders.len(), 1, "the unavailable member still renders as a root row");
+    assert!(
+        block_on(workspace::scan_scripts(app.clone(), workspace.id.clone()))
+            .unwrap()
+            .is_empty()
+    );
+    let folders = block_on(workspace::scan_workspace_folders(
+        app.clone(),
+        workspace.id.clone(),
+    ))
+    .unwrap();
+    assert_eq!(
+        folders.len(),
+        1,
+        "the unavailable member still renders as a root row"
+    );
     let error = block_on(workspace::scan_workspace_entries(
         app.clone(),
         workspace.id.clone(),

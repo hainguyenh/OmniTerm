@@ -32,6 +32,7 @@ const baseSettings: AppSettings = {
     toggleSidebar: 'Ctrl+B',
     commandPalette: 'CommandOrControl+P',
     closeTab: 'Ctrl+W',
+    toggleAppFullscreen: 'F11',
   },
   excludedViewableExts: ['log'],
 }

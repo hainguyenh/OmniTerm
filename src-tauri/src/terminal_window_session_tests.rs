@@ -1,5 +1,5 @@
-use super::*;
 use super::tests::entry;
+use super::*;
 use crate::adhoc::AdhocRegistry;
 use crate::openshell::OpenShellRequest;
 use crate::pty::{self, PtyManager};
@@ -11,7 +11,10 @@ fn discarding_channel() -> Channel<Response> {
     Channel::new(|_body: InvokeResponseBody| Ok(()))
 }
 
-fn status_channel() -> (Channel<SessionStatus>, std::sync::mpsc::Receiver<SessionStatus>) {
+fn status_channel() -> (
+    Channel<SessionStatus>,
+    std::sync::mpsc::Receiver<SessionStatus>,
+) {
     let (tx, rx) = std::sync::mpsc::channel();
     let channel = Channel::new(move |body: InvokeResponseBody| {
         if let InvokeResponseBody::Json(text) = body {
@@ -94,11 +97,16 @@ fn happy_paths_through_a_real_session_and_a_real_mock_window() {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     let mut ready = false;
     while std::time::Instant::now() < deadline && !ready {
-        if let Ok(SessionStatus::Ready { .. }) = ready_rx.recv_timeout(std::time::Duration::from_millis(200)) {
+        if let Ok(SessionStatus::Ready { .. }) =
+            ready_rx.recv_timeout(std::time::Duration::from_millis(200))
+        {
             ready = true;
         }
     }
-    assert!(ready, "session should report Ready before the test proceeds");
+    assert!(
+        ready,
+        "session should report Ready before the test proceeds"
+    );
 
     let registry = handle.state::<DetachRegistry>();
     let detached = tauri::async_runtime::block_on(detach_terminal(
@@ -121,12 +129,12 @@ fn happy_paths_through_a_real_session_and_a_real_mock_window() {
     let webview_window = handle
         .get_webview_window(&window_label)
         .expect("the window detach_terminal built should be reachable");
-    let window: tauri::Window<_> =
-        AsRef::<tauri::Webview<_>>::as_ref(&webview_window).window();
+    let window: tauri::Window<_> = AsRef::<tauri::Webview<_>>::as_ref(&webview_window).window();
 
-    let bootstrap = tauri::async_runtime::block_on(bootstrap_terminal_window(window.clone(), registry.clone()))
-        .unwrap()
-        .expect("the detached window should resolve its own session");
+    let bootstrap =
+        tauri::async_runtime::block_on(bootstrap_terminal_window(window.clone(), registry.clone()))
+            .unwrap()
+            .expect("the detached window should resolve its own session");
     assert_eq!(bootstrap.session_id, session_id);
     assert_eq!(bootstrap.name, "Coverage");
 
@@ -139,12 +147,23 @@ fn happy_paths_through_a_real_session_and_a_real_mock_window() {
     .unwrap();
     assert!(snapshot.is_some(), "attach should find the live session");
 
-    tauri::async_runtime::block_on(focus_terminal_window(handle.clone(), registry.clone(), session_id.clone()))
-        .unwrap();
+    tauri::async_runtime::block_on(focus_terminal_window(
+        handle.clone(),
+        registry.clone(),
+        session_id.clone(),
+    ))
+    .unwrap();
 
-    let reattached = tauri::async_runtime::block_on(reattach_terminal(handle.clone(), registry.clone(), session_id.clone()))
-        .unwrap();
-    assert!(reattached, "reattach should close the still-tracked mock window");
+    let reattached = tauri::async_runtime::block_on(reattach_terminal(
+        handle.clone(),
+        registry.clone(),
+        session_id.clone(),
+    ))
+    .unwrap();
+    assert!(
+        reattached,
+        "reattach should close the still-tracked mock window"
+    );
     assert!(
         registry
             .entries
@@ -157,9 +176,17 @@ fn happy_paths_through_a_real_session_and_a_real_mock_window() {
 
     // Reset folding_back and fire on_window_destroyed to hit the session_is_busy path
     // with a real, live session.
-    registry.entries.get(&session_id).unwrap().folding_back.store(false, Ordering::SeqCst);
+    registry
+        .entries
+        .get(&session_id)
+        .unwrap()
+        .folding_back
+        .store(false, Ordering::SeqCst);
     on_window_destroyed(&handle, &session_id);
-    assert!(!registry.entries.contains_key(&session_id), "busy session should be folded back and removed");
+    assert!(
+        !registry.entries.contains_key(&session_id),
+        "busy session should be folded back and removed"
+    );
 }
 
 #[test]
@@ -168,7 +195,9 @@ fn detach_terminal_rejects_already_detached_session() {
     assert!(app.manage(DetachRegistry::new()));
     assert!(app.manage(PtyManager::new()));
     let registry = app.state::<DetachRegistry>();
-    registry.entries.insert("session".to_string(), entry("term-1", "Coverage"));
+    registry
+        .entries
+        .insert("session".to_string(), entry("term-1", "Coverage"));
     let handle = app.handle().clone();
 
     let detached = tauri::async_runtime::block_on(detach_terminal(
@@ -178,7 +207,8 @@ fn detach_terminal_rejects_already_detached_session() {
         "session".to_string(),
         "Coverage".to_string(),
         serde_json::json!({"id": "session"}),
-    )).unwrap();
+    ))
+    .unwrap();
     assert!(!detached);
 }
 
@@ -192,7 +222,10 @@ fn attach_session_returns_none_if_session_is_missing() {
         discarding_channel(),
         status_channel().0,
     ));
-    assert_eq!(result.unwrap_err(), "Terminal session daemon is not initialized");
+    assert_eq!(
+        result.unwrap_err(),
+        "Terminal session daemon is not initialized"
+    );
 }
 
 #[test]
@@ -206,13 +239,16 @@ fn focus_terminal_window_silently_ignores_missing_window() {
     let app = test_support::mock_app();
     assert!(app.manage(DetachRegistry::new()));
     let registry = app.state::<DetachRegistry>();
-    registry.entries.insert("session".to_string(), entry("term-999", "Coverage"));
+    registry
+        .entries
+        .insert("session".to_string(), entry("term-999", "Coverage"));
 
     tauri::async_runtime::block_on(focus_terminal_window(
         app.handle().clone(),
         registry,
         "session".to_string(),
-    )).unwrap();
+    ))
+    .unwrap();
 }
 
 #[test]
@@ -220,7 +256,9 @@ fn on_window_destroyed_kills_missing_session_without_panic() {
     let app = test_support::mock_app();
     assert!(app.manage(DetachRegistry::new()));
     let registry = app.state::<DetachRegistry>();
-    registry.entries.insert("session".to_string(), entry("term-1", "Coverage"));
+    registry
+        .entries
+        .insert("session".to_string(), entry("term-1", "Coverage"));
 
     on_window_destroyed(&app.handle().clone(), "session");
     assert!(!registry.entries.contains_key("session"));
@@ -241,11 +279,10 @@ fn on_window_destroyed_folds_if_folding_back_is_set() {
     };
     registry.entries.insert("session".to_string(), entry);
 
-    let _window = tauri::WebviewWindowBuilder::new(
-        &app,
-        "main",
-        tauri::WebviewUrl::App("index.html".into())
-    ).build().unwrap();
+    let _window =
+        tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
 
     on_window_destroyed(&handle, "session");
 

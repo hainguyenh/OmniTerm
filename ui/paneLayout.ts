@@ -32,22 +32,6 @@ export const DEFAULT_RATIOS: SplitRatios = { main: 0.5, cross: 0.5 }
  * pane cannot be dragged back out because its divider would be off the edge.
  */
 export const MIN_FRACTION = 0.15
-export const MIN_PANE_WIDTH = 200
-
-export function paneAreaMinWidth(
-  mode: LayoutMode,
-  split3Style: 'left' | 'right' | 'top' = 'left',
-  split2Style: 'columns' | 'rows' = 'columns',
-): number {
-  if (mode === 1) return 0
-  if (mode === 2) return (split2Style === 'rows' ? 1 : 2) * MIN_PANE_WIDTH
-  if (mode === 3) return 2 * MIN_PANE_WIDTH
-  if (mode === 4) return 2 * MIN_PANE_WIDTH
-  if (mode === 5) return (split3Style === 'top' ? 2 : 3) * MIN_PANE_WIDTH
-  if (mode === 6) return 3 * MIN_PANE_WIDTH
-  if (mode === 7) return (split3Style === 'top' ? 3 : 4) * MIN_PANE_WIDTH
-  return 4 * MIN_PANE_WIDTH
-}
 
 export function clampFraction(value: number): number {
   if (!Number.isFinite(value)) return 0.5

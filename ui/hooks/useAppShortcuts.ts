@@ -14,6 +14,8 @@ export interface UseAppShortcutsInput {
   resetFontSize: () => void
   /** Persist the app-wide zoom factor after a change, so it survives restart. */
   persistZoom: (factor: number) => void
+  /** Toggle whole-app fullscreen (native OS window plus chrome hidden). */
+  onToggleFullscreen: () => void
   /** True in a popped-out terminal window, which has no layout to switch. */
   isDetached: boolean
 }
@@ -29,7 +31,8 @@ export interface UseAppShortcutsInput {
  * events — but the keyboard path has no such gate, hence the explicit `inTerminal` branch below.
  */
 export function useAppShortcuts({
-  appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom, isDetached,
+  appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom,
+  onToggleFullscreen, isDetached,
 }: UseAppShortcutsInput) {
   useEffect(() => {
     const MIN_ZOOM = 0.5
@@ -80,6 +83,15 @@ export function useAppShortcuts({
         e.preventDefault()
         setZoom(1.0)
         resetFontSize()
+        return
+      }
+
+      // Whole-app fullscreen. Before the `isInput` gate: F-keys are never text entry, so a focused
+      // field must not swallow the toggle. Detached windows own their whole surface already, and
+      // the bare-Fn binding survives terminal focus via utils/shortcuts.ts.
+      if (!isDetached && matches('toggleAppFullscreen')) {
+        e.preventDefault()
+        onToggleFullscreen()
         return
       }
 
@@ -149,5 +161,5 @@ export function useAppShortcuts({
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('wheel', handleWheel)
     }
-  }, [appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom, isDetached])
+  }, [appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom, onToggleFullscreen, isDetached])
 }

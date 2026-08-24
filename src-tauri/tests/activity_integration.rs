@@ -53,7 +53,10 @@ fn wait_until_busy(pid: u32, want: bool) -> bool {
 #[test]
 fn an_idle_shell_has_no_descendants() {
     let mut session = common::start(&interactive());
-    let pid = session.child.process_id().expect("the shell should report a pid");
+    let pid = session
+        .child
+        .process_id()
+        .expect("the shell should report a pid");
 
     // Wait for the prompt, so the shell is fully up before we judge it.
     session
@@ -77,7 +80,10 @@ fn an_idle_shell_has_no_descendants() {
 #[test]
 fn a_running_command_is_seen_and_then_released() {
     let mut session = common::start(&interactive());
-    let pid = session.child.process_id().expect("the shell should report a pid");
+    let pid = session
+        .child
+        .process_id()
+        .expect("the shell should report a pid");
 
     // A few seconds of a real child process, spelled for whichever shell the harness picked.
     let sleeper = if cfg!(target_os = "windows") {

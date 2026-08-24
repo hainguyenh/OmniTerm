@@ -76,7 +76,10 @@ pub fn handle_reverse_call(method: &str, params: Option<&Value>) -> Result<Value
             Ok(Value::Bool(true))
         }
         "host.log" => {
-            if let Some(msg) = params.and_then(|p| p.get("message")).and_then(Value::as_str) {
+            if let Some(msg) = params
+                .and_then(|p| p.get("message"))
+                .and_then(Value::as_str)
+            {
                 log::info!("[plugin] {msg}");
             }
             Ok(Value::Bool(true))

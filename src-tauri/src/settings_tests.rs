@@ -22,7 +22,10 @@ fn defaults_expose_every_field_the_renderer_reads() {
 fn defaults_do_not_carry_the_invented_field_names() {
     let d = defaults();
     for stale in ["darkMode", "checkUpdates", "themeMode"] {
-        assert!(d.get(stale).is_none(), "{stale} is not part of the contract");
+        assert!(
+            d.get(stale).is_none(),
+            "{stale} is not part of the contract"
+        );
     }
 }
 
@@ -47,7 +50,10 @@ fn default_shortcuts_cover_the_full_binding_set() {
         "layout8",
         "toggleSidebar",
     ] {
-        assert!(s.get(key).and_then(|v| v.as_str()).is_some(), "{key} missing");
+        assert!(
+            s.get(key).and_then(|v| v.as_str()).is_some(),
+            "{key} missing"
+        );
     }
     assert_eq!(s["lock"], json!("Ctrl+L"));
     assert_eq!(s["toggleSidebar"], json!("Ctrl+B"));
@@ -77,7 +83,10 @@ fn a_patch_overrides_the_base() {
 #[test]
 fn an_explicit_null_is_written_through() {
     // Clearing a skipped version is done by setting it to null; the merge must not drop the key.
-    let merged = merge_shallow(&json!({"skippedVersion": "9.9.9"}), &json!({"skippedVersion": null}));
+    let merged = merge_shallow(
+        &json!({"skippedVersion": "9.9.9"}),
+        &json!({"skippedVersion": null}),
+    );
     assert_eq!(merged["skippedVersion"], json!(null));
 }
 
@@ -138,7 +147,10 @@ fn get_settings_returns_defaults_on_a_fresh_mock_app() {
     // At minimum the defaults should be there; the mock runtime may redirect the app data dir.
     assert!(settings.is_object());
     assert!(settings.get("themeId").is_some(), "themeId must be present");
-    assert!(settings.get("shortcuts").is_some(), "shortcuts must be present");
+    assert!(
+        settings.get("shortcuts").is_some(),
+        "shortcuts must be present"
+    );
 }
 
 #[test]
@@ -148,8 +160,9 @@ fn save_settings_rejects_non_object_input() {
         .expect_err("must reject non-object");
     assert!(err.contains("must be an object"), "got {err}");
 
-    let err2 = tauri::async_runtime::block_on(save_settings(app.handle().clone(), json!([1, 2, 3])))
-        .expect_err("must reject array");
+    let err2 =
+        tauri::async_runtime::block_on(save_settings(app.handle().clone(), json!([1, 2, 3])))
+            .expect_err("must reject array");
     assert!(err2.contains("must be an object"), "got {err2}");
 }
 
@@ -170,7 +183,10 @@ fn save_settings_merges_partial_patch_with_defaults() {
         Ok(()) => {}
         Err(e) => {
             // A write error from the mock filesystem is acceptable; a validation error is not.
-            assert!(!e.contains("must be an object"), "unexpected validation error: {e}");
+            assert!(
+                !e.contains("must be an object"),
+                "unexpected validation error: {e}"
+            );
         }
     }
     let _ = std::fs::remove_file(path);
@@ -202,7 +218,6 @@ fn read_settings_falls_back_for_empty_corrupt_and_non_object_files() {
     }
     let _ = std::fs::remove_file(path);
 }
-
 
 #[test]
 fn read_settings_falls_back_when_settings_path_is_not_a_file() {

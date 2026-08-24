@@ -1,8 +1,8 @@
 use std::path::Path;
-#[cfg(windows)]
-use std::time::Duration;
 #[cfg(unix)]
 use std::path::PathBuf;
+#[cfg(windows)]
+use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -27,7 +27,8 @@ pub(crate) async fn read_frame<T: DeserializeOwned>(
     let len = stream
         .read_u32()
         .await
-        .map_err(|error| format!("Could not read daemon frame length: {error}"))? as usize;
+        .map_err(|error| format!("Could not read daemon frame length: {error}"))?
+        as usize;
     if len == 0 || len > MAX_FRAME_BYTES {
         return Err(format!("Invalid daemon frame length: {len}"));
     }
@@ -143,7 +144,10 @@ mod windows_tests {
             .create(&name)
             .expect("first server instance");
         let _first_client = ClientOptions::new().open(&name).expect("first client");
-        first_server.connect().await.expect("first server connection");
+        first_server
+            .connect()
+            .await
+            .expect("first server connection");
 
         let busy = match ClientOptions::new().open(&name) {
             Ok(_) => panic!("opening without a free server instance must be busy"),
@@ -153,7 +157,10 @@ mod windows_tests {
 
         let pending = tokio::spawn(async move { connect(&state_dir).await });
         tokio::time::sleep(Duration::from_millis(60)).await;
-        assert!(!pending.is_finished(), "busy connection must wait instead of failing");
+        assert!(
+            !pending.is_finished(),
+            "busy connection must wait instead of failing"
+        );
 
         let _second_server = ServerOptions::new()
             .create(&name)
@@ -162,15 +169,20 @@ mod windows_tests {
             .await
             .expect("client retry must connect before timeout")
             .expect("connect task must not panic");
-        assert!(connected.is_ok(), "client retry must succeed once an instance is free");
-
+        assert!(
+            connected.is_ok(),
+            "client retry must succeed once an instance is free"
+        );
     }
 
     #[test]
     fn only_pipe_busy_is_retried_and_only_inside_the_deadline() {
         let busy = std::io::Error::from_raw_os_error(PIPE_BUSY_OS_ERROR);
         let denied = std::io::Error::from_raw_os_error(5);
-        assert_eq!(pipe_busy_retry_delay(&busy, Duration::ZERO), Some(PIPE_BUSY_RETRY_DELAY));
+        assert_eq!(
+            pipe_busy_retry_delay(&busy, Duration::ZERO),
+            Some(PIPE_BUSY_RETRY_DELAY)
+        );
         assert_eq!(pipe_busy_retry_delay(&busy, PIPE_BUSY_RETRY_TIMEOUT), None);
         assert_eq!(pipe_busy_retry_delay(&denied, Duration::ZERO), None);
     }

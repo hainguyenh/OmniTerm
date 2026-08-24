@@ -1,6 +1,5 @@
 /** Durable renderer layout metadata used to reattach or reconstruct daemon-owned PTY sessions. */
 import { LAYOUT_MODES, type LayoutMode } from '../themes'
-import { parseAgentTitle } from './agentTitle'
 import {
   getPersistencePolicy,
   isPersistencePolicy,
@@ -123,12 +122,11 @@ function migrateV1(o: Record<string, unknown>): SessionSnapshot | null {
     if (!value || typeof value !== 'object') return null
     const tab = value as Record<string, unknown>
     if (typeof tab['id'] !== 'string' || typeof tab['connId'] !== 'string' || typeof tab['name'] !== 'string') return null
-    const isAgent = parseAgentTitle(tab['name']) !== null
     migrated.push({
       id: tab['id'],
       sessionId: tab['id'],
       generation: 1,
-      persistencePolicy: getPersistencePolicy(tab['id'], isAgent),
+      persistencePolicy: getPersistencePolicy(tab['id']),
       connId: tab['connId'],
       name: tab['name'],
       ...(typeof tab['scrollbackKey'] === 'string' ? { scrollbackKey: tab['scrollbackKey'] } : {}),

@@ -38,11 +38,16 @@ pub(crate) fn flush(manager: &SessionManager) -> Result<(), String> {
         if !recover {
             continue;
         }
-        let bytes = entry
+        let bytes = match entry
             .output
             .lock()
-            .map(|output| output.replay())
-            .map_err(|_| "Session output lock is poisoned".to_string())?;
+            .map(|mut output| output.take_flush_snapshot())
+            .map_err(|_| "Session output lock is poisoned".to_string())?
+        {
+            Some(bytes) => bytes,
+            // Nothing changed since the last durable write — skip the disk entirely.
+            None => continue,
+        };
         atomic_write(
             &path(&manager.state_dir, entry.key()),
             &bytes,

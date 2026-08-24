@@ -37,40 +37,40 @@ fn test_upload_custom_art() {
     let tmp = TempDir::new().unwrap();
     let src_dir = tmp.path().join("src");
     fs::create_dir_all(&src_dir).unwrap();
-    
+
     let art_dir = tmp.path().join("custom-art");
-    
+
     // Test valid upload
     let img_path = create_dummy_file(&src_dir, "test.png", 1024);
     let res = upload_custom_art_impl(&art_dir, "idle-light", &img_path);
     assert!(res.is_ok());
-    
+
     let uploaded_path = PathBuf::from(res.unwrap());
     assert!(uploaded_path.exists());
     assert_eq!(uploaded_path.file_name().unwrap(), "idle-light.png");
-    
+
     // Test overwrite with different extension
     let img2_path = create_dummy_file(&src_dir, "test2.jpg", 1024);
     let res2 = upload_custom_art_impl(&art_dir, "idle-light", &img2_path);
     assert!(res2.is_ok());
-    
+
     let uploaded2_path = PathBuf::from(res2.unwrap());
     assert!(uploaded2_path.exists());
     assert_eq!(uploaded2_path.file_name().unwrap(), "idle-light.jpg");
-    
+
     // Ensure old file is gone
     assert!(!uploaded_path.exists());
-    
+
     // Test file size validation (> 2 MB)
     let large_img = create_dummy_file(&src_dir, "large.png", 3 * 1024 * 1024);
     let res_large = upload_custom_art_impl(&art_dir, "loading-light", &large_img);
     assert!(res_large.is_err());
-    
+
     // Test invalid extension
     let txt_file = create_dummy_file(&src_dir, "test.txt", 1024);
     let res_txt = upload_custom_art_impl(&art_dir, "loading-light", &txt_file);
     assert!(res_txt.is_err());
-    
+
     // Test invalid slot
     let res_slot = upload_custom_art_impl(&art_dir, "invalid_slot", &img_path);
     assert!(res_slot.is_err());
@@ -82,31 +82,31 @@ fn test_get_and_remove_custom_art() {
     let src_dir = tmp.path().join("src");
     fs::create_dir_all(&src_dir).unwrap();
     let art_dir = tmp.path().join("custom-art");
-    
+
     // Get before any upload
     let res_get1 = get_custom_art_impl(&art_dir, "idle-light");
     assert!(res_get1.is_ok());
     assert!(res_get1.unwrap().is_none());
-    
+
     // Upload and get
     let img_path = create_dummy_file(&src_dir, "test.png", 1024);
     upload_custom_art_impl(&art_dir, "idle-light", &img_path).unwrap();
-    
+
     let res_get2 = get_custom_art_impl(&art_dir, "idle-light");
     assert!(res_get2.is_ok());
     let path_opt = res_get2.unwrap();
     assert!(path_opt.is_some());
     assert!(path_opt.unwrap().ends_with("idle-light.png"));
-    
+
     // Remove
     let res_rm = remove_custom_art_impl(&art_dir, "idle-light");
     assert!(res_rm.is_ok());
-    
+
     // Get after remove
     let res_get3 = get_custom_art_impl(&art_dir, "idle-light");
     assert!(res_get3.is_ok());
     assert!(res_get3.unwrap().is_none());
-    
+
     // Ensure actual file is deleted
     assert!(!art_dir.join("idle-light.png").exists());
 }
@@ -122,7 +122,6 @@ fn test_upload_non_existent_or_dir_path() {
     fs::create_dir_all(&dir_path).unwrap();
     assert!(upload_custom_art_impl(&art_dir, "idle-light", &dir_path).is_err());
 }
-
 
 #[test]
 fn get_and_remove_reject_invalid_slots_and_unreadable_art_roots() {
@@ -217,7 +216,6 @@ fn upload_reports_a_destination_whose_parent_is_a_file() {
         .contains("Failed to create directory"));
 }
 
-
 #[cfg(unix)]
 #[test]
 fn removal_reports_a_directory_that_forbids_deletion() {
@@ -250,8 +248,13 @@ fn test_tauri_commands() {
     let handle = app.handle().clone();
     let res = tauri::async_runtime::block_on(get_custom_art(handle.clone(), "invalid".to_string()));
     assert!(res.is_err());
-    let res = tauri::async_runtime::block_on(remove_custom_art(handle.clone(), "invalid".to_string()));
+    let res =
+        tauri::async_runtime::block_on(remove_custom_art(handle.clone(), "invalid".to_string()));
     assert!(res.is_err());
-    let res = tauri::async_runtime::block_on(upload_custom_art(handle.clone(), "invalid".to_string(), "invalid".to_string()));
+    let res = tauri::async_runtime::block_on(upload_custom_art(
+        handle.clone(),
+        "invalid".to_string(),
+        "invalid".to_string(),
+    ));
     assert!(res.is_err());
 }

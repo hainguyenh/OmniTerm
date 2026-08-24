@@ -45,6 +45,7 @@ Whenever the main renderer mounts or navigation/layout/overlay/window state chan
 
 - Presentational shell components do not directly read/write native files.
 - Pane/layout changes preserve unrelated sessions/workspaces.
+- In chrome-hidden app fullscreen, `MainLayoutView` renders only the pane grid and status footer; hidden regions unmount and restore cleanly.
 
 ## Functionalities
 

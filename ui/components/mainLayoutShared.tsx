@@ -23,6 +23,8 @@ export interface MainLayoutProps {
   onFontSizeChange?: (delta: number, terminal?: { id: string; connId: string }) => void
   onThemeApply?: (themeId: string, terminal?: { id: string; connId: string }) => void
   onSettingsReload?: (tabId?: string) => void
+  /** Whole-app fullscreen: the main window hides all chrome except panes and the status footer. */
+  chromeHidden?: boolean
 }
 
 export const MAX_PLANES = 8
@@ -44,7 +46,8 @@ export const shortcutLabels = {
   layout8: 'Grid 8 Layout',
   toggleSidebar: 'Toggle Sidebar',
   commandPalette: 'Command Palette',
-  closeTab: 'Close Tab'
+  closeTab: 'Close Tab',
+  toggleAppFullscreen: 'Toggle Full Screen'
 } satisfies Record<keyof ShortcutBindings, string>
 export const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',
@@ -64,7 +67,8 @@ export const DEFAULT_SHORTCUTS = {
   layout8: 'Ctrl+8',
   toggleSidebar: 'Ctrl+B',
   commandPalette: 'Ctrl+P',
-  closeTab: 'Ctrl+W'
+  closeTab: 'Ctrl+W',
+  toggleAppFullscreen: 'F11'
 } satisfies ShortcutBindings
 
 export const CtxItem: React.FC<{ label: string; icon: React.ReactNode; color: string; onClick: () => void }> =

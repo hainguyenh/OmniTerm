@@ -5,10 +5,27 @@ use super::{
 
 #[test]
 fn persistence_policy_uses_stable_kebab_case_wire_values() {
-    assert_eq!(serde_json::to_string(&PersistencePolicy::CloseWithApp).unwrap(), "\"close-with-app\"");
-    assert_eq!(serde_json::to_string(&PersistencePolicy::KeepRunning).unwrap(), "\"keep-running\"");
-    assert_eq!(serde_json::to_string(&PersistencePolicy::RecoverAfterReboot).unwrap(), "\"recover-after-reboot\"");
+    assert_eq!(
+        serde_json::to_string(&PersistencePolicy::CloseWithApp).unwrap(),
+        "\"close-with-app\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PersistencePolicy::KeepRunning).unwrap(),
+        "\"keep-running\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PersistencePolicy::RecoverAfterReboot).unwrap(),
+        "\"recover-after-reboot\""
+    );
     assert!(serde_json::from_str::<PersistencePolicy>("\"unknown\"").is_err());
+}
+
+#[test]
+fn freeze_while_closed_round_trips_kebab_case() {
+    let json = serde_json::to_string(&PersistencePolicy::FreezeWhileClosed).unwrap();
+    assert_eq!(json, r#""freeze-while-closed""#);
+    let parsed: PersistencePolicy = serde_json::from_str(&json).unwrap();
+    assert_eq!(parsed, PersistencePolicy::FreezeWhileClosed);
 }
 
 #[test]
@@ -23,9 +40,13 @@ fn session_summary_round_trips_generation_and_lifecycle() {
         busy: true,
         launched_with_command: false,
         ssh: false,
+        frozen: false,
     };
     let encoded = serde_json::to_string(&summary).unwrap();
-    assert_eq!(serde_json::from_str::<SessionSummary>(&encoded).unwrap(), summary);
+    assert_eq!(
+        serde_json::from_str::<SessionSummary>(&encoded).unwrap(),
+        summary
+    );
 }
 
 #[test]

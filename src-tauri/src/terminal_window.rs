@@ -10,20 +10,20 @@
 //! ask about a window it does not own.
 
 use crate::pty::{self, PtyManager, SessionStatus};
-use session_protocol::AttachSnapshot;
 use dashmap::DashMap;
 use serde::Serialize;
 use serde_json::Value;
+use session_protocol::AttachSnapshot;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 #[cfg(test)]
-#[path = "terminal_window_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "terminal_window_session_tests.rs"]
 mod session_tests;
+#[cfg(test)]
+#[path = "terminal_window_tests.rs"]
+mod tests;
 
 /// Label prefix for detached windows. The capability file grants `term-*` the same permissions as
 /// `main`; anything outside that prefix gets nothing, so the prefix is load-bearing.
@@ -130,6 +130,9 @@ pub async fn detach_terminal<R: Runtime>(
         .inner_size(900.0, 600.0)
         .min_inner_size(400.0, 200.0)
         .decorations(false)
+        // A detached window must take OS focus explicitly on open — it is the whole point of the
+        // pop-out, and Windows does not guarantee focus for a new top-level window otherwise.
+        .focused(true)
         // Matches `dragDropEnabled: false` on the main window in tauri.conf.json. Left on, the
         // webview installs an OS drag-drop handler that swallows dragover/drop before the page sees
         // them, and dragging a pane header does nothing. A detached window shows the same panes, so
@@ -178,11 +181,14 @@ pub async fn bootstrap_terminal_window<R: Runtime>(
     let Some(session_id) = registry.session_for_window(window.label()) else {
         return Ok(None);
     };
-    Ok(registry.entries.get(&session_id).map(|entry| BootstrapInfo {
-        session_id: session_id.clone(),
-        name: entry.name.clone(),
-        connection: entry.connection.clone(),
-    }))
+    Ok(registry
+        .entries
+        .get(&session_id)
+        .map(|entry| BootstrapInfo {
+            session_id: session_id.clone(),
+            name: entry.name.clone(),
+            connection: entry.connection.clone(),
+        }))
 }
 
 /// Bind the caller's channels to a live session and replay its scrollback.

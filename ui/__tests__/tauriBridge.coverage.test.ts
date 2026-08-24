@@ -294,6 +294,7 @@ describe('complete Tauri bridge behavior', () => {
     await api.windowControl.toggleMaximize()
     await api.windowControl.close()
     await api.windowControl.isMaximized()
+    await api.windowControl.setFullscreen(true)
   })
 
   it('covers shell launcher calls and event-listen rejection cleanup', async () => {

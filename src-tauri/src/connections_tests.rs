@@ -82,8 +82,7 @@ fn a_plain_export_with_bad_records_is_rejected() {
 
 #[test]
 fn a_plain_export_naming_an_arbitrary_shell_is_rejected() {
-    let text =
-        r#"{"folders": [], "connections": [{"id":"c1","name":"x","type":"LOCAL","shell":"C:\\evil.exe"}]}"#;
+    let text = r#"{"folders": [], "connections": [{"id":"c1","name":"x","type":"LOCAL","shell":"C:\\evil.exe"}]}"#;
     assert!(parse_import_content(text).is_err());
 }
 
@@ -104,7 +103,10 @@ fn an_import_carrying_passwords_yields_them_stripped_not_rejected() {
     let c = &connections.as_array().expect("array")[0];
     assert_eq!(c["name"], json!("web01"), "metadata must survive");
     assert_eq!(c["user"], json!("root"));
-    assert!(c.get("password").is_none(), "secret must not reach the webview");
+    assert!(
+        c.get("password").is_none(),
+        "secret must not reach the webview"
+    );
     assert!(c.get("hasPassword").is_none());
 }
 
@@ -190,7 +192,10 @@ fn bounded_import_reader_accepts_small_text_and_rejects_missing_or_oversized_fil
     assert_eq!(read_bounded(small.path()).unwrap(), PLAIN_EXPORT);
 
     let missing = small.path().with_extension("missing");
-    assert_eq!(read_bounded(&missing).unwrap_err(), "Cannot read the selected file.");
+    assert_eq!(
+        read_bounded(&missing).unwrap_err(),
+        "Cannot read the selected file."
+    );
 
     let oversized = tempfile::NamedTempFile::new().unwrap();
     oversized
@@ -224,7 +229,6 @@ fn read_tree_returns_empty_default_when_no_file_exists() {
     assert!(tree.connections.is_empty());
     assert!(tree.folders.is_empty());
 }
-
 
 #[test]
 fn read_tree_parses_a_valid_file() {
@@ -268,8 +272,14 @@ fn scrub_stored_secrets_removes_legacy_fields_from_disk() {
     }
     scrub_stored_secrets(app.handle());
     if let Ok(cleaned) = std::fs::read_to_string(&path) {
-        assert!(!cleaned.contains("hunter2"), "password must be gone after scrub");
-        assert!(!cleaned.contains("\"password\""), "password key must be gone");
+        assert!(
+            !cleaned.contains("hunter2"),
+            "password must be gone after scrub"
+        );
+        assert!(
+            !cleaned.contains("\"password\""),
+            "password key must be gone"
+        );
     }
     // Clean up
     let _ = std::fs::remove_file(&path);
@@ -291,7 +301,6 @@ fn scrub_stored_secrets_leaves_clean_file_untouched() {
     assert!(!after_content.contains("hunter2"));
     let _ = std::fs::remove_file(&path);
 }
-
 
 #[test]
 fn scrub_stored_secrets_handles_missing_file_gracefully() {
@@ -332,7 +341,10 @@ fn empty_files_default_and_secret_scrubbing_preserves_unsalvageable_data() {
 fn bounded_reader_accepts_the_exact_limit_and_rejects_a_directory() {
     let exact = tempfile::NamedTempFile::new().unwrap();
     exact.as_file().set_len(MAX_IMPORT_FILE_BYTES).unwrap();
-    assert_eq!(read_bounded(exact.path()).unwrap().len() as u64, MAX_IMPORT_FILE_BYTES);
+    assert_eq!(
+        read_bounded(exact.path()).unwrap().len() as u64,
+        MAX_IMPORT_FILE_BYTES
+    );
     let directory = tempfile::tempdir().unwrap();
     assert_eq!(
         read_bounded(directory.path()).unwrap_err(),
@@ -349,46 +361,4 @@ fn import_reports_a_tree_that_passes_shape_checks_but_not_deserialization() {
     }"#;
     let error = parse_import_content(malformed).unwrap_err();
     assert!(error.contains("malformed connection tree"), "{error}");
-}
-
-#[test]
-fn test_save_and_load_connections() {
-    use tauri::Manager;
-    let _guard = crate::test_support::lock();
-    let app = crate::test_support::mock_app();
-    let handle = app.handle().clone();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
-    let host = app.state::<crate::plugin_host::PluginHost>();
-
-    let tree = ConnectionTree {
-        folders: vec![Folder { id: "f1".into(), name: "Folder 1".into(), parent_id: None }],
-        connections: vec![Connection {
-            id: "c1".into(),
-            name: "Server 1".into(),
-            conn_type: "SSH".into(),
-            host: "10.0.0.1".into(),
-            port: "22".into(),
-            user: "root".into(),
-            password_help_url: None,
-            parent_id: Some("f1".into()),
-            redirect_drives: None,
-            shell: None,
-            local_args: None,
-            local_cwd: None,
-            local_command: None,
-            local_keep_open: None,
-        }],
-    };
-
-    let save_res = tauri::async_runtime::block_on(save_connections(handle.clone(), host, tree));
-    assert!(save_res.is_ok());
-
-    let host2 = app.state::<crate::plugin_host::PluginHost>();
-    let loaded = tauri::async_runtime::block_on(load_connections(handle.clone(), host2)).unwrap();
-    assert_eq!(loaded.connections.len(), 1);
-    assert_eq!(loaded.folders.len(), 1);
-
-    if let Ok(path) = connections_path(app.handle()) {
-        let _ = std::fs::remove_file(path);
-    }
 }

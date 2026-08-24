@@ -31,7 +31,8 @@ const baseSettings: AppSettings = {
     layout8: "Ctrl+8",
     toggleSidebar: "Ctrl+B",
     commandPalette: "CommandOrControl+P",
-    closeTab: "Ctrl+W"
+    closeTab: "Ctrl+W",
+    toggleAppFullscreen: "F11"
   },
 };
 

@@ -16,7 +16,7 @@ import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
 import { Columns2, LayoutGrid, RotateCw, Square } from 'lucide-react'
 import { paneIdentity } from '../paneIdentity'
-import { draggedPaneIndex, paneAreaMinWidth, paneRect } from '../paneLayout'
+import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
@@ -32,7 +32,7 @@ import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {} } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
   const alwaysAwake = awakeState ?? {
     enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
     activeSessionCount: 0, keepingAwake: false, supported: true, error: null,
@@ -56,21 +56,24 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
         {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
-        <ActivityBar
-          activeView={activeView}
-          filesEnabled={!!activeSshId && connectionCapabilities?.sftp === true}
-          onViewChange={handleViewChange}
-          onSettingsClick={() => setSettingsOpen(true)}
-          alwaysAwakeAvailable={alwaysAwakeAvailable}
-          alwaysAwakeEnabled={alwaysAwake.enabled}
-          alwaysAwakeKeepingAwake={alwaysAwake.keepingAwake}
-          onAlwaysAwakeClick={() => setAlwaysAwakeOpen(true)}
-          blurAvailable={blurAvailable}
-          blurEnabled={(appSettings.blurEnabled ?? true) && blurValue > 0}
-          onBlurClick={() => setBlurOpen(true)}
-        />
+        {/* Chrome-hidden fullscreen hides it along with the side panel and tab strip. */}
+        {!chromeHidden && (
+          <ActivityBar
+            activeView={activeView}
+            filesEnabled={!!activeSshId && connectionCapabilities?.sftp === true}
+            onViewChange={handleViewChange}
+            onSettingsClick={() => setSettingsOpen(true)}
+            alwaysAwakeAvailable={alwaysAwakeAvailable}
+            alwaysAwakeEnabled={alwaysAwake.enabled}
+            alwaysAwakeKeepingAwake={alwaysAwake.keepingAwake}
+            onAlwaysAwakeClick={() => setAlwaysAwakeOpen(true)}
+            blurAvailable={blurAvailable}
+            blurEnabled={(appSettings.blurEnabled ?? true) && blurValue > 0}
+            onBlurClick={() => setBlurOpen(true)}
+          />
+        )}
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
-        {activeView !== null && (
+        {!chromeHidden && activeView !== null && (
           <div
             className="flex-shrink-0 flex flex-col border-r border-[var(--theme-border)] min-w-0 overflow-hidden relative bg-theme-sidebar"
             style={{ width: sidebarVisible ? sidebarWidth : 0 }}
@@ -102,7 +105,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           </div>
         )}
         {/* ── Resize Handle ────────────────────────────────────────────────── */}
-        {activeView !== null && sidebarVisible && (
+        {!chromeHidden && activeView !== null && sidebarVisible && (
           <div
             className="w-1.5 flex-shrink-0 cursor-col-resize hover:bg-[var(--theme-accent)] transition-colors active:bg-[var(--theme-accent)] z-10"
             onMouseDown={handleResizeDragStart}
@@ -112,7 +115,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Panel header — session tabs fill the full width, layout picker on the right.
               Keeping the tabs in this fixed header row (above the content area) means
-              the embedded RDP desktop can never paint over them. */}
+              the embedded RDP desktop can never paint over them. Chrome-hidden fullscreen
+              hides this whole row; panes and the status footer stay. */}
+          {!chromeHidden && (
           <div className="relative z-30 flex flex-col border-b border-[var(--theme-border)] flex-shrink-0">
             {viewGroups.length > 0 && <ViewGroupTabs groups={viewGroups} activeGroupId={activeGroupId} totalTabCount={ungroupedTabCount} onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }} onUpdate={notifyViewGroupUpdate} onReorder={notifyViewGroupReorder} onUngroup={notifyViewGroupUngroup} />}
             <div className="h-[40px] px-2.5 flex items-center gap-2">
@@ -220,10 +225,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 )
               })}
             </div>
-  
+   
             </div>
           </div>
-  
+          )}
+
           {activeTabId && (() => {
             const conn = activeConnection
             if (!conn) {
@@ -276,11 +282,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
             </div>
           )}
-          {/* Session content; hidden panes remain mounted to preserve terminal scroll state. */}
-          <div className="flex-1 min-w-0 min-h-0 mt-1 overflow-x-auto overflow-y-hidden">
+          {/* Session content; hidden panes remain mounted to preserve terminal scroll state.
+              overflow-hidden clips oversized xterm canvases instead of scrolling the whole
+              desktop — panes must stay inside the container, never scroll it. */}
+          <div className="flex-1 min-w-0 min-h-0 mt-1 overflow-hidden">
           <div
             className="relative isolate h-full"
-            style={{ minWidth: paneAreaMinWidth(layoutMode, appSettings.split3Style, appSettings.split2Style) || undefined }}
           >
             {fullscreenTabId && <FullscreenRestoreControl sessionName={activeTabs.find(tab => tab.id === fullscreenTabId)?.name} onRestore={() => setFullscreenPane(null)} />}
             {activeTabs.length === 0 ? (
@@ -299,7 +306,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   return (
                     <div
                       key={`frame-${i}`}
-                      className="absolute z-10 p-0.5"
+                      className="absolute z-10 p-0.5 overflow-hidden"
                       style={paneRect(i, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)}
                       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
                       onDrop={(e) => { e.preventDefault(); onPaneDrop(e, i) }}
@@ -379,7 +386,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     <DetachedPlaceholder
                       name={tab.name}
                       onFocus={() => window.omnitermAPI.terminalWindow.focus(tab.id)}
-                      onReattach={() => reattachTerminal(tab.id)}
+                      // Capture the CURRENT focused slot at click time — never the pane the tab
+                      // used to live in before it was popped out.
+                      onReattach={() => reattachTerminal(tab.id, focusedPane)}
                     />
                   ) : (
                     <TerminalView
@@ -399,6 +408,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)
                         if (clean) setActiveTabs(previous => previous.map(item => item.id === tab.id ? { ...item, name: clean } : item))
                       }}
+                      onCwdChange={(cwd) => setSessionCwd(tab.id, cwd)}
                       // A run-to-completion pane has nothing left once its shell exits, so it takes its
                       // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
                       onExit={(code) => { if (closesOnExit(conn, code)) closeTabs([tab.id], true) }}
@@ -420,7 +430,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       onDrop={split ? (e) => { e.preventDefault(); onPaneDrop(e, paneIdx) } : undefined}
                       // `pane-offscreen`, not Tailwind's `hidden`: `display: none` destroys an
                       // xterm pane's scroll position and forces a re-fit on every tab switch — see the rule's own comment in index.css.
-                      className={`absolute ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''}`}
+                      className={`absolute overflow-hidden ${visible ? '' : 'pane-offscreen'} ${split ? 'p-0.5' : ''} ${pulsePaneId === tab.id && visible ? 'pane-focus-pulse' : ''}`}
                       style={style}
                     >
                       <div
