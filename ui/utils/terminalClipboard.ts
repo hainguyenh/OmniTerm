@@ -83,26 +83,30 @@ export interface TerminalClipboard {
 }
 
 /**
+ * One clipboard write shared by selection auto-copy and the pane-header copy menu: the native
+ * plugin first (works under Tauri without focus quirks), the Web Clipboard API as fallback.
+ */
+export const writeClipboardText = async (text: string): Promise<void> => {
+  try {
+    await window.omnitermAPI.clipboard.writeText(text)
+  } catch {
+    await navigator.clipboard?.writeText(text)
+  }
+}
+
+/**
  * @param onBeforePaste Called immediately before the payload reaches the terminal. Used to quiet the
- *                      output highlighter, which must not rewrite the echo that follows — see
+ *                      highlighter, which must not rewrite the echo that follows — see
  *                      `OutputHighlighter.noteLocalEcho`.
  */
 export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => void): TerminalClipboard => {
   let pasteInFlight = false
   let copyTimer = 0
 
-  const writeToClipboard = async (text: string) => {
-    try {
-      await window.omnitermAPI.clipboard.writeText(text)
-    } catch {
-      await navigator.clipboard?.writeText(text)
-    }
-  }
-
   const copySelection = async () => {
     const sel = term.getSelection()
     if (!sel) return
-    await writeToClipboard(sel)
+    await writeClipboardText(sel)
   }
 
   // Debounced auto-copy: a drag fires onSelectionChange on every cell boundary, so dozens of
@@ -116,7 +120,7 @@ export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => vo
     const captured = sel
     window.clearTimeout(copyTimer)
     copyTimer = window.setTimeout(() => {
-      void writeToClipboard(captured)
+      void writeClipboardText(captured)
     }, 80) as unknown as number
   })
 
