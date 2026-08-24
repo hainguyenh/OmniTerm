@@ -1,5 +1,50 @@
 # Changelog
 
+## [v0.1.7] — 2026-08-24
+
+### Added
+- feat: session freeze lifecycle, native auto-updater, and terminal UX batch (@Thế Long)
+- feat: focused-slot reattach pulse, shortcuts bridge, API surface (@the-long-ride)
+- feat: alt+click cursor positioning + pane-header copy menu (@the-long-ride)
+- feat: default workspace choice for new terminals (@the-long-ride)
+- feat: versioned settings export/import across four stores (@the-long-ride)
+- feat: native updater release infra + settings UI hooks (@the-long-ride)
+- feat: paste clipboard images into terminal agents (@the-long-ride)
+- feat: folder aliases and live cwd in pane headers (@the-long-ride)
+- feat: session freeze + close-with-app default (@the-long-ride)
+
+### Fixed
+- fix: align unix suspend API with ProcIndex snapshot (@the-long-ride)
+- fix: detach window UX polish + stop button live flag + force-kill timer (@the-long-ride)
+- fix: always-awake plugin bounded retry + jiggle improvements (@the-long-ride)
+- fix: exclude trailing shell prompt from copy-last-output (terminalCopyExtract) (@the-long-ride)
+- fix: gate updater plugin on OMNITERM_UPDATER_PUBKEY env var (lib.rs + update_manager) (@the-long-ride)
+- fix(ui): promote detach/fullscreen out of the overflow menu (@the-long-ride)
+- fix(ui): clip split panes instead of horizontal scroll (@the-long-ride)
+
+### Changed
+- docs: spec + changelog updates for shipped features (@the-long-ride)
+- perf: cut redundant daemon I/O, scans and render churn (@the-long-ride)
+- docs: sync freeze, default policy and pane clip specs (@the-long-ride)
+
+### Refactored
+- refactor: workspace, pty-resolve, probe, and util cleanup (@the-long-ride)
+- refactor: window control, themes dir-swap retry, rdp cleanup (@the-long-ride)
+- refactor: plugin host rpc + management cleanup (@the-long-ride)
+
+### Tests
+- test: cover manager state-dir failure, exclude plugin Wry instances (@the-long-ride)
+- test: cover transfer/manifest error paths, exclude updater arms (@the-long-ride)
+- test: always-awake poller + native entry updates (@the-long-ride)
+- test: ipc + command integration coverage refresh (@the-long-ride)
+- test: stop-button escalation regression coverage (@the-long-ride)
+- test: settings transfer + backup section UI coverage (@the-long-ride)
+- test: split oversized Rust test modules by responsibility (@the-long-ride)
+
+### Other
+- pull latest ME (@the-long-ride)
+
+
 ## [Unreleased]
 
 ### Terminal & Sessions
