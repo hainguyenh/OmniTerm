@@ -16,7 +16,10 @@ fn ipc_rejects_workspace_paths_that_escape_the_root() {
         json!({ "path": project.to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
-    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
+    let folder_id = workspace["folders"][0]["id"]
+        .as_str()
+        .expect("folder id")
+        .to_string();
     let escape = format!("{folder_id}/../outside.sh");
 
     assert!(fixture
@@ -79,11 +82,20 @@ fn ipc_reports_a_workspace_root_deleted_after_registration() {
         json!({ "path": project.to_string_lossy() }),
     );
     let workspace_id = workspace["id"].as_str().expect("workspace id");
-    let folder_id = workspace["folders"][0]["id"].as_str().expect("folder id").to_string();
+    let folder_id = workspace["folders"][0]["id"]
+        .as_str()
+        .expect("folder id")
+        .to_string();
     fs::remove_dir_all(&project).unwrap();
 
-    assert_eq!(fixture.ok("scan_scripts", json!({ "workspaceId": workspace_id })), json!([]));
-    let folders = fixture.ok("scan_workspace_folders", json!({ "workspaceId": workspace_id }));
+    assert_eq!(
+        fixture.ok("scan_scripts", json!({ "workspaceId": workspace_id })),
+        json!([])
+    );
+    let folders = fixture.ok(
+        "scan_workspace_folders",
+        json!({ "workspaceId": workspace_id }),
+    );
     assert_eq!(folders.as_array().map(Vec::len), Some(1));
     assert!(fixture
         .invoke(
@@ -108,10 +120,23 @@ fn ipc_workspace_mutations_and_connection_scoping_edge_cases() {
     let created = fixture.ok("create_workspace", json!({ "name": "Initial" }));
     let ws_id = created["id"].as_str().unwrap();
 
-    assert!(fixture.invoke("rename_workspace", json!({ "workspaceId": ws_id, "name": "" })).is_err());
-    assert!(fixture.invoke("rename_workspace", json!({ "workspaceId": "ws#ghost", "name": "Ghost" })).is_err());
+    assert!(fixture
+        .invoke(
+            "rename_workspace",
+            json!({ "workspaceId": ws_id, "name": "" })
+        )
+        .is_err());
+    assert!(fixture
+        .invoke(
+            "rename_workspace",
+            json!({ "workspaceId": "ws#ghost", "name": "Ghost" })
+        )
+        .is_err());
 
-    let renamed = fixture.ok("rename_workspace", json!({ "workspaceId": ws_id, "name": "Renamed" }));
+    let renamed = fixture.ok(
+        "rename_workspace",
+        json!({ "workspaceId": ws_id, "name": "Renamed" }),
+    );
     assert_eq!(renamed["name"], "Renamed");
 
     assert!(fixture.invoke("save_workspace_connections", json!({
@@ -119,55 +144,108 @@ fn ipc_workspace_mutations_and_connection_scoping_edge_cases() {
         "data": [{ "id": "c1", "name": "c1", "type": "SSH", "host": "1.2.3.4", "port": "22", "user": "root" }]
     })).unwrap_err().to_string().contains("Add a folder"));
 
-    let with_folder = fixture.ok("add_workspace_folder", json!({ "workspaceId": ws_id, "path": root1.path().to_string_lossy() }));
-    let f1_id = with_folder["folders"][0]["id"].as_str().unwrap().to_string();
+    let with_folder = fixture.ok(
+        "add_workspace_folder",
+        json!({ "workspaceId": ws_id, "path": root1.path().to_string_lossy() }),
+    );
+    let f1_id = with_folder["folders"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
 
-    let pinned = fixture.ok("set_workspace_entry_pinned", json!({
-        "workspaceId": ws_id,
-        "folderId": &f1_id,
-        "path": "scripts",
-        "pinned": true
-    }));
+    let pinned = fixture.ok(
+        "set_workspace_entry_pinned",
+        json!({
+            "workspaceId": ws_id,
+            "folderId": &f1_id,
+            "path": "scripts",
+            "pinned": true
+        }),
+    );
     assert_eq!(pinned["pins"].as_array().unwrap().len(), 1);
 
-    let unpinned = fixture.ok("set_workspace_entry_pinned", json!({
-        "workspaceId": ws_id,
-        "folderId": &f1_id,
-        "path": "scripts",
-        "pinned": false
-    }));
+    let unpinned = fixture.ok(
+        "set_workspace_entry_pinned",
+        json!({
+            "workspaceId": ws_id,
+            "folderId": &f1_id,
+            "path": "scripts",
+            "pinned": false
+        }),
+    );
     assert!(unpinned["pins"].as_array().unwrap().is_empty());
 
-    assert!(fixture.invoke("set_workspace_entry_pinned", json!({
-        "workspaceId": ws_id,
-        "folderId": "folder#ghost",
-        "path": "scripts",
-        "pinned": true
-    })).is_err());
+    assert!(fixture
+        .invoke(
+            "set_workspace_entry_pinned",
+            json!({
+                "workspaceId": ws_id,
+                "folderId": "folder#ghost",
+                "path": "scripts",
+                "pinned": true
+            })
+        )
+        .is_err());
 
-    let with_two = fixture.ok("add_workspace_folder", json!({ "workspaceId": ws_id, "path": root2.path().to_string_lossy() }));
+    let with_two = fixture.ok(
+        "add_workspace_folder",
+        json!({ "workspaceId": ws_id, "path": root2.path().to_string_lossy() }),
+    );
     let f2_id = with_two["folders"][1]["id"].as_str().unwrap().to_string();
 
     let unparented = json!({ "id": "c_unparented", "name": "c", "type": "SSH", "host": "1.2.3.4", "port": "22", "user": "root" });
-    assert!(fixture.invoke("save_workspace_connections", json!({ "workspaceId": ws_id, "data": [unparented] })).unwrap_err().to_string().contains("Choose a workspace folder"));
+    assert!(fixture
+        .invoke(
+            "save_workspace_connections",
+            json!({ "workspaceId": ws_id, "data": [unparented] })
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("Choose a workspace folder"));
 
     let bad_parent = json!({ "id": "c_bad", "name": "c", "type": "SSH", "host": "1.2.3.4", "port": "22", "user": "root", "parentId": "folder#ghost/sub" });
-    assert!(fixture.invoke("save_workspace_connections", json!({ "workspaceId": ws_id, "data": [bad_parent] })).is_err());
+    assert!(fixture
+        .invoke(
+            "save_workspace_connections",
+            json!({ "workspaceId": ws_id, "data": [bad_parent] })
+        )
+        .is_err());
 
     let c_f1 = json!({ "id": "c1", "name": "c1", "type": "SSH", "host": "1.2.3.4", "port": "22", "user": "root", "parentId": format!("{f1_id}/group") });
     let c_f2 = json!({ "id": "c2", "name": "c2", "type": "SSH", "host": "1.2.3.4", "port": "22", "user": "root", "parentId": format!("{f2_id}/servers") });
-    fixture.ok("save_workspace_connections", json!({ "workspaceId": ws_id, "data": [c_f1, c_f2] }));
+    fixture.ok(
+        "save_workspace_connections",
+        json!({ "workspaceId": ws_id, "data": [c_f1, c_f2] }),
+    );
 
-    let loaded = fixture.ok("load_workspace_connections", json!({ "workspaceId": ws_id }));
+    let loaded = fixture.ok(
+        "load_workspace_connections",
+        json!({ "workspaceId": ws_id }),
+    );
     assert_eq!(loaded.as_array().unwrap().len(), 2);
 
-    fixture.ok("delete_workspace_connection", json!({ "workspaceId": ws_id, "connectionId": "c2" }));
-    let remaining = fixture.ok("load_workspace_connections", json!({ "workspaceId": ws_id }));
+    fixture.ok(
+        "delete_workspace_connection",
+        json!({ "workspaceId": ws_id, "connectionId": "c2" }),
+    );
+    let remaining = fixture.ok(
+        "load_workspace_connections",
+        json!({ "workspaceId": ws_id }),
+    );
     assert_eq!(remaining.as_array().unwrap().len(), 1);
     assert_eq!(remaining[0]["id"], "c1");
 
-    fixture.ok("delete_workspace_connection", json!({ "workspaceId": ws_id, "connectionId": "c_ghost" }));
+    fixture.ok(
+        "delete_workspace_connection",
+        json!({ "workspaceId": ws_id, "connectionId": "c_ghost" }),
+    );
 
-    assert!(fixture.invoke("run_script", json!({ "workspaceId": ws_id, "script": null, "subPath": null })).unwrap_err().to_string().contains("Choose a workspace folder"));
+    assert!(fixture
+        .invoke(
+            "run_script",
+            json!({ "workspaceId": ws_id, "script": null, "subPath": null })
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("Choose a workspace folder"));
 }
-

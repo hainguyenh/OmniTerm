@@ -6,9 +6,9 @@
 
 use super::*;
 use crate::connections::Connection;
+use crate::test_support;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::test_support;
 use std::sync::MutexGuard;
 use tauri::test::MockRuntime;
 use tauri::Manager;
@@ -79,16 +79,16 @@ fn write_file(path: impl AsRef<Path>, contents: impl AsRef<[u8]>) {
     fs::write(path, contents).unwrap();
 }
 
-#[path = "command_persistence_tests.rs"]
-mod persistence;
-#[path = "command_workspace_tests.rs"]
-mod workspace_commands;
 #[path = "command_app_tests.rs"]
 mod app_commands;
 #[path = "command_connection_tests.rs"]
 mod connection_commands;
 #[path = "command_edge_tests.rs"]
 mod edge_commands;
+#[path = "command_persistence_tests.rs"]
+mod persistence;
+#[path = "command_workspace_tests.rs"]
+mod workspace_commands;
 
 #[path = "command_plugin_tests.rs"]
 mod plugin_commands;

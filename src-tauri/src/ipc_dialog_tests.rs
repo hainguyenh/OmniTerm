@@ -180,9 +180,7 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
     let invalid_package = tools.path().join("invalid-plugin.zip");
     fs::write(&invalid_package, b"not a zip archive").unwrap();
     std::env::set_var("OMNITERM_ZENITY_OPEN", &invalid_package);
-    assert!(fixture
-        .invoke("install_plugin_package", json!({}))
-        .is_err());
+    assert!(fixture.invoke("install_plugin_package", json!({})).is_err());
 
     std::env::set_var("OMNITERM_ZENITY_OPEN", &package);
     std::env::set_var("OMNITERM_ZENITY_CANCEL", "1");

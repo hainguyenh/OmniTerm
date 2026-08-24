@@ -28,9 +28,16 @@ fn settings_theme_and_custom_art_commands_round_trip_through_app_data() {
     assert_eq!(saved["extra"], json!(true));
 
     write_file(fixture.data_dir.join("settings.json"), b"{not-json");
-    assert_eq!(settings::read_settings(&app)["themeId"], json!("tokyo-night"));
+    assert_eq!(
+        settings::read_settings(&app)["themeId"],
+        json!("tokyo-night")
+    );
 
-    assert!(block_on(themes::save_theme(app.clone(), json!({"name": "Missing id"}))).is_err());
+    assert!(block_on(themes::save_theme(
+        app.clone(),
+        json!({"name": "Missing id"})
+    ))
+    .is_err());
     assert!(block_on(themes::save_theme(
         app.clone(),
         json!({"id": "../escape", "name": "Unsafe"}),
@@ -45,8 +52,16 @@ fn settings_theme_and_custom_art_commands_round_trip_through_app_data() {
         .unwrap()
         .iter()
         .any(|theme| theme["id"] == "coverage-theme"));
-    block_on(themes::delete_theme(app.clone(), "coverage-theme".to_string())).unwrap();
-    block_on(themes::delete_theme(app.clone(), "coverage-theme".to_string())).unwrap();
+    block_on(themes::delete_theme(
+        app.clone(),
+        "coverage-theme".to_string(),
+    ))
+    .unwrap();
+    block_on(themes::delete_theme(
+        app.clone(),
+        "coverage-theme".to_string(),
+    ))
+    .unwrap();
     assert!(!block_on(themes::list_themes(app.clone()))
         .unwrap()
         .iter()
@@ -56,7 +71,10 @@ fn settings_theme_and_custom_art_commands_round_trip_through_app_data() {
     // without opening a user-facing file manager.
     block_on(themes::open_themes_folder(app.clone())).unwrap();
     let themes_dir = app.path().app_data_dir().unwrap().join("themes");
-    assert!(themes_dir.exists(), "open_themes_folder should ensure the directory exists");
+    assert!(
+        themes_dir.exists(),
+        "open_themes_folder should ensure the directory exists"
+    );
 
     let source = TempDir::new().unwrap();
     let png = source.path().join("art.png");
@@ -75,7 +93,11 @@ fn settings_theme_and_custom_art_commands_round_trip_through_app_data() {
     .unwrap();
     assert!(Path::new(&stored_path).is_file());
     assert_eq!(
-        block_on(custom_art::get_custom_art(app.clone(), "idle-dark".to_string())).unwrap(),
+        block_on(custom_art::get_custom_art(
+            app.clone(),
+            "idle-dark".to_string()
+        ))
+        .unwrap(),
         Some(stored_path)
     );
     block_on(custom_art::remove_custom_art(

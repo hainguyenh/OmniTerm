@@ -116,7 +116,11 @@ fn starts_in_the_requested_working_directory() {
     let marker_dir = root.join("marker-dir");
     std::fs::create_dir(&marker_dir).unwrap();
 
-    let print_cwd = if cfg!(target_os = "windows") { "cd" } else { "pwd" };
+    let print_cwd = if cfg!(target_os = "windows") {
+        "cd"
+    } else {
+        "pwd"
+    };
     let launch = LocalLaunch {
         shell: native_shell(),
         cwd: Some(marker_dir.to_string_lossy().into_owned()),
@@ -190,7 +194,12 @@ fn passes_quoted_extra_arguments_through_to_the_shell() {
 /// launch spec, so there is nothing to spawn.
 #[test]
 fn an_arbitrary_executable_never_reaches_the_spawner() {
-    for hostile in ["calc.exe", r"C:\Windows\System32\calc.exe", "/bin/sh", "sh -c x"] {
+    for hostile in [
+        "calc.exe",
+        r"C:\Windows\System32\calc.exe",
+        "/bin/sh",
+        "sh -c x",
+    ] {
         assert!(
             LocalShell::parse(hostile).is_none(),
             "{hostile:?} must not resolve to a shell"
