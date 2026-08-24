@@ -307,4 +307,14 @@ describe('SessionControlButtons', () => {
     expect(screen.getByRole('button', { name: 'Detach into its own window' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Focus pane full screen' })).toBeInTheDocument()
   })
+
+  it('shows the copy menu for terminal sessions but never for RDP', () => {
+    const { unmount } = render(
+      <SessionControlButtons conn={local} sessionId="s1" detach={null} onToggleDetach={vi.fn()} />,
+    )
+    expect(screen.getByRole('button', { name: 'Copy terminal output' })).toBeInTheDocument()
+    unmount()
+    render(<SessionControlButtons conn={rdp} sessionId="s1" detach={null} onToggleDetach={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Copy terminal output' })).not.toBeInTheDocument()
+  })
 })
