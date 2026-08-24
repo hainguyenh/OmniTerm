@@ -124,12 +124,20 @@ fn send_group_signal(root_pid: u32, signal: i32) -> Result<(), String> {
 }
 
 #[cfg(unix)]
-pub fn suspend_tree(root_pid: u32) -> Result<(), String> {
+pub fn suspend_tree(index: &ProcIndex, root_pid: u32) -> Result<(), String> {
+    // Identity guard shared with the Windows path: never signal a pid that was
+    // absent from the caller's snapshot, since it may have been recycled.
+    if process_start_time(index, root_pid).is_none() {
+        return Err(format!("process {root_pid} is not running"));
+    }
     send_group_signal(root_pid, libc::SIGSTOP)
 }
 
 #[cfg(unix)]
-pub fn resume_tree(root_pid: u32) -> Result<(), String> {
+pub fn resume_tree(index: &ProcIndex, root_pid: u32) -> Result<(), String> {
+    if process_start_time(index, root_pid).is_none() {
+        return Err(format!("process {root_pid} is not running"));
+    }
     send_group_signal(root_pid, libc::SIGCONT)
 }
 
