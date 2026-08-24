@@ -94,8 +94,16 @@ impl RdpSessionManager {
 /// Credential-free by construction — see the module note. `Connection` has no password field, so there
 /// is nothing here that could write one even by accident.
 pub fn generate_rdp_content(conn: &Connection) -> String {
-    let port = if conn.port.is_empty() { "3389" } else { &conn.port };
-    let redirect = if conn.redirect_drives.unwrap_or(false) { 1 } else { 0 };
+    let port = if conn.port.is_empty() {
+        "3389"
+    } else {
+        &conn.port
+    };
+    let redirect = if conn.redirect_drives.unwrap_or(false) {
+        1
+    } else {
+        0
+    };
 
     format!(
         "full address:s:{}:{}\n\
@@ -127,8 +135,12 @@ pub fn temp_file_name(conn_id: &str, seq: u64) -> String {
 /// dropped at exit without unlinking, so every session leaked its file into the cache directory
 /// permanently. Best-effort: a failure here must not stop the app from launching.
 pub fn sweep_stale_temp_files<R: Runtime>(app: &AppHandle<R>) {
-    let Ok(dir) = app.path().app_cache_dir() else { return };
-    let Ok(entries) = fs::read_dir(&dir) else { return };
+    let Ok(dir) = app.path().app_cache_dir() else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let name = entry.file_name();
         let Some(name) = name.to_str() else { continue };
@@ -164,7 +176,10 @@ fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&P
 }
 
 #[tauri::command]
-pub async fn connect_rdp<R: Runtime>(app: AppHandle<R>, id: String) -> Result<serde_json::Value, String> {
+pub async fn connect_rdp<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+) -> Result<serde_json::Value, String> {
     // Resolves through the ad-hoc registry, the global tree, workspace profiles, then a plugin's
     // `ConnectionProvider`. A plugin owning the tree therefore also owns what gets launched from it.
     let conn = crate::pty_resolve::resolve_connection_by_id(&app, &id).await?;

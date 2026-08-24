@@ -145,7 +145,6 @@ fn temp_file_helpers_write_sweep_and_finish_only_omniterm_rdp_files() {
     let _ = fs::remove_file(unrelated);
 }
 
-
 /// On Linux there is no built-in RDP client, so `connect_rdp` against a real RDP connection reaches
 /// `rdp_command`, hits the unsupported-platform branch, removes the temp file it wrote, and surfaces
 /// the same "no Remote Desktop client" message `launch_rdp` does. Covers the temp-write + Err path
@@ -181,14 +180,14 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
     assert!(error.contains("No Remote Desktop client"), "got {error:?}");
 
     let cache = handle.path().app_cache_dir().unwrap();
-    let leftover = std::fs::read_dir(&cache).unwrap()
+    let leftover = std::fs::read_dir(&cache)
+        .unwrap()
         .flatten()
         .any(|entry| entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX));
     assert!(!leftover, "the temp .rdp file should have been removed");
 
     let _ = std::fs::remove_dir_all(&cache);
 }
-
 
 #[test]
 fn temp_file_creation_reports_cache_and_target_collisions() {
@@ -233,7 +232,7 @@ fn rdp_content_generation_disables_redirect_drives_when_false_or_none() {
     let mut conn = rdp_conn();
     conn.redirect_drives = Some(false);
     assert!(generate_rdp_content(&conn).contains("redirectdrives:i:0"));
-    
+
     conn.redirect_drives = None;
     assert!(generate_rdp_content(&conn).contains("redirectdrives:i:0"));
 }
@@ -245,7 +244,7 @@ fn sweep_stale_temp_files_handles_missing_cache_dir_and_invalid_names() {
     let app = test_support::mock_app();
     let handle = app.handle().clone();
     let cache = handle.path().app_cache_dir().unwrap();
-    
+
     // Remove the cache dir entirely to test the read_dir error path
     let _ = fs::remove_dir_all(&cache);
     sweep_stale_temp_files(&handle); // should return silently
@@ -254,7 +253,7 @@ fn sweep_stale_temp_files_handles_missing_cache_dir_and_invalid_names() {
     fs::create_dir_all(&cache).unwrap();
     let wrong_ext = cache.join(temp_file_name("wrong", 777_003).replace(".rdp", ".txt"));
     let _ = fs::write(&wrong_ext, "keep");
-    
+
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -264,7 +263,7 @@ fn sweep_stale_temp_files_handles_missing_cache_dir_and_invalid_names() {
 
     sweep_stale_temp_files(&handle);
     assert!(wrong_ext.exists());
-    
+
     let _ = fs::remove_dir_all(&cache);
 }
 
@@ -302,19 +301,18 @@ fn rdp_disconnect_removes_session_and_cleans_up() {
     let app = test_support::mock_app();
     let manager = RdpSessionManager::new();
     let handle = app.handle().clone();
-    
+
     let cache = handle.path().app_cache_dir().unwrap();
     fs::create_dir_all(&cache).unwrap();
     let temp_file = cache.join(temp_file_name("c1", 100));
     fs::write(&temp_file, "content").unwrap();
-    
+
     manager.register("c1".to_string(), temp_file.clone());
     assert!(app.manage(manager));
-    
+
     tauri::async_runtime::block_on(rdp_disconnect(handle.clone(), "c1".to_string())).unwrap();
-    
+
     // The file should be removed.
     assert!(!temp_file.exists());
     let _ = fs::remove_dir_all(&cache);
 }
-
