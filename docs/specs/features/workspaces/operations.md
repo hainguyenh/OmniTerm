@@ -48,6 +48,7 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 - Folder/subfolder terminal action supplies an explicit logical target.
 - One-folder workspace may remain eligible for quick-shell convenience.
 - Configured max-open size and excluded extensions are enforced natively.
+- New-terminal targeting resolves explicit argument (an explicit null forces home) → the `defaultWorkspace` setting (workspace, folder-pinned workspace, or home) → last-used workspace → home; selections whose workspace/folder no longer exists fall through to the next link instead of failing the launch.
 
 ## Functionalities
 
@@ -57,6 +58,7 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 - `read_script` — owned by this spec.
 - `write_script` — owned by this spec.
 - `run_script` — owned by this spec.
+- `resolveNewSessionWorkspace` / `defaultWorkspaceToSelection` / `isSelectionLive` — owned by this spec.
 
 ## Components and functions
 
@@ -68,6 +70,8 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 | `read_script` | Read safe viewable file. | Viewer/editor content. | Resolve target then `read_viewable_excluding`. | Open file. |
 | `write_script` | Write safe editable file. | Editor save. | Resolve target then `write_editable`. | Save file. |
 | `run_script` | Run file or open folder terminal. | Execution/terminal functionality. | Resolve safe runnable/cwd then launch RDP/ad-hoc shell. | Run/Open Terminal. |
+| `resolveNewSessionWorkspace` | Pick the target workspace for a new terminal. | Launch sites without an explicit target still land predictably. | Walk explicit → default setting → last-used, dropping dead selections via a liveness check. | New session/quick shell without explicit workspace. |
+| `defaultWorkspaceToSelection` / `isSelectionLive` | Encode the setting as a selection string and validate it against the live catalog. | Stale saved choices must degrade, not break launches. | Reuse selection encoding; check workspace/folder existence. | Resolution walk and settings persistence. |
 
 ## State and data
 
@@ -77,6 +81,7 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 - Canonical target/cwd
 - Page offset/limit
 - Settings safety policy
+- Default-workspace setting and last-used selection (`omniterm:last-workspace`)
 
 ## Errors and edge cases
 
@@ -100,3 +105,4 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 - `crates/app-core/src/workspace_model.rs`
 - `crates/app-core/src/safepath.rs`
 - `crates/app-core/src/workspace_scan.rs`
+- `ui/utils/workspaceSelection.ts`

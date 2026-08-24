@@ -15,7 +15,10 @@ pub fn custom_art_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String>
 }
 
 fn is_valid_slot(slot: &str) -> bool {
-    matches!(slot, "idle-light" | "idle-dark" | "loading-light" | "loading-dark")
+    matches!(
+        slot,
+        "idle-light" | "idle-dark" | "loading-light" | "loading-dark"
+    )
 }
 
 fn has_valid_extension(path: &Path) -> bool {
@@ -80,7 +83,7 @@ pub fn get_custom_art_impl(dir: &Path, slot: &str) -> Result<Option<String>, Str
     for entry in fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {e}"))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let path = entry.path();
-        
+
         if path.is_file() {
             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                 if stem == slot {
@@ -108,7 +111,7 @@ pub fn remove_custom_art_impl(dir: &Path, slot: &str) -> Result<(), String> {
     for entry in fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {e}"))? {
         let entry = entry.map_err(|e| format!("Failed to read entry: {e}"))?;
         let path = entry.path();
-        
+
         if path.is_file() {
             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                 if stem == slot {
@@ -122,13 +125,20 @@ pub fn remove_custom_art_impl(dir: &Path, slot: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn upload_custom_art<R: Runtime>(app: AppHandle<R>, slot: String, path: String) -> Result<String, String> {
+pub async fn upload_custom_art<R: Runtime>(
+    app: AppHandle<R>,
+    slot: String,
+    path: String,
+) -> Result<String, String> {
     let dir = custom_art_dir(&app)?;
     upload_custom_art_impl(&dir, &slot, Path::new(&path))
 }
 
 #[tauri::command]
-pub async fn get_custom_art<R: Runtime>(app: AppHandle<R>, slot: String) -> Result<Option<String>, String> {
+pub async fn get_custom_art<R: Runtime>(
+    app: AppHandle<R>,
+    slot: String,
+) -> Result<Option<String>, String> {
     let dir = custom_art_dir(&app)?;
     get_custom_art_impl(&dir, &slot)
 }

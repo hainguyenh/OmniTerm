@@ -96,6 +96,22 @@ describe('MainLayoutView coverage', () => {
     expect(panel).not.toBeNull()
   })
 
+  it('hides activity bar, sidebar, and tab strip in chrome-hidden fullscreen but keeps panes', () => {
+    render(<MainLayoutView model={model({
+      chromeHidden: true,
+      activeView: 'workspace',
+      activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
+      panes: ['game-tab'],
+      connById: (id?: string) => id === 'local'
+        ? local
+        : [ssh, rdp].find(c => c.id === id),
+    })} />)
+    expect(screen.queryByTestId('activity')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workspace')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tabs')).not.toBeInTheDocument()
+    expect(screen.getByTestId('terminal-game-tab')).toBeInTheDocument()
+  })
+
   it('handles the tab strip and all layout-picker transitions', () => {
     const m = model({
       activeTabs: [{ id: 'game-tab', connId: 'local', name: 'Game' }],
@@ -325,7 +341,8 @@ describe('MainLayoutView coverage', () => {
     expect(m.closeTab).toHaveBeenCalledWith('edit-tab')
     expect(m.setStatus).toHaveBeenCalledWith('rdp-tab', 'connected')
     expect(m.setLatency).toHaveBeenCalledWith('rdp-tab', 33)
-    expect(m.reattachTerminal).toHaveBeenCalledWith('pop-tab')
+    // Reattach now targets the focused slot at click time (0 in this harness).
+    expect(m.reattachTerminal).toHaveBeenCalledWith('pop-tab', 0)
     expect(m.setMetric).toHaveBeenCalledWith('local-tab', { latency: 7 })
     expect(m.setBusy).toHaveBeenCalledWith('local-tab', true)
     expect(m.onFontSizeChange).toHaveBeenCalled()

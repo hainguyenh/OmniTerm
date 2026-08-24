@@ -7,32 +7,31 @@
 use crate::adhoc;
 use crate::openshell::OpenShellRequest;
 use crate::safepath;
+use crate::workspace_folders::{canonical_dir, new_folder};
 use crate::workspace_launch::{default_shell, script_run_request};
 use crate::workspace_scan::{WorkspaceEntry, WorkspaceEntryPage, WorkspaceScript};
 use app_core::workspace_model::{
-    logical_target, move_workspace as move_workspace_model, namespace_path,
-    normalize_workspace_orders, parse_workspace_import, set_entry_pinned,
+    logical_target, move_workspace as move_workspace_model, namespace_path, set_entry_pinned,
 };
 pub use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
-use std::fs;
 use std::path::Path;
 use tauri::{AppHandle, Manager, Runtime};
 use uuid::Uuid;
 
-pub(crate) use crate::workspace_persistence::{read_workspaces, write_workspaces};
+#[cfg(test)]
+#[cfg(test)]
+pub(crate) use crate::workspace_lifecycle::{
+    import_workspace_file, remove_workspace, rename_workspace,
+};
 #[cfg(test)]
 pub(crate) use crate::workspace_persistence::workspaces_file;
+pub(crate) use crate::workspace_persistence::{read_workspaces, write_workspaces};
 #[cfg(test)]
 #[path = "workspace_tests.rs"]
 mod tests;
-
-fn canonical_dir(path: &str) -> Result<String, String> {
-    let canonical = dunce::canonicalize(path).map_err(|_| "That path is not a folder.".to_string())?;
-    if !canonical.is_dir() {
-        return Err("That path is not a folder.".to_string());
-    }
-    Ok(canonical.to_string_lossy().into_owned())
-}
+#[cfg(test)]
+#[path = "workspace_command_validation_tests.rs"]
+mod command_validation_tests;
 
 fn display_name(path: &str) -> String {
     Path::new(path)
@@ -42,7 +41,7 @@ fn display_name(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-fn next_root_order(list: &[Workspace]) -> usize {
+pub(crate) fn next_root_order(list: &[Workspace]) -> usize {
     list.iter()
         .filter(|workspace| workspace.parent_id.is_none())
         .map(|workspace| workspace.order)
@@ -50,16 +49,11 @@ fn next_root_order(list: &[Workspace]) -> usize {
         .map_or(0, |order| order.saturating_add(1))
 }
 
-fn new_folder(path: String, name: Option<String>) -> WorkspaceFolder {
-    WorkspaceFolder {
-        id: format!("folder#{}", Uuid::new_v4()),
-        name: name.filter(|value| !value.trim().is_empty()).unwrap_or_else(|| display_name(&path)),
-        path,
-        color: None,
-    }
-}
-
-fn new_workspace(name: String, folders: Vec<WorkspaceFolder>, order: usize) -> Workspace {
+pub(crate) fn new_workspace(
+    name: String,
+    folders: Vec<WorkspaceFolder>,
+    order: usize,
+) -> Workspace {
     Workspace {
         id: format!("ws#{}", Uuid::new_v4()),
         name,
@@ -72,7 +66,10 @@ fn new_workspace(name: String, folders: Vec<WorkspaceFolder>, order: usize) -> W
     }
 }
 
-pub(crate) fn find_workspace<R: Runtime>(app: &AppHandle<R>, id: &str) -> Result<Workspace, String> {
+pub(crate) fn find_workspace<R: Runtime>(
+    app: &AppHandle<R>,
+    id: &str,
+) -> Result<Workspace, String> {
     read_workspaces(app)?
         .into_iter()
         .find(|workspace| workspace.id == id)
@@ -84,7 +81,10 @@ pub async fn list_workspaces<R: Runtime>(app: AppHandle<R>) -> Result<Vec<Worksp
 }
 
 #[tauri::command]
-pub async fn create_workspace<R: Runtime>(app: AppHandle<R>, name: String) -> Result<Workspace, String> {
+pub async fn create_workspace<R: Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<Workspace, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Workspace name cannot be empty.".to_string());
@@ -98,100 +98,36 @@ pub async fn create_workspace<R: Runtime>(app: AppHandle<R>, name: String) -> Re
 
 /// Backward-compatible one-folder add: creates a new container around the selected folder.
 #[tauri::command]
-pub async fn add_workspace<R: Runtime>(app: AppHandle<R>, path: String) -> Result<Workspace, String> {
+pub async fn add_workspace<R: Runtime>(
+    app: AppHandle<R>,
+    path: String,
+) -> Result<Workspace, String> {
     let path = canonical_dir(&path)?;
     let mut list = read_workspaces(&app)?;
-    if let Some(existing) = list.iter().find(|workspace| workspace.folders.iter().any(|folder| folder.path == path)) {
+    if let Some(existing) = list
+        .iter()
+        .find(|workspace| workspace.folders.iter().any(|folder| folder.path == path))
+    {
         return Ok(existing.clone());
     }
     let name = display_name(&path);
-    let workspace = new_workspace(name.clone(), vec![new_folder(path, Some(name))], next_root_order(&list));
+    let workspace = new_workspace(
+        name.clone(),
+        vec![new_folder(path, Some(name))],
+        next_root_order(&list),
+    );
     list.push(workspace.clone());
     write_workspaces(&app, &list)?;
     Ok(workspace)
 }
 
 #[tauri::command]
-pub async fn add_workspace_folder<R: Runtime>(app: AppHandle<R>, workspace_id: String, path: String) -> Result<Workspace, String> {
-    let path = canonical_dir(&path)?;
-    let mut list = read_workspaces(&app)?;
-    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
-    if !workspace.folders.iter().any(|folder| folder.path == path) {
-        workspace.folders.push(new_folder(path, None));
-    }
-    let result = workspace.clone();
-    write_workspaces(&app, &list)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn remove_workspace_folder<R: Runtime>(
+pub async fn move_workspace<R: Runtime>(
     app: AppHandle<R>,
     workspace_id: String,
-    folder_id: String,
-) -> Result<Workspace, String> {
-    let mut list = read_workspaces(&app)?;
-    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
-    let original_len = workspace.folders.len();
-    workspace.folders.retain(|folder| folder.id != folder_id);
-    if workspace.folders.len() == original_len {
-        return Err(format!("Unknown workspace folder \"{folder_id}\""));
-    }
-    workspace.pins.retain(|pin| pin.folder_id != folder_id);
-    let result = workspace.clone();
-    write_workspaces(&app, &list)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn import_workspace_file<R: Runtime>(app: AppHandle<R>, path: String) -> Result<Workspace, String> {
-    const MAX_IMPORT_BYTES: u64 = 1024 * 1024;
-    let metadata = fs::metadata(&path).map_err(|error| format!("Cannot read workspace file: {error}"))?;
-    if metadata.len() > MAX_IMPORT_BYTES {
-        return Err("Workspace file is too large (max 1 MB).".to_string());
-    }
-    let content = fs::read_to_string(&path).map_err(|error| format!("Cannot read workspace file: {error}"))?;
-    let imported = parse_workspace_import(Path::new(&path), &content)?;
-    let mut list = read_workspaces(&app)?;
-    let folders = imported.folders.into_iter().map(|folder| new_folder(folder.path, Some(folder.name))).collect();
-    let workspace = new_workspace(imported.name, folders, next_root_order(&list));
-    list.push(workspace.clone());
-    write_workspaces(&app, &list)?;
-    Ok(workspace)
-}
-
-#[tauri::command]
-pub async fn remove_workspace<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
-    let mut list = read_workspaces(&app)?;
-    let parent = list.iter().find(|workspace| workspace.id == id).map(|workspace| workspace.parent_id.clone())
-        .ok_or_else(|| format!("Unknown workspace \"{id}\""))?;
-    for workspace in &mut list {
-        if workspace.parent_id.as_deref() == Some(&id) {
-            workspace.parent_id = parent.clone();
-        }
-    }
-    list.retain(|workspace| workspace.id != id);
-    normalize_workspace_orders(&mut list);
-    write_workspaces(&app, &list)
-}
-
-#[tauri::command]
-pub async fn rename_workspace<R: Runtime>(app: AppHandle<R>, workspace_id: String, name: String) -> Result<Workspace, String> {
-    let name = name.trim();
-    if name.is_empty() { return Err("Workspace name cannot be empty.".to_string()); }
-    let mut list = read_workspaces(&app)?;
-    let workspace = list.iter_mut().find(|workspace| workspace.id == workspace_id)
-        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
-    workspace.name = name.to_string();
-    let result = workspace.clone();
-    write_workspaces(&app, &list)?;
-    Ok(result)
-}
-
-#[tauri::command]
-pub async fn move_workspace<R: Runtime>(app: AppHandle<R>, workspace_id: String, parent_id: Option<String>, index: usize) -> Result<Vec<Workspace>, String> {
+    parent_id: Option<String>,
+    index: usize,
+) -> Result<Vec<Workspace>, String> {
     let mut list = read_workspaces(&app)?;
     move_workspace_model(&mut list, &workspace_id, parent_id.as_deref(), index)?;
     write_workspaces(&app, &list)?;
@@ -289,12 +225,19 @@ pub async fn scan_workspace_entries<R: Runtime>(
 ) -> Result<WorkspaceEntryPage, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
     if folder.trim().is_empty() {
-        return Ok(WorkspaceEntryPage { entries: Vec::new(), total: 0, has_more: false });
+        return Ok(WorkspaceEntryPage {
+            entries: Vec::new(),
+            total: 0,
+            has_more: false,
+        });
     }
     let target = logical_target(&workspace, &folder)?;
     let root = Path::new(&target.folder.path);
     if !root.is_dir() {
-        return Err(format!("Workspace folder \"{}\" is unavailable.", target.folder.name));
+        return Err(format!(
+            "Workspace folder \"{}\" is unavailable.",
+            target.folder.name
+        ));
     }
     let page = crate::workspace_scan::scan_folder_files_excluding(
         root,
@@ -337,21 +280,30 @@ pub async fn run_script<R: Runtime>(
         adhoc::open_adhoc_shell(&app, request);
         return Ok(true);
     }
-    let logical = sub_path.as_deref().map(str::trim).filter(|value| !value.is_empty())
+    let logical = sub_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         .ok_or_else(|| "Choose a workspace folder before opening a terminal.".to_string())?;
     let target = logical_target(&workspace, logical)?;
     let cwd = safepath::safe_subdir(&target.folder.path, &target.relative_path, false)?;
-    let name = target.relative_path.split('/').rfind(|value| !value.is_empty())
+    let name = target
+        .relative_path
+        .split('/')
+        .rfind(|value| !value.is_empty())
         .unwrap_or(&target.folder.name)
         .to_string();
-    adhoc::open_adhoc_shell(&app, OpenShellRequest {
-        shell: default_shell(),
-        cwd: Some(cwd.to_string_lossy().into_owned()),
-        command: None,
-        args: None,
-        keep_open: true,
-        name,
-    });
+    adhoc::open_adhoc_shell(
+        &app,
+        OpenShellRequest {
+            shell: default_shell(),
+            cwd: Some(cwd.to_string_lossy().into_owned()),
+            command: None,
+            args: None,
+            keep_open: true,
+            name,
+        },
+    );
     Ok(true)
 }
 
@@ -367,7 +319,11 @@ fn excluded_viewable_exts<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
     crate::settings::read_settings(app)
         .get("excludedViewableExts")
         .and_then(serde_json::Value::as_array)
-        .map(|arr| arr.iter().filter_map(|value| value.as_str().map(str::to_lowercase)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|value| value.as_str().map(str::to_lowercase))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -396,5 +352,10 @@ pub async fn write_script<R: Runtime>(
 ) -> Result<(), String> {
     let workspace = find_workspace(&app, &workspace_id)?;
     let target = logical_target(&workspace, &path)?;
-    safepath::write_editable(&target.folder.path, &target.relative_path, &content, max_open_bytes(&app))
+    safepath::write_editable(
+        &target.folder.path,
+        &target.relative_path,
+        &content,
+        max_open_bytes(&app),
+    )
 }

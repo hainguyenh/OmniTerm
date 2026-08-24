@@ -37,6 +37,11 @@ export type ClipboardAction = 'paste' | 'copy' | null
  * would only add a way to double-fire, so we deliberately leave it alone.
  */
 export const clipboardActionFor = (e: ClipboardKeyEvent, isMac: boolean): ClipboardAction => {
+  // Alt+V is the explicit image-paste binding: agents like OpenCode read the
+  // inserted file path from the prompt. Claimed so the Alt press cannot leak
+  // an ESC-prefixed code into the PTY instead.
+  if (e.code === 'KeyV' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) return 'paste';
+
   if (e.altKey) return null
 
   if (e.code === 'KeyV') {

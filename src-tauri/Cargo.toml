@@ -45,6 +45,8 @@ tauri-plugin-dialog = "2"
 tauri-plugin-log = "2"
 tauri-plugin-os = "2"
 tauri-plugin-single-instance = "2"
+# Native auto-update (minisign-signed bundles from GitHub Releases; see update_manager.rs).
+tauri-plugin-updater = "2"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

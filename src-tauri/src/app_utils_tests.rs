@@ -10,7 +10,10 @@ fn logging_follows_debug_assertions_only() {
     #[cfg(debug_assertions)]
     assert!(logging_enabled(), "a dev build keeps its log");
     #[cfg(not(debug_assertions))]
-    assert!(!logging_enabled(), "a release/portable build must log nothing");
+    assert!(
+        !logging_enabled(),
+        "a release/portable build must log nothing"
+    );
 }
 
 /// A provider may open an HTTPS authentication-help page before the native client prompts. Arbitrary HTTPS hosts are
@@ -119,7 +122,10 @@ fn reveal_log_errors_when_logging_is_disabled() {
     {
         let app = crate::test_support::mock_app();
         let result = tauri::async_runtime::block_on(reveal_log(app.handle().clone()));
-        assert!(result.is_ok(), "reveal_log must not open a user-facing folder in tests: {result:?}");
+        assert!(
+            result.is_ok(),
+            "reveal_log must not open a user-facing folder in tests: {result:?}"
+        );
     }
 }
 
@@ -142,14 +148,16 @@ fn clear_log_truncates_only_files_and_reports_an_unreadable_log_root() {
         Ok(true)
     );
     assert!(fs::read(log_dir.join("app.log")).unwrap().is_empty());
-    assert_eq!(fs::read(log_dir.join("nested/keep.log")).unwrap(), b"nested");
+    assert_eq!(
+        fs::read(log_dir.join("nested/keep.log")).unwrap(),
+        b"nested"
+    );
 
     fs::remove_dir_all(&log_dir).unwrap();
     fs::write(&log_dir, b"not a directory").unwrap();
     assert!(tauri::async_runtime::block_on(clear_log(app.handle().clone())).is_err());
     fs::remove_file(log_dir).unwrap();
 }
-
 
 #[cfg(all(unix, debug_assertions))]
 #[test]
@@ -242,9 +250,7 @@ fn reveal_log_covers_directory_creation_and_reuse() {
     fs::remove_file(opener).unwrap();
     // The opener is intentionally excluded from unit-test builds so this command remains
     // side-effect free; opener failure is covered by the production opener integration tests.
-    assert!(
-        tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_ok()
-    );
+    assert!(tauri::async_runtime::block_on(reveal_log(app.handle().clone())).is_ok());
 
     std::env::set_var("PATH", original_path);
     fs::remove_dir_all(log_dir).unwrap();
@@ -260,7 +266,10 @@ fn reveal_log_covers_directory_creation_reuse_and_opener_failure_windows() {
     let tools = tempfile::tempdir().unwrap();
     let opener = tools.path().join("explorer.bat");
     std::fs::write(&opener, "\r\nexit 0\r\n").unwrap();
-    let mut new_path = std::env::join_paths(std::iter::once(tools.path().to_path_buf())).unwrap().into_string().unwrap();
+    let mut new_path = std::env::join_paths(std::iter::once(tools.path().to_path_buf()))
+        .unwrap()
+        .into_string()
+        .unwrap();
     new_path.push(';');
     new_path.push_str(&original_path.clone().into_string().unwrap());
     std::env::set_var("PATH", new_path);
@@ -290,10 +299,19 @@ fn reveal_log_covers_directory_creation_reuse_and_opener_failure_windows() {
 
 #[test]
 fn validate_path_for_open_accepts_absolute_and_relative_paths() {
-    assert_eq!(validate_path_for_open(r"C:\Users\me\foo.txt"), Ok(r"C:\Users\me\foo.txt"));
-    assert_eq!(validate_path_for_open("/home/me/foo.txt"), Ok("/home/me/foo.txt"));
+    assert_eq!(
+        validate_path_for_open(r"C:\Users\me\foo.txt"),
+        Ok(r"C:\Users\me\foo.txt")
+    );
+    assert_eq!(
+        validate_path_for_open("/home/me/foo.txt"),
+        Ok("/home/me/foo.txt")
+    );
     assert_eq!(validate_path_for_open("./src/lib.rs"), Ok("./src/lib.rs"));
-    assert_eq!(validate_path_for_open("../build/Debug/omniterm.exe"), Ok("../build/Debug/omniterm.exe"));
+    assert_eq!(
+        validate_path_for_open("../build/Debug/omniterm.exe"),
+        Ok("../build/Debug/omniterm.exe")
+    );
 }
 
 #[test]
@@ -308,7 +326,10 @@ fn validate_path_for_open_refuses_urls() {
         "mailto:user@test",
         "notorious://payload",
     ] {
-        assert!(validate_path_for_open(url).is_err(), "{url} should be refused");
+        assert!(
+            validate_path_for_open(url).is_err(),
+            "{url} should be refused"
+        );
     }
 }
 

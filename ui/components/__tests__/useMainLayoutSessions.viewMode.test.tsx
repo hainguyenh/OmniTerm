@@ -56,6 +56,7 @@ function useHarness(options: HarnessOptions) {
   const tabGroups = options.useActualGroups ? actualGroups.tabGroups : mockTabGroups
   const setTabGroups = options.useActualGroups ? actualGroups.setTabGroups : setMockTabGroups
   const base = {
+  sessionCwds: {}, workspaces: [],
     appSettings,
     setAppSettings: vi.fn(),
     themes: [],

@@ -8,7 +8,9 @@ use tauri::Manager;
 fn ipc_exposes_safe_runtime_and_failure_contracts() {
     let fixture = IpcApp::new();
 
-    assert!(fixture.ok("system_excluded_view_exts", json!({})).is_array());
+    assert!(fixture
+        .ok("system_excluded_view_exts", json!({}))
+        .is_array());
     assert!(fixture.ok("list_available_shells", json!({})).is_array());
     assert_eq!(fixture.ok("clear_log", json!({})), json!(true));
     let launcher = fixture.ok("setup_launcher", json!({}));
@@ -18,7 +20,10 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
     assert!(launcher_dir.join("wt-shim.ps1").is_file());
 
     assert!(fixture
-        .error("send_session_input", json!({ "id": "missing", "data": "x" }))
+        .error(
+            "send_session_input",
+            json!({ "id": "missing", "data": "x" })
+        )
         .to_string()
         .to_lowercase()
         .contains("session"));
@@ -51,20 +56,22 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
         ),
         json!(false)
     );
-    assert_eq!(fixture.ok("bootstrap_terminal_window", json!({})), Value::Null);
+    assert_eq!(
+        fixture.ok("bootstrap_terminal_window", json!({})),
+        Value::Null
+    );
     assert_eq!(
         fixture.ok("reattach_terminal", json!({ "id": "missing" })),
         json!(false)
     );
     for command in ["focus_terminal_window", "release_terminal_window"] {
-        assert_eq!(
-            fixture.ok(command, json!({ "id": "missing" })),
-            Value::Null
-        );
+        assert_eq!(fixture.ok(command, json!({ "id": "missing" })), Value::Null);
     }
 
     let quick_shell = fixture.ok("open_quick_shell", json!({ "shell": null }));
-    assert!(quick_shell["id"].as_str().is_some_and(|id| id.starts_with("adhoc-")));
+    assert!(quick_shell["id"]
+        .as_str()
+        .is_some_and(|id| id.starts_with("adhoc-")));
     assert_eq!(fixture.ok("shells_ready", json!({})), Value::Null);
     assert_eq!(
         fixture.ok("shells_release", json!({ "connId": "missing" })),
@@ -108,8 +115,15 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
     assert_eq!(fixture.ok("is_maximized", json!({})), json!(false));
     assert_eq!(fixture.ok("toggle_maximize", json!({})), Value::Null);
     assert_eq!(fixture.ok("is_maximized", json!({})), json!(false));
-    assert_eq!(fixture.ok("set_webview_zoom", json!({ "factor": 1.25 })), Value::Null);
+    assert_eq!(
+        fixture.ok("set_webview_zoom", json!({ "factor": 1.25 })),
+        Value::Null
+    );
     assert_eq!(fixture.ok("minimize_window", json!({})), Value::Null);
+    assert_eq!(
+        fixture.ok("set_fullscreen", json!({ "on": true })),
+        Value::Null
+    );
 
     let handle = fixture.handle();
     assert!(handle.try_state::<PtyManager>().is_some());
@@ -129,7 +143,10 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
     let malformed = [
         ("start_local_session", json!({ "id": "x", "connId": "x" })),
         ("send_session_input", json!({ "id": "x", "data": 4 })),
-        ("resize_session", json!({ "id": "x", "cols": "80", "rows": 24 })),
+        (
+            "resize_session",
+            json!({ "id": "x", "cols": "80", "rows": 24 }),
+        ),
         ("prepare_ssh_session", json!({ "connId": 4 })),
         ("connect_rdp", json!({ "id": false })),
         ("rdp_disconnect", json!({ "id": [] })),
@@ -145,27 +162,51 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
         ("get_custom_art", json!({ "slot": 3 })),
         ("remove_custom_art", json!({ "slot": false })),
         ("save_connections", json!({ "data": "bad" })),
-        ("export_json", json!({ "suggestedName": 7, "content": "{}" })),
+        (
+            "export_json",
+            json!({ "suggestedName": 7, "content": "{}" }),
+        ),
         ("set_webview_zoom", json!({ "factor": "large" })),
         ("create_workspace", json!({ "name": 7 })),
         ("add_workspace", json!({ "path": 7 })),
-        ("add_workspace_folder", json!({ "workspaceId": [], "path": "x" })),
+        (
+            "add_workspace_folder",
+            json!({ "workspaceId": [], "path": "x" }),
+        ),
         ("import_workspace_file", json!({ "path": 7 })),
         ("remove_workspace", json!({ "id": false })),
-        ("move_workspace", json!({ "workspaceId": "x", "parentId": null, "index": "first" })),
+        (
+            "move_workspace",
+            json!({ "workspaceId": "x", "parentId": null, "index": "first" }),
+        ),
         (
             "set_workspace_entry_pinned",
             json!({ "workspaceId": "x", "folderId": "folder#1", "path": "a", "pinned": "yes" }),
         ),
         ("scan_scripts", json!({ "workspaceId": [] })),
         ("scan_workspace_folders", json!({ "workspaceId": {} })),
-        ("scan_workspace_entries", json!({ "workspaceId": "x", "folder": 2 })),
-        ("run_script", json!({ "workspaceId": "x", "script": 2, "subPath": null })),
+        (
+            "scan_workspace_entries",
+            json!({ "workspaceId": "x", "folder": 2 }),
+        ),
+        (
+            "run_script",
+            json!({ "workspaceId": "x", "script": 2, "subPath": null }),
+        ),
         ("read_script", json!({ "workspaceId": "x", "path": 2 })),
-        ("write_script", json!({ "workspaceId": "x", "path": "a.sh", "content": 2 })),
+        (
+            "write_script",
+            json!({ "workspaceId": "x", "path": "a.sh", "content": 2 }),
+        ),
         ("load_workspace_connections", json!({ "workspaceId": 2 })),
-        ("save_workspace_connections", json!({ "workspaceId": "x", "data": {} })),
-        ("delete_workspace_connection", json!({ "workspaceId": "x", "connectionId": 2 })),
+        (
+            "save_workspace_connections",
+            json!({ "workspaceId": "x", "data": {} }),
+        ),
+        (
+            "delete_workspace_connection",
+            json!({ "workspaceId": "x", "connectionId": 2 }),
+        ),
         ("shells_release", json!({ "connId": 2 })),
         ("open_quick_shell", json!({ "shell": 2 })),
         ("plugin_set_enabled", json!({ "id": "x", "enabled": "yes" })),

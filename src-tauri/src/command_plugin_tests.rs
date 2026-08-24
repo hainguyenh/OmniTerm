@@ -19,7 +19,10 @@ fn plugin_commands_smoke_test() {
     assert!(set_enabled.is_ok() || set_enabled.is_err()); // Either way, we hit the code path
 
     // Test plugin_select_connection_provider
-    let select_provider = block_on(plugin_select_connection_provider(host.clone(), Some("test".to_string())));
+    let select_provider = block_on(plugin_select_connection_provider(
+        host.clone(),
+        Some("test".to_string()),
+    ));
     assert!(select_provider.is_ok() || select_provider.is_err());
 
     // Test connection_provider_capabilities

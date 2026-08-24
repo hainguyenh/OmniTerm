@@ -17,6 +17,8 @@ export interface TerminalViewProps {
   onActivity?: (busy: boolean) => void
   /** Receives OSC title updates emitted by shells and interactive agents. */
   onTitleChange?: (title: string) => void
+  /** Shell-reported working directory (OSC 7 / OSC 9;9). Fires whenever the shell changes dir. */
+  onCwdChange?: (cwd: string) => void
   /**
    * The pane's process ended, carrying its exit status. Separate from `onStatus('closed')` because the
    * status alone cannot tell a script that finished from one that failed — see sessionExit.ts.

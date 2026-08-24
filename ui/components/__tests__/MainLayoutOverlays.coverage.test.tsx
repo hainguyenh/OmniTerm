@@ -2,10 +2,15 @@
  * @vitest-environment jsdom
  */
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockOmnitermAPI } from '../../testUtils'
 import MainLayoutOverlays from '../MainLayoutOverlays'
 import type { MainLayoutModel } from '../useMainLayoutController'
+
+// jsdom does not implement scrollIntoView; NewTerminalMenu scrolls the active row into view.
+beforeAll(() => {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
+})
 
 vi.mock('../SettingsModal', () => ({
   default: (p: any) => p.isOpen ? (

@@ -160,7 +160,7 @@ export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
         conn={conn}
         sessionId={sessionId}
         busy={busy}
-        isAgent={agentCtx !== null}
+        sessionLive={status === 'connected'}
         detach={detach}
         onToggleDetach={onToggleDetach}
         fullscreen={fullscreen}

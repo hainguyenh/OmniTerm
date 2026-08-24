@@ -1,6 +1,6 @@
-import React from 'react'
+import React, { useState } from 'react'
 import {
-  ChevronDown, ChevronRight, Filter, Folder, Loader2, Pin, PinOff, Play, Terminal, Unlink,
+  ChevronDown, ChevronRight, Filter, Folder, Loader2, Pencil, Pin, PinOff, Play, Terminal, Unlink,
 } from 'lucide-react'
 import type {
   Connection,
@@ -45,6 +45,7 @@ interface WorkspaceTreeRendererProps {
   onOpenScript: (workspaceId: string, script: WorkspaceScript) => void
   onRunScript: (workspaceId: string, script: WorkspaceScript) => void
   onOpenTerminal: (workspaceId: string, subPath?: string) => void
+  onRenameFolder?: (workspaceId: string, folderId: string, name: string) => void
   onSetFolderPendingRemoval: (pending: { workspaceId: string; folderId: string; name: string }) => void
   onOpenFolderFilterMenu: (
     workspaceId: string,
@@ -83,6 +84,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
   onOpenScript,
   onRunScript,
   onOpenTerminal,
+  onRenameFolder,
   onSetFolderPendingRemoval,
   onOpenFolderFilterMenu,
   renderConnectionAction,
@@ -92,6 +94,30 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
   isHighlighted,
   registerRow,
 }) => {
+  // Inline alias editing for root workspace folders. One row at a time; the
+  // draft lives here because renderNode is a closure, not a component.
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null)
+  const [folderAliasDraft, setFolderAliasDraft] = useState('')
+
+  /** Absolute path tooltip: every segment dim, the real folder name bold. */
+  const pathTooltip = (path: string) => {
+    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+    return (
+      <>
+        {cut >= 0 ? path.slice(0, cut + 1) : ''}
+        <strong>{cut >= 0 ? path.slice(cut + 1) : path}</strong>
+      </>
+    )
+  }
+
+  const submitFolderAlias = () => {
+    if (!renamingFolderId) return
+    const trimmed = folderAliasDraft.trim()
+    const folderId = renamingFolderId
+    setRenamingFolderId(null)
+    if (trimmed && onRenameFolder) onRenameFolder(workspace.id, folderId, trimmed)
+  }
+
   const fileRow = (node: WorkspaceTreeNode, label: string, depth: number) => {
     const wsId = workspace.id
     const meta = fileKindMeta(node.entry?.kind ?? '')
@@ -211,7 +237,44 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
             className="w-4 h-4 flex-shrink-0"
             style={{ color: rootFolder?.color ? WORKSPACE_COLOR_VALUES[rootFolder.color] : 'var(--theme-dim)' }}
           />
-          <span className="flex-1 truncate text-xs">{node.name}</span>
+          {rootFolder && renamingFolderId === rootFolder.id ? (
+            <input
+              type="text"
+              autoFocus
+              value={folderAliasDraft}
+              onChange={event => setFolderAliasDraft(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  submitFolderAlias()
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  setRenamingFolderId(null)
+                }
+              }}
+              onBlur={submitFolderAlias}
+              onClick={event => event.stopPropagation()}
+              onDoubleClick={event => event.stopPropagation()}
+              aria-label="Folder alias"
+              className="flex-1 min-w-0 px-1 py-0.5 text-xs bg-[var(--theme-bg)] text-[var(--theme-fg)] border border-[var(--theme-accent)] rounded outline-none"
+            />
+          ) : (
+            <Tooltip content={rootFolder ? pathTooltip(node.path) : node.name} placement="top">
+              <span
+                className="flex-1 truncate text-xs"
+                onDoubleClick={event => {
+                  if (!rootFolder || !onRenameFolder) return
+                  event.stopPropagation()
+                  setRenamingFolderId(rootFolder.id)
+                  setFolderAliasDraft(rootFolder.name)
+                }}
+              >
+                {rootFolder?.name ?? node.name}
+              </span>
+            </Tooltip>
+          )}
           {pinned ? (
             <Tooltip content="Unpin item" placement="bottom">
               <button
@@ -236,7 +299,22 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
             </Tooltip>
           )}
           {rootFolder && (
-            <Tooltip content="Unlink folder from workspace" placement="bottom">
+            <>
+              <Tooltip content="Rename folder" placement="bottom">
+                <button
+                  type="button"
+                  aria-label="Rename folder"
+                  onClick={event => {
+                    event.stopPropagation()
+                    setRenamingFolderId(rootFolder.id)
+                    setFolderAliasDraft(rootFolder.name)
+                  }}
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip content="Unlink folder from workspace" placement="bottom">
               <button
                 type="button"
                 aria-label="Unlink folder from workspace"
@@ -252,7 +330,8 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
               >
                 <Unlink className="w-3.5 h-3.5" />
               </button>
-            </Tooltip>
+              </Tooltip>
+            </>
           )}
           <Tooltip content="Open terminal here" placement="bottom">
             <button

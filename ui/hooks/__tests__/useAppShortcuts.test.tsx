@@ -5,17 +5,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { mockOmnitermAPI } from '../../testUtils'
 import { useAppShortcuts } from '../useAppShortcuts'
+import { resolveShortcuts } from '../../utils/shortcuts'
 
 const appSettings: AppSettings = {
   themeId: 't', fontSize: 14, smartColors: true, checkUpdatesOnStartup: true, darkMode: true,
 }
 
 /** Renders with a fresh set of spies, and focuses `target` (inside `.xterm` or not) first. */
-function setup(target: 'xterm' | 'chrome') {
+function setup(target: 'xterm' | 'chrome', overrides: Partial<Parameters<typeof useAppShortcuts>[0]> = {}) {
   const changeFontSize = vi.fn()
   const resetFontSize = vi.fn()
   const persistZoom = vi.fn()
   const setAppSettings = vi.fn()
+  const onToggleFullscreen = vi.fn()
 
   const host = document.createElement(target === 'xterm' ? 'div' : 'span')
   if (target === 'xterm') host.className = 'xterm'
@@ -27,13 +29,18 @@ function setup(target: 'xterm' | 'chrome') {
   renderHook(() => useAppShortcuts({
     appSettings, setAppSettings, setSettingsOpen: vi.fn(),
     changeFontSize, resetFontSize, persistZoom, isDetached: false,
+    onToggleFullscreen,
+    ...overrides,
   }))
 
-  return { changeFontSize, resetFontSize, persistZoom, setAppSettings, cleanup: () => host.remove() }
+  return { changeFontSize, resetFontSize, persistZoom, setAppSettings, onToggleFullscreen, cleanup: () => host.remove() }
 }
 
 const ctrlKey = (key: string, extra: Partial<KeyboardEventInit> = {}) =>
   new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true, ...extra })
+
+const plainKey = (key: string, extra: Partial<KeyboardEventInit> = {}) =>
+  new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra })
 
 describe('useAppShortcuts', () => {
   let setZoomFactor: ReturnType<typeof vi.fn>
@@ -87,12 +94,54 @@ describe('useAppShortcuts', () => {
     renderHook(() => useAppShortcuts({
       appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
       changeFontSize, resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: true,
+      onToggleFullscreen: vi.fn(),
     }))
     const onLayout = vi.fn()
     window.addEventListener('omniterm:change-layout', onLayout)
     window.dispatchEvent(ctrlKey('3'))
     expect(onLayout).not.toHaveBeenCalled()
     window.removeEventListener('omniterm:change-layout', onLayout)
+  })
+
+  it('toggles app fullscreen on F11 even when a terminal has focus', () => {
+    for (const target of ['xterm', 'chrome'] as const) {
+      const { onToggleFullscreen, cleanup } = setup(target)
+      window.dispatchEvent(plainKey('F11'))
+      expect(onToggleFullscreen).toHaveBeenCalledTimes(1)
+      cleanup()
+    }
+  })
+
+  it('skips the fullscreen toggle in a detached window', () => {
+    const { onToggleFullscreen, cleanup } = setup('chrome', { isDetached: true })
+    window.dispatchEvent(plainKey('F11'))
+    expect(onToggleFullscreen).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('honors a rebound fullscreen shortcut', () => {
+    const rebound = { ...appSettings, shortcuts: { ...resolveShortcuts(appSettings.shortcuts), toggleAppFullscreen: 'F8' } }
+    const { onToggleFullscreen, cleanup } = setup('chrome', { appSettings: rebound })
+    window.dispatchEvent(plainKey('F11'))
+    expect(onToggleFullscreen).not.toHaveBeenCalled()
+    window.dispatchEvent(plainKey('F8'))
+    expect(onToggleFullscreen).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('still toggles app fullscreen when a plain input outside xterm has focus — F-keys are not text entry', () => {
+    const onToggleFullscreen = vi.fn()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+    renderHook(() => useAppShortcuts({
+      appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+      isDetached: false, onToggleFullscreen,
+    }))
+    window.dispatchEvent(plainKey('F11'))
+    expect(onToggleFullscreen).toHaveBeenCalledTimes(1)
+    input.remove()
   })
 
   it('toggles dark mode on Ctrl+/', () => {
@@ -105,7 +154,8 @@ describe('useAppShortcuts', () => {
       btn.focus()
       renderHook(() => useAppShortcuts({
         appSettings, setAppSettings, setSettingsOpen: vi.fn(),
-        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+        isDetached: false, onToggleFullscreen: vi.fn(),
       }))
       return { cleanup: () => host.remove() }
     })()
@@ -113,7 +163,6 @@ describe('useAppShortcuts', () => {
     expect(setAppSettings).toHaveBeenCalledWith({ ...appSettings, darkMode: false })
     cleanup()
   })
-
   it('zooms out inside terminal via changeFontSize', () => {
     const { changeFontSize, cleanup } = setup('xterm')
     window.dispatchEvent(ctrlKey('-'))
@@ -135,7 +184,8 @@ describe('useAppShortcuts', () => {
     input.focus()
     renderHook(() => useAppShortcuts({
       appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
-      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+      isDetached: false, onToggleFullscreen: vi.fn(),
     }))
     const onSession = vi.fn()
     window.addEventListener('omniterm:new-session', onSession)
@@ -152,7 +202,8 @@ describe('useAppShortcuts', () => {
     btn.focus()
     renderHook(() => useAppShortcuts({
       appSettings, setAppSettings: vi.fn(), setSettingsOpen,
-      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+      isDetached: false, onToggleFullscreen: vi.fn(),
     }))
     window.dispatchEvent(ctrlKey(','))
     expect(setSettingsOpen).toHaveBeenCalledWith(true)
@@ -288,7 +339,8 @@ describe('useAppShortcuts', () => {
       btn.focus()
       renderHook(() => useAppShortcuts({
         appSettings, setAppSettings, setSettingsOpen: vi.fn(),
-        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: false,
+        changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+        isDetached: false, onToggleFullscreen: vi.fn(),
       }))
       window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
       expect(setAppSettings).not.toHaveBeenCalled()

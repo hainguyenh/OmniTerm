@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import type { Connection, SessionStatus, Workspace, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
 import type { ActivityView } from './ActivityBar'
 import type { WorkspaceConnectionTarget } from './WorkspacePanel'
 import { useDialog } from '../hooks/useDialog'
 import { useSplitRatios } from '../hooks/useSplitRatios'
+import { useUpdateActions } from '../hooks/useUpdateActions'
 import { openNewSession } from '../newSession'
 import { loadShellOptions, pickShell, type ShellOption } from '../shellOptions'
 import { upsertWorkspaceConnection } from '../utils/workspaceConnections'
@@ -13,24 +14,31 @@ import { useViewGroups } from '../hooks/useViewGroups'
 import { useCustomArt } from '../hooks/useCustomArt'
 import { visibleTabsForGroup } from '../viewGroups'
 import { paneOrder } from '../paneLayout'
-import { decodeWorkspaceSelection, normalizeWorkspaceSelection } from '../utils/workspaceSelection'
+import { decodeWorkspaceSelection, isSelectionLive, resolveNewSessionWorkspace } from '../utils/workspaceSelection'
+import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
   onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
-  onSettingsReload,
+  onSettingsReload, chromeHidden = false,
 }: MainLayoutProps) {
   const handleConnectRef = useRef<(connection: Connection) => void>(() => undefined)
   const appSettingsRef = useRef(appSettings)
   appSettingsRef.current = appSettings
   const shellOptionsRef = useRef<ShellOption[]>([])
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
-      try { return localStorage.getItem('omniterm:last-workspace') } catch { return null }
-  })
+  const workspaceCatalog = useWorkspaceCatalog()
+  const { selectedWorkspaceId } = workspaceCatalog
   const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
-      const workspaceId = requestedWorkspaceId === undefined ? selectedWorkspaceId : requestedWorkspaceId;
+      const lastUsed = (() => { try { return localStorage.getItem('omniterm:last-workspace') } catch { return null } })();
+      // Explicit arg wins (including an explicit null = forced home); otherwise default setting,
+      // then last-used, then home. Stale selections fall through instead of failing the launch.
+      const workspaceId = resolveNewSessionWorkspace(
+          requestedWorkspaceId,
+          appSettingsRef.current.defaultWorkspace,
+          lastUsed,
+          selection => isSelectionLive(workspaceCatalog.workspaces, selection),
+      );
       const selection = decodeWorkspaceSelection(workspaceId)
       const targetWorkspaceId = selection?.workspaceId ?? null
       const folderId = selection?.folderId ?? null
@@ -41,7 +49,7 @@ export function useMainLayoutBase({
           } catch { /* storage is optional */ }
           handleConnectRef.current({ ...(conn as Connection), workspaceId: targetWorkspaceId ?? undefined })
       }, targetWorkspaceId, folderId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
-  }, [selectedWorkspaceId])
+  }, [workspaceCatalog.workspaces])
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
   const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
   useEffect(() => {
@@ -60,6 +68,8 @@ export function useMainLayoutBase({
   const [savedConnections, setSavedConnections] = useState<Connection[]>([]);
   const [panes, setPanes] = useState<(string | null)[]>(Array(MAX_PLANES).fill(null));
   const [focusedPane, setFocusedPane] = useState(0);
+  /** Animation window (ms) for the reattach focus-ring pulse; slightly past the CSS 600 ms. */
+  const PULSE_CLEAR_MS = 700;
   const [fullscreenPane, setFullscreenPane] = useState<number | null>(null)
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -161,17 +171,46 @@ export function useMainLayoutBase({
           setPoppedOut(prev => ({ ...prev, [id]: true }));
       });
   }, [activeTabs, connById]);
-  const reattachTerminal = useCallback((id: string) => {
-      void window.omnitermAPI.terminalWindow.reattach(id);
+  const reattachTerminal = useCallback((id: string, targetPane?: number) => {
+      // The tab never leaves the pane array while popped out, so a naive fold-back would return it
+      // to its stale source slot. Move it to the caller's (focused) slot first, swapping occupants.
+      if (targetPane !== undefined) {
+          setPanes(previous => {
+              const from = previous.indexOf(id)
+              if (from === -1 || targetPane >= previous.length) return previous
+              const next = [...previous]
+              const occupant = next[targetPane]
+              next[targetPane] = id
+              next[from] = occupant ?? null
+              return next
+          })
+          setFocusedPane(targetPane)
+      }
+      void window.omnitermAPI.terminalWindow.reattach(id)
   }, []);
+  // Ring-pulse on the pane that just received a folded-back session (~600 ms CSS animation).
+  const [pulsePaneId, setPulsePaneId] = useState<string | null>(null);
+  const pulseTimerRef = useRef<number | null>(null);
+  useEffect(() => () => { if (pulseTimerRef.current != null) window.clearTimeout(pulseTimerRef.current) }, []);
   useEffect(() => {
       if (!window.omnitermAPI.terminalWindow)
           return;
       return window.omnitermAPI.terminalWindow.onReattached((id) => {
           setPoppedOut(prev => (prev[id] ? { ...prev, [id]: false } : prev));
+          // Land focus (and the pulse ring) on the slot the session actually occupies now.
+          setFocusedPane(previous => {
+              const slot = panes.findIndex(p => p === id);
+              return slot >= 0 ? slot : previous;
+          });
+          if (pulseTimerRef.current != null) window.clearTimeout(pulseTimerRef.current);
+          setPulsePaneId(id);
+          pulseTimerRef.current = window.setTimeout(() => {
+              pulseTimerRef.current = null;
+              setPulsePaneId(null);
+          }, PULSE_CLEAR_MS);
           onSettingsReload?.(id);
       });
-  }, [onSettingsReload]);
+  }, [onSettingsReload, panes, setFocusedPane]);
   const focusTerminal = (id: string) => {
       window.dispatchEvent(new CustomEvent('omniterm:focus-terminal', { detail: { id } }));
   };
@@ -368,23 +407,16 @@ export function useMainLayoutBase({
       setRevealRequest({ workspaceId: editor.workspaceId, path: editor.script.id, nonce: revealNonce.current });
   }, [editorTabs, handleViewChange]);
   const aboutOpen = settingsOpen; const setAboutOpen = setSettingsOpen;
-  const [updateChecking, setUpdateChecking] = useState(false);
-  const [installerChoiceOpen, setInstallerChoiceOpen] = useState(false);
-  const [splitRatios, setSplitRatios, persistRatios] = useSplitRatios(appSettings, setAppSettings);
-  const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
+  const {
+    updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen,
+    checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion,
+  } = useUpdateActions({ updateState, setUpdateState, showAlert });
   useEffect(() => {
       void loadShellOptions().then(opts => {
           shellOptionsRef.current = opts;
           setShellOptions(opts);
       });
   }, []);
-  const refreshWorkspaces = useCallback(async () => {
-      await window.omnitermAPI.workspace.list().then(list => {
-          setWorkspaces(list)
-          setSelectedWorkspaceId(current => normalizeWorkspaceSelection(list, current))
-      }).catch(() => setWorkspaces([]))
-  }, [])
-  useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
   useEffect(() => {
       let cancelled = false;
       void (async () => {
@@ -416,61 +448,8 @@ export function useMainLayoutBase({
       window.addEventListener('mousedown', onClick);
       return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onClick); };
   }, [dataMenuOpen]);
-  const checkForUpdates = async () => {
-      setInstallerChoiceOpen(false);
-      setUpdateChecking(true);
-      try {
-          setUpdateState(await window.omnitermAPI.updates.check());
-      }
-      catch (err) {
-          await showAlert(`Could not check for updates: ${err instanceof Error ? err.message : String(err)}`, {
-              title: 'Update Check Failed',
-              tone: 'error',
-          });
-      }
-      finally {
-          setUpdateChecking(false);
-      }
-  };
-  const handleDownloadPortable = async () => {
-      if (!updateState?.latest)
-          return;
-      const defaultName = `OmniTerm-Portable-${updateState.latest}.exe`;
-      const savePath = await window.omnitermAPI.updates.showSaveDialog(defaultName);
-      if (!savePath)
-          return;
-      try {
-          setUpdateChecking(true);
-          await window.omnitermAPI.updates.downloadPortable(savePath);
-      }
-      catch (err) {
-          showAlert(`Download failed: ${err instanceof Error ? err.message : String(err)}`, { title: 'Download Error', tone: 'error' });
-      }
-      finally {
-          setUpdateChecking(false);
-      }
-  };
-  const handleDownloadInstaller = async (installNow: boolean) => {
-      setInstallerChoiceOpen(false);
-      try {
-          setUpdateChecking(true);
-          await window.omnitermAPI.updates.downloadInstaller(installNow);
-      }
-      catch (err) {
-          showAlert(`Download failed: ${err instanceof Error ? err.message : String(err)}`, { title: 'Download Error', tone: 'error' });
-      }
-      finally {
-          setUpdateChecking(false);
-      }
-  };
-  const skipThisVersion = async () => {
-      if (updateState?.latest)
-          setUpdateState(await window.omnitermAPI.updates.skip(updateState.latest));
-  };
-  const clearSkippedVersion = async () => {
-      const s = await window.omnitermAPI.updates.skip(null);
-      setUpdateState(s);
-  };
+  const [splitRatios, setSplitRatios, persistRatios] = useSplitRatios(appSettings, setAppSettings);
+  const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
   const handleSaveConnection = async (conn: Connection) => {
       const wsId = wsConnFormRef.current;
       if (!wsId)
@@ -494,5 +473,5 @@ export function useMainLayoutBase({
           await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
       }
   };
-  return { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, restoreGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, workspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
+  return { ...workspaceCatalog, chromeHidden, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, restoreGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, pulsePaneId, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
 }

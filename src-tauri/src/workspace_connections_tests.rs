@@ -60,7 +60,10 @@ fn a_password_in_the_file_is_dropped_on_read() {
     let conns = read_at(dir.to_str().unwrap()).unwrap();
     assert_eq!(conns.len(), 1);
     let as_value = serde_json::to_value(&conns[0]).unwrap();
-    assert!(as_value.get("password").is_none(), "a secret must not survive the read");
+    assert!(
+        as_value.get("password").is_none(),
+        "a secret must not survive the read"
+    );
     assert!(!serde_json::to_string(&conns).unwrap().contains("hunter2"));
 
     fs::remove_dir_all(&dir).ok();
@@ -108,7 +111,10 @@ fn an_unvalidatable_workspace_path_reads_as_empty() {
 fn reading_creates_no_directory() {
     let dir = temp_workspace();
     let _ = read_at(dir.to_str().unwrap());
-    assert!(!dir.join(".omniterm").exists(), "a read must not create .omniterm");
+    assert!(
+        !dir.join(".omniterm").exists(),
+        "a read must not create .omniterm"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -116,8 +122,11 @@ fn reading_creates_no_directory() {
 fn the_size_cap_is_enforced_before_the_directory_is_created() {
     let dir = temp_workspace();
     // One connection per 100-odd bytes; 20k of them comfortably clears 1 MB.
-    let many: Vec<Connection> = (0..20_000).map(|i| conn(&format!("c{i}"), "LOCAL")).collect();
-    let json = serde_json::to_string_pretty(&WorkspaceConnectionsFile { connections: many }).unwrap();
+    let many: Vec<Connection> = (0..20_000)
+        .map(|i| conn(&format!("c{i}"), "LOCAL"))
+        .collect();
+    let json =
+        serde_json::to_string_pretty(&WorkspaceConnectionsFile { connections: many }).unwrap();
     assert!(json.len() > MAX_BYTES, "fixture should exceed the cap");
 
     // The cap is checked against the serialized payload, before `connections_path(.., true)` runs.
@@ -131,8 +140,18 @@ fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
         id: "ws#1".to_string(),
         name: "Composite".to_string(),
         folders: vec![
-            WorkspaceFolder { id: "folder#1".to_string(), name: "One".to_string(), path: "/one".to_string(), color: None },
-            WorkspaceFolder { id: "folder#2".to_string(), name: "Two".to_string(), path: "/two".to_string(), color: None },
+            WorkspaceFolder {
+                id: "folder#1".to_string(),
+                name: "One".to_string(),
+                path: "/one".to_string(),
+                color: None,
+            },
+            WorkspaceFolder {
+                id: "folder#2".to_string(),
+                name: "Two".to_string(),
+                path: "/two".to_string(),
+                color: None,
+            },
         ],
         parent_id: None,
         order: 0,
@@ -142,18 +161,25 @@ fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
     };
     let mut connection = conn("c1", "SSH");
     connection.parent_id = Some("folder#missing/src".to_string());
-    let error = validate_connection_targets(&workspace, &[connection]).expect_err("unknown folder must fail");
+    let error = validate_connection_targets(&workspace, &[connection])
+        .expect_err("unknown folder must fail");
     assert!(error.contains("unknown workspace folder"), "{error}");
 
     let mut unparented = conn("c2", "SSH");
     unparented.parent_id = None;
-    let err2 = validate_connection_targets(&workspace, &[unparented]).expect_err("multi-root requires folder");
+    let err2 = validate_connection_targets(&workspace, &[unparented])
+        .expect_err("multi-root requires folder");
     assert!(err2.contains("Choose a workspace folder"));
 
     let single_ws = Workspace {
         id: "ws#s".to_string(),
         name: "Single".to_string(),
-        folders: vec![WorkspaceFolder { id: "f1".to_string(), name: "F1".to_string(), path: "/one".to_string(), color: None }],
+        folders: vec![WorkspaceFolder {
+            id: "f1".to_string(),
+            name: "F1".to_string(),
+            path: "/one".to_string(),
+            color: None,
+        }],
         parent_id: None,
         order: 0,
         pins: Vec::new(),
@@ -165,8 +191,18 @@ fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
 
 #[test]
 fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
-    let folder1 = WorkspaceFolder { id: "f1".to_string(), name: "One".to_string(), path: "/one".to_string(), color: None };
-    let folder2 = WorkspaceFolder { id: "f2".to_string(), name: "Two".to_string(), path: "/two".to_string(), color: None };
+    let folder1 = WorkspaceFolder {
+        id: "f1".to_string(),
+        name: "One".to_string(),
+        path: "/one".to_string(),
+        color: None,
+    };
+    let folder2 = WorkspaceFolder {
+        id: "f2".to_string(),
+        name: "Two".to_string(),
+        path: "/two".to_string(),
+        color: None,
+    };
     let ws_multi = Workspace {
         id: "ws#m".to_string(),
         name: "Multi".to_string(),
@@ -180,26 +216,36 @@ fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
 
     let mut c_f1_direct = conn("c1", "SSH");
     c_f1_direct.parent_id = Some("f1".to_string());
-    let res1 = local_connection(&ws_multi, &folder1, c_f1_direct).unwrap().unwrap();
+    let res1 = local_connection(&ws_multi, &folder1, c_f1_direct)
+        .unwrap()
+        .unwrap();
     assert_eq!(res1.parent_id, None);
 
     let mut c_f1_nested = conn("c2", "SSH");
     c_f1_nested.parent_id = Some("f1/servers".to_string());
-    let res2 = local_connection(&ws_multi, &folder1, c_f1_nested).unwrap().unwrap();
+    let res2 = local_connection(&ws_multi, &folder1, c_f1_nested)
+        .unwrap()
+        .unwrap();
     assert_eq!(res2.parent_id, Some("servers".to_string()));
 
     let mut c_f1_slash = conn("c3", "SSH");
     c_f1_slash.parent_id = Some("f1/".to_string());
-    let res3 = local_connection(&ws_multi, &folder1, c_f1_slash).unwrap().unwrap();
+    let res3 = local_connection(&ws_multi, &folder1, c_f1_slash)
+        .unwrap()
+        .unwrap();
     assert_eq!(res3.parent_id, None);
 
     let mut c_f2 = conn("c4", "SSH");
     c_f2.parent_id = Some("f2/nested".to_string());
-    assert!(local_connection(&ws_multi, &folder1, c_f2).unwrap().is_none());
+    assert!(local_connection(&ws_multi, &folder1, c_f2)
+        .unwrap()
+        .is_none());
 
     let mut c_none = conn("c5", "SSH");
     c_none.parent_id = None;
-    assert!(local_connection(&ws_multi, &folder1, c_none).unwrap().is_none());
+    assert!(local_connection(&ws_multi, &folder1, c_none)
+        .unwrap()
+        .is_none());
 
     let ws_single = Workspace {
         id: "ws#s".to_string(),
@@ -212,7 +258,9 @@ fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
         icon: None,
     };
     let c_single_none = conn("c6", "SSH");
-    let res_single = local_connection(&ws_single, &folder1, c_single_none.clone()).unwrap().unwrap();
+    let res_single = local_connection(&ws_single, &folder1, c_single_none.clone())
+        .unwrap()
+        .unwrap();
     assert_eq!(res_single.parent_id, None);
     let res_other = local_connection(&ws_single, &folder2, c_single_none).unwrap();
     assert!(res_other.is_none());

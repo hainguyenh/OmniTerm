@@ -5,13 +5,15 @@
 use super::*;
 use serde_json::json;
 
-
 #[test]
 fn an_unknown_method_errors_instead_of_returning_null() {
     // Unknown capabilities must fail loudly rather than fake success. Any future
     // capability added to host-api.cjs but not here must fail loudly rather than fake success.
     let err = handle_reverse_call("host.somethingNew", None).expect_err("unknown must not resolve");
-    assert!(err.contains("host.somethingNew"), "error should name the method: {err}");
+    assert!(
+        err.contains("host.somethingNew"),
+        "error should name the method: {err}"
+    );
 }
 
 /// `writeClipboard` is declared in the contract but not implemented by this host. It must be in the
@@ -65,8 +67,13 @@ fn a_refusal_serializes_as_a_json_rpc_error_not_a_result() {
         }),
     };
 
-    assert!(reply.get("result").is_none(), "a refusal must carry no result member");
-    let error = reply.get("error").expect("refusal must carry an error member");
+    assert!(
+        reply.get("result").is_none(),
+        "a refusal must carry no result member"
+    );
+    let error = reply
+        .get("error")
+        .expect("refusal must carry an error member");
     assert_eq!(error["code"], -32601);
     assert!(error["message"].as_str().unwrap().contains("host.unknown"));
 }
@@ -91,7 +98,11 @@ fn node_arg_path_leaves_loadable_paths_alone() {
         r"\\?\UNC\server\share\plugin-host.cjs",
         r"\\server\share\plugin-host.cjs",
     ] {
-        assert_eq!(node_arg_path(Path::new(path)), PathBuf::from(path), "{path}");
+        assert_eq!(
+            node_arg_path(Path::new(path)),
+            PathBuf::from(path),
+            "{path}"
+        );
     }
 }
 

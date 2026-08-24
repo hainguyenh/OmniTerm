@@ -30,16 +30,21 @@ const MetricChip: React.FC<MetricChipProps> = ({ icon, value, colorClass, title,
 
 /** Uptime pill with its own 1s ticker so the parent doesn't re-render every second. */
 const UptimeChip: React.FC<{ since: number; compact?: boolean }> = ({ since, compact }) => {
-  const [, force] = useState(0)
+  // State holds the FORMATTED label, not a tick counter: React bails out when
+  // the string is unchanged, so idle sessions cost zero renders per second.
+  const compute = () => formatUptime(Math.max(0, Math.floor((Date.now() - since) / 1000)))
+  const [label, setLabel] = useState(compute)
   useEffect(() => {
-    const t = setInterval(() => force(n => n + 1), 1000)
+    const t = setInterval(() => {
+      const next = compute()
+      setLabel(prev => (prev === next ? prev : next))
+    }, 1000)
     return () => clearInterval(t)
-  }, [])
-  const secs = Math.max(0, Math.floor((Date.now() - since) / 1000))
+  }, [since])
   return (
     <MetricChip
       icon={<Clock className="w-3 h-3" />}
-      value={formatUptime(secs)}
+      value={label}
       colorClass="text-theme-fg"
       title="Session uptime"
       compact={compact}

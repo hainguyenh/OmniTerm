@@ -7,27 +7,24 @@
 
 use super::with_invoke_handler;
 use crate::{
-    adhoc::AdhocRegistry,
-    plugin_host::PluginHost,
-    pty::PtyManager,
-    rdp_embed::RdpSessionManager,
+    adhoc::AdhocRegistry, plugin_host::PluginHost, pty::PtyManager, rdp_embed::RdpSessionManager,
     terminal_window::DetachRegistry,
 };
 use serde_json::Value;
 use std::{fs, path::PathBuf, sync::MutexGuard};
 use tauri::{test::MockRuntime, Manager};
 
-#[path = "ipc_persistence_tests.rs"]
-mod persistence;
 #[cfg(target_os = "linux")]
 #[path = "ipc_dialog_tests.rs"]
 mod dialogs;
+#[path = "ipc_persistence_tests.rs"]
+mod persistence;
 #[path = "ipc_runtime_tests.rs"]
 mod runtime;
-#[path = "ipc_workspace_tests.rs"]
-mod workspace_ipc;
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
+#[path = "ipc_workspace_tests.rs"]
+mod workspace_ipc;
 
 struct IpcApp {
     _guard: MutexGuard<'static, ()>,

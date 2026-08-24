@@ -1,7 +1,7 @@
 use super::*;
 use std::fs;
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 use crate::test_support;
 
@@ -107,7 +107,8 @@ for line in sys.stdin:
         "disabled in test"
     );
     assert_eq!(
-        block_on(host.select_connection_provider(Some("fake.plugin".to_string()))).unwrap()[0]["id"],
+        block_on(host.select_connection_provider(Some("fake.plugin".to_string()))).unwrap()[0]
+            ["id"],
         "selected.plugin"
     );
     assert_eq!(
@@ -134,7 +135,9 @@ for line in sys.stdin:
     );
     assert!(block_on(host.save_connections(json!({ "connections": [] }))).unwrap());
     assert_eq!(
-        block_on(host.resolve_connection("ssh-1".to_string())).unwrap().unwrap()["id"],
+        block_on(host.resolve_connection("ssh-1".to_string()))
+            .unwrap()
+            .unwrap()["id"],
         "ssh-1"
     );
     assert_eq!(
@@ -142,49 +145,45 @@ for line in sys.stdin:
         None
     );
     assert_eq!(
-        block_on(host.load_scoped_connections(json!({ "empty": false }))).unwrap().unwrap()[0]["id"],
+        block_on(host.load_scoped_connections(json!({ "empty": false })))
+            .unwrap()
+            .unwrap()[0]["id"],
         "scoped"
     );
     assert_eq!(
         block_on(host.load_scoped_connections(json!({ "empty": true }))).unwrap(),
         None
     );
-    assert!(block_on(host.save_scoped_connections(
-        json!({ "workspaceId": "w" }),
-        json!([]),
-    ))
-    .unwrap());
+    assert!(
+        block_on(host.save_scoped_connections(json!({ "workspaceId": "w" }), json!([]),)).unwrap()
+    );
     assert_eq!(
-        block_on(host.resolve_scoped_connection(
-            json!({ "workspaceId": "w" }),
-            "ssh-2".to_string(),
-        ))
+        block_on(
+            host.resolve_scoped_connection(json!({ "workspaceId": "w" }), "ssh-2".to_string(),)
+        )
         .unwrap()
         .unwrap()["id"],
         "ssh-2"
     );
     assert_eq!(
-        block_on(host.resolve_scoped_connection(
-            json!({ "workspaceId": "w" }),
-            "missing".to_string(),
-        ))
+        block_on(
+            host.resolve_scoped_connection(json!({ "workspaceId": "w" }), "missing".to_string(),)
+        )
         .unwrap(),
         None
     );
     assert_eq!(
-        block_on(host.resolve_connection_launch(
-            json!({ "workspaceId": "w" }),
-            "ssh-3".to_string(),
-        ))
+        block_on(
+            host.resolve_connection_launch(json!({ "workspaceId": "w" }), "ssh-3".to_string(),)
+        )
         .unwrap()
         .unwrap()["kind"],
         "batch"
     );
     assert_eq!(
-        block_on(host.resolve_connection_launch(
-            json!({ "workspaceId": "w" }),
-            "missing".to_string(),
-        ))
+        block_on(
+            host.resolve_connection_launch(json!({ "workspaceId": "w" }), "missing".to_string(),)
+        )
         .unwrap(),
         None
     );
@@ -206,7 +205,10 @@ for line in sys.stdin:
 
     block_on(async {
         let removed = host.stdin_tx.lock().await.take();
-        assert!(removed.is_some(), "the fake sidecar should have an input channel");
+        assert!(
+            removed.is_some(),
+            "the fake sidecar should have an input channel"
+        );
     });
     if let Some(mut child) = block_on(async { host.child.lock().await.take() }) {
         block_on(async {

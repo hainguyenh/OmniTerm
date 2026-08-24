@@ -90,3 +90,20 @@ async fn persist_reports_unwritable_state_directory_without_panicking() {
     assert!(result.is_ok());
     manager.disconnect("session").unwrap();
 }
+
+#[test]
+fn new_reports_an_uncreatable_state_directory() {
+    // A regular file cannot be turned into the daemon state directory; the
+    // constructor must surface that instead of panicking.
+    let dir = tempfile::tempdir().unwrap();
+    let blocker = dir.path().join("state-file");
+    std::fs::write(&blocker, b"not a directory").unwrap();
+    let error = match SessionManager::new(blocker) {
+        Ok(_) => panic!("directory creation must fail for a regular file"),
+        Err(error) => error,
+    };
+    assert!(
+        error.contains("state directory"),
+        "unexpected error: {error}"
+    );
+}

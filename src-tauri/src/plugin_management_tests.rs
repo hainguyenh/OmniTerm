@@ -11,14 +11,20 @@ fn manifest() -> Vec<u8> {
 #[test]
 fn safe_directory_names_replace_only_filesystem_metacharacters() {
     assert_eq!(safe_dir_name("@scope/demo"), "@scope_demo");
-    assert_eq!(safe_dir_name("a\\b?c%d*e:f|g\"h<i>j"), "a_b_c_d_e_f_g_h_i_j");
+    assert_eq!(
+        safe_dir_name("a\\b?c%d*e:f|g\"h<i>j"),
+        "a_b_c_d_e_f_g_h_i_j"
+    );
     assert_eq!(safe_dir_name("normal.plugin-name"), "normal.plugin-name");
 }
 
 #[test]
 fn checked_directory_names_reject_empty_special_and_control_names() {
     for unsafe_id in ["", ".", "..", "bad\nname", "bad\0name"] {
-        assert!(checked_dir_name(unsafe_id).is_err(), "{unsafe_id:?} must be rejected");
+        assert!(
+            checked_dir_name(unsafe_id).is_err(),
+            "{unsafe_id:?} must be rejected"
+        );
     }
     assert_eq!(checked_dir_name("@x/demo").unwrap(), "@x_demo");
 }
@@ -42,7 +48,9 @@ fn manifest_reads_supported_metadata_and_defaults() {
 
 #[test]
 fn manifest_rejects_invalid_json_and_non_plugin_packages() {
-    assert!(parse_manifest(b"not json").unwrap_err().contains("not valid JSON"));
+    assert!(parse_manifest(b"not json")
+        .unwrap_err()
+        .contains("not valid JSON"));
     assert!(parse_manifest(br#"{"name":"demo"}"#)
         .unwrap_err()
         .contains("not an OmniTerm plugin"));
@@ -58,7 +66,9 @@ fn manifest_requires_api_v2() {
         &br#"{"name":"x","omnitermPlugin":{"apiVersion":1}}"#[..],
         &br#"{"name":"x","omnitermPlugin":{"apiVersion":3}}"#[..],
     ] {
-        assert!(parse_manifest(value).unwrap_err().contains("requires version 2"));
+        assert!(parse_manifest(value)
+            .unwrap_err()
+            .contains("requires version 2"));
     }
 }
 
@@ -83,10 +93,12 @@ fn manifest_requires_string_known_permissions() {
         .map(|permission| format!(r#""{permission}""#))
         .collect::<Vec<_>>()
         .join(",");
-    let bytes = format!(
-        r#"{{"name":"x","omnitermPlugin":{{"apiVersion":2,"permissions":[{all}]}}}}"#,
+    let bytes =
+        format!(r#"{{"name":"x","omnitermPlugin":{{"apiVersion":2,"permissions":[{all}]}}}}"#,);
+    assert_eq!(
+        parse_manifest(bytes.as_bytes()).unwrap().permissions.len(),
+        KNOWN_PERMISSIONS.len()
     );
-    assert_eq!(parse_manifest(bytes.as_bytes()).unwrap().permissions.len(), KNOWN_PERMISSIONS.len());
 }
 
 #[test]
@@ -94,16 +106,25 @@ fn manifest_rejects_unsafe_package_and_entrypoint_names() {
     {
         let id = "..";
         let bytes = format!(r#"{{"name":"{id}","omnitermPlugin":{{"apiVersion":2}}}}"#);
-        assert!(parse_manifest(bytes.as_bytes()).unwrap_err().contains("unsafe"));
+        assert!(parse_manifest(bytes.as_bytes())
+            .unwrap_err()
+            .contains("unsafe"));
     }
-    for main in ["../evil.js", "dist/../../evil.js", "/tmp/evil.js", "..\\evil.js"] {
+    for main in [
+        "../evil.js",
+        "dist/../../evil.js",
+        "/tmp/evil.js",
+        "..\\evil.js",
+    ] {
         let bytes = serde_json::to_vec(&serde_json::json!({
             "name": "x",
             "main": main,
             "omnitermPlugin": { "apiVersion": 2 },
         }))
         .unwrap();
-        assert!(parse_manifest(&bytes).unwrap_err().contains("main path is unsafe"));
+        assert!(parse_manifest(&bytes)
+            .unwrap_err()
+            .contains("main path is unsafe"));
     }
 }
 
@@ -183,7 +204,6 @@ fn oversized_package_manifest_is_rejected_before_json_parsing() {
         .contains("package.json is too large"));
 }
 
-
 #[test]
 fn extraction_creates_explicit_directories_and_nested_files() {
     use std::io::Write;
@@ -235,8 +255,13 @@ fn manifest_rejects_empty_and_oversized_names() {
     assert!(parse_manifest(empty).unwrap_err().contains("no valid name"));
 
     let name = "a".repeat(201);
-    let oversized = format!(r#"{{"name":"{}","omnitermPlugin":{{"apiVersion":2}}}}"#, name);
-    assert!(parse_manifest(oversized.as_bytes()).unwrap_err().contains("no valid name"));
+    let oversized = format!(
+        r#"{{"name":"{}","omnitermPlugin":{{"apiVersion":2}}}}"#,
+        name
+    );
+    assert!(parse_manifest(oversized.as_bytes())
+        .unwrap_err()
+        .contains("no valid name"));
 }
 
 #[test]
@@ -280,9 +305,11 @@ fn install_transaction_installs_replaces_and_cleans_failed_staging() {
     let missing_main = zip_file(&[("package.json", package.as_slice(), None)]);
     let mut archive = zip::ZipArchive::new(fs::File::open(missing_main.path()).unwrap()).unwrap();
     let parsed = read_package_manifest(&mut archive).unwrap();
-    assert!(install_validated_archive(&mut archive, plugins.path(), &parsed)
-        .unwrap_err()
-        .contains("entry point"));
+    assert!(
+        install_validated_archive(&mut archive, plugins.path(), &parsed)
+            .unwrap_err()
+            .contains("entry point")
+    );
     assert!(fs::read_dir(plugins.path()).unwrap().all(|entry| {
         let name = entry.unwrap().file_name();
         !name.to_string_lossy().starts_with(".install-")

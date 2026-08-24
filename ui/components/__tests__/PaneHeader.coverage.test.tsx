@@ -91,7 +91,7 @@ describe('PaneHeader remaining behavior', () => {
 
   it('offers all Hybrid persistence modes from a button popover and persists a selection', () => {
     setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
-    // Default for a non-agent SSH pane is keep-running per persistencePolicy.ts.
+    // Default for every terminal pane is close-with-app per persistencePolicy.ts.
     const trigger = screen.getByRole('button', { name: 'Session persistence' })
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
 
@@ -102,9 +102,9 @@ describe('PaneHeader remaining behavior', () => {
     const keep = screen.getByRole('menuitemradio', { name: 'Keep running' })
     const recover = screen.getByRole('menuitemradio', { name: 'Recover after reboot' })
     expect(close).toBeInTheDocument()
-    // 'keep-running' is the default-effective policy, so it shows the radio check.
-    expect(keep).toHaveAttribute('aria-checked', 'true')
-    expect(close).toHaveAttribute('aria-checked', 'false')
+    // 'close-with-app' is the default-effective policy, so it shows the radio check.
+    expect(close).toHaveAttribute('aria-checked', 'true')
+    expect(keep).toHaveAttribute('aria-checked', 'false')
     expect(recover).toHaveAttribute('aria-checked', 'false')
 
     fireEvent.click(recover)
@@ -138,14 +138,15 @@ describe('PaneHeader remaining behavior', () => {
     expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
   })
 
-  it('sends Ctrl+C from the Stop button while busy and disables it while idle', () => {
+  it('sends Ctrl+C from the Stop button while busy and keeps it enabled once a live session goes idle', () => {
     const x = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true })
     const stop = screen.getByRole('button', { name: 'Stop current process' })
     expect(stop).toBeEnabled()
     fireEvent.click(stop)
     expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x03')
     x.rerender(<PaneHeader {...x.props} busy={false} />)
-    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeDisabled()
+    // The idle probe misreads WSL/fast commands, so a still-connected session keeps Stop enabled.
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
   })
 
   it('clears the terminal via the same input channel as cls, even while idle', () => {

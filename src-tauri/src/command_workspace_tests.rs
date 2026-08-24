@@ -30,15 +30,25 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     ))
     .unwrap();
     assert_eq!(duplicate.id, added.id);
-    assert_eq!(block_on(workspace::list_workspaces(app.clone())).unwrap().len(), 1);
-    assert_eq!(workspace::find_workspace(&app, &added.id).unwrap().folders, added.folders);
+    assert_eq!(
+        block_on(workspace::list_workspaces(app.clone()))
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        workspace::find_workspace(&app, &added.id).unwrap().folders,
+        added.folders
+    );
     assert!(workspace::find_workspace(&app, "missing").is_err());
 
     let folder_id = added.folders[0].id.clone();
     let logical = |path: &str| format!("{folder_id}/{path}");
     let scripts = block_on(workspace::scan_scripts(app.clone(), added.id.clone())).unwrap();
     assert!(scripts.iter().any(|script| script.id == logical("run.sh")));
-    assert!(scripts.iter().any(|script| script.id == logical("nested/task.ps1")));
+    assert!(scripts
+        .iter()
+        .any(|script| script.id == logical("nested/task.ps1")));
     let folders = block_on(workspace::scan_workspace_folders(
         app.clone(),
         added.id.clone(),
@@ -70,7 +80,12 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
     // Renderer-visible paths are logical `<folderId>/<relativePath>` values; the backend resolves
     // them against the matching real folder root before applying the safepath policy.
     assert_eq!(
-        block_on(workspace::read_script(app.clone(), added.id.clone(), logical("notes.txt"))).unwrap(),
+        block_on(workspace::read_script(
+            app.clone(),
+            added.id.clone(),
+            logical("notes.txt")
+        ))
+        .unwrap(),
         "hello\n"
     );
     block_on(workspace::write_script(
@@ -80,7 +95,10 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
         "echo changed\n".to_string(),
     ))
     .unwrap();
-    assert_eq!(fs::read_to_string(project.join("run.sh")).unwrap(), "echo changed\n");
+    assert_eq!(
+        fs::read_to_string(project.join("run.sh")).unwrap(),
+        "echo changed\n"
+    );
     assert!(block_on(workspace::write_script(
         app.clone(),
         added.id.clone(),
@@ -104,9 +122,15 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
         Some(logical("nested")),
     ))
     .unwrap());
-    assert!(block_on(workspace::remove_workspace(app.clone(), "not-there".to_string())).is_err());
+    assert!(block_on(workspace::remove_workspace(
+        app.clone(),
+        "not-there".to_string()
+    ))
+    .is_err());
     block_on(workspace::remove_workspace(app.clone(), added.id)).unwrap();
-    assert!(block_on(workspace::list_workspaces(app)).unwrap().is_empty());
+    assert!(block_on(workspace::list_workspaces(app))
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

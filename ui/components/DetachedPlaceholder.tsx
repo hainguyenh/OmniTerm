@@ -17,7 +17,7 @@ interface DetachedPlaceholderProps {
  * shrinks the art and stacks the buttons instead of clipping or overflowing them.
  */
 const DetachedPlaceholder: React.FC<DetachedPlaceholderProps> = ({ name, onFocus, onReattach, compact }) => (
-  <div className={`h-full w-full flex flex-col items-center justify-center text-theme-dim select-none bg-[var(--theme-bg)] ${compact ? 'gap-3 px-2' : 'gap-4'}`}>
+  <div className={`detach-window-enter h-full w-full flex flex-col items-center justify-center text-theme-dim select-none bg-[var(--theme-bg)] ${compact ? 'gap-3 px-2' : 'gap-4'}`}>
     <ExternalLink className={compact ? 'w-[12vmin] min-w-[28px] max-w-[56px] opacity-20' : 'w-14 h-14 opacity-20'} />
     <div className="text-center min-w-0 max-w-full">
       <p className={`font-medium text-theme-fg ${compact ? 'text-xs' : 'text-sm'}`}>Running in a separate window</p>

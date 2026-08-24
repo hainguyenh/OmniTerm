@@ -90,7 +90,13 @@ pub(super) fn jiggle_mouse() -> Result<(), String> {
             x: original.x.saturating_add(1),
             y: original.y,
         };
-        SetCursorPos(moved.x, moved.y).map_err(|e| format!("Could not move the mouse: {e}"))?;
+        // SetCursorPos can transiently report failure while the thread's last error stays clear
+        // (observed under concurrent desktop input, e.g. parallel test runs). The jiggle is
+        // best-effort, so one immediate retry absorbs the spurious FALSE without masking a real
+        // failure — a second genuine error still surfaces here.
+        SetCursorPos(moved.x, moved.y)
+            .or_else(|_| SetCursorPos(moved.x, moved.y))
+            .map_err(|e| format!("Could not move the mouse: {e}"))?;
         // Restore immediately, but do not overwrite a real user movement observed between calls.
         let mut current = POINT::default();
         GetCursorPos(&mut current).map_err(|e| format!("Could not re-read mouse position: {e}"))?;

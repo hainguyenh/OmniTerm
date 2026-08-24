@@ -52,6 +52,25 @@ describe("survivesTerminalFocus", () => {
     expect(survivesTerminalFocus("newFolder", "Ctrl+Shift+N")).toBe(true);
     expect(survivesTerminalFocus("closeTab", "Ctrl+Alt+W")).toBe(true);
   });
+
+  it("lets bare function keys through — they carry no shell meaning but do carry app actions", () => {
+    expect(survivesTerminalFocus("toggleAppFullscreen", "F11")).toBe(true);
+    expect(survivesTerminalFocus("toggleAppFullscreen", "F2")).toBe(true);
+    expect(survivesTerminalFocus("toggleAppFullscreen", "Shift+F11")).toBe(true);
+    // A Ctrl combo collides with shell control-key space and must not survive.
+    expect(survivesTerminalFocus("toggleAppFullscreen", "Ctrl+F11")).toBe(false);
+  });
+});
+
+describe("toggleAppFullscreen", () => {
+  it("defaults to F11", () => {
+    expect(FALLBACK_SHORTCUTS.toggleAppFullscreen).toBe("F11");
+    expect(resolveShortcuts({}).toggleAppFullscreen).toBe("F11");
+  });
+
+  it("matches F11 inside a focused terminal", () => {
+    expect(matchesChromeShortcut(key("F11"), FALLBACK_SHORTCUTS, { inTerminal: true })).toBe(true);
+  });
 });
 
 describe("matchesChromeShortcut", () => {

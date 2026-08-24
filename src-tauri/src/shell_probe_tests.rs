@@ -9,8 +9,8 @@ fn every_offered_shell_is_parseable_and_supported_here() {
     let all = available_shells(|_| true);
     assert!(!all.is_empty(), "the picker must never be empty");
     for opt in &all {
-        let parsed = LocalShell::parse(&opt.id)
-            .unwrap_or_else(|| panic!("{} is not a LocalShell", opt.id));
+        let parsed =
+            LocalShell::parse(&opt.id).unwrap_or_else(|| panic!("{} is not a LocalShell", opt.id));
         assert!(parsed.is_supported_here(), "{} is foreign here", opt.id);
         assert!(!opt.label.is_empty(), "{} has no label", opt.id);
     }

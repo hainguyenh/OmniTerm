@@ -68,10 +68,7 @@ pub fn available_shells(on_path: impl Fn(&str) -> bool) -> Vec<ShellOption> {
 /// can never disagree about what is installed.
 #[cfg(not(target_os = "windows"))]
 pub fn available_shells(is_exec: impl Fn(&str) -> bool) -> Vec<ShellOption> {
-    let mut out = vec![ShellOption::new(
-        LocalShell::Default,
-        "Default login shell",
-    )];
+    let mut out = vec![ShellOption::new(LocalShell::Default, "Default login shell")];
     for shell in [LocalShell::Zsh, LocalShell::Bash, LocalShell::Sh] {
         if crate::shell_spec::resolve_posix_shell(shell, &is_exec).is_ok() {
             out.push(ShellOption::new(shell, shell.label()));

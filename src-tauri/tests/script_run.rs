@@ -31,9 +31,14 @@ fn runs_a_real_script_file_from_its_workspace() {
     std::fs::write(&script, body).expect("write script");
 
     // Exactly what `workspace::run_script` does: containment-check the path, then build the request.
-    let real = app_lib::safepath::safe_runnable_path(&root.to_string_lossy(), &script.to_string_lossy())
-        .expect("the script is inside its workspace");
-    let kind = if cfg!(target_os = "windows") { "bat" } else { "sh" };
+    let real =
+        app_lib::safepath::safe_runnable_path(&root.to_string_lossy(), &script.to_string_lossy())
+            .expect("the script is inside its workspace");
+    let kind = if cfg!(target_os = "windows") {
+        "bat"
+    } else {
+        "sh"
+    };
     let request = app_lib::workspace_launch::script_run_request(
         kind,
         &real.to_string_lossy(),
@@ -111,4 +116,3 @@ fn a_keystroke_answers_a_script_waiting_on_pause_and_the_shell_exits() {
         "the shell should exit once the script finishes"
     );
 }
-

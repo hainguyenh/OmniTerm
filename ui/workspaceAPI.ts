@@ -33,6 +33,8 @@ export function createWorkspaceAPI() {
     },
     removeFolder: (workspaceId: string, folderId: string) =>
       invoke<WorkspaceWire>('remove_workspace_folder', { workspaceId, folderId }).then(normalizeWorkspace),
+    renameFolder: (workspaceId: string, folderId: string, name: string) =>
+      invoke<WorkspaceWire>('rename_workspace_folder', { workspaceId, folderId, name }).then(normalizeWorkspace),
     importFile: async () => {
       const path = await open({
         multiple: false,

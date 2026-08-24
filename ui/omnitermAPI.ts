@@ -87,7 +87,13 @@ function createTauriAPI(): any {
   // fall back to the CSS property only if the native call is refused (e.g. zoom disabled by policy).
   let zoomFactor = 1
 
-  const updates = createUpdateAPI(() => invoke<string>('get_version'))
+  const updates = {
+    ...createUpdateAPI(() => invoke<string>('get_version')),
+    // Native signed-update path (tauri-plugin-updater). Absent config in dev builds resolves to
+    // `{ available: false, reason: 'updater-disabled' }` instead of an error.
+    nativeCheck: () => invoke<{ available: boolean; reason?: string; version?: string }>('check_for_native_update'),
+    nativeInstall: () => invoke<void>('download_and_install_update'),
+  }
 
   return {
     connections: {
@@ -122,6 +128,9 @@ function createTauriAPI(): any {
         startSession(sessionId, connId, overrideShell, darkMode),
       localDisconnect: (id: string) =>
         invoke('disconnect_session', { id }).catch(() => {}),
+      // Force kill shares the daemon disconnect wire path but surfaces the error so the
+      // Stop-button escalation UI can report a failed kill instead of failing silently.
+      forceKillSession: (id: string) => invoke<void>('disconnect_session', { id }),
       localInput: (id: string, data: string) =>
         invoke('send_session_input', { id, data }).catch(() => {}),
       localResize: (id: string, size: { cols: number; rows: number }) =>
@@ -133,7 +142,7 @@ function createTauriAPI(): any {
       // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
       onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
       listLocalSessions: () => invoke<any[]>('list_local_sessions').catch(() => []),
-      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') =>
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed') =>
         invoke<void>('set_session_persistence', { id, policy }),
 
       // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt
@@ -223,6 +232,7 @@ function createTauriAPI(): any {
     clipboard: {
       writeText: (text: string) => writeText(text),
       readText: () => readText(),
+      saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
     },
 
     // SFTP rides on SSH, so it arrives with it.
@@ -297,6 +307,10 @@ function createTauriAPI(): any {
       get: () => invoke<any>('get_settings'),
       // A partial object is a partial write — the backend merges it into what is stored.
       save: (settings: any) => invoke('save_settings', { settings }),
+      /** Versioned envelope { version, exportedAt, sections }; secrets never leave the stores. */
+      exportAll: () => invoke<SettingsTransferEnvelope>('export_settings'),
+      importAll: (envelope: SettingsTransferEnvelope, strategy: 'merge' | 'replace') =>
+        invoke<{ imported: Record<string, number> }>('import_settings', { envelope, strategy }),
       // The backend broadcasts this after every successful save from ANY window, so a popped-out
       // terminal and the main window keep their appearance state in sync while one is detached.
       onChanged: (cb: (settings: any) => void) => onEvent<any>('settings:changed', cb),
@@ -322,6 +336,7 @@ function createTauriAPI(): any {
       toggleMaximize: () => invoke('toggle_maximize'),
       close: () => invoke('close_window'),
       isMaximized: () => invoke<boolean>('is_maximized'),
+      setFullscreen: (on: boolean) => invoke('set_fullscreen', { on }),
       onMaximizedState: (cb: (state: boolean) => void) => onEvent<boolean>('maximized-state', cb),
     },
 

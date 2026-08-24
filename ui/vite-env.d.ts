@@ -26,6 +26,8 @@ interface ShortcutBindings {
   toggleSidebar: string
   commandPalette: string
   closeTab: string
+  /** Whole-app fullscreen (native window + chrome hidden). Bare F-keys stay terminal-safe. */
+  toggleAppFullscreen: string
 }
 
 /**
@@ -38,6 +40,18 @@ interface TerminalAppearance {
   themeId?: string
 }
 
+/** Versioned backup envelope produced by `export_settings`; see settings_transfer.rs. */
+interface SettingsTransferEnvelope {
+  version: number
+  exportedAt: string
+  sections: {
+    appSettings?: Partial<AppSettings>
+    connections?: { connections?: unknown[]; folders?: unknown[] }
+    themes?: Array<Record<string, unknown>>
+    workspaces?: import('@omniterm/contract').Workspace[]
+  }
+}
+
 interface AppSettings {
   themeId: string
   fontSize: number
@@ -48,6 +62,8 @@ interface AppSettings {
   perConn?: Record<string, TerminalAppearance>
   /** Any id from `shells.list` — validated against that list before use, never assumed. */
   defaultShell?: string
+  /** Where new terminals land when the launch site does not name a workspace itself. */
+  defaultWorkspace?: { mode: 'workspace'; workspaceId: string } | { mode: 'folder'; workspaceId: string; folderId: string } | { mode: 'home' }
   lastKnownLatest?: string
   lastCheckAt?: number
   skippedVersion?: string | null
@@ -190,6 +206,7 @@ interface Window {
       // LOCAL connection.
       local: (sessionId: string, connId: string, shell?: string, darkMode?: boolean) => void
       localDisconnect: (id: string) => void
+      forceKillSession: (id: string) => Promise<void>
       localInput: (id: string, data: string) => void
       localResize: (id: string, size: { cols: number, rows: number }) => void
       onLocalReady: (id: string, cb: (label?: string) => void) => () => void
@@ -206,15 +223,16 @@ interface Window {
       listLocalSessions: () => Promise<Array<{
         id: string
         generation: number
-        policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot'
+        policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed'
         lifecycle: 'live' | 'interrupted' | 'closed' | 'error'
         pid?: number | null
         label: string
         busy: boolean
         launchedWithCommand: boolean
         ssh: boolean
+        frozen: boolean
       }>>
-      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot') => Promise<void>
+      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed') => Promise<void>
     }
     // Multi-window terminal detach/reattach. `detachedSessionId` is non-null only inside a
     // popped-out window (from its --omniterm-detached=<id> launch arg); the primary reads null.
@@ -240,6 +258,8 @@ interface Window {
     clipboard: {
       writeText: (text: string) => Promise<void>
       readText: () => Promise<string>
+      /** Persist clipboard-image bytes to a temp PNG; resolves to its absolute path. */
+      saveImageTemp: (bytes: Uint8Array) => Promise<string>
     }
     sftp: {
       home: (id: string) => Promise<string>
@@ -279,6 +299,11 @@ interface Window {
     settings: {
       get: () => Promise<AppSettings>
       save: (s: Partial<AppSettings>) => Promise<void>
+      exportAll: () => Promise<SettingsTransferEnvelope>
+      importAll: (
+        envelope: SettingsTransferEnvelope,
+        strategy: 'merge' | 'replace',
+      ) => Promise<{ imported: Record<string, number> }>
       /** Broadcast by the backend after any window saves settings — keeps detached windows in sync. */
       onChanged: (cb: (s: AppSettings) => void) => () => void
       systemExcludedViewExts: () => Promise<string[]>
@@ -290,6 +315,7 @@ interface Window {
       add: () => Promise<import('@omniterm/contract').Workspace | null>
       addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
       removeFolder: (workspaceId: string, folderId: string) => Promise<import('@omniterm/contract').Workspace>
+      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
       importFile: () => Promise<import('@omniterm/contract').Workspace | null>
       remove: (id: string) => Promise<void>
       rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
@@ -319,6 +345,9 @@ interface Window {
       downloadPortable: (savePath: string) => Promise<void>
       downloadInstaller: (installNow: boolean) => Promise<void>
       onState: (cb: (s: UpdateState) => void) => () => void
+      /** Native signed-update path; unavailable in unsigned dev builds. */
+      nativeCheck: () => Promise<{ available: boolean; reason?: string; version?: string }>
+      nativeInstall: () => Promise<void>
     }
     themes: {
       list: () => Promise<import('./themes').AppTheme[]>
@@ -337,6 +366,8 @@ interface Window {
       toggleMaximize: () => Promise<void>
       close: () => Promise<void>
       isMaximized: () => Promise<boolean>
+      /** True OS-level fullscreen — paired with the renderer's chrome-hidden mode (F11). */
+      setFullscreen: (on: boolean) => Promise<void>
       onMaximizedState: (cb: (state: boolean) => void) => () => void
     }
     // Cooperative launcher (nc-open): main asks the renderer to open an ad-hoc local shell pane.

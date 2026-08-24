@@ -13,7 +13,11 @@ fn a_theme_root_yields_parseable_json_files_and_skips_everything_else() {
     let root = tempfile::tempdir().unwrap();
     let expected = serde_json::json!({ "id": "coverage-builtin", "name": "Coverage Builtin" });
 
-    fs::write(root.path().join("valid.json"), serde_json::to_vec(&expected).unwrap()).unwrap();
+    fs::write(
+        root.path().join("valid.json"),
+        serde_json::to_vec(&expected).unwrap(),
+    )
+    .unwrap();
     // Malformed JSON: skipped, not fatal.
     fs::write(root.path().join("broken.json"), "not-json").unwrap();
     // Right content, wrong extension.
@@ -71,7 +75,11 @@ fn listing_themes_reads_the_user_root_and_tolerates_a_missing_builtin_root() {
     let app = crate::test_support::mock_app();
     let themes_dir = get_themes_dir(app.handle()).unwrap();
     let mine = serde_json::json!({ "id": "mine", "name": "Mine" });
-    fs::write(themes_dir.join("mine.json"), serde_json::to_vec(&mine).unwrap()).unwrap();
+    fs::write(
+        themes_dir.join("mine.json"),
+        serde_json::to_vec(&mine).unwrap(),
+    )
+    .unwrap();
 
     let themes = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap();
     assert!(themes.contains(&mine));

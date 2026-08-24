@@ -13,6 +13,7 @@
  * typed commands exposed by src/omnitermAPI.ts.
  */
 
+import { useEffect, useState } from 'react'
 import { AlertTriangle, Check, Download, Loader2, RotateCw, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 
@@ -43,6 +44,21 @@ export default function UpdateSettings({
   handleDownloadPortable,
   handleDownloadInstaller,
 }: UpdateSettingsProps) {
+  // Native signed-update path: probed once. Unsigned/dev builds answer "updater-disabled" and the
+  // manual download flow below stays the only path, exactly as before.
+  const [nativeReady, setNativeReady] = useState(false)
+  const [nativeInstalling, setNativeInstalling] = useState(false)
+  useEffect(() => {
+    let alive = true
+    window.omnitermAPI?.updates?.nativeCheck?.()
+      .then((r) => { if (alive) setNativeReady(r.available === true) })
+      .catch(() => { if (alive) setNativeReady(false) })
+    return () => { alive = false }
+  }, [])
+  const runNativeInstall = async () => {
+    setNativeInstalling(true)
+    try { await window.omnitermAPI.updates.nativeInstall() } finally { setNativeInstalling(false) }
+  }
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
@@ -107,6 +123,21 @@ export default function UpdateSettings({
                 </div>
               ) : (
                 <div className="flex items-center gap-2 mt-0.5">
+                  {nativeReady ? (
+                    /* Signed build: the updater verifies and installs natively, then relaunches. */
+                    <Tooltip content="Verify, install and relaunch — no manual download" placement="bottom">
+                      <button
+                        type="button"
+                        disabled={nativeInstalling || updateChecking}
+                        onClick={() => void runNativeInstall()}
+                        className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                      >
+                        {nativeInstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        Download & install
+                      </button>
+                    </Tooltip>
+                  ) : (
+                    <>
                   <Tooltip content={updateState.isPortable ? 'Download portable zip archive' : 'Install latest update'} placement="bottom">
                     <button
                       type="button"
@@ -129,6 +160,8 @@ export default function UpdateSettings({
                       Skip v{updateState.latest}
                     </button>
                   </Tooltip>
+                    </>
+                  )}
                 </div>
               )}
             </div>

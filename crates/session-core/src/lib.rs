@@ -11,12 +11,15 @@
 mod activity;
 mod agent_activity;
 mod client;
+mod exit_watcher;
+mod freeze;
 mod manager;
 mod manifest;
 mod output;
-mod server;
 mod scrollback;
+mod server;
 mod summary;
+mod suspend;
 mod transport;
 
 pub use client::{SessionDaemonClient, SessionSubscription};

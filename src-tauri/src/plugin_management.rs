@@ -48,7 +48,10 @@ struct PackageManifest {
 fn safe_dir_name(id: &str) -> String {
     id.chars()
         .map(|c| {
-            if matches!(c, '/' | '\\' | '?' | '%' | '*' | ':' | '|' | '"' | '<' | '>') {
+            if matches!(
+                c,
+                '/' | '\\' | '?' | '%' | '*' | ':' | '|' | '"' | '<' | '>'
+            ) {
                 '_'
             } else {
                 c
@@ -140,9 +143,13 @@ fn parse_manifest(bytes: &[u8]) -> Result<PackageManifest, String> {
     })
 }
 
-fn read_package_manifest(archive: &mut zip::ZipArchive<fs::File>) -> Result<PackageManifest, String> {
+fn read_package_manifest(
+    archive: &mut zip::ZipArchive<fs::File>,
+) -> Result<PackageManifest, String> {
     if archive.len() > MAX_FILES {
-        return Err(format!("Plugin ZIP contains too many files (max {MAX_FILES})."));
+        return Err(format!(
+            "Plugin ZIP contains too many files (max {MAX_FILES})."
+        ));
     }
     let mut total = 0_u64;
     for index in 0..archive.len() {
@@ -187,7 +194,10 @@ fn extract_validated(
             fs::create_dir_all(&output).map_err(|error| error.to_string())?;
             continue;
         }
-        if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) {
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
             return Err("Plugin ZIP may not contain symbolic links.".to_string());
         }
         if let Some(parent) = output.parent() {
@@ -260,8 +270,8 @@ pub async fn install_plugin_package<R: Runtime>(
         return Ok(None);
     };
     let archive_file = fs::File::open(file.path()).map_err(|error| error.to_string())?;
-    let mut archive =
-        zip::ZipArchive::new(archive_file).map_err(|error| format!("Invalid plugin ZIP: {error}"))?;
+    let mut archive = zip::ZipArchive::new(archive_file)
+        .map_err(|error| format!("Invalid plugin ZIP: {error}"))?;
     let manifest = read_package_manifest(&mut archive)?;
     let permissions = if manifest.permissions.is_empty() {
         "none".to_string()
@@ -312,7 +322,8 @@ pub async fn remove_plugin<R: Runtime>(
     // If the sidecar is running, remove even an incompatible/disabled descriptor from its registry.
     // A plugin-free Basic build has no sidecar, in which case deleting the validated files is enough.
     let _ = host.uninstall(id).await;
-    fs::remove_dir_all(target).map_err(|error| format!("Could not remove plugin files: {error}"))?;
+    fs::remove_dir_all(target)
+        .map_err(|error| format!("Could not remove plugin files: {error}"))?;
     Ok(true)
 }
 
@@ -325,8 +336,8 @@ pub fn restart_app<R: Runtime>(app: AppHandle<R>) {
 }
 
 #[cfg(test)]
-#[path = "plugin_management_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "plugin_management_io_tests.rs"]
 mod io_tests;
+#[cfg(test)]
+#[path = "plugin_management_tests.rs"]
+mod tests;

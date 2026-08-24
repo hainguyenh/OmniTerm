@@ -130,4 +130,3 @@ pub fn wait_for_exit(child: &mut Box<dyn portable_pty::Child + Send + Sync>) -> 
     }
     false
 }
-
