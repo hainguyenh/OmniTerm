@@ -138,6 +138,8 @@ pub(crate) fn ensure_resumed(manager: &SessionManager, id: &str, session: &Sessi
 pub(crate) fn kill_frozen_orphans_sweep(
     interrupted: &dashmap::DashMap<String, crate::manifest::SessionManifest>,
 ) {
+    // One whole-machine snapshot serves every identity check in the sweep.
+    let index = crate::suspend::index_processes();
     for record in interrupted.iter() {
         let (Some(pid), Some(start_time)) = (record.pid, record.start_time) else {
             continue;
@@ -145,7 +147,7 @@ pub(crate) fn kill_frozen_orphans_sweep(
         if !record.frozen {
             continue;
         }
-        if crate::suspend::process_start_time(pid) == Some(start_time) {
+        if crate::suspend::process_start_time(&index, pid) == Some(start_time) {
             // SAFETY: signal delivery; identity was double-checked via start time.
             unsafe {
                 libc::kill(pid as libc::pid_t, libc::SIGKILL);

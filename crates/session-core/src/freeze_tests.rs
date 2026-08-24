@@ -18,7 +18,9 @@ fn boot_sweep_kills_only_verified_frozen_orphans() {
         .expect("spawn orphan stand-in");
     std::thread::sleep(Duration::from_millis(300));
     let pid = child.id();
-    let start_time = suspend::process_start_time(pid).expect("start time for live pid");
+    let index = suspend::index_processes();
+    let start_time =
+        suspend::process_start_time(&index, pid).expect("start time for live pid");
 
     let mut record = SessionManifest::live(
         "orphan".to_string(),
