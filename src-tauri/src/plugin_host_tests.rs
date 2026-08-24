@@ -1,8 +1,8 @@
 use super::*;
 use std::fs;
 use std::path::Path;
-use tempfile::TempDir;
 use tauri::Manager;
+use tempfile::TempDir;
 
 use crate::test_support;
 
@@ -45,9 +45,15 @@ fn development_plugin_directory_uses_only_an_existing_explicit_path() {
     let plugin = TempDir::new().unwrap();
 
     std::env::set_var("OMNITERM_DEV_PLUGIN", plugin.path());
-    assert_eq!(bundled_plugin_dir(&handle), Some(plugin.path().to_path_buf()));
+    assert_eq!(
+        bundled_plugin_dir(&handle),
+        Some(plugin.path().to_path_buf())
+    );
     std::env::set_var("OMNITERM_DEV_PLUGIN", plugin.path().join("missing"));
-    assert_ne!(bundled_plugin_dir(&handle), Some(plugin.path().join("missing")));
+    assert_ne!(
+        bundled_plugin_dir(&handle),
+        Some(plugin.path().join("missing"))
+    );
 
     match original {
         Some(value) => std::env::set_var("OMNITERM_DEV_PLUGIN", value),
@@ -94,7 +100,10 @@ fn startup_failure_records_a_visible_disabled_reason() {
     block_on(host.start(&handle)).unwrap();
     let descriptors = block_on(host.list_plugins()).unwrap();
     assert_eq!(descriptors.len(), 1);
-    assert!(descriptors[0]["error"].as_str().unwrap().contains("Could not start"));
+    assert!(descriptors[0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("Could not start"));
 
     match original_path {
         Some(value) => std::env::set_var("PATH", value),
@@ -247,7 +256,9 @@ fn plugin_host_start_fails_gracefully_when_node_is_missing() {
 
     assert!(!host.started.load(Ordering::SeqCst));
     let disabled = block_on(host.disabled_reason.lock()).clone();
-    assert!(disabled.unwrap().contains("Plugins need Node.js on your PATH."));
+    assert!(disabled
+        .unwrap()
+        .contains("Plugins need Node.js on your PATH."));
 
     if let Some(p) = original_path {
         std::env::set_var("PATH", p);

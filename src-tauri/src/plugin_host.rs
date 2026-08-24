@@ -19,19 +19,22 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use crate::plugin_host_api::{handle_reverse_call, node_arg_path};
 
 #[cfg(test)]
-#[path = "plugin_host_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "plugin_host_integration_tests.rs"]
 mod integration_tests;
+#[cfg(test)]
+#[path = "plugin_host_provider_fallback_tests.rs"]
+mod provider_fallback_tests;
+#[path = "plugin_host_rpc.rs"]
+mod rpc;
 #[cfg(all(test, unix))]
 #[path = "plugin_host_sidecar_unix_tests.rs"]
 mod sidecar_unix_tests;
 #[cfg(all(test, windows))]
 #[path = "plugin_host_sidecar_windows_tests.rs"]
 mod sidecar_windows_tests;
-#[path = "plugin_host_rpc.rs"]
-mod rpc;
+#[cfg(test)]
+#[path = "plugin_host_tests.rs"]
+mod tests;
 pub struct PluginHost {
     started: AtomicBool,
     start_lock: Mutex<()>,
@@ -174,9 +177,10 @@ impl PluginHost {
         };
 
         let mut cmd = Command::new("node");
-        #[cfg(windows)] cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: hide Node beside the GUI.
-        // Every path handed to Node goes through `node_arg_path`: the resource directory arrives as a
-        // verbatim UNC path on Windows, which Node cannot load.
+        #[cfg(windows)]
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW: hide Node beside the GUI.
+                                         // Every path handed to Node goes through `node_arg_path`: the resource directory arrives as a
+                                         // verbatim UNC path on Windows, which Node cannot load.
         cmd.arg(node_arg_path(&sidecar_script))
             .arg(node_arg_path(&app_data_dir))
             .stdin(Stdio::piped())
@@ -291,5 +295,4 @@ impl PluginHost {
         log::info!("[plugin_host] Node.js plugin host process started successfully");
         Ok(())
     }
-
 }
