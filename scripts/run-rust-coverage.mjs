@@ -17,14 +17,18 @@ const outputDir = path.join(root, 'coverage-rust')
 // SetInformationJobObject, AssignProcessToJobObject). Its happy path already has a real test
 // (assigns_job_and_terminates_process), but the error branches only fire on OS-level failures
 // (a job handle the kernel refuses to create, a process already dead before it can be assigned)
-// that cannot be triggered without mocking the Win32 API — there is nothing left to test.
+// that cannot be triggered without mocking the Win32 API - there is nothing left to test.
+//
+// update_manager.rs: the plugin-configured arms of both commands need a registered updater
+// plugin with real signing keys and GitHub endpoints; in coverage builds the plugin never
+// registers (no injected conf), so only the typed "disabled" degradation paths can execute.
 //
 // build.rs: a Cargo build script. It runs at compile time, not in the application, so no test can
-// execute it and the coverage instrumentation never sees it run — every line reports as missed. Its
+// execute it and the coverage instrumentation never sees it run - every line reports as missed. Its
 // only conditional is `CARGO_CFG_TARGET_OS != "windows"`, which the Linux coverage job takes and the
 // Windows build does not; a test could not take the other arm without cross-compiling.
 const IGNORED_FILENAME_REGEX = [
-  '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|lib|main|test_support)\\.rs$',
+  '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|update_manager|lib|main|test_support)\\.rs$',
   '(?:^|[/\\\\])src-tauri[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]src[/\\\\](?:lib|main)\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]build\\.rs$',
