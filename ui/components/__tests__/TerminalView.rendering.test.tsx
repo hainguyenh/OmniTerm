@@ -214,6 +214,20 @@ describe('TerminalView rendering & WebGL', () => {
     }
   })
 
+  // The mount-time resize races session creation and is dropped by the backend; when the session
+  // reports ready the pane must resend its grid even though cols/rows did not change, or the ConPTY
+  // stays at its default 80x24 and wraps long lines at a width the pane never renders (the
+  // recalled-long-command overlap bug).
+  it('resends the pty size once the session reports ready, without a grid change', () => {
+    installApi()
+    render(<TerminalView id="resize-on-ready" connection={localConnection} />)
+
+    expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(1)
+    act(() => { handlers.localReady?.() })
+    expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledTimes(2)
+    expect(window.omnitermAPI.connect.localResize).toHaveBeenLastCalledWith('resize-on-ready', { cols: 100, rows: 30 })
+  })
+
   // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
   // resize event, so without this a pane would keep drawing at the pre-zoom cell size.
   it('re-measures and refits on omniterm:zoom-changed', () => {
