@@ -139,14 +139,29 @@ describe('NewTerminalMenu', () => {
     expect(props.onClose).toHaveBeenCalledOnce()
   })
 
-  it('selects the folder under the cursor on Enter and keeps the menu open', () => {
+  it('opens the highlighted folder with the default shell on Enter and closes', () => {
     const { props } = renderMenu()
 
     fireEvent.keyDown(window, { key: 'ArrowUp' }) // powershell -> Docs - Guide
     fireEvent.keyDown(window, { key: 'Enter' })
 
     expect(props.onSelectWorkspace).toHaveBeenCalledWith('docs::guide')
-    expect(screen.getByRole('searchbox', { name: 'Search workspace or folder' })).toBeInTheDocument()
+    expect(props.onLaunchShell).toHaveBeenCalledWith('powershell', 'docs::guide')
+    expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
+  it('opens the None row as the default directory on Enter', () => {
+    const { props } = renderMenu({ defaultShellId: 'cmd' })
+
+    fireEvent.keyDown(window, { key: 'ArrowUp' }) // cmd (4) -> powershell (3)
+    fireEvent.keyDown(window, { key: 'ArrowUp' }) // -> Docs - Guide (2)
+    fireEvent.keyDown(window, { key: 'ArrowUp' }) // -> Team - Client (1)
+    fireEvent.keyDown(window, { key: 'ArrowUp' }) // -> None (0)
+    fireEvent.keyDown(window, { key: 'Enter' })
+
+    expect(props.onSelectWorkspace).toHaveBeenCalledWith(null)
+    expect(props.onLaunchShell).toHaveBeenCalledWith('cmd', null)
+    expect(props.onClose).toHaveBeenCalledOnce()
   })
 
   it('resets the cursor to the first visible row when the query changes', () => {

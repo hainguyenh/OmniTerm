@@ -14,7 +14,8 @@ interface NewTerminalMenuProps {
   selectedWorkspaceId: string | null
   defaultShellId: string
   onSelectWorkspace: (value: string | null) => void
-  onLaunchShell: (shell: string) => void
+  /** `workspaceSelection` is an explicit folder choice (including null = default directory); absent when a shell row launched. */
+  onLaunchShell: (shell: string, workspaceSelection?: string | null) => void
   onClose: () => void
 }
 
@@ -93,13 +94,20 @@ export default function NewTerminalMenu({
       } else {
         const item = items[activeCursor]
         if (!item) return
-        if (item.kind === 'folder') onSelectWorkspace(item.selection)
+        if (item.kind === 'folder') {
+          // Enter opens the highlighted row directly: remember the choice and launch the default
+          // shell in that folder now (null = the "None" row's default directory), instead of only
+          // selecting it and forcing a second trip to the shell section.
+          onSelectWorkspace(item.selection)
+          onLaunchShell(defaultShellId, item.selection)
+          onClose()
+        }
         else { onLaunchShell(item.id); onClose() }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, items, activeCursor, onSelectWorkspace, onLaunchShell])
+  }, [onClose, items, activeCursor, onSelectWorkspace, onLaunchShell, defaultShellId])
 
   useEffect(() => {
     menuRef.current?.querySelector<HTMLElement>(`[data-menu-index="${activeCursor}"]`)
