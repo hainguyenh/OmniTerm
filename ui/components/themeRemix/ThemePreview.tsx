@@ -1,7 +1,7 @@
 import React from 'react'
 import { FolderGit2, MoonStar, Settings, Terminal } from 'lucide-react'
 import type { AppTheme } from '../../themes'
-import { themeCssVars, type ThemeMode } from '../../utils/themeVars'
+import { isSquareTheme, themeCssVars, type ThemeMode } from '../../utils/themeVars'
 import { normalizeXtermTheme } from '../../utils/xtermTheme'
 
 /**
@@ -41,7 +41,7 @@ export const ThemePreview: React.FC<{ theme: AppTheme; mode: ThemeMode }> = ({ t
   return (
     <div
       data-testid={`theme-preview-${mode}`}
-      className="flex min-h-0 flex-col overflow-hidden rounded-xl border"
+      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border${isSquareTheme(theme) ? ' theme-square' : ''}`}
       style={{
         ...(vars as React.CSSProperties),
         backgroundColor: 'var(--theme-bg)',

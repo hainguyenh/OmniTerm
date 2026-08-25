@@ -57,7 +57,7 @@ describe("normalizeXtermTheme", () => {
   });
 
   it("repairs a color that is only barely different from the background", () => {
-    // clickhouse.json's dark `black` against its `background` — contrast ratio ~1.3, not identical
+    // compact.json's dark `black` against its `background` — contrast ratio ~1.3, not identical
     // but still effectively invisible.
     const out = normalizeXtermTheme({ ...baseTheme, background: "#0a0a0a", black: "#1a1a1a" });
     expect(contrast(out.black!, out.background!)).toBeGreaterThan(1.6);

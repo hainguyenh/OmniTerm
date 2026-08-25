@@ -134,6 +134,18 @@ export const applyThemeVars = (element: HTMLElement, vars: Record<string, string
   for (const [name, value] of Object.entries(vars)) element.style.setProperty(name, value)
 }
 
+/**
+ * A theme that zeroes every `--theme-rounded-*` variable wants NO rounding anywhere — including the
+ * pill/dot shapes (`rounded-full`) that bypass those variables because they have no variable-driven
+ * override. Callers toggle a root class off this so one CSS rule can flatten everything.
+ */
+export const isSquareTheme = (theme: AppTheme): boolean =>
+  (['dark', 'light'] as const).every(mode => {
+    const ui = theme.ui?.[mode]
+    return !!ui && [ui.borderRadiusSm, ui.borderRadiusMd, ui.borderRadiusLg, ui.borderRadiusXl]
+      .every(radius => radius === '0' || radius === '0px')
+  })
+
 /* ── The editable-field registry the Theme Remix editor renders from ──────────────────────── */
 
 export interface ColorField {

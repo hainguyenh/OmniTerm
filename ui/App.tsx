@@ -5,7 +5,7 @@ import { TitleBar } from './components/TitleBar'
 import { ThemeRemixModal } from './components/ThemeRemixModal'
 import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
-import { applyThemeVars, themeCssVars } from './utils/themeVars'
+import { applyThemeVars, isSquareTheme, themeCssVars } from './utils/themeVars'
 import { diag } from './diag'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
@@ -290,6 +290,9 @@ function App() {
   useEffect(() => {
     if (!currentTheme) return
     applyThemeVars(document.documentElement, themeCssVars(currentTheme, appSettings.darkMode ? 'dark' : 'light'))
+    // Zero-radius themes also flatten the rounded-full shapes that bypass --theme-rounded-*
+    // (see .theme-square in index.css). Detached windows share this document, so one toggle covers them.
+    document.documentElement.classList.toggle('theme-square', isSquareTheme(currentTheme))
   }, [currentTheme, appSettings.darkMode])
 
   // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the
