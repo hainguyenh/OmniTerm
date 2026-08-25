@@ -154,16 +154,30 @@ export default function AlwaysAwakeModal({
               borderColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-border)',
             }}
           >
-            <span
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-dim)' }}
-            />
+            {/* A real switch, not just an ON/OFF readout: flipping it acts immediately — ON applies the
+                selected mode/schedule (same as Save), OFF disables (same as the footer Off button).
+                Inline styles for the same Tailwind-purge reason as the panel width above. */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={status.enabled}
+              aria-label="Always Awake"
+              disabled={busy || !status.supported}
+              onClick={() => (status.enabled ? void disable() : void save())}
+              className="relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50"
+              style={{ backgroundColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-border)' }}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${status.enabled ? 'left-[18px]' : 'left-0.5'}`}
+              />
+            </button>
             <div className="min-w-0">
+              {/* The ON/OFF word stays in text so the state never reads through colour alone. */}
               <p
-                className="text-2xl font-black leading-none tracking-wide"
+                className="text-xs font-bold tracking-wide"
                 style={{ color: status.enabled ? 'var(--theme-accent)' : 'var(--theme-dim)' }}
               >
-                {status.enabled ? 'ON' : 'OFF'}
+                {status.enabled ? 'Always Awake is ON' : 'Always Awake is OFF'}
               </p>
               <p className="mt-1 text-[11px] text-theme-dim">
                 <span>{status.enabled ? (status.keepingAwake ? 'Active' : 'Enabled, waiting') : 'Off'}</span>
