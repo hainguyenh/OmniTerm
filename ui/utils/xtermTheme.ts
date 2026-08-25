@@ -8,7 +8,7 @@ import type { TerminalTheme } from '../themes'
  * schema validation on the backend (`src-tauri/src/themes.rs`), and the old conversion
  * (`toXtermTheme`) only ever stripped an empty `selectionForeground` — any other malformed or
  * invisible color reached xterm untouched. Two shipped themes hit exactly that: `claude.json`'s
- * dark palette has `brightWhite === background`, and `clickhouse.json`'s dark palette has a `black`
+ * dark palette has `brightWhite === background`, and `compact.json`'s dark palette has a `black`
  * only barely lighter than its `background`. Both are fixed at the source (see the JSON files), but
  * this is the general-purpose backstop for any theme — built-in or user-authored — that ships or
  * develops the same problem.

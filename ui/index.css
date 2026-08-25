@@ -51,7 +51,6 @@ html.win-window .app-window-rounded {
   border-radius: 8px;
 }
 
-
 /* ── Global scrollbars: thin, theme-colored, transparent track ── */
 *::-webkit-scrollbar {
   width: 6px;
@@ -229,6 +228,11 @@ a {
   border-radius: calc(var(--theme-rounded-xl) * 1.5) !important;
 }
 
+/* Zero-radius themes (e.g. Compact) also flatten rounded-full shapes, which bypass the vars above. */
+.theme-square, .theme-square * {
+  border-radius: 0 !important;
+}
+
 /* Dynamic padding overrides */
 .p-2, .p-2\.5 {
   padding: var(--theme-padding-sm) !important;
@@ -306,7 +310,6 @@ textarea.code-editor-textarea {
   background-color: transparent !important;
   caret-color: var(--theme-fg) !important;
 }
-
 
 /* ── Custom dialog (DialogHost) — fully driven by theme CSS variables ─────── */
 :root {

@@ -10,6 +10,7 @@ import {
   TERMINAL_COLOR_FIELDS,
   applyThemeVars,
   isColorLight,
+  isSquareTheme,
   readColorField,
   resolvedColorField,
   themeCssVars,
@@ -128,6 +129,32 @@ describe('isColorLight', () => {
     ['#gggggg', false],
     ['', false],
   ])('classifies %s', (hex, expected) => expect(isColorLight(hex)).toBe(expected))
+})
+
+describe('isSquareTheme', () => {
+  const withRadii = (dark: string[], light: string[]): AppTheme => ({
+    ...TOKYO_NIGHT,
+    ui: {
+      ...TOKYO_NIGHT.ui,
+      dark: { ...TOKYO_NIGHT.ui.dark, borderRadiusSm: dark[0], borderRadiusMd: dark[1], borderRadiusLg: dark[2], borderRadiusXl: dark[3] },
+      light: { ...TOKYO_NIGHT.ui.light, borderRadiusSm: light[0], borderRadiusMd: light[1], borderRadiusLg: light[2], borderRadiusXl: light[3] },
+    },
+  })
+
+  it('is true when every radius is zero in both modes', () => {
+    expect(isSquareTheme(withRadii(['0', '0', '0', '0'], ['0px', '0px', '0px', '0px']))).toBe(true)
+  })
+
+  it.each([
+    [['0.25rem', '0', '0', '0'], ['0', '0', '0', '0']], // one non-zero radius in dark
+    [['0', '0', '0', '0'], ['0', '0', '0', '0.5rem']], // one non-zero radius in light
+  ])('is false when any radius survives: %o / %o', (dark, light) => {
+    expect(isSquareTheme(withRadii(dark, light))).toBe(false)
+  })
+
+  it('is false for a theme without a ui block', () => {
+    expect(isSquareTheme(withoutUi())).toBe(false)
+  })
 })
 
 describe('the editable field registry', () => {
