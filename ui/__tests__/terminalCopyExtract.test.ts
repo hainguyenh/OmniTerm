@@ -139,6 +139,80 @@ describe('createLastOutputTracker', () => {
   })
 })
 
+describe('createLastOutputTracker with a live marker host', () => {
+  /**
+   * Models xterm's buffer under scrollback trims and resize reflows: appended lines shift
+   * absolute indexes down once the cap is hit, and a live marker re-resolves its line.
+   */
+  const makeMarkerHost = () => {
+    let line = -1
+    const marker = {
+      get line() { return line },
+      isDisposed: false,
+      dispose: () => { marker.isDisposed = true },
+    }
+    return {
+      marker,
+      /** Called by noteInput via the registerMarker callback: pin the current last line. */
+      register: (length: number) => { line = length - 1; return marker },
+      /** Simulate N lines being trimmed from the top of a full scrollback. */
+      trimFromTop: (count: number) => { line -= count },
+      reflow: (newLine: number) => { line = newLine },
+    }
+  }
+
+  it('follows scrollback trims so long output is copied whole, not from a stale index', () => {
+    const lines = [...Array.from({ length: 50 }, (_, i) => `old-${i}`), 'PS F:\\repo> build']
+    const host = makeMarkerHost()
+    const tracker = createLastOutputTracker(liveBuffer(lines), () => host.register(lines.length))
+    tracker.noteInput('\r')
+    // Output floods in until the scrollback cap trims the 50 oldest rows; every surviving
+    // absolute index shifts down by 50. A stale Enter-time index would slice from mid-output.
+    for (let i = 0; i < 100; i += 1) lines.push(`out-${i}`)
+    lines.splice(0, 50)
+    host.trimFromTop(50)
+    const expected = ['PS F:\\repo> build', ...Array.from({ length: 100 }, (_, i) => `out-${i}`)]
+    expect(tracker.lastOutputText()).toBe(expected.join('\n'))
+  })
+
+  it('keeps the anchor across a resize reflow that renumbers buffer lines', () => {
+    const host = makeMarkerHost()
+    const lines = ['$ long-command-that-wraps']
+    const tracker = createLastOutputTracker(liveBuffer(lines), () => host.register(lines.length))
+    tracker.noteInput('\r')
+    // The pane got narrower: the marked command line now wraps into rows 0+1.
+    lines.push('result')
+    lines[0] = '$ long-command-that-'
+    lines.splice(1, 0, 'wraps')
+    host.reflow(1)
+    expect(tracker.lastOutputText()).toBe('wraps\nresult')
+  })
+
+  it('yields nothing once the tracked line left the buffer', () => {
+    const lines = ['a']
+    const host = makeMarkerHost()
+    const tracker = createLastOutputTracker(liveBuffer(lines), () => host.register(lines.length))
+    tracker.noteInput('\r')
+    host.marker.dispose()
+    lines.length = 0
+    lines.push('fresh')
+    expect(tracker.lastOutputText()).toBe('')
+  })
+
+  it('replaces the previous marker on the next Enter instead of stacking them', () => {
+    const lines = ['one']
+    const host = makeMarkerHost()
+    const tracker = createLastOutputTracker(liveBuffer(lines), () => host.register(lines.length))
+    tracker.noteInput('\r')
+    expect(host.marker.isDisposed).toBe(false)
+    lines.push('two')
+    tracker.noteInput('\r')
+    // Only one live anchor exists; the old one was released.
+    lines.push('three')
+    expect(tracker.lastOutputText()).not.toContain('one')
+  })
+})
+
 describe('event helpers', () => {
   it('round-trips a copy request through a window event', () => {
     const seen: unknown[] = []

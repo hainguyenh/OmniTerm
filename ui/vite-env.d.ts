@@ -258,6 +258,8 @@ interface Window {
     clipboard: {
       writeText: (text: string) => Promise<void>
       readText: () => Promise<string>
+      /** Native RGBA clipboard read; null when the clipboard holds no image or the read fails. */
+      readImage: () => Promise<{ rgba: Uint8Array; width: number; height: number } | null>
       /** Persist clipboard-image bytes to a temp PNG; resolves to its absolute path. */
       saveImageTemp: (bytes: Uint8Array) => Promise<string>
     }

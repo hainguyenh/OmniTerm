@@ -26,6 +26,21 @@ export interface TerminalBufferLike {
   }
 }
 
+export interface TerminalMarkerLike {
+  /**
+   * Absolute buffer line this marker tracks. A live marker implementation (xterm's
+   * `registerMarker`) re-resolves this as lines are appended, trimmed from scrollback, or
+   * reflowed by a resize — an index captured once goes stale in all three cases.
+   */
+  readonly line: number
+  /** True once the tracked line left the buffer (trimmed or reset). */
+  readonly isDisposed: boolean
+  dispose: () => void
+}
+
+/** Registers a marker on the current cursor line; may return undefined before the terminal is open. */
+export type RegisterTerminalMarker = () => TerminalMarkerLike | undefined
+
 export interface LastOutputTracker {
   /** Feed every `onData` payload; a carriage return marks where the next output begins. */
   noteInput: (data: string) => void
@@ -68,17 +83,36 @@ export const viewportText = (buffer: TerminalBufferLike, rows: number): string =
  * The marker points at the line the cursor occupied when Enter fired — the echoed prompt +
  * command — so extraction includes it. Full-screen TUI apps rewrite the screen, making this a
  * documented heuristic there (spec: 2026-08-24-terminal-copy-menu-design.md).
+ *
+ * When the host can register live markers they are preferred: xterm trims scrollback and
+ * reflows lines on every resize, both of which renumber absolute indexes, so a plain index
+ * captured at Enter time drifts and later slices start mid-output (truncated copies). The
+ * index fallback keeps the tracker testable and covers hosts without marker support.
  */
-export const createLastOutputTracker = (buffer: TerminalBufferLike): LastOutputTracker => {
-  let marker = -1
+export const createLastOutputTracker = (
+  buffer: TerminalBufferLike,
+  registerMarker?: RegisterTerminalMarker,
+): LastOutputTracker => {
+  let marker: TerminalMarkerLike | null = null
+  let fallbackIndex = -1
   return {
     noteInput: (data: string) => {
       if (!data.includes('\r')) return
-      marker = Math.max(0, buffer.active.length - 1)
+      marker?.dispose()
+      marker = registerMarker?.() ?? null
+      fallbackIndex = Math.max(0, buffer.active.length - 1)
     },
     lastOutputText: () => {
-      if (marker < 0) return ''
-      const first = Math.min(marker, buffer.active.length)
+      let first = -1
+      if (marker) {
+        // The tracked line left the buffer (scrollback trim or pane reset): nothing sane to slice.
+        if (!marker.isDisposed && marker.line >= 0 && marker.line < buffer.active.length) {
+          first = marker.line
+        }
+      } else if (fallbackIndex >= 0) {
+        first = Math.min(fallbackIndex, buffer.active.length)
+      }
+      if (first < 0) return ''
       const lines: string[] = []
       for (let i = first; i < buffer.active.length; i += 1) {
         lines.push(buffer.active.getLine(i)?.translateToString(true) ?? '')
@@ -98,6 +132,31 @@ export const createLastOutputTracker = (buffer: TerminalBufferLike): LastOutputT
 /** Dispatch a copy request for one session. Fired by TerminalCopyMenu. */
 export const dispatchTerminalCopy = (sessionId: string, action: TerminalCopyAction): void => {
   window.dispatchEvent(new CustomEvent(TERMINAL_COPY_EVENT, { detail: { sessionId, action } }))
+}
+
+/**
+ * Answer this pane's copy-menu requests at their only useful site: the component holding the
+ * xterm instance. Returns the unregister cleanup. Requests for other sessions or from a
+ * replaced pane are ignored; empty extractions never touch the clipboard.
+ */
+export const registerTerminalCopyHandler = (options: {
+  sessionId: string
+  /** False once the pane's xterm was recreated, so a stale listener never answers. */
+  isCurrent: () => boolean
+  /** Computes the text for a validated request (last-output slice or viewport). */
+  extract: (action: TerminalCopyAction) => string
+  /** Clipboard sink; async implementations may ignore ordering. */
+  write: (text: string) => void
+}): (() => void) => {
+  const { sessionId, isCurrent, extract, write } = options
+  const onCopyRequest = (event: Event) => {
+    const request = parseTerminalCopyEvent(event)
+    if (!request || request.sessionId !== sessionId || !isCurrent()) return
+    const text = extract(request.action)
+    if (text) write(text)
+  }
+  window.addEventListener(TERMINAL_COPY_EVENT, onCopyRequest)
+  return () => window.removeEventListener(TERMINAL_COPY_EVENT, onCopyRequest)
 }
 
 /**

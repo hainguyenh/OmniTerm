@@ -112,7 +112,7 @@ function installApi(resume: () => Promise<any> = async () => null) {
       onSessionMetrics: subscription('metrics'),
     },
     terminalWindow: { resume: vi.fn(resume) },
-    clipboard: { writeText: vi.fn(async () => {}), readText: vi.fn(async () => 'pasted text') },
+    clipboard: { writeText: vi.fn(async () => {}), readText: vi.fn(async () => 'pasted text'), readImage: async () => null },
   })
 }
 
