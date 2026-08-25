@@ -35,12 +35,22 @@ export type ClipboardAction = 'paste' | 'copy' | null
  * `isMac` matters: on macOS Cmd+V produces no key from `evaluateKeyboardEvent`, so xterm never
  * cancels the event and its native `paste` listener is already the sole writer. Intercepting there
  * would only add a way to double-fire, so we deliberately leave it alone.
+ *
+ * `altVPassthrough`: agents that bind Alt+V to their own clipboard reader (Antigravity CLI) need
+ * the raw keystroke, not the app's path-insertion. Returning null lets the keydown fall through to
+ * xterm, which encodes Alt+V to the PTY as usual.
  */
-export const clipboardActionFor = (e: ClipboardKeyEvent, isMac: boolean): ClipboardAction => {
+export const clipboardActionFor = (
+  e: ClipboardKeyEvent,
+  isMac: boolean,
+  altVPassthrough = false,
+): ClipboardAction => {
   // Alt+V is the explicit image-paste binding: agents like OpenCode read the
   // inserted file path from the prompt. Claimed so the Alt press cannot leak
   // an ESC-prefixed code into the PTY instead.
-  if (e.code === 'KeyV' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) return 'paste';
+  if (e.code === 'KeyV' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    return altVPassthrough ? null : 'paste'
+  }
 
   if (e.altKey) return null
 

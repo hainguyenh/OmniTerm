@@ -19,7 +19,10 @@ describe('terminal clipboard', () => {
       onSelectionChange: selection,
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: { writeText, readText: vi.fn(), readImage: async () => null, saveImageTemp: vi.fn() },
+    }
 
     const clipboard = createTerminalClipboard(term)
     await clipboard.copySelection()
@@ -46,7 +49,7 @@ describe('terminal clipboard', () => {
     } as unknown as Terminal
     window.omnitermAPI = {
       ...window.omnitermAPI,
-      clipboard: { writeText: vi.fn(), readText: async () => '', saveImageTemp },
+      clipboard: { writeText: vi.fn(), readText: async () => '', readImage: async () => null, saveImageTemp },
     }
 
     const clipboard = createTerminalClipboard(term, onBeforePaste)
@@ -58,6 +61,140 @@ describe('terminal clipboard', () => {
     clipboard.dispose()
   })
 
+  it('falls back to the native plugin when the WebView denies clipboard.read', async () => {
+    // WebView2's default: navigator.clipboard.read() rejects instead of listing items.
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { read: async () => { throw new Error('Read permission denied.') } },
+    })
+    const saveImageTemp = vi.fn().mockResolvedValue('C:/temp/omniterm-paste-2.png')
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: {
+        writeText: vi.fn(),
+        readText: async () => '',
+        // One red pixel, as the native plugin delivers it.
+        readImage: async () => ({ rgba: new Uint8Array([255, 0, 0, 255]), width: 1, height: 1 }),
+        saveImageTemp,
+      },
+    }
+    const putImageData = vi.fn()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      createImageData: (width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+      putImageData,
+    } as unknown as CanvasRenderingContext2D)
+    HTMLCanvasElement.prototype.toBlob = function toBlob(
+      this: HTMLCanvasElement,
+      callback: (blob: Blob | null) => void,
+    ) {
+      callback(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }))
+      return null
+    } as typeof HTMLCanvasElement.prototype.toBlob
+
+    const clipboard = createTerminalClipboard(term)
+    await clipboard.paste()
+
+    expect(saveImageTemp).toHaveBeenCalledOnce()
+    expect(saveImageTemp.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array)
+    expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-2.png')
+    clipboard.dispose()
+  })
+
+  it('still pastes an image when the text read rejects on an image-only clipboard', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    const saveImageTemp = vi.fn().mockResolvedValue('C:/temp/omniterm-paste-3.png')
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: {
+        writeText: vi.fn(),
+        // The plugin throws when no text flavor is present — this must not abort the paste.
+        readText: async () => { throw new Error('no text on clipboard') },
+        readImage: async () => ({ rgba: new Uint8Array([0, 255, 0, 255]), width: 1, height: 1 }),
+        saveImageTemp,
+      },
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      createImageData: (width: number, height: number) => ({
+        data: new Uint8ClampedArray(width * height * 4),
+      }),
+      putImageData: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    HTMLCanvasElement.prototype.toBlob = function toBlob(
+      this: HTMLCanvasElement,
+      callback: (blob: Blob | null) => void,
+    ) {
+      callback(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }))
+      return null
+    } as typeof HTMLCanvasElement.prototype.toBlob
+
+    const clipboard = createTerminalClipboard(term)
+    await clipboard.paste()
+
+    expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-3.png')
+    clipboard.dispose()
+  })
+
+  it('pastes nothing when neither reader finds an image and there is no text', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: {
+        writeText: vi.fn(),
+        readText: async () => '',
+        readImage: async () => null,
+        saveImageTemp: vi.fn(),
+      },
+    }
+
+    const clipboard = createTerminalClipboard(term)
+    await clipboard.paste()
+
+    expect(term.paste).not.toHaveBeenCalled()
+    clipboard.dispose()
+  })
+
+  it('leaves an image-only clipboard untouched when path insertion is disabled', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined })
+    const saveImageTemp = vi.fn()
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: {
+        writeText: vi.fn(),
+        readText: async () => '',
+        // An image IS on the clipboard; the pane opted out of the path contract.
+        readImage: async () => ({ rgba: new Uint8Array([0, 0, 255, 255]), width: 1, height: 1 }),
+        saveImageTemp,
+      },
+    }
+    const onBeforePaste = vi.fn()
+
+    const clipboard = createTerminalClipboard(term, onBeforePaste, () => false)
+    await clipboard.paste()
+
+    expect(saveImageTemp).not.toHaveBeenCalled()
+    expect(term.paste).not.toHaveBeenCalled()
+    expect(onBeforePaste).not.toHaveBeenCalled()
+    clipboard.dispose()
+  })
+
   it('only sends one paste when clipboard reads overlap', async () => {
     let resolveRead: ((text: string) => void) | undefined
     const readText = vi.fn(() => new Promise<string>(resolve => { resolveRead = resolve }))
@@ -65,7 +202,7 @@ describe('terminal clipboard', () => {
       onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText: vi.fn(), readText, saveImageTemp: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText: vi.fn(), readText, readImage: async () => null, saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
     const first = clipboard.paste()
@@ -90,7 +227,7 @@ describe('terminal clipboard', () => {
       }),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), readImage: async () => null, saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
 
@@ -126,7 +263,7 @@ describe('terminal clipboard', () => {
       }),
       paste: vi.fn(),
     } as unknown as Terminal
-    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), saveImageTemp: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, clipboard: { writeText, readText: vi.fn(), readImage: async () => null, saveImageTemp: vi.fn() } }
 
     const clipboard = createTerminalClipboard(term)
     selectionCb?.()

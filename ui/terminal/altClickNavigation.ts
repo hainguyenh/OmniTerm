@@ -53,3 +53,33 @@ export function cellFromPointer(clientX: number, clientY: number, rect: DOMRect,
   const row = Math.max(0, Math.min(rows - 1, Math.floor((clientY - rect.top) / cellHeight)))
   return { col, row }
 }
+
+/** Just the xterm surface this DOM handler touches. */
+export interface AltClickTermLike {
+  modes?: { mouseTrackingMode?: string; applicationCursorKeysMode?: boolean }
+  buffer: { active: { cursorX: number; cursorY: number } }
+  cols?: number
+  rows?: number
+}
+
+/**
+ * The pane's `mousedown` listener for Alt+Click moves. Kept next to the pure helpers above so
+ * TerminalView only wires listeners; the PTY write goes through the session channel like typing.
+ */
+export function createAltClickMoveHandler(
+  term: AltClickTermLike,
+  api: { input(data: string): void },
+): (event: MouseEvent) => void {
+  return (event: MouseEvent) => {
+    if (!altClickArrows(event, term.modes?.mouseTrackingMode)) return
+    // The `.xterm-rows` element lives under the terminal's own element; resolve it lazily so a
+    // detached or not-yet-opened terminal is simply inert instead of throwing.
+    const element = (term as { element?: HTMLElement | null }).element
+    const rowsEl = element?.querySelector('.xterm-rows') as HTMLElement | null
+    if (!rowsEl || !term.cols || !term.rows) return
+    const cursor = { col: term.buffer.active.cursorX, row: term.buffer.active.cursorY }
+    const target = cellFromPointer(event.clientX, event.clientY, rowsEl.getBoundingClientRect(), term.cols, term.rows)
+    const burst = buildArrowBurst(cursor, target, term.modes?.applicationCursorKeysMode === true)
+    if (burst) api.input(burst)
+  }
+}

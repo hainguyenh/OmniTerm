@@ -84,6 +84,14 @@ export default function SessionControlButtons({
     return clearEscalationTimer
   }, [sessionId])
 
+  // Escalation is armed for ONE process only. Without this reset, a red (Force kill) button
+  // survives the process it was aimed at and turns a later process's first Stop press into an
+  // instant session teardown instead of a Ctrl+C.
+  useEffect(() => {
+    clearEscalationTimer()
+    setEscalated(false)
+  }, [busy, sessionLive])
+
   const sendInput = (data: string) => {
     const api = window.omnitermAPI?.connect
     if (!api) return

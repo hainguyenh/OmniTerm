@@ -31,3 +31,26 @@ export function formatAgentResumeCommand(agentName?: string | null): string | nu
   const recipe = getAgentResumeRecipe(agentName)
   return recipe ? [recipe.command, ...recipe.resumeArgs].join(' ') : null
 }
+
+/** How a pane handles an image on the clipboard when the user pastes. */
+export type ImagePasteMode =
+  /** Persist the image to a temp PNG and insert its absolute path — the agent attaches by path. */
+  | 'insert-path'
+  /** Leave the keystroke/paste untouched so the agent's own clipboard binding fires. */
+  | 'forward'
+
+/**
+ * Agents verified to attach a pasted image from an inserted temp-file path. Anything not listed
+ * here (Antigravity CLI reads the clipboard itself on Alt+V; unknown agents and plain shells
+ * must never see a stray path in their prompt) gets 'forward'.
+ */
+const PATH_PASTE_AGENTS = ['OpenCode', 'Claude Code', 'Gemini CLI']
+
+export function imagePasteModeFor(agentName?: string | null): ImagePasteMode {
+  if (!agentName) return 'forward'
+  const normalized = agentName.trim().toLowerCase()
+  if (!normalized) return 'forward'
+  return PATH_PASTE_AGENTS.some(name => name.toLowerCase() === normalized)
+    ? 'insert-path'
+    : 'forward'
+}

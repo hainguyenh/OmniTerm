@@ -12,7 +12,7 @@
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { platform as osPlatform } from '@tauri-apps/plugin-os'
-import { writeText, readText } from '@tauri-apps/plugin-clipboard-manager'
+import { writeText, readText, readImage } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
 import { homeDir } from '@tauri-apps/api/path'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -232,6 +232,18 @@ function createTauriAPI(): any {
     clipboard: {
       writeText: (text: string) => writeText(text),
       readText: () => readText(),
+      // Native RGBA read for image paste. WebView2 denies `navigator.clipboard.read()` by
+      // default, so the plugin is the reliable path; no image on the clipboard resolves null.
+      readImage: async () => {
+        try {
+          const image = await readImage()
+          const [rgba, size] = await Promise.all([image.rgba(), image.size()])
+          void image.close?.()
+          return { rgba, width: size.width, height: size.height }
+        } catch {
+          return null
+        }
+      },
       saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
     },
 
