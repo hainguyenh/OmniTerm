@@ -179,7 +179,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     let lastRows = -1
     let lastClientWidth = -1
     let lastClientHeight = -1
-    const safeFit = () => {
+    const safeFit = (force = false) => {
       const el = terminalRef.current
       if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
         return
@@ -198,21 +198,20 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         // change forced a non-deduped repaint. Idempotent once held, and the same path
         // re-acquires after a context loss (drop() re-arms retryLoad).
         if (activeRef.current) webglController.load()
-        if (term.cols !== lastCols || term.rows !== lastRows) {
-          lastCols = term.cols
-          lastRows = term.rows
-          api.resize({ cols: term.cols, rows: term.rows })
+        // Dedupe ConPTY resizes (expensive); force=true resends even an unchanged grid — required
+        // after a fresh backend session, whose PTY restarted at the daemon's default size.
+        if (!force && term.cols === lastCols && term.rows === lastRows) {
+          // Grid unchanged but pixels moved: nothing downstream repaints on its own. A grid change
+          // already repaints via term.resize(), and repainting twice per drag-resize frame — which
+          // is what this did unconditionally, alongside a clearTextureAtlas() that threw away
+          // every cached glyph — is the lag. Never synthesize a keystroke to force a repaint
+          // either: it would corrupt the agent's own input state.
+          if (pixelSizeChanged) term.refresh(0, term.rows - 1)
           return
         }
-        // Only the case the resize above did NOT cover: the pixel size changed but cols/rows didn't,
-        // so nothing downstream repaints on its own. A cols/rows change already triggers a full
-        // repaint via term.resize(), and repainting twice per drag-resize frame — which is what this
-        // did unconditionally, alongside a clearTextureAtlas() that threw away every cached glyph —
-        // is the lag. Never synthesize a keystroke to force a repaint either: it would corrupt the
-        // agent's own input state.
-        if (pixelSizeChanged) {
-          term.refresh(0, term.rows - 1)
-        }
+        lastCols = term.cols
+        lastRows = term.rows
+        api.resize({ cols: term.cols, rows: term.rows })
       } catch {
         /* terminal not ready / not visible yet — ignore */
       }
@@ -311,7 +310,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       }
     })
 
-
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault()
@@ -385,7 +383,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onMetrics: (m) => onMetricsRef.current?.(m),
       onActivity: (busy) => onActivityRef.current?.(busy),
       smartColors: () => smartColorsRef.current === true,
-      refit: () => safeFit(),
+      // Refit = a fresh backend session (ready/attach/replay): its PTY restarted at the daemon's
+      // default 80x24 and the mount-time resize was dropped, so resend the real grid even unchanged.
+      refit: () => safeFit(true),
       isCurrent: () => termRef.current === term,
       // Only local panes are restored across restarts, so only they carry saved scrollback.
       scrollbackKey: isLocal ? `sb-${id}` : undefined,
@@ -398,7 +398,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     ro.observe(terminalRef.current)
     // Defer the first fit until after layout so dimensions are valid. Immediate, not coalesced —
     // there's nothing to collapse a burst with yet.
-    const raf = requestAnimationFrame(safeFit)
+    // Wrapped: rAF passes a timestamp as the first argument, which would read as force=true.
+    const raf = requestAnimationFrame(() => safeFit())
 
     return () => {
       cancelAnimationFrame(raf)
