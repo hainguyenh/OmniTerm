@@ -112,10 +112,35 @@ describe('AlwaysAwakeModal', () => {
 
   it('states ON or OFF in its own right, not only as a colour', () => {
     const { rerender } = render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
-    expect(screen.getByRole('status')).toHaveTextContent(/^OFF/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Always Awake is OFF/)
+    expect(screen.getByRole('switch', { name: 'Always Awake' })).toHaveAttribute('aria-checked', 'false')
 
     rerender(<AlwaysAwakeModal status={{ ...status, enabled: true, keepingAwake: true }} onClose={vi.fn()} onSaved={vi.fn()} />)
-    expect(screen.getByRole('status')).toHaveTextContent(/^ON/)
+    expect(screen.getByRole('status')).toHaveTextContent(/Always Awake is ON/)
+    expect(screen.getByRole('switch', { name: 'Always Awake' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('flips the switch to apply the selected schedule immediately, or to disable', async () => {
+    const onSaved = vi.fn()
+    const onClose = vi.fn()
+    const enabled = { ...status, enabled: true, expiresAtMs: Date.now() + 1_000 }
+    const setState = vi.fn(async () => enabled)
+    mockOmnitermAPI({ alwaysAwake: { setState, disable: vi.fn(async () => status) } })
+    const { rerender } = render(
+      <AlwaysAwakeModal status={status} onClose={onClose} onSaved={onSaved} />,
+    )
+
+    // Off -> On applies the current mode/schedule without touching Save.
+    fireEvent.click(screen.getByRole('switch', { name: 'Always Awake' }))
+    await waitFor(() => expect(setState).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, mode: 'activeOnly' })))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
+
+    // On -> Off disables immediately.
+    onClose.mockClear()
+    rerender(<AlwaysAwakeModal status={enabled} onClose={onClose} onSaved={onSaved} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Always Awake' }))
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(status))
+    await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
   it('opens on the schedule that is actually running, not always on 24 hours', () => {
