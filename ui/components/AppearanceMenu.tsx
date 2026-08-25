@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Palette, Check, Sparkles, Database, BookOpen, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
+import { Palette, Check, Sparkles, Minimize2, BookOpen, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
 import type { AppTheme } from '../themes'
 import { Tooltip } from './Tooltip'
 
 function getThemeIcon(themeId: string) {
   const id = themeId.toLowerCase()
   if (id.includes('claude')) return Sparkles
-  if (id.includes('clickhouse')) return Database
+  if (id.includes('compact')) return Minimize2
   if (id.includes('novel')) return BookOpen
   if (id.includes('tokyohot') || id.includes('tokyo-hot') || id.includes('hot')) return Flame
   if (id.includes('tokyonight') || id.includes('tokyo-night') || id.includes('night')) return Moon
@@ -75,20 +75,40 @@ export const FontSizeControl: React.FC<{
 /** Estimated non-list height of the popup: header row + padding, plus action rows when present. */
 const menuChromeHeight = (hasActions: boolean): number => (hasActions ? 108 : 44)
 
-/** Pick the side with more room and cap the scrollable list so the popup fits the viewport. */
+const MENU_MARGIN = 8
+const MENU_GAP = 6
+
+/**
+ * Where the theme popup renders: a VIEWPORT-FIXED box that can never leave the visible area.
+ * Absolute anchoring inside the header worked until the header sat low in a short window, where
+ * the popup extended past the viewport edge entirely — the click opened a menu nobody could see.
+ */
+interface MenuPlacement {
+  /** Scrollable-list cap so popup + chrome stay inside the viewport on the chosen side. */
+  maxHeight: number
+  /** Viewport offsets; exactly one of top/bottom is set, plus the right-edge offset. */
+  top: number | null
+  bottom: number | null
+  right: number
+}
+
 const computeMenuPlacement = (
   rect: DOMRect | null | undefined,
   chrome: number,
-): { vertical: 'bottom' | 'top'; maxHeight: number } => {
-  if (!rect) return { vertical: 'bottom', maxHeight: 240 }
-  const margin = 8
-  const spaceBelow = window.innerHeight - rect.bottom - margin
-  const spaceAbove = rect.top - margin
+): MenuPlacement => {
+  if (!rect) return { maxHeight: 240, top: null, bottom: null, right: MENU_MARGIN }
+  const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN
+  const spaceAbove = rect.top - MENU_MARGIN
   const vertical = spaceBelow >= spaceAbove ? 'bottom' : 'top'
-  const space = vertical === 'bottom' ? spaceBelow : spaceAbove
+  // The gap between trigger and popup eats into the chosen side too.
+  const space = (vertical === 'bottom' ? spaceBelow : spaceAbove) - MENU_GAP
   return {
-    vertical,
-    maxHeight: Math.max(96, Math.min(240, Math.floor(space) - chrome)),
+    // The 48px floor keeps at least a couple of rows usable in a very short window; the fixed
+    // anchor guarantees the popup itself still starts inside the viewport either way.
+    maxHeight: Math.max(48, Math.min(240, Math.floor(space) - chrome)),
+    top: vertical === 'bottom' ? Math.floor(rect.bottom) + MENU_GAP : null,
+    bottom: vertical === 'top' ? Math.max(MENU_MARGIN, Math.floor(window.innerHeight - rect.top) + MENU_GAP) : null,
+    right: Math.max(MENU_MARGIN, Math.floor(window.innerWidth - rect.right)),
   }
 }
 
@@ -107,9 +127,8 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   // Decided at open time from the trigger's viewport position so the popup never renders past
   // the window edge — pane headers sit anywhere in a split layout, and a bottom-docked pane's
   // header leaves no room below for the default open-downward popup.
-  const [placement, setPlacement] = useState<{ vertical: 'bottom' | 'top'; maxHeight: number }>({
-    vertical: 'bottom',
-    maxHeight: 240,
+  const [placement, setPlacement] = useState<MenuPlacement>({
+    maxHeight: 240, top: null, bottom: null, right: MENU_MARGIN,
   })
   const chromeReserve = menuChromeHeight(Boolean(onApplyToAll || onRemix))
 
@@ -171,10 +190,16 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
         {open && (
           <div
             ref={popRef}
-            className={`absolute right-0 z-[100] border rounded-xl shadow-2xl py-1 min-w-[200px] ${
-              placement.vertical === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
-            }`}
-            style={{ backgroundColor: 'var(--theme-popup-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-fg)' }}
+            data-testid="appearance-popup"
+            className="fixed z-[100] border rounded-xl shadow-2xl py-1 min-w-[200px]"
+            style={{
+              backgroundColor: 'var(--theme-popup-bg)',
+              borderColor: 'var(--theme-border)',
+              color: 'var(--theme-fg)',
+              top: placement.top ?? undefined,
+              bottom: placement.bottom ?? undefined,
+              right: placement.right,
+            }}
           >
             <div className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-theme-dim">
               Theme
