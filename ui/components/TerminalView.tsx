@@ -4,6 +4,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
 import { clipboardActionFor } from '../utils/paste'
+import { imagePasteModeFor } from '../utils/agentRegistry'
+import { parseAgentTitle } from '../utils/agentTitle'
 import { enterSequenceFor, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
 import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
@@ -17,8 +19,9 @@ import '@xterm/xterm/css/xterm.css'
 import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
-import { altClickArrows, buildArrowBurst, cellFromPointer } from '../terminal/altClickNavigation'
-import { createLastOutputTracker, parseTerminalCopyEvent, viewportText } from '../utils/terminalCopyExtract'
+import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
+import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
+import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import type { TerminalViewProps } from './TerminalView.types'
@@ -50,6 +53,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // Read at write-time so the toggle applies to live sessions immediately.
   const smartColorsRef = useRef(smartColors)
   smartColorsRef.current = smartColors
+
+  // The OSC-title-detected agent currently running in this pane (see utils/agentTitle.ts).
+  // Decides the image-paste strategy per agent — read at paste time so a title change (agent
+  // launched inside an existing shell) applies without a remount.
+  const agentNameRef = useRef<string | null>(null)
+  const canInsertImagePaths = () => imagePasteModeFor(agentNameRef.current) === 'insert-path'
 
   // Stable refs so callbacks don't re-trigger the main effect.
   const onStatusRef = useRef(onStatus)
@@ -135,7 +144,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
     const titleDisposable = typeof term.onTitleChange === 'function'
-      ? term.onTitleChange(title => onTitleChangeRef.current?.(title))
+      ? term.onTitleChange(title => {
+          // Track the running agent for the per-agent image-paste strategy (agentRegistry.ts);
+          // onTitleChangeRef still drives the header/footer title.
+          agentNameRef.current = parseAgentTitle(title)?.agentName ?? null
+          onTitleChangeRef.current?.(title)
+        })
       : { dispose: () => {} }
     const cwdDisposables = registerCwdReporting(term, onCwdChangeRef.current)
     const plainLinkDisposable = registerPlainUrlLinks(term)
@@ -221,11 +235,16 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
-    const clipboard = createTerminalClipboard(term, () => noteLocalEcho())
+    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths)
     // Powers the pane-header copy menu's "last output" slice; fed from term.onData below.
     // The wrapper (not `.active`) is handed over so every read resolves the current buffer —
-    // xterm's active view can be swapped underneath by resets/replays.
-    const copyTracker = createLastOutputTracker(term.buffer)
+    // xterm's active view can be swapped underneath by resets/replays. The live marker keeps
+    // the Enter anchor pinned to its line across scrollback trims and resize reflows; hosts
+    // without marker support fall back to a plain index.
+    const copyTracker = createLastOutputTracker(
+      term.buffer,
+      typeof term.registerMarker === 'function' ? () => term.registerMarker(0) : undefined,
+    )
     let suppressNativePasteUntil = 0
 
     const { onContextMenu, onLinkClick } = createTerminalContextMenu({
@@ -239,26 +258,15 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term,
       noteLocalEcho: () => noteLocalEcho(),
       isSuppressed: () => performance.now() <= suppressNativePasteUntil,
+      canInsertImagePaths,
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
     termEl.addEventListener('mousedown', onLinkClick)
     // Alt+Click moves the cursor by emitting the equivalent arrow-key burst — but only when the
     // program has NOT enabled mouse reporting (plain clicks keep native selection either way).
-    const onAltClickMove = (event: MouseEvent) => {
-      if (!altClickArrows(event, term.modes?.mouseTrackingMode)) return
-      const rowsEl = term.element?.querySelector('.xterm-rows') as HTMLElement | null
-      if (!rowsEl || !term.cols || !term.rows) return
-      const cursorX = term.buffer.active.cursorX
-      const cursorY = term.buffer.active.cursorY
-      const target = cellFromPointer(event.clientX, event.clientY, rowsEl.getBoundingClientRect(), term.cols, term.rows)
-      const burst = buildArrowBurst(
-        { col: cursorX, row: cursorY },
-        target,
-        term.modes?.applicationCursorKeysMode === true,
-      )
-      if (burst) api.input(burst)
-    }
+    // See ui/terminal/altClickNavigation.ts for the translation.
+    const onAltClickMove = createAltClickMoveHandler(term, api)
     termEl.addEventListener('mousedown', onAltClickMove)
     termEl.addEventListener('paste', onNativePaste, true)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
@@ -276,29 +284,19 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     // The pane-header copy menu (TerminalCopyMenu) asks for this pane's text by session id; the
     // xterm instance lives only here, so the extraction runs at the request site.
-    const onCopyRequest = (event: Event) => {
-      const request = parseTerminalCopyEvent(event)
-      if (!request || request.sessionId !== id || termRef.current !== term) return
-      const text = request.action === 'last-output'
-        ? copyTracker.lastOutputText()
-        : viewportText(term.buffer, term.rows)
-      if (text) void writeClipboardText(text)
-    }
-    window.addEventListener('omniterm:copy-terminal', onCopyRequest)
+    const disposeCopyRequests = registerTerminalCopyHandler({
+      sessionId: id,
+      isCurrent: () => termRef.current === term,
+      extract: (action) =>
+        action === 'last-output'
+          ? copyTracker.lastOutputText()
+          : viewportText(term.buffer, term.rows),
+      write: (text) => void writeClipboardText(text),
+    })
 
-    // WebView zoom (App.tsx / DetachedTerminalWindow.tsx) changes CSS pixel density with no DOM
-    // resize event, so xterm's cached char measurement goes stale — part of why detaching a window
-    // "fixes" a garbled pane, since remounting re-measures fresh. Toggling `fontFamily` forces the
-    // same re-measure publicly: its option setter skips the work when the value doesn't change.
-    //
-    // Coalesced, because a re-measure re-rasterizes every glyph: holding Ctrl+wheel fires one zoom
-    // step per notch, and doing this on each one is the same kind of thrash the ResizeObserver had.
-    const remeasureCoalescer = createCoalescer(() => {
-      const family = term.options.fontFamily
-      term.options.fontFamily = `${family} `
-      term.options.fontFamily = family
-      safeFit()
-    }, 70)
+    // WebView zoom and late-loading fonts both invalidate xterm's cached character metrics with
+    // no DOM resize event — see utils/terminalFontRemeasure.ts.
+    const remeasureCoalescer = createFontRemeasurer(term, safeFit)
     const onZoomChanged = () => remeasureCoalescer.schedule()
     window.addEventListener('omniterm:zoom-changed', onZoomChanged)
 
@@ -342,7 +340,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
       // Claimed FIRST so no user binding can shadow it, always with preventDefault() — otherwise
       // Chromium's native paste fires on top of ours and the PTY gets the clipboard twice (paste.ts).
-      const clip = clipboardActionFor(e, isMac)
+      // Alt+V belongs to the running agent when it binds its own clipboard reader (Antigravity
+      // CLI): forward the raw keystroke instead of claiming it for path insertion. Read at
+      // keydown time, so an agent launched mid-session flips the behavior immediately.
+      const clip = clipboardActionFor(e, isMac, imagePasteModeFor(agentNameRef.current) === 'forward')
       if (clip) {
         e.preventDefault()
         e.stopPropagation()
@@ -417,7 +418,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
-      window.removeEventListener('omniterm:copy-terminal', onCopyRequest)
+      disposeCopyRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
       safeFitRef.current = () => {}

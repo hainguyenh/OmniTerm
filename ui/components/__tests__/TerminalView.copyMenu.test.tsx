@@ -72,7 +72,7 @@ beforeEach(() => {
   xterm.terminals.length = 0
   writeText.mockClear()
   mockOmnitermAPI({
-    clipboard: { writeText, readText: vi.fn(async () => '') },
+    clipboard: { writeText, readText: vi.fn(async () => ''), readImage: async () => null },
   })
   vi.stubGlobal('ResizeObserver', class {
     observe = vi.fn()

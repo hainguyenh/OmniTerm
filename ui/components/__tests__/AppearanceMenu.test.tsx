@@ -81,4 +81,33 @@ describe('AppearanceMenu', () => {
     fireEvent.mouseDown(document.body)
     expect(screen.queryByText('Theme')).not.toBeInTheDocument()
   })
+
+  it('opens downward with a full list when there is room below the trigger', () => {
+    renderMenu()
+    const trigger = screen.getByRole('button', { name: 'Appearance — theme & font size' })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 40, 24, 24),
+    )
+    fireEvent.click(trigger)
+    const list = screen.getByText('Other Theme').closest('.overflow-y-auto') as HTMLElement
+    expect(list.style.maxHeight).toBe('240px')
+    expect(list.closest('[class*="absolute"]')?.className).toContain('top-full')
+  })
+
+  it('flips above the trigger when the popup would run past the bottom of the viewport', () => {
+    renderMenu()
+    const trigger = screen.getByRole('button', { name: 'Appearance — theme & font size' })
+    // A header docked near the window's bottom edge: only ~60px below, plenty above.
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 700, 24, 24),
+    )
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 })
+    fireEvent.click(trigger)
+    const popup = screen.getByText('Other Theme').closest('[class*="absolute"]') as HTMLElement
+    expect(popup.className).toContain('bottom-full')
+    expect(popup.className).not.toContain('top-full')
+    const list = screen.getByText('Other Theme').closest('.overflow-y-auto') as HTMLElement
+    // The chosen side has room, so the list keeps its full height — just rendered upward.
+    expect(list.style.maxHeight).toBe('240px')
+  })
 })

@@ -89,6 +89,28 @@ describe('SessionControlButtons stop escalation', () => {
     expect(localInput).toHaveBeenLastCalledWith('s2', '\x03')
   })
 
+  it('disarms a stale escalation when the process exits so the next Stop sends Ctrl+C again', () => {
+    const localInput = vi.fn()
+    mockOmnitermAPI({ connect: { localInput, forceKillSession: vi.fn().mockResolvedValue(undefined) } })
+    const view = renderControls({ busy: true, sessionLive: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+    act(() => { vi.advanceTimersByTime(3000) })
+    // The probe reports idle once the process actually exited; escalation must not survive it.
+    view.rerender(
+      <SessionControlButtons conn={local} sessionId="s1" busy={false} sessionLive detach={null} onToggleDetach={vi.fn()} />,
+    )
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
+
+    // A new process starts and the user presses Stop again: Ctrl+C, not an instant teardown.
+    view.rerender(
+      <SessionControlButtons conn={local} sessionId="s1" busy sessionLive detach={null} onToggleDetach={vi.fn()} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+    expect(localInput).toHaveBeenLastCalledWith('s1', '\x03')
+    expect(window.omnitermAPI.connect.forceKillSession).not.toHaveBeenCalled()
+  })
+
   it('does not fire Force kill after unmount', () => {
     const forceKillSession = vi.fn().mockResolvedValue(undefined)
     mockOmnitermAPI({ connect: { localInput: vi.fn(), forceKillSession } })

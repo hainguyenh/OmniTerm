@@ -72,6 +72,26 @@ export const FontSizeControl: React.FC<{
   )
 }
 
+/** Estimated non-list height of the popup: header row + padding, plus action rows when present. */
+const menuChromeHeight = (hasActions: boolean): number => (hasActions ? 108 : 44)
+
+/** Pick the side with more room and cap the scrollable list so the popup fits the viewport. */
+const computeMenuPlacement = (
+  rect: DOMRect | null | undefined,
+  chrome: number,
+): { vertical: 'bottom' | 'top'; maxHeight: number } => {
+  if (!rect) return { vertical: 'bottom', maxHeight: 240 }
+  const margin = 8
+  const spaceBelow = window.innerHeight - rect.bottom - margin
+  const spaceAbove = rect.top - margin
+  const vertical = spaceBelow >= spaceAbove ? 'bottom' : 'top'
+  const space = vertical === 'bottom' ? spaceBelow : spaceAbove
+  return {
+    vertical,
+    maxHeight: Math.max(96, Math.min(240, Math.floor(space) - chrome)),
+  }
+}
+
 /**
  * The theme + font-size control shared by every place a terminal's look can be changed: the
  * TitleBar (focused terminal), a detached window's own title bar, and — per-pane — PaneHeader.
@@ -84,6 +104,14 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  // Decided at open time from the trigger's viewport position so the popup never renders past
+  // the window edge — pane headers sit anywhere in a split layout, and a bottom-docked pane's
+  // header leaves no room below for the default open-downward popup.
+  const [placement, setPlacement] = useState<{ vertical: 'bottom' | 'top'; maxHeight: number }>({
+    vertical: 'bottom',
+    maxHeight: 240,
+  })
+  const chromeReserve = menuChromeHeight(Boolean(onApplyToAll || onRemix))
 
   useEffect(() => {
     if (!open) return
@@ -94,10 +122,23 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
         btnRef.current && !btnRef.current.contains(e.target as Node)
       ) setOpen(false)
     }
+    // A resize can move the trigger out of the side the placement was computed for.
+    const onResize = () => setPlacement(computeMenuPlacement(btnRef.current?.getBoundingClientRect(), chromeReserve))
+    window.addEventListener('resize', onResize)
     window.addEventListener('keydown', onKey)
     window.addEventListener('mousedown', onClick)
-    return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onClick) }
-  }, [open])
+    return () => {
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mousedown', onClick)
+    }
+  }, [open, chromeReserve])
+
+  const toggleOpen = () => {
+    if (open) { setOpen(false); return }
+    setPlacement(computeMenuPlacement(btnRef.current?.getBoundingClientRect(), chromeReserve))
+    setOpen(true)
+  }
 
   const btnSize = compact ? 'w-4 h-4' : 'w-6 h-6'
   const iconSize = compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
@@ -114,7 +155,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
             aria-label={triggerLabel}
             aria-haspopup={menuItem ? 'menu' : undefined}
             aria-expanded={menuItem ? open : undefined}
-            onClick={() => setOpen(v => !v)}
+            onClick={toggleOpen}
             className={menuItem
               ? 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover'
               : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
@@ -130,7 +171,9 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
         {open && (
           <div
             ref={popRef}
-            className="absolute right-0 top-full mt-1.5 z-[100] border rounded-xl shadow-2xl py-1 min-w-[200px]"
+            className={`absolute right-0 z-[100] border rounded-xl shadow-2xl py-1 min-w-[200px] ${
+              placement.vertical === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
+            }`}
             style={{ backgroundColor: 'var(--theme-popup-bg)', borderColor: 'var(--theme-border)', color: 'var(--theme-fg)' }}
           >
             <div className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-theme-dim">
@@ -139,7 +182,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
                 {scopeLabel}
               </span>
             </div>
-            <div className="max-h-60 overflow-y-auto no-scrollbar">
+            <div className="overflow-y-auto no-scrollbar" style={{ maxHeight: placement.maxHeight }}>
               {themes.map(t => {
                 const Icon = getThemeIcon(t.id)
                 const accent = t.ui[darkMode ? 'dark' : 'light'].accent

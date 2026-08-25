@@ -34,6 +34,7 @@ vi.mock('@tauri-apps/plugin-os', () => ({
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeText: (...args: unknown[]) => state.writeText(...args),
   readText: (...args: unknown[]) => state.readText(...args),
+  readImage: async () => { throw new Error('no image') },
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({
   open: (...args: unknown[]) => state.open(...args),

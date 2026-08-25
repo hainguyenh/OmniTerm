@@ -3,6 +3,7 @@ import {
   AGENT_REGISTRY,
   formatAgentResumeCommand,
   getAgentResumeRecipe,
+  imagePasteModeFor,
 } from '../utils/agentRegistry'
 
 describe('agentRegistry', () => {
@@ -57,5 +58,23 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('Gemini CLI')).toBe('gemini --resume')
     expect(formatAgentResumeCommand('Copilot CLI')).toBeNull()
     expect(formatAgentResumeCommand('Unknown')).toBeNull()
+  })
+
+  it('inserts pasted-image paths only for agents verified to attach by path', () => {
+    expect(imagePasteModeFor('OpenCode')).toBe('insert-path')
+    expect(imagePasteModeFor('Claude Code')).toBe('insert-path')
+    expect(imagePasteModeFor('Gemini CLI')).toBe('insert-path')
+
+    // Antigravity CLI binds Alt+V to its own clipboard reader; a path in the prompt is noise.
+    expect(imagePasteModeFor('Antigravity CLI')).toBe('forward')
+  })
+
+  it('forwards image paste for unknown agents and plain panes', () => {
+    expect(imagePasteModeFor(null)).toBe('forward')
+    expect(imagePasteModeFor(undefined)).toBe('forward')
+    expect(imagePasteModeFor('')).toBe('forward')
+    expect(imagePasteModeFor('   ')).toBe('forward')
+    expect(imagePasteModeFor('unknown-agent')).toBe('forward')
+    expect(imagePasteModeFor('opencode')).toBe('insert-path')
   })
 })

@@ -39,6 +39,16 @@ describe("clipboardActionFor", () => {
     expect(clipboardActionFor(key("KeyC", { ctrlKey: true, shiftKey: true, altKey: true }), false)).toBeNull();
   });
 
+  it("lets Alt+V fall through for agents that bind it to their own clipboard reader", () => {
+    // Antigravity-style agents: the raw keystroke must reach xterm (which encodes ESC+v to the
+    // PTY), so the app claims nothing.
+    expect(clipboardActionFor(key("KeyV", { altKey: true }), false, true)).toBeNull();
+    expect(clipboardActionFor(key("KeyV", { ctrlKey: true, altKey: true }), false, true)).toBeNull();
+    // Text clipboard routing is unaffected by the passthrough.
+    expect(clipboardActionFor(key("KeyV", { ctrlKey: true }), false, true)).toBe("paste");
+    expect(clipboardActionFor(key("KeyC", { ctrlKey: true, shiftKey: true }), false, true)).toBe("copy");
+  });
+
   it("ignores unrelated keys and unmodified V", () => {
     expect(clipboardActionFor(key("KeyV"), false)).toBeNull();
     expect(clipboardActionFor(key("KeyB", { ctrlKey: true }), false)).toBeNull();

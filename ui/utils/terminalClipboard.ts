@@ -7,22 +7,30 @@ import type { Terminal } from '@xterm/xterm'
  * paste so exactly one writer reaches the PTY (see utils/paste.ts). When the
  * event carries an image (macOS Cmd+V, right-click), the image is persisted to
  * a temp PNG and its absolute path inserted instead — agents attach by path.
+ *
+ * `canInsertImagePaths` false opts the pane out of that contract: the event is
+ * left untouched so the WebView's default paste runs (text pastes normally, an
+ * image-only clipboard does nothing) — for agents that read the clipboard
+ * themselves and would only choke on a visible file path.
  */
 export const createNativePasteGate = ({
   term,
   noteLocalEcho,
   isSuppressed,
+  canInsertImagePaths = () => true,
 }: {
   term: Terminal
   noteLocalEcho: () => void
   /** True while an app-claimed paste just wrote, so Chromium's echo must drop. */
   isSuppressed: () => boolean
+  canInsertImagePaths?: () => boolean
 }): ((event: ClipboardEvent) => void) => {
   return (event: ClipboardEvent) => {
     if (isSuppressed()) return
     const imageItem = Array.from(event.clipboardData?.items ?? []).find(item =>
       item.type.startsWith('image/'),
     )
+    if (imageItem && !canInsertImagePaths()) return
     if (imageItem) {
       event.preventDefault()
       event.stopPropagation()
@@ -43,27 +51,64 @@ export const createNativePasteGate = ({
 }
 
 /**
+ * Encode raw RGBA pixels (the native clipboard plugin's format) as PNG bytes through a canvas,
+ * so they can ride the existing `saveImageTemp` temp-file contract. Null when the payload is
+ * malformed or the environment cannot encode.
+ */
+const pngBytesFromRgba = async (
+  image: { rgba: Uint8Array; width: number; height: number },
+): Promise<Uint8Array | null> => {
+  const { rgba, width, height } = image
+  if (width <= 0 || height <= 0 || rgba.length < width * height * 4) return null
+  try {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const context = canvas.getContext('2d')
+    if (!context) return null
+    // createImageData (not `new ImageData`) keeps this usable in environments without the
+    // constructor and lets tests stub the 2D context wholesale.
+    const target = context.createImageData(width, height)
+    target.data.set(rgba.subarray(0, Math.min(rgba.length, target.data.length)))
+    context.putImageData(target, 0, 0)
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) return null
+    return new Uint8Array(await blob.arrayBuffer())
+  } catch {
+    return null
+  }
+}
+
+/**
  * Read the clipboard as an image, persist it to a temp PNG via the native
  * side, and resolve to that absolute path — or null when the clipboard holds
- * no image / the read is denied. Uses the Web Clipboard API so Ctrl+V,
- * Cmd+V and Alt+V all share one code path.
+ * no image / the read is denied. Two readers, in order: the Web Clipboard
+ * API (works where the WebView grants it) and then the native plugin —
+ * WebView2 denies `navigator.clipboard.read()` by default, so without the
+ * fallback Ctrl+V with an image on the clipboard did nothing at all. Both
+ * paths converge on the same temp-PNG file the agent attaches by path.
  */
 const readImagePathFromClipboard = async (): Promise<string | null> => {
   try {
     const read = navigator.clipboard?.read?.bind(navigator.clipboard)
-    if (!read) return null
-    const items = await read()
-    for (const item of items) {
-      const type = item.types.find(t => t.startsWith('image/'))
-      if (!type) continue
-      const blob = await item.getType(type)
-      const bytes = new Uint8Array(await blob.arrayBuffer())
-      return await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+    if (read) {
+      const items = await read()
+      for (const item of items) {
+        const type = item.types.find(t => t.startsWith('image/'))
+        if (!type) continue
+        const blob = await item.getType(type)
+        const bytes = new Uint8Array(await blob.arrayBuffer())
+        return await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+      }
     }
   } catch {
-    // Permission denied or no image: fall through to null.
+    // Permission denied or no image: fall through to the native reader.
   }
-  return null
+  const image = await window.omnitermAPI.clipboard.readImage()
+  if (!image) return null
+  const bytes = await pngBytesFromRgba(image)
+  if (!bytes) return null
+  return window.omnitermAPI.clipboard.saveImageTemp(bytes)
 }
 
 /**
@@ -99,7 +144,12 @@ export const writeClipboardText = async (text: string): Promise<void> => {
  *                      highlighter, which must not rewrite the echo that follows — see
  *                      `OutputHighlighter.noteLocalEcho`.
  */
-export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => void): TerminalClipboard => {
+export const createTerminalClipboard = (
+  term: Terminal,
+  onBeforePaste?: () => void,
+  /** False makes an image-only clipboard paste inert instead of inserting a temp-file path. */
+  canInsertImagePaths: () => boolean = () => true,
+): TerminalClipboard => {
   let pasteInFlight = false
   let copyTimer = 0
 
@@ -133,15 +183,24 @@ export const createTerminalClipboard = (term: Terminal, onBeforePaste?: () => vo
       if (pasteInFlight) return
       pasteInFlight = true
       try {
-        const text = await window.omnitermAPI.clipboard.readText()
+        // A rejected read means the clipboard holds no text (image-only, or a blocked read) —
+        // it must fall through to the image path below instead of failing the whole paste.
+        let text = ''
+        try {
+          text = await window.omnitermAPI.clipboard.readText()
+        } catch {
+          text = ''
+        }
         if (text) {
           onBeforePaste?.()
           term.paste(text)
           return
         }
-        // Text clipboard empty: an image may be on it. Agents cannot receive
-        // pixels over a PTY, so we persist the image and insert its absolute
-        // path — the contract Claude Code / OpenCode / Gemini CLI accept.
+        // Text clipboard empty: an image may be on it. When path insertion is enabled, the
+        // image is persisted and its absolute path inserted — the contract Claude Code /
+        // OpenCode / Gemini CLI accept. With the setting off the paste stays inert so agents
+        // that read the clipboard themselves never see a stray path.
+        if (!canInsertImagePaths()) return
         const imagePath = await readImagePathFromClipboard()
         if (imagePath) {
           onBeforePaste?.()

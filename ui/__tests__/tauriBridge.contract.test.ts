@@ -33,6 +33,7 @@ vi.mock('@tauri-apps/plugin-os', () => ({ platform: () => 'windows' }))
 vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
   writeText: (...args: unknown[]) => writeTextMock(...args),
   readText: (...args: unknown[]) => readTextMock(...args),
+  readImage: async () => { throw new Error('no image') },
 }))
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...args: unknown[]) => openMock(...args) }))
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: '' }) }))
