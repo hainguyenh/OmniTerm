@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 import type { Workspace } from '@omniterm/contract'
@@ -128,6 +128,21 @@ describe('NewTerminalMenu', () => {
 
     fireEvent.keyDown(window, { key: 'ArrowDown' }) // and back across the bottom boundary to None (0)
     expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-0')
+  })
+
+  it('moves the cursor when ArrowDown bubbles from the focused search input to window', () => {
+    // The other suites fire keydown straight at `window`, skipping the real propagation chain
+    // (input -> body -> html -> document -> window). This pins that chain end-to-end.
+    renderMenu()
+    const search = screen.getByRole('searchbox', { name: 'Search workspace or folder' })
+    expect(document.activeElement).toBe(search)
+
+    act(() => {
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
+    })
+
+    // powershell (3) -> cmd (4)
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-4')
   })
 
   it('launches the shell under the cursor on Enter and closes', () => {
