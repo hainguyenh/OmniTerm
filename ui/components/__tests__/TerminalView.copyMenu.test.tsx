@@ -102,7 +102,7 @@ describe('TerminalView copy menu wiring', () => {
       term.setBufferLines(['ps> ls', 'file-a', 'file-b'], 0)
       fireCopy('sess-1', 'last-output')
     })
-    expect(writeText).toHaveBeenCalledWith('ps> ls\nfile-a\nfile-b')
+    expect(writeText).toHaveBeenCalledWith('ps> ls\nfile-a')
   })
 
   it('copies only the visible viewport for the viewport action', () => {

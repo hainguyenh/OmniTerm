@@ -65,7 +65,17 @@ describe('createLastOutputTracker', () => {
     const tracker = createLastOutputTracker(liveBuffer(lines))
     tracker.noteInput('\r')
     lines.push('file-a', 'file-b')
-    expect(tracker.lastOutputText()).toBe('$ ls\nfile-a\nfile-b')
+    expect(tracker.lastOutputText()).toBe('$ ls\nfile-a')
+  })
+
+  it('drops the trailing non-blank line from the copied output', () => {
+    // The user asked for copies without their final line — process teardown noise
+    // ("Waiting for the debugger to disconnect...") reads as chrome, not content.
+    const lines = ['$ node --inspect script']
+    const tracker = createLastOutputTracker(liveBuffer(lines))
+    tracker.noteInput('\r')
+    lines.push('result ok', 'Waiting for the debugger to disconnect...')
+    expect(tracker.lastOutputText()).toBe('$ node --inspect script\nresult ok')
   })
 
   it('moves the marker forward on the next Enter', () => {
@@ -75,8 +85,9 @@ describe('createLastOutputTracker', () => {
     lines.push('two')
     tracker.noteInput('\r')
     lines.push('three')
-    // Marker sits on the newest prompt-style line ("two"), so "one" drops out.
-    expect(tracker.lastOutputText()).toBe('two\nthree')
+    // Marker sits on the newest prompt-style line ("two"), so "one" drops out — and the
+    // trailing-line rule removes "three".
+    expect(tracker.lastOutputText()).toBe('two')
   })
 
   it('ignores input without a carriage return', () => {
@@ -110,7 +121,7 @@ describe('createLastOutputTracker', () => {
       'PS F:\\my-repos\\agentic\\engram>',
     )
     expect(tracker.lastOutputText()).toBe(
-      'PS F:\\my-repos\\agentic\\engram> rtk stats\nTotal exec time: 3316m32s\nEfficiency meter: ██████████░░ 85.1%',
+      'PS F:\\my-repos\\agentic\\engram> rtk stats\nTotal exec time: 3316m32s',
     )
   })
 
@@ -119,7 +130,7 @@ describe('createLastOutputTracker', () => {
     const tracker = createLastOutputTracker(liveBuffer(lines))
     tracker.noteInput('\r')
     lines.push('compiled ok', '', 'F:\\repo>')
-    expect(tracker.lastOutputText()).toBe('F:\\repo> build.cmd\ncompiled ok')
+    expect(tracker.lastOutputText()).toBe('F:\\repo> build.cmd')
   })
 
   it('keeps the echoed command line even when the command produced no output', () => {
@@ -135,7 +146,7 @@ describe('createLastOutputTracker', () => {
     const tracker = createLastOutputTracker(liveBuffer(lines))
     tracker.noteInput('\r')
     lines.push('  -> step 2 done', 'path > other/path')
-    expect(tracker.lastOutputText()).toBe('$ tail -n2 log\n  -> step 2 done\npath > other/path')
+    expect(tracker.lastOutputText()).toBe('$ tail -n2 log\n  -> step 2 done')
   })
 })
 
@@ -171,7 +182,7 @@ describe('createLastOutputTracker with a live marker host', () => {
     for (let i = 0; i < 100; i += 1) lines.push(`out-${i}`)
     lines.splice(0, 50)
     host.trimFromTop(50)
-    const expected = ['PS F:\\repo> build', ...Array.from({ length: 100 }, (_, i) => `out-${i}`)]
+    const expected = ['PS F:\\repo> build', ...Array.from({ length: 99 }, (_, i) => `out-${i}`)]
     expect(tracker.lastOutputText()).toBe(expected.join('\n'))
   })
 
@@ -185,7 +196,7 @@ describe('createLastOutputTracker with a live marker host', () => {
     lines[0] = '$ long-command-that-'
     lines.splice(1, 0, 'wraps')
     host.reflow(1)
-    expect(tracker.lastOutputText()).toBe('wraps\nresult')
+    expect(tracker.lastOutputText()).toBe('wraps')
   })
 
   it('yields nothing once the tracked line left the buffer', () => {
