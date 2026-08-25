@@ -119,11 +119,14 @@ export const createLastOutputTracker = (
       }
       // The slice starts at the echoed command, so trimming only ever touches the tail: drop the
       // idle prompt the shell printed after the command exited (plus the blank gap ahead of it),
-      // but never strip down past the echoed command line itself.
+      // then the final non-blank line itself — the user asked for output without its trailing
+      // line (process teardown noise like "Waiting for the debugger to disconnect..." reads as
+      // chrome). Never strip down past the echoed command line.
       while (lines.length > 1 && isIdlePromptLine(lines[lines.length - 1] ?? '')) {
         lines.pop()
         while (lines.length > 1 && (lines[lines.length - 1] ?? '').trim() === '') lines.pop()
       }
+      if (lines.length > 1) lines.pop()
       return joinTrimmingTrailingBlanks(lines)
     },
   }
