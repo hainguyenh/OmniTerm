@@ -89,9 +89,12 @@ describe('AppearanceMenu', () => {
       new DOMRect(100, 40, 24, 24),
     )
     fireEvent.click(trigger)
+    const popup = screen.getByTestId('appearance-popup')
+    // Fixed just below the trigger (rect.bottom 64 + 6 gap), right-aligned to its right edge.
+    expect(popup.style.top).toBe('70px')
+    expect(popup.style.right).toBe('900px')
     const list = screen.getByText('Other Theme').closest('.overflow-y-auto') as HTMLElement
     expect(list.style.maxHeight).toBe('240px')
-    expect(list.closest('[class*="absolute"]')?.className).toContain('top-full')
   })
 
   it('flips above the trigger when the popup would run past the bottom of the viewport', () => {
@@ -103,11 +106,30 @@ describe('AppearanceMenu', () => {
     )
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 })
     fireEvent.click(trigger)
-    const popup = screen.getByText('Other Theme').closest('[class*="absolute"]') as HTMLElement
-    expect(popup.className).toContain('bottom-full')
-    expect(popup.className).not.toContain('top-full')
+    const popup = screen.getByTestId('appearance-popup')
+    // Anchored upward from the trigger's top edge (innerHeight 768 - rect.top 700 + 6 gap).
+    expect(popup.style.bottom).toBe('74px')
+    expect(popup.style.top).toBe('')
     const list = screen.getByText('Other Theme').closest('.overflow-y-auto') as HTMLElement
     // The chosen side has room, so the list keeps its full height — just rendered upward.
     expect(list.style.maxHeight).toBe('240px')
+  })
+
+  it('stays fully inside the viewport when the window is too short for the default size', () => {
+    // The reported bug: a low header in a short window opened a menu whose fixed-height list ran
+    // past the viewport edge — the click "did nothing" because nothing visible appeared.
+    renderMenu()
+    const trigger = screen.getByRole('button', { name: 'Appearance — theme & font size' })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(100, 40, 24, 24),
+    )
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 220 })
+    fireEvent.click(trigger)
+    const popup = screen.getByTestId('appearance-popup')
+    const list = screen.getByText('Other Theme').closest('.overflow-y-auto') as HTMLElement
+    // space below = 220 - 64 - 8 margin - 6 gap - 44 chrome = 98, so the list shrinks to fit and
+    // popup top (70) + list (98) + chrome (44) lands exactly on the innerHeight - margin line.
+    expect(list.style.maxHeight).toBe('98px')
+    expect(popup.style.top).toBe('70px')
   })
 })
