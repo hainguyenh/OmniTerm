@@ -102,8 +102,11 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
               selectedWorkspaceId={selectedWorkspaceId}
               defaultShellId={pickShell(shellOptions, appSettings.defaultShell)}
               onSelectWorkspace={setSelectedWorkspaceId}
-              onLaunchShell={shell => {
-                if (selectedWorkspaceId) requestNewSession(shell, selectedWorkspaceId)
+              onLaunchShell={(shell, workspaceSelection) => {
+                // A folder row's Enter names its folder explicitly (null = default directory);
+                // a plain shell launch follows the menu's current workspace choice.
+                if (workspaceSelection !== undefined) requestNewSession(shell, workspaceSelection)
+                else if (selectedWorkspaceId) requestNewSession(shell, selectedWorkspaceId)
                 else requestNewSession(shell)
               }}
               onClose={() => setShellMenu(null)}
