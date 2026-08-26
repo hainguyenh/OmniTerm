@@ -13,6 +13,7 @@ import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
 import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
+import { releasePastedImage, setLastPastedImage } from '../utils/pastedImageStore'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
@@ -20,9 +21,11 @@ import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
+import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
 import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
+import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import type { TerminalViewProps } from './TerminalView.types'
 
@@ -234,7 +237,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
-    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths)
+    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths, (saved) => setLastPastedImage(id, saved))
     // Powers the pane-header copy menu's "last output" slice; fed from term.onData below.
     // The wrapper (not `.active`) is handed over so every read resolves the current buffer —
     // xterm's active view can be swapped underneath by resets/replays. The live marker keeps
@@ -258,6 +261,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       noteLocalEcho: () => noteLocalEcho(),
       isSuppressed: () => performance.now() <= suppressNativePasteUntil,
       canInsertImagePaths,
+      onImageSaved: (saved) => setLastPastedImage(id, saved),
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
@@ -310,25 +314,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       }
     })
 
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        // Stop this from also reaching the app-level Ctrl+wheel zoom handler (App.tsx) — over a
-        // terminal, Ctrl+wheel changes only its font size, never the app chrome's zoom too.
-        e.stopPropagation()
-        const currentSize = term.options.fontSize ?? 14
-        // Same 8–48 range as the app's font controls; the new size is reported up so the owner can
-        // persist the override (the change stays visible in the footer/title bar, and survives remounts).
-        const newSize = e.deltaY > 0 ? Math.max(8, currentSize - 1) : Math.min(48, currentSize + 1)
-        if (newSize !== currentSize) {
-          term.options.fontSize = newSize
-          // safeFit, not a bare fitAddon.fit(): without the follow-up api.resize() the PTY kept the
-          // pre-zoom cols/rows, and a full-screen TUI drew frames for a grid that no longer existed.
-          safeFit()
-          onFontSizeChangeRef.current?.(newSize)
-        }
-      }
-    }
+    // Ctrl+wheel resizes only this pane's font; see ctrlWheelFontResize.ts for the zoom/PTY contract.
+    const handleWheel = createCtrlWheelFontResizer(term, safeFit, (size) => onFontSizeChangeRef.current?.(size))
     termEl.addEventListener('wheel', handleWheel, { passive: false })
 
     const isMac = window.omnitermAPI.app.platform === 'darwin'
@@ -422,6 +409,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       disposeCopyRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
+      releasePastedImage(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
       termRef.current = null
@@ -493,6 +481,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         isLocal={connection.type === 'LOCAL'}
         onClose={() => setLinkMenu(null)}
       />
+      <PastedImageViewerHost sessionId={id} />
     </div>
   )
 }
