@@ -4,7 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
 import { clipboardActionFor } from '../utils/paste'
-import { imagePasteModeFor } from '../utils/agentRegistry'
+import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { enterSequenceFor, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
 import { normalizeXtermTheme } from '../utils/xtermTheme'
@@ -145,9 +145,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     term.open(terminalRef.current)
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => {
-          // Track the running agent for the per-agent image-paste strategy (agentRegistry.ts);
-          // onTitleChangeRef still drives the header/footer title.
-          agentNameRef.current = parseAgentTitle(title)?.agentName ?? null
+          // Track the running agent for per-agent image paste; LATCHED (see latchAgent) because
+          // TUIs rewrite their title with a bare cwd mid-session, killing image paste.
+          agentNameRef.current = latchAgent(agentNameRef.current, parseAgentTitle(title)?.agentName ?? null)
           onTitleChangeRef.current?.(title)
         })
       : { dispose: () => {} }

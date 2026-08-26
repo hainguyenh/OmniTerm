@@ -54,3 +54,12 @@ export function imagePasteModeFor(agentName?: string | null): ImagePasteMode {
     ? 'insert-path'
     : 'forward'
 }
+
+/**
+ * Sticky agent detection: TUIs routinely overwrite their own terminal title with a bare cwd
+ * mid-session, which would demote an already-detected agent to null ('forward') and silently
+ * kill image pastes. Keep the first detection until another KNOWN agent takes over the title.
+ */
+export function latchAgent(current: string | null, next: string | null): string | null {
+  return next ?? current
+}
