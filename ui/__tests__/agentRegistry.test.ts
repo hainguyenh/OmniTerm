@@ -4,6 +4,7 @@ import {
   formatAgentResumeCommand,
   getAgentResumeRecipe,
   imagePasteModeFor,
+  latchAgent,
 } from '../utils/agentRegistry'
 
 describe('agentRegistry', () => {
@@ -76,5 +77,14 @@ describe('agentRegistry', () => {
     expect(imagePasteModeFor('   ')).toBe('forward')
     expect(imagePasteModeFor('unknown-agent')).toBe('forward')
     expect(imagePasteModeFor('opencode')).toBe('insert-path')
+  })
+
+  it('latches agent detection so a bare-cwd title rewrite cannot demote it', () => {
+    // The OpenCode regression: the agent is detected at launch, then its TUI rewrites the title
+    // to a plain path, detection went null, and image paste silently turned to 'forward'.
+    expect(latchAgent(null, 'OpenCode')).toBe('OpenCode')
+    expect(latchAgent('OpenCode', null)).toBe('OpenCode')
+    expect(latchAgent('OpenCode', 'Claude Code')).toBe('Claude Code') // a known agent takes over
+    expect(latchAgent(null, null)).toBeNull()
   })
 })
