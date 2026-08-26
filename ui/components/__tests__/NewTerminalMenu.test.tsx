@@ -130,6 +130,43 @@ describe('NewTerminalMenu', () => {
     expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-0')
   })
 
+  it('marks the active row with an always-visible accent ring, hover only on inactive rows', () => {
+    renderMenu()
+    const search = screen.getByRole('searchbox', { name: 'Search workspace or folder' })
+
+    const activeRow = screen.getByRole('option', { name: /PowerShell 7 \(default\)/ })
+    expect(activeRow.className).toContain('ring-theme-accent')
+    expect(activeRow.className).not.toContain('hover:bg-theme-hover')
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' }) // powershell (3) -> Command Prompt (4)
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-4')
+    expect(screen.getByRole('option', { name: /Command Prompt/ }).className).toContain('ring-theme-accent')
+    expect(activeRow.className).toContain('hover:bg-theme-hover')
+    expect(activeRow.className).not.toContain('ring-theme-accent')
+  })
+
+  it('keeps the keyboard cursor stable when scroll re-fires mouseenter under a stationary pointer', () => {
+    // Chromium re-fires mouseenter when scrollIntoView slides rows under a motionless pointer;
+    // those synthetic events reuse the pointer's last coordinates. Hover must only steal the
+    // cursor back from the keyboard after the pointer genuinely moves to new coordinates.
+    renderMenu()
+    const search = screen.getByRole('searchbox', { name: 'Search workspace or folder' })
+
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /Team - Client/ }), { clientX: 10, clientY: 20 })
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-1')
+
+    fireEvent.keyDown(window, { key: 'ArrowDown' }) // keyboard takes over: Docs - Guide (2)
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-2')
+
+    // Scroll slides a different row under the same stationary pointer — must be ignored.
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /Docs - Guide/ }), { clientX: 10, clientY: 20 })
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-2')
+
+    // Real pointer movement hands control back to hover.
+    fireEvent.mouseEnter(screen.getByRole('option', { name: /Command Prompt/ }), { clientX: 30, clientY: 40 })
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-4')
+  })
+
   it('moves the cursor when ArrowDown bubbles from the focused search input to window', () => {
     // The other suites fire keydown straight at `window`, skipping the real propagation chain
     // (input -> body -> html -> document -> window). This pins that chain end-to-end, including
