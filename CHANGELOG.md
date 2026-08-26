@@ -1,5 +1,37 @@
 # Changelog
 
+## [v0.1.8] — 2026-08-26
+
+### Added
+- feat(ui): pasted-image history viewer with pager (@the-long-ride)
+- feat(ui): pane-header button opens pasted-image viewer (@the-long-ride)
+- feat(ui): full-res pasted-image viewer modal (@the-long-ride)
+- feat(clipboard): report saved image bytes to pane viewers (@the-long-ride)
+- feat(ui): per-session pasted-image store (@the-long-ride)
+- feat(plugin): always-awake status becomes switch (@the-long-ride)
+- feat(ui): rename clickhouse theme to compact (@the-long-ride)
+- feat(ui): new-terminal menu enter opens folder (@the-long-ride)
+
+### Fixed
+- fix(ui): keep new-terminal menu cursor visible (@the-long-ride)
+- fix(ui): new-terminal menu arrows survive typing a search (@the-long-ride)
+- fix(ui): latch agent title for image paste (@the-long-ride)
+- fix(ui): menu arrows die after typing a search (@the-long-ride)
+- fix(ui): theme menu fits short window viewports (@the-long-ride)
+- fix(ui): resend pty dims when session ready (@the-long-ride)
+- fix(terminal): drop trailing line from copy-last-output (@the-long-ride)
+- fix(terminal): copy-last-output, pane stop, image paste per agent (@the-long-ride)
+
+### Changed
+- docs(specs): add pasted-image viewer spec, sync inventories (@the-long-ride)
+
+### Refactored
+- refactor(ui): extract ctrl+wheel font resizer from TerminalView (@the-long-ride)
+
+### Tests
+- test(ui): pin menu arrow-key event bubbling (@the-long-ride)
+
+
 ## [v0.1.7] — 2026-08-24
 
 ### Added
