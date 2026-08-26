@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, Monitor, ChevronDown, Check, X, Bot } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, Bot, Image as ImageIcon } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
+import { getLastPastedImage, requestOpen, subscribePastedImage } from '../utils/pastedImageStore'
 import type { DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import type { AppTheme } from '../themes'
@@ -90,6 +91,12 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
   // A shell-reported cwd (OSC 7 / 9;9) is the freshest folder signal — it wins
   // over the title-derived one and updates as the user moves around.
   const folderLabel = liveFolder ?? formattedTitle.folderName
+  // Full-res preview slot for this pane's last pasted image; the button stays hidden until an
+  // image paste happens (see pastedImageStore.ts — one slot per session, replaced per paste).
+  const pastedImage = useSyncExternalStore(
+    (cb) => subscribePastedImage(sessionId, cb),
+    () => getLastPastedImage(sessionId),
+  )
   return (
     <div className="relative flex-shrink-0">
       <div
@@ -144,6 +151,18 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
         <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[15rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+          {conn && sessionId && pastedImage && (
+            <Tooltip content="View last pasted image" placement="bottom">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); requestOpen(sessionId) }}
+                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                aria-label="View last pasted image"
+              >
+                <ImageIcon className="w-3 h-3" />
+              </button>
+            </Tooltip>
+          )}
           {conn && sessionId && (
             <SessionControlButtons
               conn={conn}
