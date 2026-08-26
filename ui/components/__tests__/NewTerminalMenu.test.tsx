@@ -132,17 +132,21 @@ describe('NewTerminalMenu', () => {
 
   it('moves the cursor when ArrowDown bubbles from the focused search input to window', () => {
     // The other suites fire keydown straight at `window`, skipping the real propagation chain
-    // (input -> body -> html -> document -> window). This pins that chain end-to-end.
+    // (input -> body -> html -> document -> window). This pins that chain end-to-end, including
+    // after typing a search — the state where a native type=search suggestion popup used to be
+    // able to swallow the arrow keys before the page saw them.
     renderMenu()
     const search = screen.getByRole('searchbox', { name: 'Search workspace or folder' })
     expect(document.activeElement).toBe(search)
 
+    fireEvent.change(search, { target: { value: 'guide' } }) // cursor resets to None (0)
     act(() => {
       search.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }))
     })
 
-    // powershell (3) -> cmd (4)
-    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-4')
+    // Filtering re-indexes the flat cursor: with only "Docs - Guide" matching,
+    // items are None (0), Docs - Guide (1), then shells.
+    expect(search).toHaveAttribute('aria-activedescendant', 'new-terminal-item-1')
   })
 
   it('launches the shell under the cursor on Enter and closes', () => {
