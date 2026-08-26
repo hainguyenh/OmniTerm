@@ -81,6 +81,23 @@ export default function NewTerminalMenu({
   const activeCursor = Math.min(rawCursor, Math.max(0, items.length - 1))
   const isDefaultShell = (id: string) => id === defaultShellId
 
+  // Keyboard vs mouse modality. Once an arrow key moves the cursor, hover must stop steering it:
+  // Chromium re-fires mouseenter when scrollIntoView slides rows under a stationary pointer, so a
+  // naive onMouseEnter yanks the highlight back to whatever row happens to sit under the mouse and
+  // arrow keys look dead. A mouseenter only counts as real pointer intent when its coordinates
+  // differ from the last seen pointer position (scroll-synthetic events reuse the same coords).
+  const keyboardNavRef = useRef(false)
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null)
+  const hoverRow = (index: number, event: React.MouseEvent) => {
+    const previous = lastPointerRef.current
+    const pointerMoved = !previous
+      || previous.x !== event.clientX
+      || previous.y !== event.clientY
+    lastPointerRef.current = { x: event.clientX, y: event.clientY }
+    if (pointerMoved) keyboardNavRef.current = false
+    if (!keyboardNavRef.current) setRawCursor(index)
+  }
+
   // Latest keydown handler kept in a ref so the stable listeners registered once on
   // mount always see the current items, cursor, and callbacks without re-registering
   // on every keystroke (which can race with WebView2 native autocomplete popups).
@@ -90,8 +107,10 @@ export default function NewTerminalMenu({
     if (items.length === 0 || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter')) return false
     event.preventDefault()
     if (event.key === 'ArrowDown') {
+      keyboardNavRef.current = true
       setRawCursor(prev => (Math.min(prev, items.length - 1) + 1) % items.length)
     } else if (event.key === 'ArrowUp') {
+      keyboardNavRef.current = true
       setRawCursor(prev => (Math.min(prev, items.length - 1) - 1 + items.length) % items.length)
     } else {
       const item = items[activeCursor]
@@ -159,8 +178,12 @@ export default function NewTerminalMenu({
         top: Math.min(anchor.y, window.innerHeight - 8),
         maxHeight: Math.max(48, Math.min(maxMenuHeight, availableHeight)),
       }
+  // The active row carries an inset accent ring in addition to the selection fill: some themes
+  // pick a `selectionBackground` close to the popup background, which left keyboard-cursor
+  // movement invisible. Hover styling lives on the inactive branch only, so a stationary pointer
+  // resting on the active row can never mask the cursor.
   const rowClasses = (active: boolean) =>
-    `flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-theme-hover ${active ? 'bg-theme-selection text-theme-selection-fg' : 'text-theme-fg'}`
+    `flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${active ? 'bg-theme-selection text-theme-selection-fg ring-1 ring-inset ring-theme-accent' : 'text-theme-fg hover:bg-theme-hover'}`
 
   return createPortal(
     <div
@@ -211,7 +234,7 @@ export default function NewTerminalMenu({
             role="option"
             aria-selected={selectedWorkspaceId === null}
             className={rowClasses(activeCursor === 0)}
-            onMouseEnter={() => setRawCursor(0)}
+            onMouseEnter={(event) => hoverRow(0, event)}
             onClick={() => onSelectWorkspace(null)}
           >
             <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
@@ -231,7 +254,7 @@ export default function NewTerminalMenu({
                 title={folder.path}
                 className={rowClasses(activeCursor === itemIndex)}
                 style={{ paddingLeft: `${8 + depth * 12}px` }}
-                onMouseEnter={() => setRawCursor(itemIndex)}
+                onMouseEnter={(event) => hoverRow(itemIndex, event)}
                 onClick={() => onSelectWorkspace(selection)}
               >
                 <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
@@ -259,7 +282,7 @@ export default function NewTerminalMenu({
               aria-selected={false}
               aria-label={isDefaultShell(option.id) ? `${option.label} (default)` : undefined}
               className={rowClasses(activeCursor === itemIndex)}
-              onMouseEnter={() => setRawCursor(itemIndex)}
+              onMouseEnter={(event) => hoverRow(itemIndex, event)}
               onClick={() => { onLaunchShell(option.id); onClose() }}
             >
               <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
