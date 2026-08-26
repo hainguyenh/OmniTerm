@@ -7,6 +7,7 @@ Routing for this product feature.
 - [Terminal lifecycle](terminal-lifecycle.md) — renderer session behavior
 - [PTY/detach](pty-detach.md) — native runtime and windows
 - [Terminal status & link menu](terminal-status-link-menu.md) — running indicator signal, oscillating dot, right-click link/path overlay
+- [Pasted image viewer](pasted-image-viewer.md) — per-pane paste history, blob-URL store, full-resolution pager modal
 
 ## Spec conventions
 

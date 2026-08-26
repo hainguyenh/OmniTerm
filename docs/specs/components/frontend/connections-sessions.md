@@ -83,7 +83,7 @@ When editing/launching connections or rendering/updating live sessions.
 | `SessionStatusIndicator` | Render session status dot/animation. | Visual cue for connected/busy/idle/disconnected. | Render status indicator with oscillate or ping styles. | Pane header, footer, or tabs. |
 | `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls and status. | Compose status, persistence menu, and session controls. | Active session in focused pane. |
 | `SessionUnavailableOverlay` | Render unavailable-session recovery feedback and restart action. | Provide clear user recovery when an attached session is lost or disconnected. | Renders an opaque recovery prompt and triggers the supplied restart action. | When an attached session is no longer available. |
-| `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces, available shells, and opens target. | When clicking the new terminal `+` dropdown. |
+| `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces and available shells; arrow keys own the cursor (scroll-synthetic mouseenter cannot steal it), the active row carries an accent ring, and Enter launches the highlighted row. | When clicking the new terminal `+` dropdown. |
 | `TerminalLinkMenu` / `TerminalViewLinkMenuHost` | Modifier-click link/path context menu. | Copy or open detected URLs and file paths. | Portal overlay menu triggered by Ctrl/Cmd+click on actionable spans. | User modifier-clicks detected link or path. |
 
 ## State and data
