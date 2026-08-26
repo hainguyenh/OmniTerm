@@ -81,35 +81,64 @@ export default function NewTerminalMenu({
   const activeCursor = Math.min(rawCursor, Math.max(0, items.length - 1))
   const isDefaultShell = (id: string) => id === defaultShellId
 
-  useEffect(() => {
-    searchRef.current?.focus()
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-      if (items.length === 0 || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter')) return
-      event.preventDefault()
-      if (event.key === 'ArrowDown') {
-        setRawCursor(prev => (Math.min(prev, items.length - 1) + 1) % items.length)
-      } else if (event.key === 'ArrowUp') {
-        setRawCursor(prev => (Math.min(prev, items.length - 1) - 1 + items.length) % items.length)
+  // Latest keydown handler kept in a ref so the stable listeners registered once on
+  // mount always see the current items, cursor, and callbacks without re-registering
+  // on every keystroke (which can race with WebView2 native autocomplete popups).
+  const handleKeyDownRef = useRef<(event: KeyboardEvent) => boolean>(() => false)
+  handleKeyDownRef.current = (event: KeyboardEvent): boolean => {
+    if (event.key === 'Escape') { onClose(); return true }
+    if (items.length === 0 || (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Enter')) return false
+    event.preventDefault()
+    if (event.key === 'ArrowDown') {
+      setRawCursor(prev => (Math.min(prev, items.length - 1) + 1) % items.length)
+    } else if (event.key === 'ArrowUp') {
+      setRawCursor(prev => (Math.min(prev, items.length - 1) - 1 + items.length) % items.length)
+    } else {
+      const item = items[activeCursor]
+      if (!item) return false
+      if (item.kind === 'folder') {
+        // Enter opens the highlighted row directly: remember the choice and launch the default
+        // shell in that folder now (null = the "None" row's default directory), instead of only
+        // selecting it and forcing a second trip to the shell section.
+        onSelectWorkspace(item.selection)
+        onLaunchShell(defaultShellId, item.selection)
+        onClose()
       } else {
-        const item = items[activeCursor]
-        if (!item) return
-        if (item.kind === 'folder') {
-          // Enter opens the highlighted row directly: remember the choice and launch the default
-          // shell in that folder now (null = the "None" row's default directory), instead of only
-          // selecting it and forcing a second trip to the shell section.
-          onSelectWorkspace(item.selection)
-          onLaunchShell(defaultShellId, item.selection)
-          onClose()
-        }
-        else { onLaunchShell(item.id); onClose() }
+        onLaunchShell(item.id)
+        onClose()
       }
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, items, activeCursor, onSelectWorkspace, onLaunchShell, defaultShellId])
+    return true
+  }
 
   useEffect(() => {
+    const input = searchRef.current
+    if (!input) return
+    // Input-level listener: fires at the target phase, before any native popup or
+    // bubble-phase handler can consume the event. In WebView2 a type=text input can
+    // still spawn an autocomplete popup after typing that swallows ArrowDown/ArrowUp
+    // before the window-level listener sees them; handling keydown on the input itself
+    // guarantees the page receives the event.
+    const onInputKeyDown = (event: KeyboardEvent) => {
+      if (handleKeyDownRef.current(event)) {
+        event.stopPropagation()
+      }
+    }
+    input.addEventListener('keydown', onInputKeyDown)
+    // Window-level fallback: fires when the input lost focus (e.g. a button was clicked)
+    // and preserves compatibility with jsdom tests that dispatch keydown on window.
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      handleKeyDownRef.current(event)
+    }
+    window.addEventListener('keydown', onWindowKeyDown)
+    return () => {
+      input.removeEventListener('keydown', onInputKeyDown)
+      window.removeEventListener('keydown', onWindowKeyDown)
+    }
+  }, [])
+
+  useEffect(() => {
+    searchRef.current?.focus()
     menuRef.current?.querySelector<HTMLElement>(`[data-menu-index="${activeCursor}"]`)
       ?.scrollIntoView({ block: 'nearest' })
   }, [activeCursor])
@@ -168,6 +197,7 @@ export default function NewTerminalMenu({
               placeholder="Search workspace or folder"
               className="min-w-0 flex-1 bg-transparent text-theme-fg outline-none placeholder:text-theme-dim"
               autoComplete="off"
+              spellCheck={false}
             />
           </div>
         </div>
