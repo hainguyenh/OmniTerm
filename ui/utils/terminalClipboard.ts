@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
+import type { SavedPastedImage } from './pastedImageStore'
 
 /**
  * Native `paste` event gate for one pane.
@@ -18,12 +19,15 @@ export const createNativePasteGate = ({
   noteLocalEcho,
   isSuppressed,
   canInsertImagePaths = () => true,
+  onImageSaved,
 }: {
   term: Terminal
   noteLocalEcho: () => void
   /** True while an app-claimed paste just wrote, so Chromium's echo must drop. */
   isSuppressed: () => boolean
   canInsertImagePaths?: () => boolean
+  /** Receives the bytes + temp path of every persisted image, for the pane's pasted-image viewer. */
+  onImageSaved?: (saved: SavedPastedImage) => void
 }): ((event: ClipboardEvent) => void) => {
   return (event: ClipboardEvent) => {
     if (isSuppressed()) return
@@ -38,6 +42,7 @@ export const createNativePasteGate = ({
       void imageItem.getAsFile()?.arrayBuffer().then(async bytes => {
         const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes))
         if (path) {
+          onImageSaved?.({ bytes: new Uint8Array(bytes), path })
           noteLocalEcho()
           term.paste(path)
         }
@@ -81,14 +86,15 @@ const pngBytesFromRgba = async (
 
 /**
  * Read the clipboard as an image, persist it to a temp PNG via the native
- * side, and resolve to that absolute path — or null when the clipboard holds
- * no image / the read is denied. Two readers, in order: the Web Clipboard
- * API (works where the WebView grants it) and then the native plugin —
- * WebView2 denies `navigator.clipboard.read()` by default, so without the
- * fallback Ctrl+V with an image on the clipboard did nothing at all. Both
- * paths converge on the same temp-PNG file the agent attaches by path.
+ * side, and resolve to the saved image (bytes + absolute path) — or null when
+ * the clipboard holds no image / the read is denied. Two readers, in order:
+ * the Web Clipboard API (works where the WebView grants it) and then the
+ * native plugin — WebView2 denies `navigator.clipboard.read()` by default, so
+ * without the fallback Ctrl+V with an image on the clipboard did nothing at
+ * all. Both paths converge on the same temp-PNG file the agent attaches by
+ * path.
  */
-const readImagePathFromClipboard = async (): Promise<string | null> => {
+const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
   try {
     const read = navigator.clipboard?.read?.bind(navigator.clipboard)
     if (read) {
@@ -98,7 +104,8 @@ const readImagePathFromClipboard = async (): Promise<string | null> => {
         if (!type) continue
         const blob = await item.getType(type)
         const bytes = new Uint8Array(await blob.arrayBuffer())
-        return await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+        const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+        if (path) return { bytes, path }
       }
     }
   } catch {
@@ -108,7 +115,8 @@ const readImagePathFromClipboard = async (): Promise<string | null> => {
   if (!image) return null
   const bytes = await pngBytesFromRgba(image)
   if (!bytes) return null
-  return window.omnitermAPI.clipboard.saveImageTemp(bytes)
+  const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+  return path ? { bytes, path } : null
 }
 
 /**
@@ -149,6 +157,8 @@ export const createTerminalClipboard = (
   onBeforePaste?: () => void,
   /** False makes an image-only clipboard paste inert instead of inserting a temp-file path. */
   canInsertImagePaths: () => boolean = () => true,
+  /** Receives every persisted image for the pane's pasted-image viewer; omit for the old behavior. */
+  onImageSaved?: (saved: SavedPastedImage) => void,
 ): TerminalClipboard => {
   let pasteInFlight = false
   let copyTimer = 0
@@ -201,10 +211,11 @@ export const createTerminalClipboard = (
         // OpenCode / Gemini CLI accept. With the setting off the paste stays inert so agents
         // that read the clipboard themselves never see a stray path.
         if (!canInsertImagePaths()) return
-        const imagePath = await readImagePathFromClipboard()
-        if (imagePath) {
+        const saved = await readImageFromClipboard()
+        if (saved) {
+          onImageSaved?.(saved)
           onBeforePaste?.()
-          term.paste(imagePath)
+          term.paste(saved.path)
         }
       } finally {
         pasteInFlight = false
