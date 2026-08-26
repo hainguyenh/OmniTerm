@@ -154,7 +154,12 @@ export default function NewTerminalMenu({
             <Search className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
             <input
               ref={searchRef}
-              type="search"
+              // type="text", NOT "search": once text is typed, Chromium's native search-history
+              // popup can activate on a type=search input and consume ArrowDown/ArrowUp for
+              // itself — the page never sees the keydown, so the menu cursor freezes after a
+              // search. autoComplete="off" is not reliably honored there; type="text" never
+              // spawns the popup. The explicit role keeps the searchbox semantics.
+              type="text"
               role="searchbox"
               aria-label="Search workspace or folder"
               aria-activedescendant={`new-terminal-item-${activeCursor}`}
