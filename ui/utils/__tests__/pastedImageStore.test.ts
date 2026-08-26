@@ -4,6 +4,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getLastPastedImage,
+  getPastedImages,
+  MAX_PASTED_IMAGES,
   releasePastedImage,
   requestOpen,
   setLastPastedImage,
@@ -55,14 +57,33 @@ describe('pastedImageStore', () => {
     expect(listener).toHaveBeenCalledTimes(1)
   })
 
-  it('replaces the slot and revokes the previous URL only', () => {
+  it('appends pastes into a history, newest last', () => {
     const urls = stubObjectUrls()
     setLastPastedImage('sess-1', { bytes: new Uint8Array([1]), path: 'C:/temp/a.png' })
     setLastPastedImage('sess-1', { bytes: new Uint8Array([2]), path: 'C:/temp/b.png' })
 
-    expect(urls.revoked).toEqual([urls.created[0]])
-    expect(getLastPastedImage('sess-1')?.path).toBe('C:/temp/b.png')
+    const history = getPastedImages('sess-1')
+    expect(history.map(image => image.path)).toEqual(['C:/temp/a.png', 'C:/temp/b.png'])
+    expect(urls.revoked).toEqual([]) // nothing evicted yet
     expect(getLastPastedImage('sess-1')?.objectUrl).toBe(urls.created[1])
+  })
+
+  it('returns a stable empty snapshot for unknown sessions', () => {
+    expect(getPastedImages('sess-1')).toBe(getPastedImages('sess-1'))
+    expect(getPastedImages(null)).toBe(getPastedImages(null))
+  })
+
+  it('evicts the oldest paste (revoking its URL) past the cap', () => {
+    const urls = stubObjectUrls()
+    for (let i = 0; i <= MAX_PASTED_IMAGES; i++) {
+      setLastPastedImage('sess-1', { bytes: new Uint8Array([i]), path: `C:/temp/${i}.png` })
+    }
+
+    const history = getPastedImages('sess-1')
+    expect(history).toHaveLength(MAX_PASTED_IMAGES)
+    expect(history[0].path).toBe('C:/temp/1.png') // 0.png evicted
+    expect(urls.revoked).toEqual([urls.created[0]])
+    expect(getLastPastedImage('sess-1')?.path).toBe(`C:/temp/${MAX_PASTED_IMAGES}.png`)
   })
 
   it('keeps sessions isolated', () => {
@@ -84,13 +105,15 @@ describe('pastedImageStore', () => {
     expect(urls.created).toHaveLength(0)
   })
 
-  it('release revokes the URL and clears the slot', () => {
+  it('release revokes every URL in the history and clears the slot', () => {
     const urls = stubObjectUrls()
     setLastPastedImage('sess-1', { bytes: new Uint8Array([1]), path: 'C:/temp/a.png' })
+    setLastPastedImage('sess-1', { bytes: new Uint8Array([2]), path: 'C:/temp/b.png' })
     releasePastedImage('sess-1')
 
-    expect(urls.revoked).toContain(urls.created[0])
+    expect(urls.revoked).toEqual([urls.created[0], urls.created[1]])
     expect(getLastPastedImage('sess-1')).toBeNull()
+    expect(getPastedImages('sess-1')).toHaveLength(0)
   })
 
   it('requestOpen notifies open subscribers until unsubscribed', () => {
