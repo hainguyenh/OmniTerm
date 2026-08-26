@@ -1,6 +1,6 @@
 [package]
 name = "omniterm-core"
-version = "0.1.7"
+version = "0.1.8"
 description = "Domain logic + IO services for OmniTerm (no Tauri dependency)."
 authors = ["OmniTerm Contributors"]
 license = "Apache-2.0"
