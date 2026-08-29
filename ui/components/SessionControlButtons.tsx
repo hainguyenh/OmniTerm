@@ -44,6 +44,8 @@ type ControlKey = 'theme' | 'font' | 'stop' | 'clear' | 'copy' | 'persistence' |
 const MORE_BUTTON_WIDTH = 18
 /** Delay before a SIGINT-only Stop press arms the Force kill escalation. */
 const STOP_ESCALATION_MS = 3000
+/** Prevent a stale Force kill from surviving into a later command. */
+const FORCE_KILL_WINDOW_MS = 10_000
 
 export default function SessionControlButtons({
   conn,
@@ -66,6 +68,7 @@ export default function SessionControlButtons({
   const [menuOpen, setMenuOpen] = useState(false)
   const [escalated, setEscalated] = useState(false)
   const escalationTimerRef = useRef<number | null>(null)
+  const forceExpiryTimerRef = useRef<number | null>(null)
 
   // The activity probe misreads idle on WSL and fast commands, so Stop must not depend on it:
   // an explicit live flag wins, and legacy callers without one keep the busy fallback.
@@ -78,19 +81,31 @@ export default function SessionControlButtons({
     }
   }
 
-  useEffect(() => {
+  const clearForceExpiryTimer = () => {
+    if (forceExpiryTimerRef.current != null) {
+      window.clearTimeout(forceExpiryTimerRef.current)
+      forceExpiryTimerRef.current = null
+    }
+  }
+
+  const clearStopTimers = () => {
     clearEscalationTimer()
+    clearForceExpiryTimer()
+  }
+
+  useEffect(() => {
+    clearStopTimers()
     setEscalated(false)
-    return clearEscalationTimer
+    return clearStopTimers
   }, [sessionId])
 
-  // Escalation is armed for ONE process only. Without this reset, a red (Force kill) button
-  // survives the process it was aimed at and turns a later process's first Stop press into an
-  // instant session teardown instead of a Ctrl+C.
+  // Session death is authoritative. `busy` is not: WSL and in-process work can read idle while
+  // still running, so consulting it here cancels Force kill precisely when it is needed.
   useEffect(() => {
-    clearEscalationTimer()
+    if (sessionLive !== false) return
+    clearStopTimers()
     setEscalated(false)
-  }, [busy, sessionLive])
+  }, [sessionLive])
 
   const sendInput = (data: string) => {
     const api = window.omnitermAPI?.connect
@@ -106,16 +121,19 @@ export default function SessionControlButtons({
     if (escalated) {
       // Second press: the process ignored CTRL_C_EVENT, so tear the daemon session down.
       // The session-death status stream then drives the standard restart overlay.
-      clearEscalationTimer()
       api.forceKillSession?.(sessionId).catch((error: unknown) => onForceKillError?.(error))
       setMenuOpen(false)
       return
     }
     sendInput('\x03')
-    clearEscalationTimer()
+    clearStopTimers()
     escalationTimerRef.current = window.setTimeout(() => {
       escalationTimerRef.current = null
       setEscalated(true)
+      forceExpiryTimerRef.current = window.setTimeout(() => {
+        forceExpiryTimerRef.current = null
+        setEscalated(false)
+      }, FORCE_KILL_WINDOW_MS)
     }, STOP_ESCALATION_MS)
     setMenuOpen(false)
   }
