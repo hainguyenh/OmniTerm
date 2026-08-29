@@ -4,10 +4,10 @@ import type { SavedPastedImage } from './pastedImageStore'
 /**
  * Native `paste` event gate for one pane.
  *
- * Runs capture-phase before xterm's own listener and swallows every native
- * paste so exactly one writer reaches the PTY (see utils/paste.ts). When the
- * event carries an image (macOS Cmd+V, right-click), the image is persisted to
- * a temp PNG and its absolute path inserted instead — agents attach by path.
+ * Runs capture-phase before xterm's own listener and owns every native paste
+ * so exactly one writer reaches the PTY (see utils/paste.ts). Text is inserted
+ * directly, including Windows clipboard-history selections that have no Ctrl+V
+ * keydown. Images are persisted to temp PNGs and inserted by absolute path.
  *
  * `canInsertImagePaths` false opts the pane out of that contract: the event is
  * left untouched so the WebView's default paste runs (text pastes normally, an
@@ -30,15 +30,21 @@ export const createNativePasteGate = ({
   onImageSaved?: (saved: SavedPastedImage) => void
 }): ((event: ClipboardEvent) => void) => {
   return (event: ClipboardEvent) => {
-    if (isSuppressed()) return
+    const cancelNativePaste = () => {
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation()
+    }
+    if (isSuppressed()) {
+      cancelNativePaste()
+      return
+    }
     const imageItem = Array.from(event.clipboardData?.items ?? []).find(item =>
       item.type.startsWith('image/'),
     )
     if (imageItem && !canInsertImagePaths()) return
     if (imageItem) {
-      event.preventDefault()
-      event.stopPropagation()
-      event.stopImmediatePropagation()
+      cancelNativePaste()
       void imageItem.getAsFile()?.arrayBuffer().then(async bytes => {
         const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes))
         if (path) {
@@ -49,9 +55,12 @@ export const createNativePasteGate = ({
       })
       return
     }
-    event.preventDefault()
-    event.stopPropagation()
-    event.stopImmediatePropagation()
+    const text = event.clipboardData?.getData('text/plain') ?? ''
+    cancelNativePaste()
+    if (text) {
+      noteLocalEcho()
+      term.paste(text)
+    }
   }
 }
 
