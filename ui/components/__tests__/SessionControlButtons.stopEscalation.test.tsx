@@ -89,20 +89,45 @@ describe('SessionControlButtons stop escalation', () => {
     expect(localInput).toHaveBeenLastCalledWith('s2', '\x03')
   })
 
-  it('disarms a stale escalation when the process exits so the next Stop sends Ctrl+C again', () => {
+  it('still offers Force kill when the unreliable activity probe changes to idle', () => {
+    const view = renderControls({ busy: true, sessionLive: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+    view.rerender(
+      <SessionControlButtons conn={local} sessionId="s1" busy={false} sessionLive detach={null} onToggleDetach={vi.fn()} />,
+    )
+    act(() => { vi.advanceTimersByTime(3000) })
+
+    expect(screen.getByRole('button', { name: 'Force kill session' })).not.toBeDisabled()
+  })
+
+  it('expires the Force kill affordance so it cannot target a later command', () => {
+    renderControls({ busy: true, sessionLive: true })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(screen.getByRole('button', { name: 'Force kill session' })).toBeInTheDocument()
+
+    act(() => { vi.advanceTimersByTime(9999) })
+    expect(screen.getByRole('button', { name: 'Force kill session' })).toBeInTheDocument()
+    act(() => { vi.advanceTimersByTime(1) })
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
+  })
+
+  it('disarms escalation when the session ends so the next session starts with Ctrl+C', () => {
     const localInput = vi.fn()
     mockOmnitermAPI({ connect: { localInput, forceKillSession: vi.fn().mockResolvedValue(undefined) } })
     const view = renderControls({ busy: true, sessionLive: true })
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
     act(() => { vi.advanceTimersByTime(3000) })
-    // The probe reports idle once the process actually exited; escalation must not survive it.
+    // Session death is authoritative; the activity probe is not.
     view.rerender(
-      <SessionControlButtons conn={local} sessionId="s1" busy={false} sessionLive detach={null} onToggleDetach={vi.fn()} />,
+      <SessionControlButtons conn={local} sessionId="s1" busy={false} sessionLive={false} detach={null} onToggleDetach={vi.fn()} />,
     )
-    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeDisabled()
 
-    // A new process starts and the user presses Stop again: Ctrl+C, not an instant teardown.
+    // A reconnected session starts fresh: Ctrl+C, not an instant teardown.
     view.rerender(
       <SessionControlButtons conn={local} sessionId="s1" busy sessionLive detach={null} onToggleDetach={vi.fn()} />,
     )

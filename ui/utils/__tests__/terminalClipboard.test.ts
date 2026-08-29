@@ -3,7 +3,7 @@
  */
 import type { Terminal } from '@xterm/xterm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createNativePasteGate, createTerminalClipboard } from '../terminalClipboard'
+import { createTerminalClipboard } from '../terminalClipboard'
 
 describe('terminal clipboard', () => {
   beforeEach(() => { vi.useFakeTimers() })
@@ -301,37 +301,6 @@ describe('terminal clipboard', () => {
     expect(onImageSaved).toHaveBeenCalledWith({ bytes: pngBytes, path: 'C:/temp/omniterm-paste-6.png' })
     expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-6.png')
     clipboard.dispose()
-  })
-
-  it('gate reports saved bytes and path through onImageSaved', async () => {
-    const pngBytes = new Uint8Array([137, 80, 78, 71])
-    const imageItem = { type: 'image/png', getAsFile: () => new Blob([pngBytes], { type: 'image/png' }) }
-    const event = {
-      clipboardData: { items: [imageItem] },
-      preventDefault: vi.fn(),
-      stopPropagation: vi.fn(),
-      stopImmediatePropagation: vi.fn(),
-    } as unknown as ClipboardEvent
-    const saveImageTemp = vi.fn().mockResolvedValue('C:/temp/omniterm-paste-7.png')
-    const onImageSaved = vi.fn()
-    const term = { paste: vi.fn() } as unknown as Terminal
-    window.omnitermAPI = {
-      ...window.omnitermAPI,
-      clipboard: { writeText: vi.fn(), readText: vi.fn(), readImage: vi.fn(), saveImageTemp },
-    }
-
-    const gate = createNativePasteGate({
-      term,
-      noteLocalEcho: vi.fn(),
-      isSuppressed: () => false,
-      onImageSaved,
-    })
-    gate(event)
-    await vi.waitFor(() => expect(onImageSaved).toHaveBeenCalled())
-
-    expect(onImageSaved).toHaveBeenCalledWith({ bytes: pngBytes, path: 'C:/temp/omniterm-paste-7.png' })
-    expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-7.png')
-    expect(event.preventDefault).toHaveBeenCalled()
   })
 
   it('omitting onImageSaved keeps paste behavior unchanged (regression guard)', async () => {
