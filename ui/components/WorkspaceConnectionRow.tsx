@@ -26,13 +26,13 @@ const typeIconFor = (type: Connection['type']) => {
   return <Terminal className={`w-4 h-4 flex-shrink-0 ${tint}`} />
 }
 
-const hoverAction = 'flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] transition'
+const hoverAction = 'flex-shrink-0 hidden group-hover:inline-flex p-1 rounded hover:bg-[var(--theme-bg)] transition'
 
 const WorkspaceConnectionRow: React.FC<WorkspaceConnectionRowProps> = ({
   connection, depth, onConnect, onEdit, onDelete,
 }) => (
   <div
-    className="group flex items-center gap-2 pr-1 py-1 rounded bg-[var(--theme-bg)] cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+    className="group flex items-center gap-2 pr-1 h-7 rounded bg-[var(--theme-bg)] cursor-pointer hover:bg-[var(--theme-hover-bg)]"
     style={{ paddingLeft: 8 + depth * 12 }}
     onDoubleClick={() => onConnect?.(connection)}
     title={connection.type !== 'LOCAL'
@@ -40,7 +40,7 @@ const WorkspaceConnectionRow: React.FC<WorkspaceConnectionRowProps> = ({
       : connection.name}
   >
     {typeIconFor(connection.type)}
-    <span className="flex-1 truncate text-xs">{connection.name}</span>
+    <span className="flex-1 min-w-0 truncate text-xs">{connection.name}</span>
     <span className="text-[9px] text-[var(--theme-dim)] uppercase mr-1">{connection.type}</span>
     <Tooltip content="Connect" placement="bottom">
       <button

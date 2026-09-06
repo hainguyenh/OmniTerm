@@ -99,4 +99,18 @@ describe('WorkspaceRootRow', () => {
     expect(row.className).toContain('hover:bg-[var(--theme-bg)]')
     expect(row.className).not.toContain('hover:bg-[var(--theme-hover-bg)]')
   })
+
+  it('hides action buttons until hovered so the workspace title gets full row width', () => {
+    render(<WorkspaceRootRow {...props()} />)
+    const renameBtn = screen.getByRole('button', { name: 'Rename workspace' })
+    const addBtn = screen.getByRole('button', { name: 'Add folder to workspace' })
+    const removeBtn = screen.getByRole('button', { name: 'Remove from workspaces' })
+
+    expect(renameBtn.className).toContain('hidden')
+    expect(renameBtn.className).toContain('group-hover:inline-flex')
+    expect(addBtn.className).toContain('hidden')
+    expect(addBtn.className).toContain('group-hover:inline-flex')
+    expect(removeBtn.className).toContain('hidden')
+    expect(removeBtn.className).toContain('group-hover:inline-flex')
+  })
 })

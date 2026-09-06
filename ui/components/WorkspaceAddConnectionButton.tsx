@@ -13,7 +13,7 @@ const WorkspaceAddConnectionButton: React.FC<WorkspaceAddConnectionButtonProps> 
       type="button"
       aria-label={label}
       onClick={(event) => { event.stopPropagation(); onAdd() }}
-      className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+      className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
     >
       <Cable className="w-3.5 h-3.5" />
     </button>
