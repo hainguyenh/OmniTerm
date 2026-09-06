@@ -46,7 +46,7 @@ export default function WorkspaceRootRow({
   const title = workspace.folders.length === 1
     ? workspace.folders[0].path
     : `${workspace.folders.length} folders`
-  const actionClass = 'opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition disabled:opacity-20 disabled:pointer-events-none'
+  const actionClass = 'hidden group-hover:inline-flex flex-shrink-0 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition disabled:opacity-20 disabled:pointer-events-none'
   const WorkspaceIcon = workspace.icon ? {
     folder: Folder,
     briefcase: Briefcase,
@@ -90,7 +90,7 @@ export default function WorkspaceRootRow({
     <div
       draggable={!isEditing}
       data-workspace-id={workspace.id}
-      className="group sticky top-0 z-10 bg-[var(--theme-sidebar-bg)] flex items-center gap-1 py-1.5 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-bg)]"
+      className="group sticky top-0 z-10 bg-[var(--theme-sidebar-bg)] flex items-center gap-1 h-8 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-bg)]"
       style={{ paddingLeft: 8 + depth * 12 }}
       onClick={onToggle}
       onDragStart={isEditing ? undefined : onDragStart}
@@ -130,7 +130,7 @@ export default function WorkspaceRootRow({
       ) : (
         <Tooltip content={title} placement="top">
           <span
-            className="flex-1 truncate text-sm"
+            className="flex-1 min-w-0 truncate text-sm"
             onDoubleClick={event => {
               event.stopPropagation()
               startRename()
