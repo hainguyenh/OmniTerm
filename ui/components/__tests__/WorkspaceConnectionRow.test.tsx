@@ -92,4 +92,18 @@ describe('WorkspaceConnectionRow', () => {
     render(<WorkspaceConnectionRow connection={localConn} depth={0} onDelete={vi.fn()} />)
     expect(screen.getByText('LOCAL')).toBeInTheDocument()
   })
+
+  it('hides action buttons until hovered so the connection title gets full row width', () => {
+    render(<WorkspaceConnectionRow connection={sshConn} depth={0} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    const connectBtn = screen.getByRole('button', { name: 'Connect' })
+    const editBtn = screen.getByRole('button', { name: 'Edit connection' })
+    const deleteBtn = screen.getByRole('button', { name: 'Delete connection' })
+
+    expect(connectBtn.className).toContain('hidden')
+    expect(connectBtn.className).toContain('group-hover:inline-flex')
+    expect(editBtn.className).toContain('hidden')
+    expect(editBtn.className).toContain('group-hover:inline-flex')
+    expect(deleteBtn.className).toContain('hidden')
+    expect(deleteBtn.className).toContain('group-hover:inline-flex')
+  })
 })

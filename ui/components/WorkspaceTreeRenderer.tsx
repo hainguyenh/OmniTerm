@@ -130,7 +130,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
       <div
         key={node.path}
         ref={registerRow(wsId, node.path)}
-        className={`group flex items-center gap-2 pr-1 py-1 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
+        className={`group flex items-center gap-2 pr-1 h-7 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
           highlighted
             ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]'
             : ''
@@ -140,13 +140,17 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
         title={title}
       >
         <Icon className="w-4 h-4 flex-shrink-0" style={{ color: meta.color }} />
-        <span className={`flex-1 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
+        <span className={`flex-1 min-w-0 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
         <Tooltip content={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'} placement="bottom">
           <button
             type="button"
             aria-label={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'}
             onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-            className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+            className={`flex-shrink-0 p-1 rounded hover:bg-[var(--theme-bg)] transition ${
+              isPinned(workspace, node.path)
+                ? 'text-[var(--theme-accent)]'
+                : 'hidden group-hover:inline-flex text-[var(--theme-dim)] hover:text-[var(--theme-accent)]'
+            }`}
           >
             {isPinned(workspace, node.path)
               ? <PinOff className="w-3.5 h-3.5" />
@@ -159,7 +163,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
               type="button"
               aria-label={script.kind === 'rdp' ? 'Launch' : 'Run'}
               onClick={event => { event.stopPropagation(); onRunScript(wsId, script) }}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+              className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
             >
               <Play className="w-3.5 h-3.5" />
             </button>
@@ -212,7 +216,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     return (
       <div key={key}>
         <div
-          className="group flex items-center gap-1 py-1 pr-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+          className="group flex items-center gap-1 h-7 pr-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
           style={{ paddingLeft: 8 + depth * 12 }}
           onClick={() => onToggleDir(key)}
           onContextMenu={event => {
@@ -263,7 +267,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
           ) : (
             <Tooltip content={rootFolder ? pathTooltip(node.path) : node.name} placement="top">
               <span
-                className="flex-1 truncate text-xs"
+                className="flex-1 min-w-0 truncate text-xs"
                 onDoubleClick={event => {
                   if (!rootFolder || !onRenameFolder) return
                   event.stopPropagation()
@@ -292,7 +296,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
                 type="button"
                 aria-label="Pin item"
                 onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-                className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+                className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
               >
                 <Pin className="w-3.5 h-3.5" />
               </button>
@@ -309,27 +313,27 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
                     setRenamingFolderId(rootFolder.id)
                     setFolderAliasDraft(rootFolder.name)
                   }}
-                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
+                  className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
               </Tooltip>
               <Tooltip content="Unlink folder from workspace" placement="bottom">
-              <button
-                type="button"
-                aria-label="Unlink folder from workspace"
-                onClick={event => {
-                  event.stopPropagation()
-                  onSetFolderPendingRemoval({
-                    workspaceId: workspace.id,
-                    folderId: rootFolder.id,
-                    name: rootFolder.name,
-                  })
-                }}
-                className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-red-400 hover:bg-[var(--theme-bg)] transition"
-              >
-                <Unlink className="w-3.5 h-3.5" />
-              </button>
+                <button
+                  type="button"
+                  aria-label="Unlink folder from workspace"
+                  onClick={event => {
+                    event.stopPropagation()
+                    onSetFolderPendingRemoval({
+                      workspaceId: workspace.id,
+                      folderId: rootFolder.id,
+                      name: rootFolder.name,
+                    })
+                  }}
+                  className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-red-400 hover:bg-[var(--theme-bg)] transition"
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                </button>
               </Tooltip>
             </>
           )}
@@ -338,7 +342,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
               type="button"
               aria-label="Open terminal here"
               onClick={event => { event.stopPropagation(); onOpenTerminal(workspace.id, node.path) }}
-              className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
+              className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
             >
               <Terminal className="w-3.5 h-3.5" />
             </button>
