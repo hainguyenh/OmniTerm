@@ -342,35 +342,35 @@ describe('WorkspaceFilterMenu file picking', () => {
     open({ mode: 'selected' })
     expect(screen.getByText('tools')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Collapse all folders'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse all folders' }))
     expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByTitle('Expand all folders'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand all folders' }))
     expect(screen.getByText('go.sh')).toBeInTheDocument()
   })
 
   it('expands only the root folders at level 1', () => {
     open({ mode: 'selected' })
-    fireEvent.click(screen.getByTitle('Expand only root folders (Level 1)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand only root folders (Level 1)' }))
     // Root folders stay open; anything nested inside them is folded away, so `tools/deep` offers an
     // "expand" affordance while `tools` itself still offers "collapse".
     expect(screen.getByText('go.sh')).toBeInTheDocument()
     expect(screen.queryByText('inner.ps1')).not.toBeInTheDocument()
-    expect(screen.getByTitle('Collapse tools')).toBeInTheDocument()
-    expect(screen.getByTitle('Expand deep')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse tools' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand deep' })).toBeInTheDocument()
   })
 
   it('expands two levels deep at level 2', () => {
     open({ mode: 'selected' })
-    fireEvent.click(screen.getByTitle('Expand root + second-level folders (Level 2)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand root + second-level folders (Level 2)' }))
     expect(screen.getByText('inner.ps1')).toBeInTheDocument()
   })
 
   it('folds a single folder shut and open again', () => {
     open({ mode: 'selected' })
-    fireEvent.click(screen.getByTitle('Collapse tools'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse tools' }))
     expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByTitle('Expand tools'))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand tools' }))
     expect(screen.getByText('go.sh')).toBeInTheDocument()
   })
 

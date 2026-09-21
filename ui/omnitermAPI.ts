@@ -128,9 +128,7 @@ function createTauriAPI(): any {
         startSession(sessionId, connId, overrideShell, darkMode),
       localDisconnect: (id: string) =>
         invoke('disconnect_session', { id }).catch(() => {}),
-      // Force kill shares the daemon disconnect wire path but surfaces the error so the
-      // Stop-button escalation UI can report a failed kill instead of failing silently.
-      forceKillSession: (id: string) => invoke<void>('disconnect_session', { id }),
+      interruptSession: (id: string) => invoke<void>('interrupt_session', { id }),
       localInput: (id: string, data: string) =>
         invoke('send_session_input', { id, data }).catch(() => {}),
       localResize: (id: string, size: { cols: number; rows: number }) =>

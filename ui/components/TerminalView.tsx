@@ -439,7 +439,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     term.focus()
     // The pane the user is looking at must be the last to lose hardware rendering.
     touchRendererRef.current()
-    if (becameActive || layoutChanged) safeFitRef.current()
+    let settleFrame = 0
+    if (becameActive || layoutChanged) {
+      safeFitRef.current()
+      // Layout-count changes can move a pane between grid tracks after React commits. Re-fit once
+      // more on the next paint so xterm's canvas/text layers cannot remain sized to the old pane.
+      settleFrame = requestAnimationFrame(() => safeFitRef.current())
+    }
     // Belt and braces for the scroll bug the `.pane-offscreen` rule fixes: even if some future
     // change collapses the pane again, a tab the user left at the live tail comes back to it.
     // xterm queues writes; wait for the queue before restoring a pane that was at the live tail.
@@ -449,6 +455,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     } else if (wasAtBottomRef.current) {
       term.scrollToBottom?.()
     }
+    return () => { if (settleFrame) cancelAnimationFrame(settleFrame) }
   }, [active, layoutEpoch])
 
   return (

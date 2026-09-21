@@ -53,7 +53,7 @@ export const FontSizeControl: React.FC<{
         <span className="flex-1">Font size</span>
         <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
           <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
-          <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} title={scopeLabel}>{fontSize}</span>
+          <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} aria-label={scopeLabel}>{fontSize}</span>
           <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
         </div>
       </div>
@@ -64,7 +64,7 @@ export const FontSizeControl: React.FC<{
       <Tooltip content="Decrease font size" placement="bottom">
         <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
       </Tooltip>
-      <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} title={scopeLabel}>{fontSize}</span>
+      <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} aria-label={scopeLabel}>{fontSize}</span>
       <Tooltip content="Increase font size" placement="bottom">
         <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
       </Tooltip>

@@ -1,5 +1,41 @@
 # Changelog
 
+## [Unreleased]
+
+## [v0.1.9] — 2026-09-21
+
+### Terminal & Sessions
+- **Immediate session-preserving Stop**: Local pane Stop now snapshots the running process tree, sends ETX, terminates only the pre-existing descendants, and leaves the root shell/PTY alive for the next command. SSH Stop sends ETX directly; the delayed Force-kill escalation is gone.
+- **Current-directory pane launch**: Local pane headers expose an icon action and fixed `Ctrl+Shift+N` shortcut to open the same shell in the pane's live working directory, reserving a newly exposed pane when the layout expands.
+- **Current working folder status**: Pane headers and the active-session status bar resolve live cwd updates, preferring the deepest matching workspace-folder alias before falling back to the raw folder basename.
+- **Persistent close-confirm preference**: “Apply to all (Don't ask again)” now persists across launches, with a General setting that can restore the connected-terminal confirmation dialog at any time.
+- **Freeze while closed**: Per-session Freeze mode suspends the process tree while no GUI is attached and resumes it with buffered output replay when OmniTerm returns.
+- **Close with OmniTerm remains the default lifetime**: New shells and agent sessions close with the app unless the user selects Keep running, Freeze while closed, or Recover after reboot.
+- **Safer recovery bookkeeping**: Frozen-session manifests update immediately on resume and recovery avoids signaling recycled process IDs.
+
+### Workspace & Launching
+- **Default workspace selection**: General settings can choose last-used, system home, a workspace root, or a pinned folder for launches that do not specify a location.
+- **Faster New Terminal folder launches**: Double-clicking a workspace folder immediately opens the default shell there, and New Terminal hover text shows the exact shell kind and directory before launch.
+
+### Settings & UI
+- **Whole-settings export/import**: Preferences, shortcuts, and custom themes can be exported in one validated envelope and imported with merge or replace semantics.
+- **Pane controls use themed tooltips only**: Native button/pane `title` attributes were removed in favor of accessible labels and the application tooltip system; unlabeled buttons receive a delegated themed fallback.
+- **Responsive pane actions**: The current-directory action uses a larger icon, participates in the three-dots overflow menu, and returns inline together with the other controls whenever pane width allows.
+- **Sidebar label readability**: Sidebar labels remain fully readable at rest and only truncate when required by the hover interaction.
+
+### Windowing & Layouts
+- **Layout shrink compaction**: Shrinking from a larger pane layout removes empty visible slots before hiding active terminals, preserving visual order and following the focused pane when it moves.
+- **Pane-geometry terminal refit**: Visible xterm instances refit immediately and again on the next paint after layout changes so canvas/text geometry settles to the final pane size.
+- **App fullscreen (F11)**: OS-level fullscreen can hide application chrome while keeping the status bar visible, with Escape restoring the normal window.
+- **Split panes stay contained**: Divider changes use percentage geometry and clipping instead of allowing oversized terminal canvases to create horizontal desktop scrolling.
+
+### Reliability, Coverage & Documentation
+- Hardened native image paste/session process handling and kept process interruption independent from unreliable activity probes.
+- Added focused Rust branch coverage for the local session interrupt paths so the repository's 85% Rust branch gate covers the new Stop implementation.
+- Local pre-push Rust checks keep Cargo build caches in the OS temp directory by default, avoiding repository-drive exhaustion while preserving an explicit `CARGO_TARGET_DIR` override.
+- Synchronized session, layout, settings, frontend/Rust source inventories, and release notes with the shipped v0.1.9 behavior.
+
+
 ## [v0.1.8] — 2026-08-26
 
 ### Added
@@ -76,24 +112,6 @@
 ### Other
 - pull latest ME (@the-long-ride)
 
-
-## [Unreleased]
-
-### Terminal & Sessions
-- **Stop escalation with live-session gating**: The Stop button no longer depends on the activity probe, which misread idle on WSL and fast commands — a connected session keeps Stop pressable. Pressing Stop sends SIGINT first; if the process survives a short escalation delay, the control re-arms into a Force-kill action that tears down the daemon session.
-- **Freeze while closed**: New per-session persistence policy. When OmniTerm closes, the session's whole process tree is suspended (nothing runs: no CPU, no output, no file edits); reopening resumes it exactly where it stopped, with buffered output replayed first. Suspension uses `NtSuspendProcess` on Windows and `SIGSTOP` on Unix; a boot sweep reaps frozen orphans after a daemon crash.
-- **Close with OmniTerm is the default lifetime**: Every new terminal — plain shells and AI agent sessions alike — now terminates when the app closes. Keep running, Freeze while closed, and Recover after reboot remain one click away in the persistence menu, and agent resume commands (`claude --continue`, etc.) are still remembered for recovery.
-- **Safer session resume bookkeeping**: Frozen-session manifests are rewritten immediately on resume, and freeze/resume never signal a recycled process id.
-
-### Workspace Management
-- **Default workspace for new terminals**: A new General setting picks where terminals land when their launch site does not name a workspace — last used (previous behavior), system home, any workspace root, or a pinned folder inside one. Saved choices that no longer resolve fall through to the next candidate instead of failing the launch.
-
-### Settings
-- **Whole-settings export/import**: Settings can be exported as a single timestamped envelope covering preferences, shortcuts, and custom themes, then imported on another machine with either a merge (existing values win) or replace strategy. Everything is validated before any write, so a bad section aborts cleanly instead of leaving a half-applied state.
-
-### Windowing & Layouts
-- **App fullscreen (F11)**: F11 now toggles true OS-level fullscreen together with a chrome-hidden mode — title bar, activity bar, side panel, and tab strip disappear so every terminal pane fills the screen while the status bar stays visible. Rebindable in settings, Escape exits, and window corner rounding adapts automatically.
-- **No horizontal scrollbar in split layouts**: Dragging a divider no longer scrolls the terminal desktop. Panes are pure percentage geometry that clips inside its frame — oversized terminals stay contained instead of pushing the container wide.
 
 ## [v0.1.6] — 2026-08-20
 

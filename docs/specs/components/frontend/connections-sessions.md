@@ -63,6 +63,8 @@ When editing/launching connections or rendering/updating live sessions.
 - `SessionFooterBar` — owned by this spec.
 - `SessionUnavailableOverlay` — owned by this spec.
 - `NewTerminalMenu` — owned by this spec.
+- `useOpenPaneAtCurrentDirectory` — owned by this spec.
+- `newTerminalHoverText` — owned by this spec.
 - `TerminalLinkMenu` / `TerminalViewLinkMenuHost` — owned by this spec.
 
 ## Components and functions
@@ -78,12 +80,14 @@ When editing/launching connections or rendering/updating live sessions.
 | `ConnectingOverlay` | Show async connection progress. | User feedback. | Render launch status. | Connecting. |
 | `WaitingPane` | Render no/awaiting session state. | Clear empty-pane UX. | Present placeholder/action. | No active content. |
 | `SessionMetricsChips` | Render session metrics. | Expose activity/health. | Map native metrics to chips. | Metrics available. |
-| `SessionControlButtons` / `sessionControlOverflow` | Shared session header/footer actions with responsive overflow handling. | Keep Stop, Clear, Fullscreen, Detach, and Persistence actions uniform and responsive to narrow panes. | Renders action icon buttons, measures container overflow via `controlsOverflow`, and collapses hidden items into an overflow popup menu. | Pane header or active footer bar rendered. |
+| `SessionControlButtons` / `sessionControlOverflow` | Shared session header/footer actions with responsive overflow handling. | Keep Stop, Clear, current-directory launch, Fullscreen, Detach, and Persistence actions uniform and responsive to narrow panes. | Renders themed-tooltip actions, routes immediate LOCAL/SSH Stop behavior, measures container overflow via `controlsOverflow`, and returns hidden actions inline whenever width permits. | Pane header or active footer bar rendered. |
 | `SessionPersistenceMenu` | Per-terminal persistence policy selector. | Configure lifetime policy (None, Window, Hybrid, App). | Open dropdown menu and invoke daemon persistence updates. | User clicks persistence indicator. |
 | `SessionStatusIndicator` | Render session status dot/animation. | Visual cue for connected/busy/idle/disconnected. | Render status indicator with oscillate or ping styles. | Pane header, footer, or tabs. |
-| `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls and status. | Compose status, persistence menu, and session controls. | Active session in focused pane. |
+| `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls, status, and location context. | Shows live current-working-folder text (workspace-folder alias first, basename fallback), then composes status, persistence menu, and session controls. | Active session in focused pane. |
 | `SessionUnavailableOverlay` | Render unavailable-session recovery feedback and restart action. | Provide clear user recovery when an attached session is lost or disconnected. | Renders an opaque recovery prompt and triggers the supplied restart action. | When an attached session is no longer available. |
-| `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces and available shells; arrow keys own the cursor (scroll-synthetic mouseenter cannot steal it), the active row carries an accent ring, and Enter launches the highlighted row. | When clicking the new terminal `+` dropdown. |
+| `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces and available shells; Enter or folder double-click launches the highlighted folder immediately with the default shell, while shell rows launch their selected shell. | When clicking the new terminal `+` dropdown. |
+| `useOpenPaneAtCurrentDirectory` | Open another local pane at the focused pane's current directory. | Preserve exact terminal context without forcing the user to navigate back to the folder. | Uses live session cwd plus current shell, expands/reserves a pane, and responds to the pane action/Ctrl+Shift+N event. | When a local pane has a reliable current directory and the user requests a sibling pane. |
+| `newTerminalHoverText` | Describe the next New Terminal launch target. | Let users know the shell kind and actual directory before launching. | Resolves shell label and selected folder/home directory into deterministic tooltip text. | When a New Terminal button renders. |
 | `TerminalLinkMenu` / `TerminalViewLinkMenuHost` | Modifier-click link/path context menu. | Copy or open detected URLs and file paths. | Portal overlay menu triggered by Ctrl/Cmd+click on actionable spans. | User modifier-clicks detected link or path. |
 
 ## State and data
@@ -123,5 +127,7 @@ When editing/launching connections or rendering/updating live sessions.
 - `ui/components/SessionFooterBar.tsx`
 - `ui/components/SessionUnavailableOverlay.tsx`
 - `ui/components/NewTerminalMenu.tsx`
+- `ui/hooks/useOpenPaneAtCurrentDirectory.ts`
+- `ui/utils/newTerminalDescription.ts`
 - `ui/components/TerminalLinkMenu.tsx`
 - `ui/components/TerminalViewLinkMenuHost.tsx`

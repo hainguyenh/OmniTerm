@@ -1,6 +1,7 @@
 import type React from 'react'
 import type { SessionStatus } from '@omniterm/contract'
-import { workspaceLocationLabel } from '../utils/workspaceDisplay'
+import { workingFolderLabel, workspaceLocationLabel } from '../utils/workspaceDisplay'
+import { newTerminalHoverText } from '../utils/newTerminalDescription'
 import ActivityBar from './ActivityBar'
 import FileBrowser from './FileBrowser'
 import WorkspacePanel from './WorkspacePanel'
@@ -47,6 +48,14 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const activeConnection = activeConnId ? connById(activeConnId) : undefined
   const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
   const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
+  const footerWorkingFolder = activeTabId
+    ? workingFolderLabel(model.sessionCwds?.[activeTabId] ?? activeConnection?.localCwd, model.workspaces ?? [])
+    : undefined
+  const footerLocationLabel = footerWorkingFolder ?? footerWorkspaceTitle
+  const newSessionTitle = newTerminalHoverText(
+    shellOptions ?? [], appSettings.defaultShell, model.workspaces ?? [],
+    model.selectedWorkspaceId ?? null, model.homeDir ?? '',
+  )
   const onPaneDrop = (event: React.DragEvent, target: number) => {
     const source = draggedPaneIndex(event.dataTransfer.getData('text/plain'), layoutMode)
     if (source !== null) swapPanes(source, target)
@@ -143,6 +152,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onClose={closeTab}
                 onContextMenu={(e, id) => { e.preventDefault(); setTabMenu({ x: e.clientX, y: e.clientY, tabId: id }) }}
                 onNewSession={() => requestNewSession(undefined, model.selectedWorkspaceId)}
+                newSessionTitle={newSessionTitle}
                 onPickShell={(rect) => setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
                 onPickPane={layoutMode > 1
                   ? (rect) => {
@@ -235,7 +245,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             if (!conn) {
               return (
                 <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
+                  <span className="truncate">{footerWorkspaceTitle}</span>
                   <span className="opacity-60">·</span>
                   <span className="truncate">Editor active</span>
                   {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -261,7 +271,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 layoutMode={layoutMode}
                 focusedPane={focusedPane}
                 busy={conn.type === 'LOCAL' ? (activity[activeTabId] ?? false) : undefined}
-                workspaceTitle={footerWorkspaceTitle}
+                workspaceTitle={footerLocationLabel}
                 footerShellLabel={footerShellLabel}
                 zoomFactor={zoomFactor}
                 detach={detachControl.stateOf(activeTabId)}
@@ -276,7 +286,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           })()}
           {!activeTabId && (
             <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate" title={footerWorkspaceTitle}>{footerWorkspaceTitle}</span>
+              <span className="truncate">{footerWorkspaceTitle}</span>
               <span className="opacity-60">·</span>
               <span>No active terminal</span>
               {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
@@ -328,6 +338,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                             paneIndex={i}
                             openSessionCount={visibleTabs.length}
                             onNewSession={() => { setFocusedPane(i); requestNewSession(undefined, model.selectedWorkspaceId) }}
+                            newSessionTitle={newSessionTitle}
                             onPickShell={(rect) => { setFocusedPane(i); setShellMenu({ x: rect.left, y: rect.bottom + 4 }) }}
                             onChooseSession={(rect) => { setPanePickerAnchor(rect); setPanePicker(i) }}
                             customArtUrl={idleArtUrl}

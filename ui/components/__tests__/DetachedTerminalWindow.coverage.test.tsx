@@ -99,9 +99,9 @@ describe('DetachedTerminalWindow', () => {
     }))
 
     fireEvent.click(screen.getByText('Re-attach'))
-    fireEvent.click(screen.getByTitle('Minimize'))
-    fireEvent.click(screen.getByTitle('Maximize'))
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Maximize' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(reattach).toHaveBeenCalledWith('session-1')
     expect(minimize).toHaveBeenCalled()
     expect(toggleMaximize).toHaveBeenCalled()

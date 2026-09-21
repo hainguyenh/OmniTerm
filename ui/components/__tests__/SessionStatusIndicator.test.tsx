@@ -13,21 +13,21 @@ describe('SessionStatusIndicator', () => {
 
   it('renders sonar ping running effect for active AI agent', () => {
     render(<SessionStatusIndicator status="connected" isAgent busy />)
-    const indicator = screen.getByTitle('AI agent running')
+    const indicator = screen.getByLabelText('AI agent running')
     expect(indicator).toBeInTheDocument()
     expect(indicator.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
   it('renders sonar ping running effect for running process', () => {
     render(<SessionStatusIndicator status="connected" busy />)
-    const indicator = screen.getByTitle('Running command')
+    const indicator = screen.getByLabelText('Running command')
     expect(indicator).toBeInTheDocument()
     expect(indicator.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
   it('renders the oscillating dot with a 2-step ghost trail when runningStyle="oscillate"', () => {
     render(<SessionStatusIndicator status="connected" busy runningStyle="oscillate" />)
-    const indicator = screen.getByTitle('Running process')
+    const indicator = screen.getByLabelText('Running process')
     expect(indicator).toBeInTheDocument()
     expect(indicator.querySelector('.animate-ping')).toBeNull()
     expect(indicator.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
@@ -37,40 +37,40 @@ describe('SessionStatusIndicator', () => {
 
   it('uses the oscillate variant label for AI agents too', () => {
     render(<SessionStatusIndicator status="connected" isAgent busy runningStyle="oscillate" />)
-    expect(screen.getByTitle('AI agent running')).toBeInTheDocument()
+    expect(screen.getByLabelText('AI agent running')).toBeInTheDocument()
   })
 
   it('falls back to the ping variant when runningStyle is omitted', () => {
     render(<SessionStatusIndicator status="connected" busy />)
-    expect(screen.getByTitle('Running command')).toBeInTheDocument()
+    expect(screen.getByLabelText('Running command')).toBeInTheDocument()
   })
 
   it('renders connecting pulse indicator', () => {
     render(<SessionStatusIndicator status="connecting" />)
-    const indicator = screen.getByTitle('Connecting…')
+    const indicator = screen.getByLabelText('Connecting…')
     expect(indicator).toBeInTheDocument()
     expect(indicator.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
   it('renders idle indicator when connected and not busy', () => {
     render(<SessionStatusIndicator status="connected" busy={false} />)
-    const indicator = screen.getByTitle('Idle')
+    const indicator = screen.getByLabelText('Idle')
     expect(indicator).toHaveClass('border-theme-dim')
     expect(indicator).toHaveClass('bg-transparent')
   })
 
   it('renders plain connected dot when busy is undefined', () => {
     render(<SessionStatusIndicator status="connected" />)
-    const indicator = screen.getByTitle('Connected')
+    const indicator = screen.getByLabelText('Connected')
     expect(indicator).toHaveClass('bg-theme-accent')
   })
 
   it('renders disconnected and error dots correctly', () => {
     const { unmount } = render(<SessionStatusIndicator status="closed" />)
-    expect(screen.getByTitle('Disconnected')).toBeInTheDocument()
+    expect(screen.getByLabelText('Disconnected')).toBeInTheDocument()
     unmount()
 
     render(<SessionStatusIndicator status="error" />)
-    expect(screen.getByTitle('Error')).toBeInTheDocument()
+    expect(screen.getByLabelText('Error')).toBeInTheDocument()
   })
 })

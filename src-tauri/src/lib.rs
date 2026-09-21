@@ -29,6 +29,7 @@ pub use app_protocol::{openshell, session_status, shell_spec};
 pub use app_core::win_job;
 pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 pub mod pty;
+mod pty_interrupt;
 pub mod pty_resolve;
 pub mod safepath_command;
 pub use app_core::safepath;
@@ -198,6 +199,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         // PTY
         pty::start_local_session,
         pty::send_session_input,
+        pty_interrupt::interrupt_session,
         pty::resize_session,
         pty::disconnect_session,
         pty::list_local_sessions,

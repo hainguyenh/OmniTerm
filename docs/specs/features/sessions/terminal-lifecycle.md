@@ -48,7 +48,9 @@ From session start through live IO, resize, status changes, disconnect and close
 - Every terminal defaults to `close-with-app`; `keep-running`, `freeze-while-closed` and `recover-after-reboot` are per-session overrides via the persistence menu.
 - `freeze-while-closed` suspends the daemon-owned process tree on last-client exit and resumes it before any attach or mutation; explicit pane close still kills outright.
 - Stop is gated by an explicit live-session flag from the hosting header/footer, not by the activity probe — the probe misreads idle on WSL and fast commands, so a connected session keeps Stop pressable.
-- A Stop press sends SIGINT (`Ctrl+C`) first; if the process survives an escalation delay it re-arms into a Force-kill action that tears the daemon session down, surfacing failures through a host callback.
+- Stop is immediate and session-preserving: LOCAL sessions invoke native `interrupt_session`, which snapshots pre-existing descendants, sends ETX, terminates those descendants, and leaves the root shell/PTY alive; SSH sessions send ETX through their PTY input channel.
+- Connected-terminal close confirmation is shown by default. Choosing “Don't ask again” while confirming persists `skipTerminalCloseConfirm`; General settings can turn it off to restore the dialog.
+- Visible xterm panes refit immediately and again on the next paint after a layout epoch change so the canvas/text layers settle to the final pane geometry.
 
 ## Functionalities
 
@@ -60,7 +62,7 @@ From session start through live IO, resize, status changes, disconnect and close
 - `attachTerminalStream` — owned by this spec.
 - `createTerminalOptions` — owned by this spec.
 - `saveScrollback` / `loadScrollback` — owned by this spec.
-- Stop escalation (`sessionLive` gate, SIGINT then Force kill) — owned by this spec.
+- Stop interruption (`sessionLive` gate, LOCAL native interrupt, SSH ETX) — owned by this spec.
 
 ## Components and functions
 
@@ -83,7 +85,8 @@ From session start through live IO, resize, status changes, disconnect and close
 - Status/metrics
 - Stream subscription
 - Persisted layout snapshots and scrollback buffers
-- Session-control escalation state (armed Force-kill timer)
+- Session-control live-state gate
+- Persisted close-confirmation preference (`skipTerminalCloseConfirm`)
 
 ## Errors and edge cases
 
@@ -112,3 +115,5 @@ From session start through live IO, resize, status changes, disconnect and close
 - `ui/utils/scrollbackStore.ts`
 - `ui/utils/sessionStore.ts`
 - `ui/components/SessionControlButtons.tsx`
+- `src-tauri/src/pty_interrupt.rs`
+- `src-tauri/src/pty_interrupt_tests.rs`

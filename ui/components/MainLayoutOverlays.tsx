@@ -118,7 +118,12 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
               isMultiple={pendingCloseTabIds.length > 1}
               onCancel={() => setPendingCloseTabIds(null)}
               onConfirm={(applyToAll) => {
-                if (applyToAll) skipCloseConfirmRef.current = true
+                if (applyToAll) {
+                  skipCloseConfirmRef.current = true
+                  const next = { ...appSettings, skipTerminalCloseConfirm: true }
+                  setAppSettings(next)
+                  void window.omnitermAPI.settings.save({ skipTerminalCloseConfirm: true })
+                }
                 closeTabs(pendingCloseTabIds, true)
                 setPendingCloseTabIds(null)
               }}

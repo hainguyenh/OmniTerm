@@ -76,8 +76,7 @@ const WorkspaceFilterTree: React.FC<WorkspaceFilterTreeProps> = ({ entries, path
           style={{ paddingLeft: 4 + depth * 12 }}
         >
           <button
-            type="button"
-            title={isCollapsed ? `Expand ${node.name}` : `Collapse ${node.name}`}
+            type="button" aria-label={isCollapsed ? `Expand ${node.name}` : `Collapse ${node.name}`}
             onClick={() => onToggleCollapse(node.path)}
             className="flex-shrink-0 text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
           >

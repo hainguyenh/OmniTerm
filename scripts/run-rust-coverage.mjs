@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 import fs from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
 const root = process.cwd()
 const outputDir = path.join(root, 'coverage-rust')
+const cargoEnv = process.env.CARGO_TARGET_DIR
+  ? process.env
+  : { ...process.env, CARGO_TARGET_DIR: path.join(tmpdir(), 'omniterm-rust-coverage-target') }
 
 // Files excluded from the coverage gate entirely, not just under-counted.
 //
@@ -73,13 +77,13 @@ function run(args) {
       const quoteArg = (arg) => (/[ \t\n\v"|&<>()^]/.test(arg) ? `"${arg.replaceAll('"', '\\"')}"` : arg)
       const cargoCmd = `cargo +nightly-x86_64-pc-windows-msvc ${args.map(quoteArg).join(' ')}`
       const cmdLine = `call "${vcvars}" x64 && ${cargoCmd}`
-      const result = spawnSync(cmdLine, { cwd: root, stdio: 'inherit', shell: true })
+      const result = spawnSync(cmdLine, { cwd: root, stdio: 'inherit', shell: true, env: cargoEnv })
       if (result.error) throw result.error
       if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
       return
     }
   }
-  const result = spawnSync('cargo', args, { cwd: root, stdio: 'inherit', shell: false })
+  const result = spawnSync('cargo', args, { cwd: root, stdio: 'inherit', shell: false, env: cargoEnv })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
 }

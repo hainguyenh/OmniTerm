@@ -234,6 +234,11 @@ fn windows_argv_builder_is_tested_on_every_platform() {
         launch(LocalShell::Cmd, None, true).windows_args(Vec::new(), None),
         vec!["/k", "chcp 65001 >nul"]
     );
+    assert_eq!(
+        launch(LocalShell::Cmd, None, true)
+            .windows_args(vec!["/v:on".to_string()], None),
+        vec!["/v:on", "/k", "chcp 65001 >nul"]
+    );
 
     let ps_keep = launch(LocalShell::Powershell, None, true)
         .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()));

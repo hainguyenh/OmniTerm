@@ -46,6 +46,7 @@ When Settings/Plugin surfaces are open or user changes/saves customization/lifec
 
 - Draft UI state is not claimed persisted until native action succeeds.
 - Theme/plugin/custom-art file operations stay native.
+- `skipTerminalCloseConfirm` is a persisted General preference. Enabling it suppresses connected-terminal close confirmation across launches; disabling it restores the dialog.
 
 ## Functionalities
 
@@ -65,7 +66,7 @@ When Settings/Plugin surfaces are open or user changes/saves customization/lifec
 | Component | What | Why | How | When |
 |---|---|---|---|---|
 | `SettingsModal` | Render consolidated settings modal dialog. | Modular tabbed configuration UX with categorized settings. | Renders vertical-tabbed layout for General, Appearance, Plugins, Updates, and Shortcuts. | Settings modal active. |
-| `GeneralSettings` | Render general preferences. | Main configuration UX. | Bind effective/draft values and save callbacks. | Settings route. |
+| `GeneralSettings` | Render general preferences. | Main configuration UX. | Bind effective/draft values and save callbacks, including the persistent close-confirmation toggle. | Settings route. |
 | `AppearanceMenu` | Render appearance choices. | Fast visual selection. | Bind theme/mode state. | Appearance control. |
 | `ThemeRemixModal` | Edit/preview custom theme. | Advanced visual customization. | Maintain draft and invoke theme save. | Remix open. |
 | `BlurSettingsOverlay` | Configure blur behavior. | Focused appearance control. | Bind blur hook/settings. | Blur settings. |

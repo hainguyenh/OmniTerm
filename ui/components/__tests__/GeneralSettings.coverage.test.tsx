@@ -211,4 +211,23 @@ describe('GeneralSettings', () => {
     // Choice row retires after a decision.
     expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
   })
+  it('persists the connected-terminal close confirmation preference', async () => {
+    const setAppSettings = vi.fn()
+    const { rerender } = render(
+      <GeneralSettings appSettings={{ skipTerminalCloseConfirm: false }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />,
+    )
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Skip terminal close confirmation' }))
+    expect(setAppSettings).toHaveBeenLastCalledWith(expect.objectContaining({ skipTerminalCloseConfirm: true }))
+    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalCloseConfirm: true })
+
+    rerender(
+      <GeneralSettings appSettings={{ skipTerminalCloseConfirm: true }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />,
+    )
+    fireEvent.click(screen.getByRole('switch', { name: 'Skip terminal close confirmation' }))
+    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalCloseConfirm: false })
+  })
+
+
 })

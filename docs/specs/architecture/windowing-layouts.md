@@ -44,6 +44,7 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 ## Behavior
 
 - Layout changes preserve session IDs.
+- Shrinking a layout compacts occupied visible panes before dropping any session, so empty slots disappear first; if occupied panes still exceed the target count, the focused pane is retained.
 - Detach never starts a second PTY.
 - Split ratios remain bounded (`MIN_FRACTION`); panes are percentage geometry with no pixel floor.
 - Pane area and pane frames clip overflow (`overflow-hidden`) — an oversized xterm canvas never scrolls or paints outside the desktop.
@@ -71,6 +72,7 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 |---|---|---|---|---|
 | `useSplitRatios` | Manage split ratios and grid boundaries for 1 to 8 panes. | Stable bounded resize and orientation calculations. | Track/update ratios and compute pane rectangles. | Pane resize/restore or layout change. |
 | `useViewGroups` | Manage grouped view tabs. | Organize multiple views. | Create/select/close group state. | View-group action. |
+| `useMainLayoutSessions` layout transition | Reconcile visible panes when switching layout counts. | Keep active terminals visible when empty panes can be removed instead. | Orders panes visually, compacts occupied slots while shrinking, preserves the focused pane when capacity is exceeded, and remaps into the target geometry. | User switches between pane counts. |
 | `useWindowRounding` | Detect platform window rounding capability and maximize state. | Proper desktop corner curvature on Windows 11. | Inspects platform and window maximize state to toggle rounded shell styling. | Window mount, resize, and maximize. |
 | `detach_terminal` | Move session presentation to detached window. | Separate UI placement from process lifetime. | Create/focus window tied to existing session ID. | Detach. |
 | `reattach_terminal` | Return existing session to main renderer. | Reversible detach. | Release detached ownership and signal/attach main renderer. | Reattach. |
@@ -112,5 +114,6 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 - `ui/hooks/useAppShortcuts.ts`
 - `ui/App.tsx`
 - `ui/paneLayout.ts`
+- `ui/components/useMainLayoutSessions.tsx`
 - `src-tauri/src/terminal_window.rs`
 - `src-tauri/src/window_control.rs`

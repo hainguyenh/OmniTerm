@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
+import path from 'node:path'
 import test from 'node:test'
 import {
+  cargoTargetEnv,
   isAvailable,
   parseArgs,
   renderResult,
@@ -9,12 +11,13 @@ import {
 } from '../pre-push-check.mjs'
 
 /** A spawnSync stand-in: answers `--version` probes, and fails whichever command is named. */
-function fakeRunner({ failing = null, missing = [], calls = [] } = {}) {
-  return (command, args) => {
+function fakeRunner({ failing = null, missing = [], calls = [], details = [] } = {}) {
+  return (command, args, options = {}) => {
     if (args[0] === '--version') {
       return missing.includes(command) ? { status: 1 } : { status: 0 }
     }
     calls.push([command, ...args].join(' '))
+    details.push({ command, args, options })
     return { status: command === failing ? 1 : 0 }
   }
 }
@@ -41,6 +44,26 @@ test('a passing run reports every check it actually ran', () => {
   assert.deepEqual(result.skipped, [])
   assert.ok(calls.some((c) => c.startsWith('cargo clippy')))
   assert.ok(calls.some((c) => c.includes('pnpm test')))
+})
+
+test('Rust checks use a temporary cargo target outside the repository by default', () => {
+  const details = []
+  const tempRoot = path.join(path.parse(process.cwd()).root, 'omniterm-test-temp')
+  runChecks(selectChecks(), {
+    runner: fakeRunner({ details }),
+    log: () => {},
+    env: { PATH: 'test-path' },
+    tempRoot,
+  })
+  const rustRuns = details.filter((call) => call.command === 'cargo')
+  const expectedTarget = path.join(tempRoot, 'omniterm-cargo-target')
+  assert.equal(rustRuns.length, 2)
+  assert.ok(rustRuns.every((call) => call.options.env.CARGO_TARGET_DIR === expectedTarget))
+})
+
+test('an explicit cargo target directory is preserved', () => {
+  const env = { PATH: 'test-path', CARGO_TARGET_DIR: 'D:/cargo-cache' }
+  assert.equal(cargoTargetEnv(env, 'C:/Temp'), env)
 })
 
 test('the first failure stops the run and names the command that reproduces it', () => {
