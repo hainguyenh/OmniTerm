@@ -70,8 +70,8 @@ describe('ThemeRemixModal', () => {
 
   it('opens the JSON folder and reloads themes from disk', async () => {
     const x = setup()
-    fireEvent.click(screen.getByTitle('Open themes folder'))
-    fireEvent.click(screen.getByTitle('Reload themes from JSON files'))
+    fireEvent.click(screen.getByRole('button', { name: 'Open themes folder' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reload themes from JSON files' }))
     await waitFor(() => expect(x.openFolder).toHaveBeenCalledTimes(1))
     expect(x.listThemes).toHaveBeenCalled()
   })
@@ -85,7 +85,7 @@ describe('ThemeRemixModal', () => {
     expect(x.props.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'theme-1234-i' }))
     expect(x.saveSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'theme-1234-i' }))
 
-    fireEvent.click(screen.getAllByTitle('Duplicate')[1])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Duplicate' })[1])
     await waitFor(() => expect(x.saveTheme).toHaveBeenCalledTimes(2))
     const copy = (x.saveTheme.mock.calls as any)[1][0]
     expect(copy).toMatchObject({ name: 'Custom Theme Copy' })
@@ -95,7 +95,7 @@ describe('ThemeRemixModal', () => {
 
   it('deletes custom themes, moves active settings to a fallback, and protects built-ins', async () => {
     const active = setup({ appSettings: { ...settings, themeId: custom.id } })
-    fireEvent.click(screen.getByTitle('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(active.deleteTheme).toHaveBeenCalledWith(custom.id))
     expect(active.props.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ themeId: TOKYO_NIGHT.id }))
     expect(active.saveSettings).toHaveBeenCalled()
@@ -103,13 +103,13 @@ describe('ThemeRemixModal', () => {
 
     // A built-in has no delete affordance at all.
     const builtInOnly = setup({ themes: [TOKYO_NIGHT] })
-    expect(screen.queryByTitle('Delete')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(builtInOnly.deleteTheme).not.toHaveBeenCalled()
     builtInOnly.unmount()
 
     // The last remaining theme is never deleted, even when it is a custom one.
     const singleCustom = setup({ themes: [custom], currentTheme: custom })
-    fireEvent.click(screen.getByTitle('Delete'))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(singleCustom.deleteTheme).not.toHaveBeenCalled()
   })
 
@@ -175,17 +175,17 @@ describe('ThemeRemixModal', () => {
     expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument()
 
     // Clean close goes straight through.
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
     // Dirty close asks first, and "Keep editing" cancels.
     fireEvent.change(nameInput(), { target: { value: 'Dirty' } })
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByText('Keep editing'))
     expect(nameInput().value).toBe('Dirty')
 
-    fireEvent.click(screen.getByTitle('Close'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     fireEvent.click(screen.getByText('Discard changes'))
     expect(onClose).toHaveBeenCalledTimes(2)
     expect(nameInput().value).toBe(TOKYO_NIGHT.name)
@@ -213,7 +213,7 @@ describe('ThemeRemixModal', () => {
 
   it('edits the light variant, including the light-only ANSI black background', async () => {
     const x = setup()
-    fireEvent.click(screen.getByTitle('Edit light variant'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit light variant' }))
     fireEvent.change(screen.getByLabelText('Black background (light mode)'), { target: { value: '#eeeeee' } })
     fireEvent.click(screen.getByText('Save'))
     await waitFor(() => expect(x.saveTheme).toHaveBeenCalled())
@@ -224,7 +224,7 @@ describe('ThemeRemixModal', () => {
     const x = setup({ currentTheme: custom, themes: [custom] })
     fireEvent.change(screen.getByLabelText('Border radius'), { target: { value: '16' } })
     fireEvent.change(screen.getByLabelText('Padding and margins'), { target: { value: '20' } })
-    fireEvent.click(screen.getByTitle('Edit light variant'))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit light variant' }))
     fireEvent.change(screen.getByLabelText('Border radius'), { target: { value: '12' } })
     fireEvent.change(screen.getByLabelText('Padding and margins'), { target: { value: '24' } })
     fireEvent.click(screen.getByText('Save'))

@@ -57,6 +57,8 @@ interface PaneHeaderProps {
   onToggleFullscreen?: () => void
   /** Close this pane's session tab, using the main layout's normal confirmation policy. */
   onClose?: () => void
+  /** Open another local terminal pane at this pane's exact live working directory. */
+  onOpenCurrentDirectory?: () => void
   busy?: boolean
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
   appearance?: {
@@ -74,7 +76,7 @@ interface PaneHeaderProps {
 const PaneHeader: React.FC<PaneHeaderProps> = ({
   paneIndex, conn, sessionTitle, liveFolder, shellLabel, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, onClose, fullscreen, onToggleFullscreen, appearance, busy,
+  onAssign, onClear, onClose, onOpenCurrentDirectory, fullscreen, onToggleFullscreen, appearance, busy,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -98,7 +100,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
     () => getLastPastedImage(sessionId),
   )
   return (
-    <div className="relative flex-shrink-0">
+    <div className="relative flex-shrink-0" data-pane-header>
       <div
         draggable={!!conn}
         onDragStart={conn ? (e) => {
@@ -112,7 +114,6 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
           focused ? 'bg-theme-bg text-theme-fg' : 'bg-theme-sidebar text-theme-dim'
         }`}
         style={conn ? { backgroundColor: paneSurfaceColor(identity, focused) } : undefined}
-        title={conn ? `Pane ${paneIndex + 1} · ${identity.label} — drag to move this session to another pane` : `Pane ${paneIndex + 1} · ${identity.label}`}
       >
         <span className="flex items-center gap-1 flex-shrink-0">
           <Shape className="w-3.5 h-3.5" style={{ color: hue }} fill={focused ? identity.color : 'none'} />
@@ -150,7 +151,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[15rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && pastedImage && (
             <Tooltip content="View last pasted image" placement="bottom">
               <button
@@ -171,6 +172,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               sessionLive={(statuses[sessionId] ?? 'connecting') === 'connected'}
               detach={detach}
               onToggleDetach={onToggleDetach}
+              onOpenCurrentDirectory={conn.type === 'LOCAL' ? onOpenCurrentDirectory : undefined}
               detachWhere="pane"
               fullscreen={fullscreen}
               onToggleFullscreen={onToggleFullscreen}
@@ -251,7 +253,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                   <span className="truncate flex-1 text-left">{t.name}</span>
                   {here && <Check className="w-3 h-3 flex-shrink-0" />}
                   {OtherShape && other && (
-                    <span className="flex items-center gap-0.5 flex-shrink-0" title={`Shown in pane ${otherPane + 1} · ${other.label}`}>
+                    <span className="flex items-center gap-0.5 flex-shrink-0" aria-label={`Shown in pane ${otherPane + 1} · ${other.label}`}>
                       <OtherShape className="w-3 h-3" style={{ color: other.color }} fill={other.color} />
                       <span className="text-[9px] font-bold" style={{ color: other.color }}>{otherPane + 1}</span>
                     </span>

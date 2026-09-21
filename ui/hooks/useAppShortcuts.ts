@@ -51,6 +51,7 @@ export function useAppShortcuts({
     const handleKeyDown = (e: KeyboardEvent) => {
       const active = document.activeElement
       const inTerminal = active instanceof Element && !!active.closest('.xterm')
+      const inPane = inTerminal || (active instanceof Element && !!active.closest('[data-pane-header]'))
       const isInput = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && !inTerminal
 
       // A focused terminal wins the shell/agent's own control keys (Ctrl+W, Ctrl+B, Ctrl+N, Ctrl+P,
@@ -120,6 +121,14 @@ export function useAppShortcuts({
       if (matches('toggleSidebar')) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:toggle-sidebar'))
+        return
+      }
+
+      // This pane action has a fixed shortcut by design. It must keep working even if the user
+      // customizes the unrelated New Folder binding in Settings.
+      if (inPane && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('omniterm:new-pane-current-directory'))
         return
       }
 

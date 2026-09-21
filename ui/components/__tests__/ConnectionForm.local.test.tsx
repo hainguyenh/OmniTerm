@@ -73,13 +73,13 @@ describe('LOCAL working directory', () => {
     fireEvent.click(screen.getByText('Local'))
     await waitFor(() => expect(screen.getByDisplayValue('C:/home')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByTitle('Browse for a folder'))
+    fireEvent.click(screen.getByRole('button', { name: 'Browse for a folder' }))
     await waitFor(() => expect(screen.getByDisplayValue('D:/chosen')).toBeInTheDocument())
     // The picker starts from whatever is in the field.
     expect(pickDirectory).toHaveBeenCalledWith('C:/home')
 
     pickDirectory.mockResolvedValueOnce(null as never)
-    fireEvent.click(screen.getByTitle('Browse for a folder'))
+    fireEvent.click(screen.getByRole('button', { name: 'Browse for a folder' }))
     await act(async () => {})
     expect(screen.getByDisplayValue('D:/chosen')).toBeInTheDocument()
   })
@@ -89,7 +89,7 @@ describe('LOCAL working directory', () => {
     await renderForm({}, { files: { getHomeDir: async () => '', pickDirectory } })
     fireEvent.click(screen.getByText('Local'))
     await act(async () => {})
-    fireEvent.click(screen.getByTitle('Browse for a folder'))
+    fireEvent.click(screen.getByRole('button', { name: 'Browse for a folder' }))
     await act(async () => {})
     expect(pickDirectory).toHaveBeenCalledWith(undefined)
   })

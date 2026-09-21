@@ -41,9 +41,9 @@ describe("ThemeRemixModal", () => {
 
   it("switches dark/light edit mode", () => {
     render(<ThemeRemixModal isOpen onClose={vi.fn()} themes={[TOKYO_NIGHT]} setThemes={vi.fn()} appSettings={baseSettings} setAppSettings={vi.fn()} currentTheme={TOKYO_NIGHT} />);
-    expect(screen.getByTitle("Edit dark variant")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Edit light variant"));
-    expect(screen.getByTitle("Edit light variant")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit dark variant" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit light variant" }));
+    expect(screen.getByRole("button", { name: "Edit light variant" })).toBeInTheDocument();
   });
 });
 

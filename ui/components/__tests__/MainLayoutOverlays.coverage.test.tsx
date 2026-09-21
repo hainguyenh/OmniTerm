@@ -59,7 +59,10 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
 }
 
 beforeEach(() => {
-  mockOmnitermAPI({ plugin: { connectionCapabilities: vi.fn(async () => ({ sftp: true })) } })
+  mockOmnitermAPI({
+    plugin: { connectionCapabilities: vi.fn(async () => ({ sftp: true })) },
+    settings: { save: vi.fn(async () => {}) },
+  })
 })
 
 describe('MainLayoutOverlays', () => {
@@ -146,6 +149,8 @@ describe('MainLayoutOverlays', () => {
     rerender(<MainLayoutOverlays model={all} />)
     fireEvent.click(screen.getByText('confirm-all'))
     expect(all.skipCloseConfirmRef.current).toBe(true)
+    expect(all.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ skipTerminalCloseConfirm: true }))
+    expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith({ skipTerminalCloseConfirm: true })
 
     const palette = model({ commandPaletteOpen: true })
     rerender(<MainLayoutOverlays model={palette} />)

@@ -38,8 +38,7 @@ const OverlayBar: React.FC = () => {
         <span className="text-sm font-medium text-white truncate max-w-[220px]">{name}</span>
 
         <button
-          onClick={restore}
-          title="Restore into tab (exit fullscreen)"
+          onClick={restore} data-tooltip="Restore into tab (exit fullscreen)"
           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent transition-colors"
         >
           <Minimize2 className="w-3.5 h-3.5" />
@@ -47,8 +46,7 @@ const OverlayBar: React.FC = () => {
         </button>
 
         <button
-          onClick={disconnect}
-          title="Disconnect"
+          onClick={disconnect} data-tooltip="Disconnect"
           className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-theme-border text-theme-error hover:border-[#f7768e] hover:bg-theme-error/10 transition-colors"
         >
           <Unplug className="w-3.5 h-3.5" />

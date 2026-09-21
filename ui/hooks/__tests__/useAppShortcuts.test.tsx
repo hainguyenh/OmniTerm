@@ -356,12 +356,35 @@ describe('useAppShortcuts', () => {
       cleanup()
     })
 
-    it('still creates a new folder on Ctrl+Shift+N — Shift means it cannot collide with a shell default', () => {
+    it('opens a current-directory pane on Ctrl+Shift+N when a terminal has focus', () => {
       const { cleanup } = setup('xterm')
+      const onPane = vi.fn()
       const onFolder = vi.fn()
+      window.addEventListener('omniterm:new-pane-current-directory', onPane)
       window.addEventListener('omniterm:new-folder', onFolder)
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
-      expect(onFolder).toHaveBeenCalled()
+      expect(onPane).toHaveBeenCalledOnce()
+      expect(onFolder).not.toHaveBeenCalled()
+      window.removeEventListener('omniterm:new-pane-current-directory', onPane)
+      window.removeEventListener('omniterm:new-folder', onFolder)
+      cleanup()
+    })
+    it('keeps Ctrl+Shift+N fixed for panes even when New Folder is rebound', () => {
+      const rebound = {
+        ...appSettings,
+        shortcuts: { ...resolveShortcuts(appSettings.shortcuts), newFolder: 'Ctrl+Shift+M' },
+      }
+      const { cleanup } = setup('xterm', { appSettings: rebound })
+      const onPane = vi.fn()
+      const onFolder = vi.fn()
+      window.addEventListener('omniterm:new-pane-current-directory', onPane)
+      window.addEventListener('omniterm:new-folder', onFolder)
+
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'N', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
+
+      expect(onPane).toHaveBeenCalledOnce()
+      expect(onFolder).not.toHaveBeenCalled()
+      window.removeEventListener('omniterm:new-pane-current-directory', onPane)
       window.removeEventListener('omniterm:new-folder', onFolder)
       cleanup()
     })

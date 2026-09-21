@@ -17,6 +17,8 @@ interface AppSettings {
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
+  /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
+  skipTerminalCloseConfirm?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
   /** Any id from `shells.list`; the picker falls back when it is no longer available. */

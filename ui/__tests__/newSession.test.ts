@@ -38,6 +38,13 @@ describe('openNewSession', () => {
     expect(open).toHaveBeenCalledWith('powershell', 'ws#1')
   })
 
+  it('passes an explicit current directory through without converting it to a workspace', async () => {
+    const open = vi.fn().mockResolvedValue({ id: 'adhoc-cwd', type: 'LOCAL' })
+    setBridge({ open })
+    await openNewSession('powershell', vi.fn(), null, null, 'C:/repos/current/subdir')
+    expect(open).toHaveBeenCalledWith('powershell', null, null, 'C:/repos/current/subdir')
+  })
+
   it('opens nothing when the backend returns no record', async () => {
     setBridge({ open: vi.fn().mockResolvedValue(null) })
     const onConnect = vi.fn()

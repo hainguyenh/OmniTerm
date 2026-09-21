@@ -66,6 +66,7 @@ interface Initial {
   panePicker?: number | null
   dragPane?: number | null
   useActualGroups?: boolean
+  sessionCwds?: Record<string, string>
 }
 
 function useHarness(initial: Initial = {}) {
@@ -123,7 +124,7 @@ function useHarness(initial: Initial = {}) {
   const switchViewGroup = initial.useActualGroups ? actualGroups.switchViewGroup : switchMockViewGroup
   const createNewViewGroup = initial.useActualGroups ? actualGroups.createNewViewGroup : createMockViewGroup
   const base: any = {
-  sessionCwds: {}, workspaces: [],
+  sessionCwds: initial.sessionCwds ?? {}, workspaces: [], requestNewSession: vi.fn(),
     appSettings, setAppSettings, themes: [TOKYO_NIGHT], resolveAppearance: vi.fn(() => ({ themeId: TOKYO_NIGHT.id, fontSize: 17 })),
     onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen: initial.settingsOpen ?? false,
     activeTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, ephemeralConns, setEphemeralConns, panes, setPanes, focusedPane, setFocusedPane, activeTabId,
@@ -190,6 +191,25 @@ describe('useMainLayoutSessions complete behavior', () => {
     act(() => window.dispatchEvent(new CustomEvent('omniterm:change-layout', { detail: { mode: 4 } })))
     expect(result.current.base.layoutMode).toBe(4)
     expect(setItem).toHaveBeenCalledWith('cc.layoutMode', '4')
+  })
+
+  it('opens a new pane with the focused local terminal current directory', () => {
+    const current = { id: 'current', connId: 'local', name: 'Current' }
+    const background = { id: 'background', connId: 'ssh', name: 'Background' }
+    const { result } = renderHook(() => useHarness({
+      tabs: [current, background],
+      panes: ['current', null, null, null, null, null, null, null],
+      layoutMode: 1,
+      sessionCwds: { current: 'C:/repos/OmniTerm/ui' },
+    }))
+
+    const requestNewSession = result.current.base.requestNewSession
+    act(() => window.dispatchEvent(new CustomEvent('omniterm:new-pane-current-directory')))
+
+    expect(requestNewSession).toHaveBeenCalledWith('powershell', null, 'C:/repos/OmniTerm/ui')
+    expect(result.current.base.layoutMode).toBe(2)
+    expect(result.current.base.panes[1]).toBeNull()
+    expect(result.current.base.focusedPane).toBe(1)
   })
 
   it('preserves the focused terminal when shrinking a multi-pane layout', () => {

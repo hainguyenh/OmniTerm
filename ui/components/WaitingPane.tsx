@@ -1,6 +1,7 @@
 import React from 'react'
 import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
 import { DefaultIdleArt } from '../assets/defaultArt'
+import { Tooltip } from './Tooltip'
 
 /**
  * The "nothing here yet" page. Used both for the whole content area (no tabs at all) and inside every
@@ -13,6 +14,8 @@ interface WaitingPaneProps {
   /** Rendered inside a split pane: smaller art, no keyboard hint. */
   compact?: boolean
   onNewSession: () => void
+  /** Hover text describing the exact shell and directory the primary action will launch. */
+  newSessionTitle?: string
   onPickShell: (rect: DOMRect) => void
   /** Omitted in single view, where there is no other pane to adopt a session from. */
   onChooseSession?: (rect: DOMRect) => void
@@ -25,7 +28,7 @@ interface WaitingPaneProps {
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
-  dark, compact = false, onNewSession, onPickShell, onChooseSession, openSessionCount = 0, customArtUrl,
+  dark, compact = false, onNewSession, newSessionTitle, onPickShell, onChooseSession, openSessionCount = 0, customArtUrl,
 }) => (
   <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
     <div className={`min-h-full w-full flex flex-col items-center justify-center ${
@@ -74,21 +77,23 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
           <div className="flex items-center justify-center flex-wrap gap-2.5 w-full">
             <div className="flex items-center gap-1">
               <div className="flex rounded-lg bg-[var(--theme-accent)] hover:opacity-90 transition-opacity">
-                <button
-                  type="button"
-                  onClick={onNewSession}
-                  className={`inline-flex items-center justify-center gap-1.5 text-[var(--theme-accent-fg)] font-bold rounded-l-lg ${
-                    compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-xs'
-                  }`}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Terminal
-                </button>
+                <Tooltip content={newSessionTitle ?? 'New Terminal'} shortcut="Ctrl+N" placement="top">
+                  <button
+                    type="button"
+                    onClick={onNewSession}
+                    className={`inline-flex items-center justify-center gap-1.5 text-[var(--theme-accent-fg)] font-bold rounded-l-lg ${
+                      compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-xs'
+                    }`}
+                    aria-label="New Terminal"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    New Terminal
+                  </button>
+                </Tooltip>
                 <button
                   type="button"
                   onClick={(e) => onPickShell(e.currentTarget.getBoundingClientRect())}
-                  className="inline-flex items-center justify-center px-2 text-[var(--theme-accent-fg)] border-l border-[var(--theme-accent-fg)]/30 rounded-r-lg"
-                  title="Select Shell"
+                  className="inline-flex items-center justify-center px-2 text-[var(--theme-accent-fg)] border-l border-[var(--theme-accent-fg)]/30 rounded-r-lg" aria-label="Select Shell"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
                 </button>

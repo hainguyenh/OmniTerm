@@ -35,8 +35,7 @@ const DetachedPlaceholder: React.FC<DetachedPlaceholderProps> = ({ name, onFocus
       <button
         type="button"
         onClick={onReattach}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-theme-border text-theme-fg text-xs hover:text-theme-accent hover:border-theme-accent transition-colors"
-        title={detachTitle('attach', 'footer')}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-theme-border text-theme-fg text-xs hover:text-theme-accent hover:border-theme-accent transition-colors" aria-label={detachTitle('attach', 'footer')}
       >
         <Minimize2 className="w-3.5 h-3.5" />
         Attach back into this tab

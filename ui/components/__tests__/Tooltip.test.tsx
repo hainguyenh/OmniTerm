@@ -3,7 +3,7 @@
  */
 import { fireEvent, render, screen, act } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { Tooltip } from '../Tooltip'
+import { GlobalButtonTooltips, Tooltip } from '../Tooltip'
 
 describe('Tooltip', () => {
   beforeEach(() => {
@@ -159,4 +159,21 @@ describe('Tooltip', () => {
     expect(tooltip).toHaveTextContent('Ctrl')
     expect(tooltip).toHaveTextContent('2')
   })
+  it('provides a themed fallback tooltip and removes native button titles', () => {
+    render(
+      <>
+        <GlobalButtonTooltips />
+        <button type="button" title="Native browser help">Fallback action</button>
+      </>,
+    )
+
+    const button = screen.getByRole('button', { name: 'Fallback action' })
+    expect(button).not.toHaveAttribute('title')
+    fireEvent.mouseOver(button)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Native browser help')
+    fireEvent.mouseOut(button)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+
 })

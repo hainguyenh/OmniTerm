@@ -86,6 +86,16 @@ describe('NewTerminalMenu', () => {
     expect(screen.getByRole('searchbox', { name: 'Search workspace or folder' })).toBeInTheDocument()
   })
 
+  it('double-clicks a folder to launch the default shell there immediately', () => {
+    const { props } = renderMenu()
+
+    fireEvent.doubleClick(screen.getByRole('option', { name: /Docs - Guide/ }))
+
+    expect(props.onSelectWorkspace).toHaveBeenCalledWith('docs::guide')
+    expect(props.onLaunchShell).toHaveBeenCalledWith('powershell', 'docs::guide')
+    expect(props.onClose).toHaveBeenCalledOnce()
+  })
+
   it('starts a shell with the selected workspace and closes the menu', () => {
     const { props } = renderMenu()
 
