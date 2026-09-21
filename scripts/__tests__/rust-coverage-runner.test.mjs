@@ -5,6 +5,13 @@ import test from 'node:test'
 const coverageScript = fs.readFileSync(new URL('../run-rust-coverage.mjs', import.meta.url), 'utf8')
 const workflow = fs.readFileSync(new URL('../../.github/workflows/test-gate.yml', import.meta.url), 'utf8')
 
+test('Rust coverage defaults cargo build artifacts to the OS temp directory', () => {
+  assert.match(coverageScript, /CARGO_TARGET_DIR/)
+  assert.match(coverageScript, /tmpdir\(\)/)
+  assert.match(coverageScript, /omniterm-rust-coverage-target/)
+  assert.match(coverageScript, /env: cargoEnv/)
+})
+
 test('Rust coverage opts in to default --cfg=coverage injection so source-level exclusion markers fire', () => {
   // cargo-llvm-cov injects `--cfg=coverage` into RUSTFLAGS by DEFAULT; the
   // negative-only flag `--no-cfg-coverage` disables that. We omit it so

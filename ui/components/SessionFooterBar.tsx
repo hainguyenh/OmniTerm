@@ -61,15 +61,14 @@ export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
   const PaneIcon = paneId?.icon ?? null
 
   return (
-    <div className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
+    <div data-session-footer className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
       {paneId && PaneIcon && (
-        <span className="flex items-center gap-1 flex-shrink-0" style={{ color: paneId.color }}
-          title={`Pane ${focusedPane + 1} · ${paneId.label}`}>
+        <span className="flex items-center gap-1 flex-shrink-0" style={{ color: paneId.color }} aria-label={`Pane ${focusedPane + 1} · ${paneId.label}`}>
           <PaneIcon className="w-3.5 h-3.5" fill={paneId.color} />
           <span className="text-[9px] font-bold">{focusedPane + 1}</span>
         </span>
       )}
-      <span className="max-w-[180px] truncate text-[10px] text-theme-dim" title={workspaceTitle}>
+      <span className="max-w-[180px] truncate text-[10px] text-theme-dim" aria-label={`Working folder: ${workspaceTitle}`}>
         {workspaceTitle}
       </span>
       <span className="opacity-50">·</span>

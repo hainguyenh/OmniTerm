@@ -80,6 +80,11 @@ export default function NewTerminalMenu({
   })
   const activeCursor = Math.min(rawCursor, Math.max(0, items.length - 1))
   const isDefaultShell = (id: string) => id === defaultShellId
+  const launchFolder = (selection: string | null) => {
+    onSelectWorkspace(selection)
+    onLaunchShell(defaultShellId, selection)
+    onClose()
+  }
 
   // Keyboard vs mouse modality. Once an arrow key moves the cursor, hover must stop steering it:
   // Chromium re-fires mouseenter when scrollIntoView slides rows under a stationary pointer, so a
@@ -236,6 +241,7 @@ export default function NewTerminalMenu({
             className={rowClasses(activeCursor === 0)}
             onMouseEnter={(event) => hoverRow(0, event)}
             onClick={() => onSelectWorkspace(null)}
+            onDoubleClick={() => launchFolder(null)}
           >
             <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
             <span className="min-w-0 flex-1 truncate">None (default directory)</span>
@@ -250,12 +256,12 @@ export default function NewTerminalMenu({
                 id={`new-terminal-item-${itemIndex}`}
                 data-menu-index={itemIndex}
                 role="option"
-                aria-selected={selection === selectedWorkspaceId}
-                title={folder.path}
+                aria-selected={selection === selectedWorkspaceId} data-tooltip={folder.path}
                 className={rowClasses(activeCursor === itemIndex)}
                 style={{ paddingLeft: `${8 + depth * 12}px` }}
                 onMouseEnter={(event) => hoverRow(itemIndex, event)}
                 onClick={() => onSelectWorkspace(selection)}
+                onDoubleClick={() => launchFolder(selection)}
               >
                 <FolderOpen className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" aria-hidden="true" />
                 <span className="min-w-0 flex-1 truncate">{workspace.name} - {folder.name}</span>

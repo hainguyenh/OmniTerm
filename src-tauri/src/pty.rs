@@ -119,7 +119,7 @@ impl PtyManager {
         );
     }
 
-    async fn refresh(&self) -> Result<Vec<SessionSummary>, String> {
+    pub(crate) async fn refresh(&self) -> Result<Vec<SessionSummary>, String> {
         let sessions = self.client()?.list().await?;
         self.sessions.clear();
         for summary in &sessions {

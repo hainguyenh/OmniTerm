@@ -21,9 +21,12 @@ export async function openNewSession(
   onConnect: (conn: any) => void,
   workspaceId?: string | null,
   folderId?: string | null,
+  cwd?: string | null,
 ): Promise<void> {
-  const conn = folderId
-    ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId)
-    : await window.omnitermAPI.shells.open(shell, workspaceId)
+  const conn = cwd
+    ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId, cwd)
+    : folderId
+      ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId)
+      : await window.omnitermAPI.shells.open(shell, workspaceId)
   if (conn) onConnect(conn)
 }

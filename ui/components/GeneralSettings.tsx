@@ -10,6 +10,7 @@ import {
   type DefaultWorkspaceSetting,
 } from '../utils/workspaceSelection'
 import { Tooltip } from './Tooltip'
+import ToggleRow from './ToggleRow'
 
 /**
  * The "General" block of the settings panel: the default terminal, and the size cap the built-in file
@@ -263,6 +264,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
           </div>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
+        <span className={LABEL_CLS}>Terminal close confirmation</span>
+        <ToggleRow
+          label="Don't ask before closing connected terminals"
+          description="Close connected terminal sessions without showing the Close Terminal dialog."
+          checked={appSettings.skipTerminalCloseConfirm ?? false}
+          onChange={() => patch({ skipTerminalCloseConfirm: !(appSettings.skipTerminalCloseConfirm ?? false) })}
+          ariaLabel="Skip terminal close confirmation"
+        />
       </div>
 
       {/* Viewer size cap. 1 MB covers every script and config file in a normal workspace; this exists

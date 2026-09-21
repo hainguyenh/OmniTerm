@@ -243,7 +243,7 @@ const FileBrowser: React.FC<FileBrowserProps> = ({ id, connectionName, active = 
         <div className="flex items-start gap-1.5 px-3 py-1.5 text-[11px] text-theme-error bg-theme-error/10 border-b border-theme-border">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
           <span className="min-w-0 break-words">{error}</span>
-          <button type="button" onClick={() => setError(null)} className="ml-auto flex-shrink-0 hover:text-white transition-colors">
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss file browser error" className="ml-auto flex-shrink-0 hover:text-white transition-colors">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

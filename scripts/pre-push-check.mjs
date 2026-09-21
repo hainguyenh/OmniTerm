@@ -12,6 +12,8 @@
  * over silently, because a gate you believe ran and did not is worse than no gate.
  */
 import { spawnSync } from 'node:child_process'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 const FAST_CHECKS = [
   {
@@ -34,12 +36,14 @@ const FAST_CHECKS = [
     command: ['cargo', 'clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'],
     fix: 'cargo clippy --workspace --all-targets -- -D warnings',
     needs: 'cargo',
+    cargoTarget: true,
   },
   {
     name: 'Rust — Unit Tests',
     command: ['cargo', 'test', '--workspace'],
     fix: 'cargo test --workspace',
     needs: 'cargo',
+    cargoTarget: true,
   },
 ]
 
@@ -85,6 +89,14 @@ function spawnCheck(command, args, options = {}) {
     : spawnSync(command, args, { ...options, shell: false })
 }
 
+export function cargoTargetEnv(env = process.env, tempRoot = tmpdir()) {
+  if (env.CARGO_TARGET_DIR) return env
+  return {
+    ...env,
+    CARGO_TARGET_DIR: path.join(tempRoot, 'omniterm-cargo-target'),
+  }
+}
+
 export function isAvailable(tool, runner = spawnCheck) {
   const probe = runner(tool, ['--version'], { stdio: 'ignore' })
   return !probe.error && probe.status === 0
@@ -109,7 +121,16 @@ export function parseArgs(argv) {
  * Stopping early is deliberate: the first failure is nearly always the cause of the rest, and a
  * developer waiting on a push wants one command to run, not five.
  */
-export function runChecks(checks, { runner = spawnCheck, log = console.log, available = isAvailable } = {}) {
+export function runChecks(
+  checks,
+  {
+    runner = spawnCheck,
+    log = console.log,
+    available = isAvailable,
+    env = process.env,
+    tempRoot = tmpdir(),
+  } = {},
+) {
   const skipped = []
   for (const check of checks) {
     if (check.needs && !available(check.needs, runner)) {
@@ -117,7 +138,10 @@ export function runChecks(checks, { runner = spawnCheck, log = console.log, avai
       continue
     }
     log(`\n▶ ${check.name}`)
-    const result = runner(check.command[0], check.command.slice(1), { stdio: 'inherit' })
+    const result = runner(check.command[0], check.command.slice(1), {
+      stdio: 'inherit',
+      env: check.cargoTarget ? cargoTargetEnv(env, tempRoot) : env,
+    })
     if (result.error || result.status !== 0) {
       return { ok: false, failed: check, skipped }
     }

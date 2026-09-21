@@ -208,13 +208,15 @@ fn pin_management_and_logical_targets_resolve_and_format_paths() {
     assert!(set_entry_pinned(&mut ws, "missing", "src/lib.rs", true).is_err());
     set_entry_pinned(&mut ws, "root", "/src/lib.rs/", true).expect("pin");
     assert_eq!(ws.pins, vec![WorkspacePin { folder_id: "root".into(), path: "src/lib.rs".into() }]);
+    set_entry_pinned(&mut ws, "root", "src/keep.rs", true).expect("pin sibling");
     assert!(is_entry_pinned(&ws, "root", "src/lib.rs"));
     assert!(!is_entry_pinned(&ws, "root", "other.rs"));
     assert!(!is_entry_pinned(&ws, "other", "src/lib.rs"));
 
     set_entry_pinned(&mut ws, "root", "src/lib.rs", false).expect("unpin");
-    assert!(ws.pins.is_empty());
+    assert_eq!(ws.pins, vec![WorkspacePin { folder_id: "root".into(), path: "src/keep.rs".into() }]);
     assert!(!is_entry_pinned(&ws, "root", "src/lib.rs"));
+    assert!(is_entry_pinned(&ws, "root", "src/keep.rs"));
 
     assert!(logical_target(&ws, "").is_err());
     assert!(logical_target(&ws, "missing/path").is_err());

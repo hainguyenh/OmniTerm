@@ -204,7 +204,6 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
               <button
                 type="button"
                 aria-label="Clear workspace color"
-                title="Clear color"
                 onClick={() => onAppearanceColorChange?.(undefined)}
                 className={`h-5 w-5 rounded border ${appearanceColor ? 'border-[var(--theme-border)]' : 'border-[var(--theme-fg)]'}`}
               />
@@ -213,7 +212,6 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                   key={color}
                   type="button"
                   aria-label={`Set color ${color}`}
-                  title={color}
                   onClick={() => onAppearanceColorChange?.(color)}
                   className={`h-5 w-5 rounded border ${appearanceColor === color ? 'border-[var(--theme-fg)] ring-1 ring-[var(--theme-fg)]' : 'border-transparent'}`}
                   style={{ backgroundColor: WORKSPACE_COLOR_VALUES[color] }}
@@ -227,7 +225,6 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                   <button
                     type="button"
                     aria-label="Clear workspace icon"
-                    title="No workspace icon"
                     onClick={() => onAppearanceIconChange(undefined)}
                     className={`rounded border px-1.5 py-0.5 text-[10px] ${appearanceIcon ? 'border-[var(--theme-border)] text-[var(--theme-dim)]' : 'border-[var(--theme-fg)] bg-[var(--theme-hover-bg)] text-[var(--theme-fg)]'}`}
                   >
@@ -247,7 +244,6 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                         key={icon}
                         type="button"
                         aria-label={`Set workspace icon ${icon}`}
-                        title={icon}
                         onClick={() => onAppearanceIconChange?.(icon)}
                         className={`rounded p-1 ${appearanceIcon === icon ? 'bg-[var(--theme-hover-bg)] text-[var(--theme-fg)]' : 'text-[var(--theme-dim)] hover:bg-[var(--theme-hover-bg)]'}`}
                       >
@@ -356,8 +352,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
             {/* Expand / collapse controls for the file tree */}
             <div className="mb-1 flex items-center gap-0.5">
               <button
-                type="button"
-                title="Collapse all folders"
+                type="button" aria-label="Collapse all folders"
                 onClick={() => setFilterTreeCollapsed(new Set(filterTreeAllDirs))}
                 className={smallButton + ' inline-flex items-center gap-0.5'}
               >
@@ -365,8 +360,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                 All
               </button>
               <button
-                type="button"
-                title="Expand all folders"
+                type="button" aria-label="Expand all folders"
                 onClick={() => setFilterTreeCollapsed(new Set())}
                 className={smallButton + ' inline-flex items-center gap-0.5'}
               >
@@ -375,8 +369,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
               </button>
               <span className="text-[9px] text-[var(--theme-dim)] mx-0.5">│</span>
               <button
-                type="button"
-                title="Expand only root folders (Level 1)"
+                type="button" aria-label="Expand only root folders (Level 1)"
                 onClick={() => {
                   const level1 = new Set(collectFilterDirPaths(filterTree, 0))
                   const allDirs = new Set(filterTreeAllDirs)
@@ -390,8 +383,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
                 Lv 1
               </button>
               <button
-                type="button"
-                title="Expand root + second-level folders (Level 2)"
+                type="button" aria-label="Expand root + second-level folders (Level 2)"
                 onClick={() => {
                   const level2 = new Set(collectFilterDirPaths(filterTree, 1))
                   const allDirs = new Set(filterTreeAllDirs)

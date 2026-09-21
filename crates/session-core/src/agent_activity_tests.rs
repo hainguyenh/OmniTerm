@@ -86,6 +86,30 @@ fn agent_matching_uses_token_boundaries() {
 }
 
 #[test]
+fn empty_output_after_echo_quiet_does_not_create_activity() {
+    let now = Instant::now();
+    let mut tracker = AgentActivityTracker::default();
+    tracker.observe_output_at(&osc_title("Claude Code - repo"), now);
+    tracker.note_input_at(now + Duration::from_millis(10));
+    let later = now + INPUT_ECHO_QUIET + Duration::from_millis(20);
+    tracker.observe_output_at(&[], later);
+    assert!(!tracker.sample_at(later).recent_output);
+}
+
+#[test]
+fn agent_alias_rejects_a_non_boundary_prefix() {
+    assert!(!title_is_agent("mycodex"));
+}
+
+#[test]
+fn non_st_escape_inside_title_is_skipped_until_real_terminator() {
+    let now = Instant::now();
+    let mut tracker = AgentActivityTracker::default();
+    tracker.observe_output_at(b"\x1b]2;Claude Code\x1bXsuffix\x07", now);
+    assert!(tracker.sample_at(now).is_agent);
+}
+
+#[test]
 fn st_terminator_ends_osc_title() {
     let now = Instant::now();
     let mut tracker = AgentActivityTracker::default();

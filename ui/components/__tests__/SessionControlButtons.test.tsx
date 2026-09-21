@@ -21,6 +21,7 @@ beforeEach(() => {
   localStorage.clear()
   mockOmnitermAPI({
     connect: {
+      interruptSession: vi.fn().mockResolvedValue(undefined),
       localInput: vi.fn(),
       sshInput: vi.fn(),
       setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
@@ -54,6 +55,7 @@ describe('SessionControlButtons', () => {
           detach="detach"
           onToggleDetach={vi.fn()}
           onToggleFullscreen={vi.fn()}
+          onOpenCurrentDirectory={vi.fn()}
           appearance={{
             themes: [TOKYO_NIGHT],
             themeId: TOKYO_NIGHT.id,
@@ -71,6 +73,7 @@ describe('SessionControlButtons', () => {
       fireEvent.click(screen.getByRole('button', { name: 'More terminal actions' }))
       expect(screen.getByText('Theme')).toBeInTheDocument()
       expect(screen.getByRole('menuitem', { name: 'Theme' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Open new pane with current directory' })).toBeInTheDocument()
     } finally {
       if (clientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth)
       else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
@@ -257,7 +260,7 @@ describe('SessionControlButtons', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
     fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
-    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x03')
+    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledWith('s1')
     expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x0c')
 
     rerender(
@@ -317,4 +320,23 @@ describe('SessionControlButtons', () => {
     render(<SessionControlButtons conn={rdp} sessionId="s1" detach={null} onToggleDetach={vi.fn()} />)
     expect(screen.queryByRole('button', { name: 'Copy terminal output' })).not.toBeInTheDocument()
   })
+  it('runs the current-directory action inline for local terminals', () => {
+    const onOpenCurrentDirectory = vi.fn()
+    render(
+      <SessionControlButtons
+        conn={local}
+        sessionId="s1"
+        busy
+        detach={null}
+        onToggleDetach={vi.fn()}
+        onOpenCurrentDirectory={onOpenCurrentDirectory}
+      />,
+    )
+    const action = screen.getByRole('button', { name: 'Open new pane with current directory' })
+    expect(action.querySelector('svg')).toHaveClass('w-5', 'h-5')
+    fireEvent.click(action)
+    expect(onOpenCurrentDirectory).toHaveBeenCalledOnce()
+  })
+
+
 })

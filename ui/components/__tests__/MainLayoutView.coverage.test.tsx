@@ -63,6 +63,24 @@ beforeEach(() => {
 })
 
 describe('MainLayoutView coverage', () => {
+  it('shows the active terminal working folder alias in the status bar', () => {
+    render(<MainLayoutView model={model({
+      activeTabs: [{ id: 'local-tab', connId: 'local', name: 'PowerShell' }],
+      activeTabId: 'local-tab',
+      panes: ['local-tab'],
+      statuses: { 'local-tab': 'connected' },
+      sessionCwds: { 'local-tab': 'F:/repos/bravo-ui/src/components' },
+      workspaces: [{
+        id: 'dev',
+        name: 'dev',
+        folders: [{ id: 'bravo', name: 'Bravo.UI', path: 'F:/repos/bravo-ui' }],
+        order: 0,
+        pins: [],
+      }],
+    })} />)
+    expect(screen.getByLabelText('Working folder: Bravo.UI')).toHaveTextContent('Bravo.UI')
+  })
+
   it('drives activity, workspace, files, fallback panel, and waiting actions', () => {
     const first = model({ activeView: 'workspace' })
     const { rerender } = render(<MainLayoutView model={first} />)

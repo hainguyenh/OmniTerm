@@ -49,6 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
       tooltip,
+      title: nativeTitle,
       shortcut,
       tooltipPlacement = 'bottom',
       tooltipDelay = 150,
@@ -78,11 +79,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       </button>
     )
 
-    // No tooltip while disabled: disabled controls fire no mouse events, so the popup could
-    // never show and the wrapper would only add dead weight.
-    if (tooltip && !disabled) {
+    const effectiveTooltip = tooltip ?? nativeTitle
+
+    // Never render native button titles: use the themed tooltip surface instead.
+    if (effectiveTooltip && !disabled) {
       return (
-        <Tooltip content={tooltip} shortcut={shortcut} placement={tooltipPlacement} delay={tooltipDelay}>
+        <Tooltip content={effectiveTooltip} shortcut={shortcut} placement={tooltipPlacement} delay={tooltipDelay}>
           {baseBtn}
         </Tooltip>
       )

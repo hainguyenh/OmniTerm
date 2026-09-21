@@ -177,6 +177,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
 
   // Clone trigger element with ref and event handlers
   const triggerProps = {
+    'data-tooltip-owned': 'true',
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node
       const originalRef = (children as unknown as { ref?: React.Ref<HTMLElement> }).ref
@@ -246,5 +247,102 @@ export const Tooltip: React.FC<TooltipProps> = ({
       {clonedTrigger}
       {portalContent}
     </>
+  )
+}
+
+
+/**
+ * Delegated fallback tooltip for every app button that does not already own an explicit <Tooltip>.
+ * Native button titles are converted to themed tooltip content and removed so Chromium never shows
+ * a competing browser tooltip.
+ */
+export const GlobalButtonTooltips: React.FC = () => {
+  const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
+  const [content, setContent] = useState('')
+  const [coords, setCoords] = useState<Position | null>(null)
+  const popupRef = useRef<HTMLDivElement | null>(null)
+  const anchorRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    const prepare = (button: HTMLButtonElement) => {
+      const nativeTitle = button.getAttribute('title')
+      if (nativeTitle) {
+        if (!button.dataset.tooltip) button.dataset.tooltip = nativeTitle
+        button.removeAttribute('title')
+      }
+    }
+    const prepareTree = (root: ParentNode) => {
+      if (root instanceof HTMLButtonElement) prepare(root)
+      root.querySelectorAll?.('button[title]').forEach(node => prepare(node as HTMLButtonElement))
+    }
+    const resolve = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return null
+      const button = target.closest('button')
+      if (!(button instanceof HTMLButtonElement) || button.dataset.tooltipOwned === 'true') return null
+      prepare(button)
+      const label = button.dataset.tooltip
+        || button.getAttribute('aria-label')
+        || button.textContent?.replace(/\s+/g, ' ').trim()
+        || ''
+      return label ? { button, label } : null
+    }
+    const show = (event: Event) => {
+      const resolved = resolve(event.target)
+      if (!resolved) return
+      anchorRef.current = resolved.button
+      setAnchor(resolved.button)
+      setContent(resolved.label)
+    }
+    const hide = (event: MouseEvent | FocusEvent) => {
+      const current = anchorRef.current
+      const related = event.relatedTarget
+      if (current && related instanceof Node && current.contains(related)) return
+      anchorRef.current = null
+      setAnchor(null)
+      setContent('')
+      setCoords(null)
+    }
+
+    prepareTree(document)
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'attributes' && record.target instanceof HTMLButtonElement) prepare(record.target)
+        for (const node of record.addedNodes) if (node instanceof Element) prepareTree(node)
+      }
+    })
+    observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] })
+    document.addEventListener('mouseover', show)
+    document.addEventListener('focusin', show)
+    document.addEventListener('mouseout', hide)
+    document.addEventListener('focusout', hide)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('mouseover', show)
+      document.removeEventListener('focusin', show)
+      document.removeEventListener('mouseout', hide)
+      document.removeEventListener('focusout', hide)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!anchor || !popupRef.current) return
+    setCoords(calculatePosition(anchor.getBoundingClientRect(), popupRef.current.getBoundingClientRect(), 'bottom'))
+  }, [anchor, content])
+
+  if (!anchor || !content || typeof document === 'undefined') return null
+  return createPortal(
+    <div
+      ref={popupRef}
+      role="tooltip"
+      className="pointer-events-none fixed z-[9999] rounded-md border border-theme-border bg-theme-popup px-2 py-1 text-[11px] font-medium text-theme-fg shadow-xl whitespace-nowrap"
+      style={{
+        top: coords ? `${coords.top}px` : '-9999px',
+        left: coords ? `${coords.left}px` : '-9999px',
+        opacity: coords ? 1 : 0,
+      }}
+    >
+      {content}
+    </div>,
+    document.body,
   )
 }

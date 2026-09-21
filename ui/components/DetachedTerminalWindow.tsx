@@ -144,21 +144,20 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             disabled={!meta}
             onClick={() => meta && window.omnitermAPI.terminalWindow.reattach(meta.sessionId)}
             className="inline-flex items-center gap-1 px-2 h-6 rounded border border-theme-border text-theme-fg text-[11px] hover:text-theme-accent hover:border-theme-accent disabled:opacity-50 transition-colors"
-            title={detachTitle('attach', 'window')}
             aria-label={detachTitle('attach', 'window')}
           >
             <Minimize2 className="w-3 h-3" />
             Re-attach
           </button>
-          <button type="button" onClick={() => window.omnitermAPI.windowControl.minimize()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-[#2a2f45] transition-colors" title="Minimize">
+          <button type="button" onClick={() => window.omnitermAPI.windowControl.minimize()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-[#2a2f45] transition-colors" aria-label="Minimize">
             <Minus className="w-3.5 h-3.5" />
           </button>
-          <button type="button" onClick={() => window.omnitermAPI.windowControl.toggleMaximize()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-[#2a2f45] transition-colors" title="Maximize">
+          <button type="button" onClick={() => window.omnitermAPI.windowControl.toggleMaximize()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-[#2a2f45] transition-colors" aria-label="Maximize">
             <Square className="w-3 h-3" />
           </button>
           {/* Closing does not always end the session: an idle shell is reaped, a busy one folds back
               into the main window rather than losing running work to a mis-click. */}
-          <button type="button" onClick={() => window.omnitermAPI.windowControl.close()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-theme-error hover:text-white transition-colors" title="Close">
+          <button type="button" onClick={() => window.omnitermAPI.windowControl.close()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-theme-error hover:text-white transition-colors" aria-label="Close">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

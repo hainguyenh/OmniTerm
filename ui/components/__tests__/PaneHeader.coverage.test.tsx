@@ -26,6 +26,12 @@ function setup(overrides: Partial<React.ComponentProps<typeof PaneHeader>> = {})
 }
 
 describe('PaneHeader remaining behavior', () => {
+  it('contains no native title attributes in pane chrome', () => {
+    const { container } = setup({ conn: { ...ssh, type: 'LOCAL' }, onOpenCurrentDirectory: vi.fn() })
+    expect(container.querySelector('[data-pane-header][title]')).toBeNull()
+    expect(container.querySelector('[data-pane-header] [title]')).toBeNull()
+  })
+
   beforeEach(() => {
     localStorage.clear()
     Object.defineProperty(window, 'omnitermAPI', {
@@ -34,6 +40,7 @@ describe('PaneHeader remaining behavior', () => {
         connect: {
           localInput: vi.fn(),
           sshInput: vi.fn(),
+          interruptSession: vi.fn().mockResolvedValue(undefined),
           setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
         },
       },
@@ -41,7 +48,7 @@ describe('PaneHeader remaining behavior', () => {
   })
   it('focuses, drags connected panes, opens picker, clears, and assigns sessions', () => {
     const x = setup()
-    const header = screen.getByTitle(/Pane 2/)
+    const header = screen.getByText('2').closest('[draggable]') as HTMLElement
     const transfer = { setData: vi.fn(), effectAllowed: '' }
     fireEvent.mouseDown(header)
     fireEvent.dragStart(header, { dataTransfer: transfer })
@@ -58,7 +65,7 @@ describe('PaneHeader remaining behavior', () => {
     expect(x.props.onClear).toHaveBeenCalled()
     fireEvent.click(screen.getByText('Desktop'))
     expect(x.props.onAssign).toHaveBeenCalledWith('s2')
-    expect(screen.getByTitle(/Shown in pane 1/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Shown in pane 1/)).toBeInTheDocument()
   })
 
   it('renders RDP identity, default connecting status, current check, and focused styling', () => {
@@ -71,7 +78,7 @@ describe('PaneHeader remaining behavior', () => {
 
   it('renders an inert empty pane and its empty picker state', () => {
     const x = setup({ conn: null, sessionId: null, tabs: [], panes: [null, null], pickerOpen: true })
-    const header = screen.getByTitle(/Pane 2/)
+    const header = screen.getByText('2').closest('[draggable]') as HTMLElement
     expect(screen.getByText('Empty pane')).toBeInTheDocument()
     expect(screen.getByText('No open sessions')).toBeInTheDocument()
     expect(screen.queryByText('Empty this pane')).not.toBeInTheDocument()
@@ -131,7 +138,7 @@ describe('PaneHeader remaining behavior', () => {
   it('renders the oscillating running indicator when busy is true', () => {
     const { container } = setup({ busy: true })
     // The pane header owns the wider header slot, so it uses the oscillating dot — not the ping ring.
-    expect(screen.getByTitle('Running process')).toBeInTheDocument()
+    expect(screen.getByLabelText('Running process')).toBeInTheDocument()
     expect(container.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
     expect(container.querySelector('.animate-ping')).toBeNull()
     expect(container.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
@@ -143,7 +150,7 @@ describe('PaneHeader remaining behavior', () => {
     const stop = screen.getByRole('button', { name: 'Stop current process' })
     expect(stop).toBeEnabled()
     fireEvent.click(stop)
-    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x03')
+    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledWith('s1')
     x.rerender(<PaneHeader {...x.props} busy={false} />)
     // The idle probe misreads WSL/fast commands, so a still-connected session keeps Stop enabled.
     expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
@@ -161,6 +168,14 @@ describe('PaneHeader remaining behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
     expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x03')
     expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x0c')
+    expect(window.omnitermAPI.connect.interruptSession).not.toHaveBeenCalled()
+  })
+
+  it('opens a new local pane at the current directory from the icon-only header action', () => {
+    const onOpenCurrentDirectory = vi.fn()
+    setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', onOpenCurrentDirectory })
+    fireEvent.click(screen.getByRole('button', { name: 'Open new pane with current directory' }))
+    expect(onOpenCurrentDirectory).toHaveBeenCalledOnce()
   })
 
   it('omits Stop and Clear for RDP panes, which have no PTY semantics', () => {

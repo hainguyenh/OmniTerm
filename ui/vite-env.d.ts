@@ -58,6 +58,8 @@ interface AppSettings {
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
+  /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
+  skipTerminalCloseConfirm?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
   /** Any id from `shells.list` — validated against that list before use, never assumed. */
@@ -206,7 +208,7 @@ interface Window {
       // LOCAL connection.
       local: (sessionId: string, connId: string, shell?: string, darkMode?: boolean) => void
       localDisconnect: (id: string) => void
-      forceKillSession: (id: string) => Promise<void>
+      interruptSession: (id: string) => Promise<void>
       localInput: (id: string, data: string) => void
       localResize: (id: string, size: { cols: number, rows: number }) => void
       onLocalReady: (id: string, cb: (label?: string) => void) => () => void

@@ -1,6 +1,7 @@
 import ReactDOM from 'react-dom/client'
 import App from './App.tsx'
 import OverlayBar from './components/OverlayBar.tsx'
+import { GlobalButtonTooltips } from './components/Tooltip.tsx'
 import { initTauriBridge } from './omnitermAPI'
 import { silenceConsole } from './diag'
 import './index.css'
@@ -27,5 +28,8 @@ if (isOverlay) {
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  isOverlay ? <OverlayBar /> : <App />,
+  <>
+    {isOverlay ? <OverlayBar /> : <App />}
+    <GlobalButtonTooltips />
+  </>,
 )

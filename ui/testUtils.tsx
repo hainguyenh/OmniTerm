@@ -185,7 +185,7 @@ const defaults: Api = {
     onSessionMetrics: noopSub,
     local: () => {},
     localDisconnect: () => {},
-    forceKillSession: async () => {},
+    interruptSession: async () => {},
     localInput: () => {},
     localResize: () => {},
     listLocalSessions: async () => [],

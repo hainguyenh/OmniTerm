@@ -36,7 +36,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
     return (
       <span
         className={`relative w-10 h-2 flex-shrink-0 ${className}`}
-        title={isAgent ? 'AI agent running' : 'Running process'}
+        aria-label={isAgent ? 'AI agent running' : 'Running process'}
         role="status"
       >
         <span className="absolute top-[1px] left-[17px] h-1.5 w-1.5 rounded-full bg-theme-accent running-dot-ghost-2" />
@@ -51,7 +51,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
     return (
       <span
         className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 ${className}`}
-        title={isAgent ? 'AI agent running' : 'Running command'}
+        aria-label={isAgent ? 'AI agent running' : 'Running command'}
       >
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-theme-accent opacity-75 duration-1000" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-theme-accent shadow-[0_0_6px_var(--theme-accent)]" />
@@ -64,7 +64,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
     return (
       <span
         className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 ${className}`}
-        title="Connecting…"
+        aria-label="Connecting…"
       >
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-theme-warning opacity-60 duration-1000" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-theme-warning" />
@@ -77,7 +77,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
     return (
       <span
         className={`w-1.5 h-1.5 rounded-full border border-theme-dim bg-transparent flex-shrink-0 ${className}`}
-        title="Idle"
+        aria-label="Idle"
       />
     )
   }
@@ -87,7 +87,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
     return (
       <span
         className={`w-1.5 h-1.5 rounded-full bg-theme-accent flex-shrink-0 ${className}`}
-        title="Connected"
+        aria-label="Connected"
       />
     )
   }
@@ -96,7 +96,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   return (
     <span
       className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]} ${className}`}
-      title={STATUS_LABEL[status]}
+      aria-label={STATUS_LABEL[status]}
     />
   )
 }

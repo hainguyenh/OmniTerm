@@ -16,6 +16,7 @@ export function useWorkspaceCatalog() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
       try { return localStorage.getItem('omniterm:last-workspace') } catch { return null }
   })
+  const [homeDir, setHomeDir] = useState('')
   const refreshWorkspaces = useCallback(async () => {
       await window.omnitermAPI.workspace.list().then(list => {
           setWorkspaces(list)
@@ -26,5 +27,10 @@ export function useWorkspaceCatalog() {
       setSessionCwds(prev => (prev[id] === cwd ? prev : { ...prev, [id]: cwd }))
   }, [])
   useEffect(() => { void refreshWorkspaces() }, [refreshWorkspaces])
-  return { workspaces, setWorkspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, sessionCwds, setSessionCwd }
+  useEffect(() => {
+    const getHomeDir = window.omnitermAPI?.files?.getHomeDir
+    if (!getHomeDir) return
+    void getHomeDir().then(setHomeDir).catch(() => setHomeDir(''))
+  }, [])
+  return { workspaces, setWorkspaces, selectedWorkspaceId, setSelectedWorkspaceId, refreshWorkspaces, sessionCwds, setSessionCwd, homeDir }
 }

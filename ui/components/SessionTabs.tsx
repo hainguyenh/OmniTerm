@@ -54,6 +54,8 @@ interface SessionTabsProps {
   onClose: (tabId: string) => void
   onContextMenu: (e: React.MouseEvent, tabId: string) => void
   onNewSession: () => void
+  /** Hover text describing the shell and exact directory the + button will launch. */
+  newSessionTitle?: string
   onPickShell: (rect: DOMRect) => void
   /** Opens the picker for the currently focused dock when split view is active. */
   onPickPane?: (rect: DOMRect) => void
@@ -72,7 +74,7 @@ interface SessionTabsProps {
 const SessionTabs: React.FC<SessionTabsProps> = ({
   tabs, panes, layoutMode, focusedPane, statuses, activity,
   isEditor, isPreview, isEphemeral, connType, getShellLabel, connName, connCwd,
-  onSelect, onPromote, onClose, onContextMenu, onNewSession, onPickShell, onPickPane, detachTabId, detachAction,
+  onSelect, onPromote, onClose, onContextMenu, onNewSession, newSessionTitle, onPickShell, onPickPane, detachTabId, detachAction,
   onToggleDetach, onReveal,
 }) => (
   <div className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0">
@@ -216,7 +218,7 @@ const SessionTabs: React.FC<SessionTabsProps> = ({
       )
     })}
     <div className="flex ml-1 rounded flex-shrink-0">
-      <Tooltip content="New Terminal" shortcut="Ctrl+N" placement="bottom">
+      <Tooltip content={newSessionTitle ?? 'New Terminal'} shortcut="Ctrl+N" placement="bottom">
         <button
           type="button"
           onClick={onNewSession}

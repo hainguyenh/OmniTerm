@@ -117,6 +117,23 @@ describe('useMainLayoutSessions view mode changes', () => {
     expect(result.current.base.tabGroups.c).toBe(result.current.base.activeGroupId)
   })
 
+  it('compacts occupied panes when shrinking past an empty slot', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [
+        { id: 'first', connId: 'local', name: 'First' },
+        { id: 'third', connId: 'ssh', name: 'Third' },
+      ],
+      panes: ['first', null, 'third', null, null, null, null, null],
+      layoutMode: 3,
+      focusedPane: 2,
+    }))
+
+    act(() => result.current.sessions.changeLayoutMode(2))
+
+    expect(result.current.base.panes.slice(0, 2)).toEqual(['first', 'third'])
+    expect(result.current.base.focusedPane).toBe(1)
+  })
+
   it('returns the last non-focused pane to Ungrouped when a group shrinks', () => {
     const { result } = renderHook(() => useHarness({
       useActualGroups: true,

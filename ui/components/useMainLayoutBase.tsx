@@ -28,8 +28,16 @@ export function useMainLayoutBase({
   const shellOptionsRef = useRef<ShellOption[]>([])
   const workspaceCatalog = useWorkspaceCatalog()
   const { selectedWorkspaceId } = workspaceCatalog
-  const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null) => {
+  const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null, requestedCwd?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
+      // An explicit cwd comes from a live pane and is already the exact launch target. Do not
+      // reinterpret it through workspace/default history or mutate the user's last workspace.
+      if (requestedCwd) {
+          void openNewSession(shell, (conn) => {
+              handleConnectRef.current(conn as Connection)
+          }, null, null, requestedCwd).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
+          return
+      }
       const lastUsed = (() => { try { return localStorage.getItem('omniterm:last-workspace') } catch { return null } })();
       // Explicit arg wins (including an explicit null = forced home); otherwise default setting,
       // then last-used, then home. Stale selections fall through instead of failing the launch.
@@ -94,7 +102,8 @@ export function useMainLayoutBase({
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const [shellMenu, setShellMenu] = useState<{ x: number; y: number } | null>(null);
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null);
-  const skipCloseConfirmRef = useRef(false);
+  const skipCloseConfirmRef = useRef(appSettings.skipTerminalCloseConfirm ?? false);
+  skipCloseConfirmRef.current = appSettings.skipTerminalCloseConfirm ?? false;
   const [panePicker, setPanePicker] = useState<number | null>(null);
   const [panePickerAnchor, setPanePickerAnchor] = useState<DOMRect | null>(null);
   const panePickerRef = useRef<HTMLDivElement>(null);

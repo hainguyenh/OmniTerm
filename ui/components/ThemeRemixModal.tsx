@@ -187,8 +187,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
             <button
               type="button"
               onClick={() => { void handleResetToDefault() }}
-              disabled={busy}
-              title={isCustom(draft) ? 'Load the default palette into this theme' : 'Restore the built-in palette'}
+              disabled={busy} aria-label={isCustom(draft) ? 'Load the default palette into this theme' : 'Restore the built-in palette'}
               className="flex items-center gap-1 rounded-lg border border-theme-border px-2.5 py-1.5 text-xs text-theme-dim hover:bg-theme-hover hover:text-theme-fg disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" />Reset to default
@@ -196,8 +195,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
             <button
               type="button"
               onClick={revert}
-              disabled={!dirty}
-              title="Discard unsaved edits"
+              disabled={!dirty} aria-label="Discard unsaved edits"
               className="flex items-center gap-1 rounded-lg border border-theme-border px-2.5 py-1.5 text-xs text-theme-dim hover:bg-theme-hover hover:text-theme-fg disabled:opacity-40"
             >
               <Undo2 className="h-3.5 w-3.5" />Revert
@@ -217,24 +215,21 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
             <button
               type="button"
               onClick={() => { void refreshThemes() }}
-              disabled={isRefreshing}
-              title="Reload themes from JSON files"
+              disabled={isRefreshing} aria-label="Reload themes from JSON files"
               className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg disabled:opacity-50"
             >
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </button>
             <button
               type="button"
-              onClick={() => { void window.omnitermAPI.themes.openFolder() }}
-              title="Open themes folder"
+              onClick={() => { void window.omnitermAPI.themes.openFolder() }} aria-label="Open themes folder"
               className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg"
             >
               <FolderOpen className="h-4 w-4" />
             </button>
             <button
               type="button"
-              onClick={guardedClose}
-              title="Close"
+              onClick={guardedClose} aria-label="Close"
               className="rounded-lg p-1 text-theme-dim transition-colors hover:bg-theme-hover hover:text-theme-fg"
             >
               <X className="h-5 w-5" />
@@ -272,11 +267,11 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
                       <span className="block text-[10px] text-theme-dim">{isCustom(t) ? 'Custom' : 'Built-in'}</span>
                     </button>
                     <span className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button type="button" onClick={() => { void handleDuplicate(t) }} title="Duplicate" className="rounded p-1 hover:bg-theme-hover">
+                      <button type="button" onClick={() => { void handleDuplicate(t) }} aria-label="Duplicate" className="rounded p-1 hover:bg-theme-hover">
                         <Copy className="h-3.5 w-3.5" />
                       </button>
                       {isCustom(t) && (
-                        <button type="button" onClick={() => { void handleDelete(t) }} title="Delete" className="rounded p-1 text-theme-error hover:bg-theme-hover">
+                        <button type="button" onClick={() => { void handleDelete(t) }} aria-label="Delete" className="rounded p-1 text-theme-error hover:bg-theme-hover">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -321,8 +316,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
                   <button
                     key={mode}
                     type="button"
-                    onClick={() => setEditMode(mode)}
-                    title={`Edit ${mode} variant`}
+                    onClick={() => setEditMode(mode)} aria-label={`Edit ${mode} variant`}
                     className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[10px] font-bold transition-all"
                     style={editMode === mode
                       ? { borderColor: 'var(--theme-accent)', backgroundColor: 'var(--theme-accent)', color: 'var(--theme-accent-fg)' }

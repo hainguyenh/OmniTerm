@@ -202,6 +202,7 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
           </h2>
           <button
             onClick={handleClose}
+            aria-label="Close connection form"
             className="text-theme-dim hover:text-theme-error transition-colors"
           >
             <X className="w-5 h-5" />
@@ -307,8 +308,7 @@ const ConnectionForm: React.FC<ConnectionFormProps> = ({
                 />
                 <button
                   type="button"
-                  onClick={handleBrowseCwd}
-                  title="Browse for a folder"
+                  onClick={handleBrowseCwd} aria-label="Browse for a folder"
                   className="shrink-0 px-2.5 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-white transition-colors"
                 >
                   <FolderOpen className="w-4 h-4" />
