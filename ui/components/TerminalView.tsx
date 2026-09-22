@@ -24,6 +24,8 @@ import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
 import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
+import { observeTerminalResize } from '../utils/terminalResize'
+import { installWindowsImeCompositionWorkaround } from '../utils/windowsIme'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
@@ -146,6 +148,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
+    const disposeWindowsImeWorkaround = installWindowsImeCompositionWorkaround(term, window.omnitermAPI.app.platform === 'win32')
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => {
           // Track the running agent for per-agent image paste; LATCHED (see latchAgent) because
@@ -216,7 +219,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         lastRows = term.rows
         api.resize({ cols: term.cols, rows: term.rows })
       } catch {
-        /* terminal not ready / not visible yet — ignore */
+        // Retry after an intermediate WebView2 layout pass.
+        fitCoalescer.schedule()
       }
     }
     safeFitRef.current = safeFit
@@ -381,8 +385,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     // Coalesced (not raw safeFit): a drag-resize fires this on every intermediate frame, and
     // fitting/resizing on each one is itself a source of TUI frame corruption.
-    const ro = new ResizeObserver(() => fitCoalescer.schedule())
-    ro.observe(terminalRef.current)
+    const disposeResizeObserver = observeTerminalResize(terminalRef.current, fitCoalescer.schedule)
     // Defer the first fit until after layout so dimensions are valid. Immediate, not coalesced —
     // there's nothing to collapse a burst with yet.
     // Wrapped: rAF passes a timestamp as the first argument, which would read as force=true.
@@ -392,7 +395,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       cancelAnimationFrame(raf)
       fitCoalescer.cancel()
       remeasureCoalescer.cancel()
-      ro.disconnect()
+      disposeResizeObserver()
       clipboard.dispose()
       terminalRef.current?.removeEventListener('focusin', onFocusIn)
       terminalRef.current?.removeEventListener('focusout', onFocusOut)
@@ -405,6 +408,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
+      disposeWindowsImeWorkaround()
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
       disposeCopyRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)

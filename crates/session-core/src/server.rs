@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use session_protocol::{ClientRequest, ServerMessage, PROTOCOL_VERSION};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 use crate::activity;
 use crate::manager::SessionManager;
@@ -14,8 +14,20 @@ pub async fn run(state_dir: PathBuf) -> Result<(), String> {
     run_platform_server(manager, &state_dir).await
 }
 
-async fn handle_connection<S>(manager: SessionManager, mut stream: S)
+#[cfg(test)]
+async fn handle_connection<S>(manager: SessionManager, stream: S)
 where
+    S: AsyncStream + 'static,
+{
+    let (shutdown, _) = watch::channel(false);
+    handle_connection_with_shutdown(manager, stream, shutdown).await;
+}
+
+async fn handle_connection_with_shutdown<S>(
+    manager: SessionManager,
+    mut stream: S,
+    shutdown: watch::Sender<bool>,
+) where
     S: AsyncStream + 'static,
 {
     let request = match read_frame::<ClientRequest>(&mut stream).await {
@@ -44,6 +56,9 @@ where
             }
             while read_frame::<ClientRequest>(&mut stream).await.is_ok() {}
             manager.client_disconnected(&client_id);
+            if manager.is_idle() {
+                let _ = shutdown.send(true);
+            }
         }
         ClientRequest::Create {
             client_id,
@@ -154,10 +169,10 @@ async fn write_result(stream: &mut dyn AsyncStream, result: Result<(), String>) 
 }
 
 // `run_platform_server` is the daemon's accept loop. Both variants bind a
-// listening socket/pipe and then `loop { ... accept().await; spawn(...) }`
-// forever, so the function never returns under normal operation. Setup lines
-// are exercised indirectly through `tests/client_daemon.rs`; the tail accept
-// loop is daemon-only and excluded from coverage.
+// listening socket/pipe and accept clients until the GUI lease disconnects
+// after all live and recoverable sessions are gone. Setup lines are exercised
+// indirectly through `tests/client_daemon.rs`; the accept loop is daemon-only
+// and excluded from coverage.
 #[cfg_attr(coverage, coverage(off))]
 #[cfg(unix)]
 async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Result<(), String> {
@@ -175,13 +190,27 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
         .map_err(|error| format!("Could not bind OmniTerm session daemon socket: {error}"))?;
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
         .map_err(|error| format!("Could not secure OmniTerm session daemon socket: {error}"))?;
+    let (shutdown, mut shutdown_rx) = watch::channel(false);
     loop {
-        let (stream, _) = listener
-            .accept()
-            .await
-            .map_err(|error| format!("Could not accept daemon client: {error}"))?;
-        tokio::spawn(handle_connection(manager.clone(), stream));
+        tokio::select! {
+            result = listener.accept() => {
+                let (stream, _) = result
+                    .map_err(|error| format!("Could not accept daemon client: {error}"))?;
+                tokio::spawn(handle_connection_with_shutdown(
+                    manager.clone(),
+                    stream,
+                    shutdown.clone(),
+                ));
+            }
+            result = shutdown_rx.changed() => {
+                if result.is_err() || *shutdown_rx.borrow() {
+                    break;
+                }
+            }
+        }
     }
+    let _ = std::fs::remove_file(&path);
+    Ok(())
 }
 
 #[cfg_attr(coverage, coverage(off))]
@@ -194,17 +223,30 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
         .first_pipe_instance(true)
         .create(&name)
         .map_err(|error| format!("Could not create OmniTerm session daemon pipe: {error}"))?;
+    let (shutdown, mut shutdown_rx) = watch::channel(false);
     loop {
-        server
-            .connect()
-            .await
-            .map_err(|error| format!("Could not accept daemon pipe client: {error}"))?;
-        let connected = server;
-        server = ServerOptions::new()
-            .create(&name)
-            .map_err(|error| format!("Could not create next daemon pipe instance: {error}"))?;
-        tokio::spawn(handle_connection(manager.clone(), connected));
+        tokio::select! {
+            result = server.connect() => {
+                result
+                    .map_err(|error| format!("Could not accept daemon pipe client: {error}"))?;
+                let connected = server;
+                server = ServerOptions::new()
+                    .create(&name)
+                    .map_err(|error| format!("Could not create next daemon pipe instance: {error}"))?;
+                tokio::spawn(handle_connection_with_shutdown(
+                    manager.clone(),
+                    connected,
+                    shutdown.clone(),
+                ));
+            }
+            result = shutdown_rx.changed() => {
+                if result.is_err() || *shutdown_rx.borrow() {
+                    break;
+                }
+            }
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]

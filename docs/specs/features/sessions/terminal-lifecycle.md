@@ -46,10 +46,13 @@ From session start through live IO, resize, status changes, disconnect and close
 - Renderer cleanup does not invent a new session.
 - Input/output are runtime stream data, not profile persistence.
 - Every terminal defaults to `close-with-app`; `keep-running`, `freeze-while-closed` and `recover-after-reboot` are per-session overrides via the persistence menu.
+- Startup checks daemon-owned sessions before restoring the renderer snapshot. Only a matching `live` session is attached; a stale or missing session starts cleanly, and `recover-after-reboot` may additionally run its saved allowlisted resume command.
+- When the GUI lease closes, the daemon applies each session's persistence policy and exits when no live or recoverable session remains.
 - `freeze-while-closed` suspends the daemon-owned process tree on last-client exit and resumes it before any attach or mutation; explicit pane close still kills outright.
 - Stop is gated by an explicit live-session flag from the hosting header/footer, not by the activity probe — the probe misreads idle on WSL and fast commands, so a connected session keeps Stop pressable.
 - Stop is immediate and session-preserving: LOCAL sessions invoke native `interrupt_session`, which snapshots pre-existing descendants, sends ETX, terminates those descendants, and leaves the root shell/PTY alive; SSH sessions send ETX through their PTY input channel.
 - Connected-terminal close confirmation is shown by default. Choosing “Don't ask again” while confirming persists `skipTerminalCloseConfirm`; General settings can turn it off to restore the dialog.
+- Windows Telex composition stays visible in the xterm composition preview while typing; only the completed composition is forwarded to the PTY.
 - Visible xterm panes refit immediately and again on the next paint after a layout epoch change so the canvas/text layers settle to the final pane geometry.
 
 ## Functionalities

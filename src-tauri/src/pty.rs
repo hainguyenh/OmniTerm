@@ -35,6 +35,7 @@ pub struct PtyManager {
     pub sessions: Arc<DashMap<String, PtySessionMeta>>,
     client: OnceLock<SessionDaemonClient>,
     lease_started: AtomicBool,
+    shutdown_requested: Arc<AtomicBool>,
 }
 
 impl PtyManager {
@@ -43,7 +44,12 @@ impl PtyManager {
             sessions: Arc::new(DashMap::new()),
             client: OnceLock::new(),
             lease_started: AtomicBool::new(false),
+            shutdown_requested: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub(crate) fn begin_shutdown(&self) {
+        self.shutdown_requested.store(true, Ordering::Release);
     }
 
     pub fn configure<R: Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
@@ -59,37 +65,8 @@ impl PtyManager {
                 SessionDaemonClient::new(state_dir, executable, format!("gui-{}", Uuid::new_v4()));
             let _ = self.client.set(client);
         }
-        self.ensure_lease();
+        crate::pty_lease::ensure(&self.client, &self.lease_started, &self.shutdown_requested);
         Ok(())
-    }
-
-    fn ensure_lease(&self) {
-        if self.lease_started.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let Some(client) = self.client.get().cloned() else {
-            self.lease_started.store(false, Ordering::Release);
-            return;
-        };
-        tauri::async_runtime::spawn(async move {
-            // Exponential backoff between lease attempts. A daemon that is up
-            // re-accepts instantly (failures reset), but a dead or uninstallable
-            // daemon must not be hammered with connect/spawn attempts at 4 Hz.
-            const BASE_RETRY_MS: u64 = 250;
-            const MAX_BACKOFF_SHIFT: u32 = 5; // 250ms * 2^5 = 8s ceiling
-            let mut failures: u32 = 0;
-            loop {
-                match client.hold_lease().await {
-                    Ok(()) => failures = 0,
-                    Err(error) => {
-                        failures = failures.saturating_add(1);
-                        log::debug!("[sessiond] client lease ended: {error}");
-                    }
-                }
-                let delay = BASE_RETRY_MS << failures.min(MAX_BACKOFF_SHIFT);
-                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-            }
-        });
     }
 
     pub(crate) fn client(&self) -> Result<SessionDaemonClient, String> {

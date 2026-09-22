@@ -104,8 +104,11 @@ export function useSessionRestore({
         if (!conn) continue
         restoredConns.set(conn.id, conn)
         restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
-        // Non-recover policies stay stopped. Recoverable tabs start a new daemon generation.
-        attachMode[tab.id] = !recover
+        // A snapshot is renderer metadata, not proof that the daemon session still exists. Only a
+        // session reported as live above may use attach mode; every other restored tab starts a
+        // clean connection. Recover-after-reboot may still pass its allowlisted resume command to
+        // the new shell, while close/keep/freeze policies start without one.
+        attachMode[tab.id] = false
       }
 
       if (cancelled || restoredTabs.length === 0) return

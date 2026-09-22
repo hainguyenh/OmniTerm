@@ -252,6 +252,39 @@ async fn client_lease_writes_ok_then_exits_when_stream_closes() {
 }
 
 #[tokio::test]
+async fn client_lease_signals_shutdown_when_no_sessions_remain() {
+    use std::time::Duration;
+    use tokio::sync::watch;
+
+    let dir = tempfile::tempdir().unwrap();
+    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
+    let (mut client, server) = duplex(8 * 1024);
+    let (shutdown, mut shutdown_rx) = watch::channel(false);
+    write_frame(
+        &mut client,
+        &ClientRequest::ClientLease {
+            client_id: "c".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let handle = tokio::spawn(handle_connection_with_shutdown(
+        manager,
+        server,
+        shutdown,
+    ));
+    let ok = read_frame::<ServerMessage>(&mut client).await.unwrap();
+    assert!(matches!(ok, ServerMessage::Ok));
+    drop(client);
+    tokio::time::timeout(Duration::from_millis(500), shutdown_rx.changed())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(*shutdown_rx.borrow());
+    handle.await.unwrap();
+}
+
+#[tokio::test]
 async fn handle_connection_returns_quietly_when_the_stream_closes_before_a_request() {
     let dir = tempfile::tempdir().unwrap();
     let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
