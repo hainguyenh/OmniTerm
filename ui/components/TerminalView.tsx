@@ -148,7 +148,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
-    const disposeWindowsImeWorkaround = installWindowsImeCompositionWorkaround(term, window.omnitermAPI.app.platform === 'win32')
+    const windowsImeWorkaround = installWindowsImeCompositionWorkaround(term, window.omnitermAPI.app.platform === 'win32')
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => {
           // Track the running agent for per-agent image paste; LATCHED (see latchAgent) because
@@ -228,10 +228,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
+      if (!windowsImeWorkaround.shouldForwardData(data)) return
       copyTracker.noteInput(data)
       api.input(data)
     })
-
     const onFocusIn = () => setIsFocused(true)
     const onFocusOut = () => setIsFocused(false)
     terminalRef.current?.addEventListener('focusin', onFocusIn)
@@ -408,7 +408,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
-      disposeWindowsImeWorkaround()
+      windowsImeWorkaround.dispose()
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
       disposeCopyRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
