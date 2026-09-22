@@ -156,7 +156,7 @@ function createTauriAPI(): any {
       },
       sshDisconnect: (id: string) => { void invoke('disconnect_session', { id }).catch(() => {}) },
       sshInput: (id: string, data: string) => { void invoke('send_session_input', { id, data }).catch(() => {}) },
-      sshResize: (id: string, size: { cols: number; rows: number }) => { void invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}) },
+      sshResize: (id: string, size: { cols: number; rows: number }) => invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
       onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
       onSSHData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
       onSSHError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),

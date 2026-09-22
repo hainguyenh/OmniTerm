@@ -162,7 +162,7 @@ describe('useSessionRestore', () => {
     )
   })
 
-  it('does not relaunch a recover session that the live daemon recorded as closed', async () => {
+  it('starts a clean session when the persisted daemon session is closed', async () => {
     listLocalSessions.mockResolvedValue([{
       id: 'old-tab-1', lifecycle: 'closed', generation: 2, policy: 'recover-after-reboot',
     }])
@@ -176,11 +176,11 @@ describe('useSessionRestore', () => {
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
     expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
-    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': true })
+    expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
   })
 
   it.each(['keep-running', 'close-with-app'] as const)(
-    're-registers %s ephemeral metadata but leaves the terminal stopped',
+    're-registers %s ephemeral metadata as a clean terminal',
     async (policy) => {
       mockOpen.mockResolvedValue(registeredConn())
       const s = setters()
@@ -188,7 +188,7 @@ describe('useSessionRestore', () => {
       await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
       expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
-      expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': true })
+      expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
     },
   )
 
