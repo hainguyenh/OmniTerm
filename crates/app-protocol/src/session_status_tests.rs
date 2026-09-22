@@ -17,11 +17,16 @@ fn to_json(status: &SessionStatus) -> Value {
 #[test]
 fn each_variant_serializes_to_the_json_the_renderer_reads() {
     assert_eq!(
-        to_json(&SessionStatus::Ready { label: "bash".into() }),
+        to_json(&SessionStatus::Ready {
+            label: "bash".into(),
+            replay: None
+        }),
         json!({ "kind": "ready", "label": "bash" })
     );
     assert_eq!(
-        to_json(&SessionStatus::Error { message: "host unreachable".into() }),
+        to_json(&SessionStatus::Error {
+            message: "host unreachable".into()
+        }),
         json!({ "kind": "error", "message": "host unreachable" })
     );
     assert_eq!(
@@ -37,9 +42,19 @@ fn each_variant_serializes_to_the_json_the_renderer_reads() {
 /// The discriminant key and the variant spellings are the contract, not an implementation detail.
 #[test]
 fn the_tag_is_named_kind_and_the_variants_are_lower_case() {
-    let raw = serde_json::to_string(&SessionStatus::Ready { label: "zsh".into() }).unwrap();
-    assert!(raw.contains("\"kind\":\"ready\""), "unexpected wire form: {raw}");
-    assert!(!raw.contains("\"type\""), "the renderer switches on `kind`: {raw}");
+    let raw = serde_json::to_string(&SessionStatus::Ready {
+        label: "zsh".into(),
+        replay: None,
+    })
+    .unwrap();
+    assert!(
+        raw.contains("\"kind\":\"ready\""),
+        "unexpected wire form: {raw}"
+    );
+    assert!(
+        !raw.contains("\"type\""),
+        "the renderer switches on `kind`: {raw}"
+    );
 }
 
 /// A clean exit is code 0, and the renderer reads `status.code` unconditionally — so the field must
@@ -51,10 +66,38 @@ fn a_zero_exit_code_is_emitted_rather_than_omitted() {
 }
 
 #[test]
+fn replay_metadata_preserves_unknown_availability_for_older_daemons() {
+    let status = SessionStatus::Ready {
+        label: "pwsh".into(),
+        replay: Some(ReplayMetadata {
+            available: None,
+            bytes: 23,
+            generation: 1,
+        }),
+    };
+
+    assert_eq!(
+        to_json(&status),
+        json!({
+            "kind": "ready",
+            "label": "pwsh",
+            "replay": { "bytes": 23, "generation": 1 },
+        }),
+    );
+    let decoded: SessionStatus = serde_json::from_value(to_json(&status)).unwrap();
+    assert_eq!(decoded, status);
+}
+
+#[test]
 fn every_variant_round_trips() {
     for status in [
-        SessionStatus::Ready { label: "pwsh".into() },
-        SessionStatus::Error { message: String::new() },
+        SessionStatus::Ready {
+            label: "pwsh".into(),
+            replay: None,
+        },
+        SessionStatus::Error {
+            message: String::new(),
+        },
         SessionStatus::Closed { code: u32::MAX },
         SessionStatus::Activity { busy: false },
     ] {

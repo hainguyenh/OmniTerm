@@ -22,14 +22,16 @@ import { Channel, invoke } from '@tauri-apps/api/core'
 import { diag } from './diag'
 
 /** Status messages from the backend's `SessionStatus` enum (serde tag = "kind"). */
+export type ReplayMetadata = { available?: boolean; bytes: number; generation: number }
+
 type SessionStatus =
-  | { kind: 'ready'; label: string }
+  | { kind: 'ready'; label: string; replay?: ReplayMetadata }
   | { kind: 'error'; message: string }
   | { kind: 'closed'; code: number }
   | { kind: 'activity'; busy: boolean }
 
 type SessionHandlers = {
-  ready: (label?: string) => void
+  ready: (label?: string, replay?: ReplayMetadata) => void
   data: (bytes: Uint8Array) => void
   error: (message: string) => void
   closed: (code: number) => void
@@ -96,7 +98,7 @@ function sessionChannels(id: string) {
   const onStatus = new Channel<SessionStatus>()
   onStatus.onmessage = (status) => {
     const entry = handlers.get(id)
-    if (status.kind === 'ready') entry?.ready?.(status.label ?? undefined)
+    if (status.kind === 'ready') entry?.ready?.(status.label ?? undefined, status.replay)
     else if (status.kind === 'error') entry?.error?.(status.message)
     else if (status.kind === 'closed') entry?.closed?.(status.code ?? 0)
     else if (status.kind === 'activity') entry?.activity?.(!!status.busy)
@@ -113,7 +115,7 @@ export async function startSession(
   id: string,
   connId: string,
   overrideShell?: string,
-  darkMode?: boolean,
+  darkMode?: boolean
 ): Promise<void> {
   const { onData, onStatus } = sessionChannels(id)
 
@@ -139,6 +141,8 @@ export type AttachSnapshot = {
   error?: string
   busy: boolean
   generation: number
+  replayAvailable: boolean
+  replayBytes: number
 }
 
 /**

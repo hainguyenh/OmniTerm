@@ -11,14 +11,13 @@ import { diag } from '../diag'
 import { paneOrder } from '../paneLayout'
 import { shellLabel as getShellLabel } from '../shellOptions'
 import { workingFolderLabel } from '../utils/workspaceDisplay'
-import { useSessionPersistence } from '../hooks/useSessionPersistence'
-import { useSessionRestore } from '../hooks/useSessionRestore'
+import { useSessionRecoveryState } from '../hooks/useSessionRecoveryState'
 import { useOpenPaneAtCurrentDirectory } from '../hooks/useOpenPaneAtCurrentDirectory'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
   const { appSettings, setAppSettings, themes, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, layoutMode, setLayoutMode, settingsOpen, activeTabs = [], setActiveTabs = () => {}, tabGroups = {}, setTabGroups = () => {}, viewGroups = [], activeGroupId = DEFAULT_VIEW_GROUP_ID, switchViewGroup = () => {}, createNewViewGroup = () => DEFAULT_VIEW_GROUP_ID, restoreGroups = () => {}, ephemeralConns = [], setEphemeralConns = () => {}, panes = [], setPanes = () => {}, focusedPane = 0, setFocusedPane = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, activeTabId, setPendingCloseTabIds = () => {}, skipCloseConfirmRef, panePicker = null, setPanePicker = () => {}, panePickerAnchor, setPanePickerAnchor = () => {}, panePickerRef, dragPane = null, setDragPane = () => {}, statuses = {}, setStatuses = () => {}, setReconnectKeys = () => {}, setLatencies = () => {}, detached = {}, setDetached = () => {}, poppedOut = {}, setPoppedOut = () => {}, setResumeMode = () => {}, setMetrics = () => {}, setConnectedAt = () => {}, setStatus = () => {}, setActivity = () => {}, activity = {}, connById = () => undefined, toggleDetach = () => {}, canDetachWindow = false, popOutTerminal = () => {}, reattachTerminal = () => {}, focusTerminal = () => {}, connFormOpen = false, showAlert, showConfirm, dataMenuOpen = false, activeView, setActiveView = () => {}, editorTabs = {}, setEditorTabs = () => {}, editorDirty = {}, setEditorDirty = () => {}, previewTabId = null, setPreviewTabId = () => {}, handleConnectRef, shellOptions } = base
 
-  const { initialSnapshot } = useSessionPersistence({
+  const { clearPendingRestore, retryRestore, markRestoreReady, markRestoreFailed, restoreOutcomes } = useSessionRecoveryState({
     activeTabs,
     ephemeralConns,
     resolveConnection: connById,
@@ -26,15 +25,11 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
     tabGroups,
     activeGroupId,
     layoutMode,
-  })
-
-  useSessionRestore({
-    initialSnapshot,
+    sessionCwds: base.sessionCwds,
     setActiveTabs,
     setEphemeralConns,
     setTabGroups,
     setResumeMode,
-    resolveConnection: connById,
     restoreGroups,
     setPanes,
     setLayoutMode,
@@ -306,6 +301,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       if (sessionIds.length === 0)
           return;
       const idSet = new Set(sessionIds);
+      clearPendingRestore(sessionIds)
       const prune = <T,>(prev: Record<string, T>): Record<string, T> => {
           let changed = false;
           const next = { ...prev };
@@ -384,6 +380,14 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           closeTabs([id], true, true);
       });
   }, [closeTabs]);
+  useEffect(() => {
+      if (typeof window.omnitermAPI.terminalWindow?.onContext !== 'function')
+          return;
+      return window.omnitermAPI.terminalWindow.onContext(({ sessionId, cwd, title }) => {
+          if (cwd) base.setSessionCwd(sessionId, cwd);
+          if (title) setActiveTabs(prev => prev.map(tab => tab.id === sessionId ? { ...tab, name: title } : tab));
+      });
+  }, [base.setSessionCwd, setActiveTabs]);
   const closeTab = (sessionId: string) => {
       if (editorTabs[sessionId] && editorDirty[sessionId]) {
           void showConfirm('Discard unsaved changes?', {
@@ -402,6 +406,11 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       setStatus(id, 'connecting');
       setResumeMode(prev => (prev[id] ? { ...prev, [id]: false } : prev));
       setReconnectKeys(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+  };
+  const handleRestoreStatus = (id: string, status: SessionStatus) => {
+      setStatus(id, status);
+      if (status === 'connected') markRestoreReady(id);
+      else if (status === 'error' || status === 'closed') markRestoreFailed(id);
   };
   const activeTab = activeTabs.find(t => t.id === activeTabId);
   const activeConn = activeTab && connById(activeTab.connId);
@@ -485,5 +494,5 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       const liveFolder = workingFolderLabel(rawCwd, base.workspaces)
       return <PaneHeader paneIndex={paneIndex} conn={conn} sessionTitle={sessionTitle} liveFolder={liveFolder} shellLabel={paneShellLabel} focused={paneIndex === focusedPane} sessionId={sessionId} tabs={activeTabs} panes={panes} layoutMode={layoutMode} statuses={statuses} connType={(connId) => connById(connId)?.type} pickerOpen={panePicker === paneIndex} pickerRef={panePickerRef} pickerAnchor={panePickerAnchor} detach={detachControl.stateOf(sessionId)} onToggleDetach={() => detachControl.toggle(sessionId)} onFocus={() => setFocusedPane(paneIndex)} onDragStart={() => setDragPane(paneIndex)} onDragEnd={() => setDragPane(null)} onTogglePicker={(anchor) => { if (panePicker === paneIndex) setPanePicker(null); else { setPanePickerAnchor(anchor); setPanePicker(paneIndex) } }} onAssign={(tabId) => assignToPane(paneIndex, tabId)} onClear={() => clearPane(paneIndex)} onClose={() => { if (sessionId) closeTab(sessionId) }} onOpenCurrentDirectory={conn?.type === 'LOCAL' && (rawCwd ?? conn.localCwd) ? () => openPaneAtCurrentDirectory(paneIndex) : undefined} fullscreen={fullscreenPane === paneIndex} onToggleFullscreen={() => setFullscreenPane(current => current === paneIndex ? null : paneIndex)} appearance={appearance} busy={paneBusy}/>
   }
-  return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
+  return { showTab, removeFromPanes, changeLayoutMode, assignToPane, clearPane, swapPanes, handleConnect, pairRunWithEditor, scriptRuns, openEditor, noteShellOpenRef, disconnectByType, clearTabState, closeTabs, closeTab, disconnectSession, reconnectSession, handleRestoreStatus, retryRestore, restoreOutcomes, activeSshId, activeSshName, STATUS_RANK, connStatuses, isOverlayOpen, detachControl, renderPaneHeader }
 }

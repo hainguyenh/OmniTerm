@@ -70,7 +70,7 @@ async fn duplicate_create_request_does_not_spawn_a_second_process() {
 }
 
 #[tokio::test]
-async fn persistent_session_survives_client_lease_loss() {
+async fn client_lease_loss_kills_owned_sessions_regardless_of_legacy_policy() {
     let dir = tempfile::tempdir().unwrap();
     let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
     manager
@@ -80,12 +80,13 @@ async fn persistent_session_survives_client_lease_loss() {
             "session",
             1,
             PersistencePolicy::KeepRunning,
-            shell_launch("echo alive"),
+            shell_launch("echo closing"),
         )
         .unwrap();
-    manager.client_disconnected("gui");
-    assert_eq!(manager.list()[0].lifecycle, SessionLifecycle::Live);
-    manager.disconnect("session").unwrap();
+
+    assert!(manager.client_disconnected("gui"));
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(manager.list().iter().all(|item| item.id != "session"));
 }
 
 #[tokio::test]

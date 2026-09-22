@@ -5,8 +5,8 @@
 //! `ConnectionTree` also drops any legacy secret key a foreign file may contain), `themes` (the
 //! *user* theme directory only, never bundled built-ins), and `workspaces` (catalog).
 //!
-//! Per-session persistence policies live in the renderer's localStorage, not in any backend store,
-//! so they are stitched in and applied by the webview around these commands.
+//! Restart layout/cwd reconstruction metadata lives in the renderer's localStorage and is not part
+//! of settings export/import. Terminal process lifetime is fixed to close-with-app for GUI sessions.
 //!
 //! Import is strictly versioned (`version == 1`) and fails closed: an unknown section key or a
 //! wrong version aborts before any store is touched.

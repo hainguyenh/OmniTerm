@@ -71,6 +71,14 @@ async fn client_full_lifecycle_against_a_running_daemon() {
     // An empty daemon lists no sessions.
     assert!(client.list().await.unwrap().is_empty());
 
+    // Hold the GUI lease for the entire lifecycle. Losing it tears down every owned PTY and
+    // stops the daemon, so release it only after the normal client assertions finish.
+    let lease_client = client.clone();
+    let lease_handle = tokio::spawn(async move {
+        let _ = lease_client.hold_lease().await;
+    });
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
     // Create a real interactive PTY that stays alive via `cmd /k` or
     // `exec /bin/sh` so resize / input / attach have something to talk to.
     let session = client
@@ -153,15 +161,6 @@ async fn client_full_lifecycle_against_a_running_daemon() {
     let _ = tokio::time::timeout(Duration::from_millis(500), subscription.next()).await;
     drop(subscription);
 
-    // hold_lease() blocks forever inside its read loop. Exercising its
-    // `ClientLease` -> `Ok` -> `loop` path requires a bounded task that we
-    // abort after it has had a chance to connect.
-    let lease_client = client.clone();
-    let lease_handle = tokio::spawn(async move {
-        let _ = lease_client.hold_lease().await;
-    });
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    lease_handle.abort();
 
     // create() with an unresolvable working directory fails on the daemon,
     // exercising the server's Create error arm and the client's
@@ -196,6 +195,8 @@ async fn client_full_lifecycle_against_a_running_daemon() {
         .await
         .expect("disconnect failed");
     assert!(client.list().await.unwrap().is_empty());
+
+    lease_handle.abort();
 }
 
 #[test]

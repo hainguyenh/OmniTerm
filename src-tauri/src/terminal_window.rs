@@ -37,6 +37,7 @@ const REATTACHED_EVENT: &str = "terminal-window-reattached";
 /// the session's real (now-gone) status instead of showing dead "Focus window" / "Attach back"
 /// buttons for a window that no longer exists.
 const CLOSED_EVENT: &str = "terminal-window-closed";
+const CONTEXT_EVENT: &str = "terminal-window-context";
 
 const MAIN_WINDOW: &str = "main";
 
@@ -49,6 +50,8 @@ pub struct DetachEntry {
     /// Set by `reattach_terminal` before it closes the window, so the close handler folds the
     /// session back instead of consulting the busy flag.
     pub folding_back: AtomicBool,
+    pub last_cwd: Option<String>,
+    pub last_title: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -57,6 +60,14 @@ pub struct BootstrapInfo {
     pub session_id: String,
     pub name: String,
     pub connection: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DetachedContextUpdate {
+    pub session_id: String,
+    pub cwd: Option<String>,
+    pub title: Option<String>,
 }
 
 pub struct DetachRegistry {
@@ -154,6 +165,8 @@ pub async fn detach_terminal<R: Runtime>(
             name,
             connection,
             folding_back: AtomicBool::new(false),
+            last_cwd: None,
+            last_title: None,
         },
     );
 
@@ -189,6 +202,48 @@ pub async fn bootstrap_terminal_window<R: Runtime>(
             name: entry.name.clone(),
             connection: entry.connection.clone(),
         }))
+}
+
+/// Forward deduplicated cwd/title reports from the detached owner to the main checkpoint owner.
+#[tauri::command]
+pub async fn report_detached_terminal_context<R: Runtime>(
+    window: tauri::Window<R>,
+    registry: tauri::State<'_, DetachRegistry>,
+    session_id: String,
+    cwd: Option<String>,
+    title: Option<String>,
+) -> Result<(), String> {
+    if registry.session_for_window(window.label()) != Some(session_id.clone()) {
+        return Err("Detached window does not own this terminal session".to_string());
+    }
+    let Some(mut entry) = registry.entries.get_mut(&session_id) else {
+        return Err("Detached terminal session is no longer registered".to_string());
+    };
+    let cwd = cwd.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+    let title = title.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+    let cwd_changed = cwd != entry.last_cwd;
+    let title_changed = title != entry.last_title;
+    if !cwd_changed && !title_changed {
+        return Ok(());
+    }
+    if cwd_changed {
+        entry.last_cwd = cwd.clone();
+    }
+    if title_changed {
+        entry.last_title = title.clone();
+    }
+    let Some(main) = window.app_handle().get_webview_window(MAIN_WINDOW) else {
+        return Ok(());
+    };
+    main.emit(
+        CONTEXT_EVENT,
+        DetachedContextUpdate {
+            session_id,
+            cwd: if cwd_changed { cwd } else { None },
+            title: if title_changed { title } else { None },
+        },
+    )
+    .map_err(|error| error.to_string())
 }
 
 /// Bind the caller's channels to a live session and replay its scrollback.

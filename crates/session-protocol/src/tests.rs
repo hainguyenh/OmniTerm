@@ -84,8 +84,32 @@ fn protocol_requests_and_stream_messages_have_stable_tags() {
             error: None,
             busy: false,
             generation: 1,
+            replay_available: Some(true),
+            replay_bytes: Some(3),
         },
         replay: vec![1, 2, 3],
     };
     assert_eq!(serde_json::to_value(attach).unwrap()["kind"], "attached");
+}
+
+#[test]
+fn attached_snapshot_accepts_older_daemon_without_replay_metadata() {
+    let message = serde_json::json!({
+        "kind": "attached",
+        "snapshot": {
+            "status": "ready",
+            "label": "bash",
+            "error": null,
+            "busy": false,
+            "generation": 1
+        },
+        "replay": []
+    });
+
+    let parsed: ServerMessage = serde_json::from_value(message).unwrap();
+    let ServerMessage::Attached { snapshot, .. } = parsed else {
+        panic!("expected attached message");
+    };
+    assert_eq!(snapshot.replay_available, None);
+    assert_eq!(snapshot.replay_bytes, None);
 }

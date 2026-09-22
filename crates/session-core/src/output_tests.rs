@@ -110,6 +110,8 @@ fn attach_returns_replay_and_subscribes_to_stream() {
     let (snapshot, replay, mut rx) = output.attach(7);
     assert_eq!(snapshot.generation, 7);
     assert_eq!(replay, b"persisted");
+    assert_eq!(snapshot.replay_available, Some(true));
+    assert_eq!(snapshot.replay_bytes, Some(9));
     output.push(b"live");
     let msg = rx.try_recv().unwrap();
     assert!(matches!(msg, ServerMessage::Data { data } if data == b"live"));
@@ -163,17 +165,40 @@ fn flush_snapshot_skips_unchanged_buffers() {
         .take_flush_snapshot()
         .expect("first flush always writes");
     assert!(
-        initial.is_empty(),
+        initial.1.is_empty(),
         "fresh session starts with an empty tail"
     );
     output.push(b"hello");
     let first = output.take_flush_snapshot().expect("first change flushes");
-    assert_eq!(first, b"hello");
+    assert_eq!(first.1, b"hello");
+    assert!(
+        output.take_flush_snapshot().is_some(),
+        "a snapshot is retryable until its write is acknowledged"
+    );
+    output.acknowledge_flush(first.0);
     assert!(
         output.take_flush_snapshot().is_none(),
         "idle buffer must not flush again"
     );
     output.push(b" world");
     let second = output.take_flush_snapshot().expect("new bytes flush");
-    assert_eq!(second, b"hello world");
+    assert_eq!(second.1, b"hello world");
+    output.acknowledge_flush(second.0);
+    output.acknowledge_flush(first.0);
+    assert!(
+        output.take_flush_snapshot().is_none(),
+        "an older acknowledgement must not dirty a newer revision"
+    );
+}
+
+#[test]
+fn fresh_output_is_not_reported_as_historical_replay() {
+    let mut output = Output::new("test".into(), false);
+    output.push(b"fresh prompt");
+
+    let (snapshot, replay, _) = output.attach(1);
+
+    assert_eq!(replay, b"fresh prompt");
+    assert_eq!(snapshot.replay_available, Some(false));
+    assert_eq!(snapshot.replay_bytes, Some(0));
 }

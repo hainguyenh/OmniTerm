@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Minus, Square, X, Minimize2, Loader2 } from 'lucide-react'
 import TerminalView from './TerminalView'
 import AppearanceMenu from './AppearanceMenu'
@@ -51,6 +51,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [missing, setMissing] = useState(false)
   const [restartKey, setRestartKey] = useState(0)
   const [windowActive, setWindowActive] = useState(true)
+  const lastReportedCwd = useRef<string | undefined>(undefined)
+  const lastReportedTitle = useRef<string | undefined>(undefined)
   const { available: blurAvailable } = useBlurPlugin()
   const windowRounded = useWindowRounding()
 
@@ -104,6 +106,15 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
 
   const applyTheme = (nextThemeId: string) => {
     saveAppearance({ themeId: nextThemeId })
+  }
+
+  const reportContext = (update: { cwd?: string; title?: string }) => {
+    if (!meta) return
+    if (update.cwd !== undefined && update.cwd === lastReportedCwd.current) return
+    if (update.title !== undefined && update.title === lastReportedTitle.current) return
+    if (update.cwd !== undefined) lastReportedCwd.current = update.cwd
+    if (update.title !== undefined) lastReportedTitle.current = update.title
+    void window.omnitermAPI.terminalWindow.reportContext(meta.sessionId, update)
   }
 
   const restartSession = () => {
@@ -186,11 +197,13 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             onTitleChange={(title) => {
               const clean = title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 120)
               if (clean) {
+                reportContext({ title: clean })
                 setMeta(previous => previous && previous.name !== clean
                   ? { ...previous, name: clean }
                   : previous)
               }
             }}
+            onCwdChange={(cwd) => reportContext({ cwd })}
             darkMode={appSettings.darkMode}
             theme={terminalTheme}
             fontSize={fontSize}

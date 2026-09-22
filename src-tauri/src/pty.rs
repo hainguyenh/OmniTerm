@@ -36,7 +36,6 @@ pub struct PtyManager {
     client: OnceLock<SessionDaemonClient>,
     lease_started: AtomicBool,
 }
-
 impl PtyManager {
     pub fn new() -> Self {
         Self {
@@ -142,7 +141,6 @@ fn path_with_helper<R: Runtime>(app: &AppHandle<R>) -> Option<OsString> {
     parts.extend(std::env::split_paths(&current));
     std::env::join_paths(parts).ok()
 }
-
 pub(crate) fn colorfgbg_for_dark_mode(dark_mode: Option<bool>) -> Option<&'static str> {
     dark_mode.map(|dark| if dark { "15;0" } else { "0;15" })
 }
@@ -159,7 +157,7 @@ pub async fn start_local_session<R: Runtime>(
     shell: Option<String>,
     dark_mode: Option<bool>,
     on_data: Channel<Response>,
-    on_status: Channel<SessionStatus>,
+    on_status: Channel<SessionStatus>
 ) -> Result<(), String> {
     state.configure(&app)?;
     let launch = resolve_local_launch(&app, &conn_id, shell).await?;
@@ -189,29 +187,24 @@ pub async fn start_local_session<R: Runtime>(
         ssh,
     };
     let client = state.client()?;
-    let previous = client
-        .list()
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .find(|session| session.id == id);
-    let generation = previous
-        .as_ref()
-        .map(|session| session.generation.saturating_add(1))
-        .unwrap_or(1);
-    let policy = previous
-        .as_ref()
-        .map(|session| session.policy)
-        .unwrap_or(PersistencePolicy::CloseWithApp);
-    let summary = client.create(id.clone(), generation, policy, spec).await?;
+    // Restart restoration is reconstruction, never process reattachment. Remove any stale daemon
+    // session under this stable tab id, then launch a fresh close-with-app PTY.
+    let _ = client.disconnect(id.clone()).await;
+    let summary = client
+        .create(id.clone(), 1, PersistencePolicy::CloseWithApp, spec)
+        .await?;
     state.cache_summary(&summary);
     let mut subscription = client.attach(id.clone()).await?;
+    crate::pty_status::send_initial_status(
+        &on_status,
+        &subscription.snapshot,
+        subscription.replay.len(),
+    );
     if !subscription.replay.is_empty() {
         on_data
             .send(Response::new(std::mem::take(&mut subscription.replay)))
             .map_err(|error| error.to_string())?;
     }
-    send_initial_status(&on_status, &subscription.snapshot);
     spawn_stream(id, subscription, on_data, on_status, state.inner());
     Ok(())
 }
@@ -244,25 +237,7 @@ pub async fn disconnect_session(
     state.client()?.disconnect(id).await
 }
 
-#[tauri::command]
-pub async fn list_local_sessions(
-    state: tauri::State<'_, PtyManager>,
-) -> Result<Vec<SessionSummary>, String> {
-    state.refresh().await
-}
 
-#[tauri::command]
-pub async fn set_session_persistence(
-    state: tauri::State<'_, PtyManager>,
-    id: String,
-    policy: PersistencePolicy,
-) -> Result<(), String> {
-    state.client()?.set_policy(id.clone(), policy).await?;
-    if let Some(mut session) = state.sessions.get_mut(&id) {
-        session.policy = policy;
-    }
-    Ok(())
-}
 
 pub(crate) async fn attach_existing_session(
     manager: &PtyManager,
@@ -278,6 +253,11 @@ pub(crate) async fn attach_existing_session(
         }
         Err(error) => return Err(error),
     };
+    crate::pty_status::send_initial_status(
+        &on_status,
+        &subscription.snapshot,
+        subscription.replay.len(),
+    );
     if !subscription.replay.is_empty() {
         on_data
             .send(Response::new(std::mem::take(&mut subscription.replay)))
@@ -297,37 +277,6 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     tauri::async_runtime::spawn(async move {
         let _ = client.disconnect(id).await;
     });
-}
-
-fn send_initial_status(
-    on_status: &Channel<SessionStatus>,
-    snapshot: &session_protocol::AttachSnapshot,
-) {
-    match snapshot.status.as_str() {
-        "ready" => {
-            let _ = on_status.send(SessionStatus::Ready {
-                label: snapshot
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| "Terminal".to_string()),
-            });
-            let _ = on_status.send(SessionStatus::Activity {
-                busy: snapshot.busy,
-            });
-        }
-        "error" => {
-            let _ = on_status.send(SessionStatus::Error {
-                message: snapshot
-                    .error
-                    .clone()
-                    .unwrap_or_else(|| "Terminal session failed".to_string()),
-            });
-        }
-        "closed" => {
-            let _ = on_status.send(SessionStatus::Closed { code: 0 });
-        }
-        _ => {}
-    }
 }
 
 fn spawn_stream(
@@ -375,7 +324,10 @@ fn spawn_stream(
                             DaemonStatus::Ready { label } => meta.label = label.clone(),
                         }
                     }
-                    if on_status.send(to_tauri_status(status)).is_err() {
+                    if on_status
+                        .send(crate::pty_status::to_tauri_status(status))
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -387,13 +339,4 @@ fn spawn_stream(
             }
         }
     });
-}
-
-fn to_tauri_status(status: DaemonStatus) -> SessionStatus {
-    match status {
-        DaemonStatus::Ready { label } => SessionStatus::Ready { label },
-        DaemonStatus::Error { message } => SessionStatus::Error { message },
-        DaemonStatus::Closed { code } => SessionStatus::Closed { code },
-        DaemonStatus::Activity { busy } => SessionStatus::Activity { busy },
-    }
 }

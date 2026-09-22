@@ -350,6 +350,7 @@ describe('TerminalView full lifecycle', () => {
     const element = container.querySelectorAll('.h-full.w-full')[1] as HTMLElement
     const term = xterm.terminals[0]
 
+    act(() => { handlers.localReady?.('PowerShell') })
     await act(async () => { handlers.localData?.(new TextEncoder().encode('error one')) })
     expect(term.writes.join('')).toContain('\x1b[91merror\x1b[39m')
 

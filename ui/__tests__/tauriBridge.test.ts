@@ -133,6 +133,7 @@ describe('connect.local', () => {
     expect(startArgs()).toEqual({ id: 'sess-1', connId: 'conn-1', shell: 'cmd', darkMode: false })
   })
 
+
   /**
    * Resolution belongs in the backend: an `adhoc-…` id exists only in the backend's in-memory
    * registry, so a webview-side lookup against connections.json finds nothing and the pane opens as a
