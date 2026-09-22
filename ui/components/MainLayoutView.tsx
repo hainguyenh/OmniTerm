@@ -10,6 +10,7 @@ import TerminalView from './TerminalView'
 import RDPView from './RDPView'
 import ConnectingOverlay from './ConnectingOverlay'
 import DetachedPlaceholder from './DetachedPlaceholder'
+import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import ConnectionForm from './ConnectionForm'
 import { SessionFooterBar } from './SessionFooterBar'
 import SessionTabs from './SessionTabs'
@@ -33,7 +34,8 @@ import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
+  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
+  const handleRestoreStatus = model.handleRestoreStatus ?? setStatus
   const alwaysAwake = awakeState ?? {
     enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
     activeSessionCount: 0, keepingAwake: false, supported: true, error: null,
@@ -373,6 +375,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                     ? paneRect(paneIdx, layoutMode, appSettings.split3Style, appSettings.split2Style, splitRatios)
                     : { left: 0, top: 0, width: '100%', height: '100%' }
                   const editor = editorTabs[tab.id]
+                  const restoreOutcome = restoreOutcomes[tab.id]
+                  const restoreBlocked = restoreOutcome?.phase === 'pending' || restoreOutcome?.phase === 'failed'
                   const sessionView = editor ? (
                     <ScriptViewer workspaceId={editor.workspaceId} script={editor.script}
                       onClose={() => closeTab(tab.id)}
@@ -382,6 +386,14 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         if (d) keepTab(tab.id)
                         setEditorDirty(prev => (prev[tab.id] === d ? prev : { ...prev, [tab.id]: d }))
                       }} />
+                  ) : restoreBlocked ? (
+                    <SessionUnavailableOverlay
+                      message={restoreOutcome.message}
+                      onRestart={restoreOutcome.retryable && restoreOutcome.phase !== 'pending'
+                        ? () => retryRestore(tab.id)
+                        : undefined}
+                      actionLabel="Restart terminal"
+                    />
                   ) : conn?.type === 'RDP' ? (
                     <RDPView
                       key={`${tab.id}:${reconnectKeys[tab.id] ?? 0}`}
@@ -390,7 +402,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       active={visible}
                       paneEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       overlayActive={isOverlayOpen}
-                      onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
+                      onStatus={(status: SessionStatus) => handleRestoreStatus(tab.id, status)}
                       onLatency={(ms: number | null) => setLatency(tab.id, ms)}
                     />
                   ) : poppedOut[tab.id] ? (
@@ -412,7 +424,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       layoutEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       darkMode={appSettings.darkMode}
                       blurStrength={blurAvailable && (appSettings.blurEnabled ?? true) && appSettings.blurInactiveDock ? appSettings.blurInactiveWindow ?? 0 : 0}
-                      onStatus={(s: SessionStatus) => setStatus(tab.id, s)}
+                      onStatus={(status: SessionStatus) => handleRestoreStatus(tab.id, status)}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}
                       onTitleChange={(title) => {
@@ -453,6 +465,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         {split && renderPaneHeader(paneIdx, conn ?? null)}
                         <div className={`flex-1 min-h-0 relative ${split ? 'rounded-b-lg overflow-hidden' : ''}`}>
                           {sessionView}
+
                           {statuses[tab.id] === 'connecting' && !poppedOut[tab.id] && <ConnectingOverlay dark={appSettings.darkMode} customArtUrl={loadingArtUrl} />}
                         </div>
                       </div>
@@ -479,5 +492,4 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
         )}
         <MainLayoutOverlays model={model} />
         {blurOpen && blurAvailable && <BlurSettingsOverlay strength={appSettings.blurInactiveWindow ?? 0} blurDock={appSettings.blurInactiveDock ?? false} enabled={appSettings.blurEnabled ?? true} onSave={(blurInactiveWindow, blurInactiveDock, blurEnabled) => { const next = { ...appSettings, blurInactiveWindow, blurInactiveDock, blurEnabled }; setAppSettings(next); window.omnitermAPI.settings.save(next) }} onClose={() => setBlurOpen(false)} />}
-    </div>)
-}
+    </div>)}

@@ -10,13 +10,32 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SessionStatus {
-	/// The PTY is live; `label` is the shell name to show in the pane banner.
-	Ready { label: String },
-	Error { message: String },
-	Closed { code: u32 },
-	/// The shell is (or is no longer) running something — see `session-core/activity.rs`. Sent on change
-	/// only, so the renderer can hold it as a plain flag.
-	Activity { busy: bool },
+    /// The PTY is live; `label` is the shell name to show in the pane banner.
+    Ready {
+        label: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        replay: Option<ReplayMetadata>,
+    },
+    Error {
+        message: String,
+    },
+    Closed {
+        code: u32,
+    },
+    /// The shell is (or is no longer) running something — see `session-core/activity.rs`. Sent on change
+    /// only, so the renderer can hold it as a plain flag.
+    Activity {
+        busy: bool,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available: Option<bool>,
+    pub bytes: usize,
+    pub generation: u64,
 }
 
 #[cfg(test)]

@@ -4,7 +4,6 @@ import type { Connection } from '@omniterm/contract'
 import { detachTitle, type DetachAction } from '../detachControl'
 import type { AppTheme } from '../themes'
 import AppearanceMenu, { FontSizeControl } from './AppearanceMenu'
-import SessionPersistenceMenu from './SessionPersistenceMenu'
 import TerminalCopyMenu from './TerminalCopyMenu'
 import { controlsOverflow } from './sessionControlOverflow'
 import { Tooltip, type TooltipPlacement } from './Tooltip'
@@ -40,7 +39,7 @@ interface SessionControlButtonsProps {
 }
 
 const buttonClass = 'w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors'
-type ControlKey = 'theme' | 'font' | 'currentDir' | 'stop' | 'clear' | 'copy' | 'persistence' | 'detach' | 'fullscreen'
+type ControlKey = 'theme' | 'font' | 'currentDir' | 'stop' | 'clear' | 'copy' | 'detach' | 'fullscreen'
 const MORE_BUTTON_WIDTH = 18
 
 export default function SessionControlButtons({
@@ -98,7 +97,7 @@ export default function SessionControlButtons({
     const update = () => {
       const availableWidth = root.clientWidth
       const measurement = measurementRef.current
-      if (!availableWidth || !measurement || !controlsOverflow(availableWidth, measurement.scrollWidth)) {
+      if (!measurement || !controlsOverflow(availableWidth, measurement.scrollWidth)) {
         setHiddenControls(previous => previous.length === 0 ? previous : [])
         return
       }
@@ -108,7 +107,7 @@ export default function SessionControlButtons({
       })
       const order: ControlKey[] = [
         ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
-        ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy', 'persistence'] as ControlKey[] : []),
+        ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
         ...(conn.type === 'LOCAL' && onOpenCurrentDirectory ? ['currentDir'] as ControlKey[] : []),
         ...(detach ? ['detach'] as ControlKey[] : []),
         ...(onToggleFullscreen ? ['fullscreen'] as ControlKey[] : []),
@@ -155,7 +154,7 @@ export default function SessionControlButtons({
   const toggleFullscreen = (event: React.MouseEvent) => { event.stopPropagation(); onToggleFullscreen?.(); setMenuOpen(false) }
   const availableControls: ControlKey[] = [
     ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
-    ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy', 'persistence'] as ControlKey[] : []),
+    ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
     ...(conn.type === 'LOCAL' && onOpenCurrentDirectory ? ['currentDir'] as ControlKey[] : []),
     ...(detach ? ['detach'] as ControlKey[] : []),
     ...(onToggleFullscreen ? ['fullscreen'] as ControlKey[] : []),
@@ -220,10 +219,10 @@ export default function SessionControlButtons({
   const menuItemClass = 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover disabled:opacity-40'
 
   return (
-    <span ref={rootRef} data-testid="session-control-root" data-session-control-root className={`relative flex min-w-0 flex-1 items-center justify-end gap-0.5 ${className}`}>
+    <span ref={rootRef} data-testid="session-control-root" data-session-control-root className={`relative flex min-w-[18px] flex-1 items-center justify-end gap-0.5 ${className}`}>
       <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
         {appearance && <><span data-control-key="theme" className="h-4 w-4" /><span data-control-key="font" className="h-4 w-[3.75rem]" /></>}
-        {conn.type !== 'RDP' && <><span data-control-key="stop" className={buttonClass} /><span data-control-key="clear" className={buttonClass} /><span data-control-key="copy" className={buttonClass} /><span data-control-key="persistence" className={buttonClass} /></>}
+        {conn.type !== 'RDP' && <><span data-control-key="stop" className={buttonClass} /><span data-control-key="clear" className={buttonClass} /><span data-control-key="copy" className={buttonClass} /></>}
         {conn.type === 'LOCAL' && onOpenCurrentDirectory && <span data-control-key="currentDir" className="h-4 w-5" />}
         {detach && <span data-control-key="detach" className={buttonClass} />}
         {onToggleFullscreen && <span data-control-key="fullscreen" className={buttonClass} />}
@@ -233,7 +232,6 @@ export default function SessionControlButtons({
       {isVisible('stop') && stopControl}
       {isVisible('clear') && clearControl}
       {isVisible('copy') && conn.type !== 'RDP' && <TerminalCopyMenu sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
-      {isVisible('persistence') && conn.type !== 'RDP' && <SessionPersistenceMenu sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
       {isVisible('currentDir') && currentDirectoryControl}
       {isVisible('detach') && detachControl}
       {isVisible('fullscreen') && fullscreenControl}
@@ -249,7 +247,6 @@ export default function SessionControlButtons({
               {hiddenControls.includes('theme') && overflowThemeControl}
               {hiddenControls.includes('stop') && <button type="button" role="menuitem" disabled={!stopEnabled} onClick={stop} className={menuItemClass}><Square className="h-3.5 w-3.5 flex-shrink-0" />Stop current process</button>}
               {hiddenControls.includes('clear') && <button type="button" role="menuitem" onClick={clear} className={menuItemClass}><Eraser className="h-3.5 w-3.5 flex-shrink-0" />Clear terminal</button>}
-              {hiddenControls.includes('persistence') && <SessionPersistenceMenu sessionId={sessionId} placement="bottom" menuItem />}
               {hiddenControls.includes('copy') && conn.type !== 'RDP' && <TerminalCopyMenu sessionId={sessionId} menuItem />}
               {hiddenControls.includes('currentDir') && (
                 <button type="button" role="menuitem" onClick={openCurrentDirectory} className={menuItemClass}>

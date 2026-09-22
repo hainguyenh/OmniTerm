@@ -38,10 +38,10 @@ pub(crate) fn flush(manager: &SessionManager) -> Result<(), String> {
         if !recover {
             continue;
         }
-        let bytes = match entry
+        let (revision, bytes) = match entry
             .output
             .lock()
-            .map(|mut output| output.take_flush_snapshot())
+            .map(|output| output.take_flush_snapshot())
             .map_err(|_| "Session output lock is poisoned".to_string())?
         {
             Some(bytes) => bytes,
@@ -53,6 +53,11 @@ pub(crate) fn flush(manager: &SessionManager) -> Result<(), String> {
             &bytes,
             "durable terminal scrollback",
         )?;
+        entry
+            .output
+            .lock()
+            .map_err(|_| "Session output lock is poisoned after durable write".to_string())?
+            .acknowledge_flush(revision);
     }
     Ok(())
 }

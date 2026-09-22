@@ -141,7 +141,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     termRef.current = term
 
-    const api = createSessionChannel(isLocal, id, connection.id, connection.shell, darkMode)
+    const api = createSessionChannel(
+      isLocal, id, connection.id, connection.shell, darkMode
+    )
 
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
@@ -360,8 +362,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       return true
     })
 
-    // Status + output + exit + the two side channels, and the connect-or-attach kickoff. See
-    // utils/terminalStream.ts — the byte path lives there because none of it is React's business.
+    // Status/output/exit and side channels live in terminalStream, not React.
     const stream = attachTerminalStream({
       term, api, id, isLocal, host: connection.host, mode,
       onStatus: (s) => onStatusRef.current?.(s),
@@ -370,12 +371,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onMetrics: (m) => onMetricsRef.current?.(m),
       onActivity: (busy) => onActivityRef.current?.(busy),
       smartColors: () => smartColorsRef.current === true,
-      // Refit = a fresh backend session (ready/attach/replay): its PTY restarted at the daemon's
-      // default 80x24 and the mount-time resize was dropped, so resend the real grid even unchanged.
+      // A fresh PTY/replay needs the real grid resent even when its size is unchanged.
       refit: () => safeFit(true),
       isCurrent: () => termRef.current === term,
-      // Only local panes are restored across restarts, so only they carry saved scrollback.
-      scrollbackKey: isLocal ? `sb-${id}` : undefined,
     })
     noteLocalEcho = stream.noteLocalEcho
 

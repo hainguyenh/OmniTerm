@@ -17,7 +17,7 @@ const ITEMS: Array<{ action: TerminalCopyAction; label: string; hint?: string }>
 
 /**
  * Pane-header copy control: a chrome Copy icon that opens a compact dropdown (mirroring
- * SessionPersistenceMenu's popover, outside-click and Escape dismissal included) offering the
+ * other terminal popovers, outside-click and Escape dismissal included) offering the
  * spec'd two actions. Selecting one dispatches `omniterm:copy-terminal`; the owning TerminalView
  * computes the text and writes the clipboard — see utils/terminalCopyExtract.ts.
  */
@@ -26,7 +26,7 @@ export default function TerminalCopyMenu({ sessionId, placement = 'bottom', menu
   const popRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
 
-  // Mirror SessionPersistenceMenu's outside-click / Escape dismissal so the dropdown never relies
+  // Keep outside-click / Escape dismissal local so the dropdown never relies
   // on hover away; both listeners exist only while it is open.
   useEffect(() => {
     if (!open) return

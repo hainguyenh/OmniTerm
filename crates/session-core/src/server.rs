@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use session_protocol::{ClientRequest, ServerMessage, PROTOCOL_VERSION};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
 
 use crate::activity;
 use crate::manager::SessionManager;
@@ -11,10 +12,11 @@ pub async fn run(state_dir: PathBuf) -> Result<(), String> {
     let manager = SessionManager::new(state_dir.clone())?;
     let _activity = activity::spawn(manager.clone());
     let _scrollback = crate::scrollback::spawn(manager.clone());
-    run_platform_server(manager, &state_dir).await
+    let shutdown = Arc::new(Notify::new());
+    run_platform_server(manager, &state_dir, shutdown).await
 }
 
-async fn handle_connection<S>(manager: SessionManager, mut stream: S)
+async fn handle_connection<S>(manager: SessionManager, mut stream: S, shutdown: Arc<Notify>)
 where
     S: AsyncStream + 'static,
 {
@@ -43,7 +45,9 @@ where
                 return;
             }
             while read_frame::<ClientRequest>(&mut stream).await.is_ok() {}
-            manager.client_disconnected(&client_id);
+            if manager.client_disconnected(&client_id) {
+                shutdown.notify_one();
+            }
         }
         ClientRequest::Create {
             client_id,
@@ -160,7 +164,7 @@ async fn write_result(stream: &mut dyn AsyncStream, result: Result<(), String>) 
 // loop is daemon-only and excluded from coverage.
 #[cfg_attr(coverage, coverage(off))]
 #[cfg(unix)]
-async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Result<(), String> {
+async fn run_platform_server(manager: SessionManager, state_dir: &Path, shutdown: Arc<Notify>) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
     let path = crate::transport::endpoint_path(state_dir);
@@ -176,17 +180,21 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
         .map_err(|error| format!("Could not secure OmniTerm session daemon socket: {error}"))?;
     loop {
-        let (stream, _) = listener
-            .accept()
-            .await
-            .map_err(|error| format!("Could not accept daemon client: {error}"))?;
-        tokio::spawn(handle_connection(manager.clone(), stream));
+        let accepted = tokio::select! {
+            _ = shutdown.notified() => break,
+            result = listener.accept() => result
+                .map_err(|error| format!("Could not accept daemon client: {error}"))?,
+        };
+        let (stream, _) = accepted;
+        tokio::spawn(handle_connection(manager.clone(), stream, Arc::clone(&shutdown)));
     }
+    let _ = std::fs::remove_file(&path);
+    Ok(())
 }
 
 #[cfg_attr(coverage, coverage(off))]
 #[cfg(windows)]
-async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Result<(), String> {
+async fn run_platform_server(manager: SessionManager, state_dir: &Path, shutdown: Arc<Notify>) -> Result<(), String> {
     use tokio::net::windows::named_pipe::ServerOptions;
 
     let name = crate::transport::endpoint_name(state_dir);
@@ -195,15 +203,17 @@ async fn run_platform_server(manager: SessionManager, state_dir: &Path) -> Resul
         .create(&name)
         .map_err(|error| format!("Could not create OmniTerm session daemon pipe: {error}"))?;
     loop {
-        server
-            .connect()
-            .await
-            .map_err(|error| format!("Could not accept daemon pipe client: {error}"))?;
+        tokio::select! {
+            _ = shutdown.notified() => return Ok(()),
+            result = server.connect() => {
+                result.map_err(|error| format!("Could not accept daemon pipe client: {error}"))?;
+            }
+        }
         let connected = server;
         server = ServerOptions::new()
             .create(&name)
             .map_err(|error| format!("Could not create next daemon pipe instance: {error}"))?;
-        tokio::spawn(handle_connection(manager.clone(), connected));
+        tokio::spawn(handle_connection(manager.clone(), connected, Arc::clone(&shutdown)));
     }
 }
 
