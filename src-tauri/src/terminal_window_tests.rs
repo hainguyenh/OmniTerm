@@ -11,6 +11,8 @@ pub(super) fn entry(label: &str, name: &str) -> DetachEntry {
         name: name.to_string(),
         connection: serde_json::json!({ "id": "c1", "type": "LOCAL" }),
         folding_back: AtomicBool::new(false),
+        last_cwd: None,
+        last_title: None,
     }
 }
 

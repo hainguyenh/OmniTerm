@@ -58,7 +58,6 @@ When editing/launching connections or rendering/updating live sessions.
 - `WaitingPane` — owned by this spec.
 - `SessionMetricsChips` — owned by this spec.
 - `SessionControlButtons` / `sessionControlOverflow` — owned by this spec.
-- `SessionPersistenceMenu` — owned by this spec.
 - `SessionStatusIndicator` — owned by this spec.
 - `SessionFooterBar` — owned by this spec.
 - `SessionUnavailableOverlay` — owned by this spec.
@@ -80,10 +79,9 @@ When editing/launching connections or rendering/updating live sessions.
 | `ConnectingOverlay` | Show async connection progress. | User feedback. | Render launch status. | Connecting. |
 | `WaitingPane` | Render no/awaiting session state. | Clear empty-pane UX. | Present placeholder/action. | No active content. |
 | `SessionMetricsChips` | Render session metrics. | Expose activity/health. | Map native metrics to chips. | Metrics available. |
-| `SessionControlButtons` / `sessionControlOverflow` | Shared session header/footer actions with responsive overflow handling. | Keep Stop, Clear, current-directory launch, Fullscreen, Detach, and Persistence actions uniform and responsive to narrow panes. | Renders themed-tooltip actions, routes immediate LOCAL/SSH Stop behavior, measures container overflow via `controlsOverflow`, and returns hidden actions inline whenever width permits. | Pane header or active footer bar rendered. |
-| `SessionPersistenceMenu` | Per-terminal persistence policy selector. | Configure lifetime policy (None, Window, Hybrid, App). | Open dropdown menu and invoke daemon persistence updates. | User clicks persistence indicator. |
+| `SessionControlButtons` / `sessionControlOverflow` | Shared session header/footer actions with responsive overflow handling. | Keep Stop, Clear, Copy, current-directory launch, Fullscreen, and Detach actions uniform and responsive to narrow panes. | Renders themed-tooltip actions, routes immediate LOCAL/SSH Stop behavior, measures container overflow via `controlsOverflow`, and returns hidden actions inline whenever width permits. | Pane header or active footer bar rendered. |
 | `SessionStatusIndicator` | Render session status dot/animation. | Visual cue for connected/busy/idle/disconnected. | Render status indicator with oscillate or ping styles. | Pane header, footer, or tabs. |
-| `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls, status, and location context. | Shows live current-working-folder text (workspace-folder alias first, basename fallback), then composes status, persistence menu, and session controls. | Active session in focused pane. |
+| `SessionFooterBar` | Render bottom footer bar for active session. | Quick access to controls, status, and location context. | Shows live current-working-folder text (workspace-folder alias first, basename fallback), then composes status and session controls. | Active session in focused pane. |
 | `SessionUnavailableOverlay` | Render unavailable-session recovery feedback and restart action. | Provide clear user recovery when an attached session is lost or disconnected. | Renders an opaque recovery prompt and triggers the supplied restart action. | When an attached session is no longer available. |
 | `NewTerminalMenu` | Quick shell, workspace folder, and connection launcher dropdown. | Unified launcher from tab bars, title bar, and activity bar. | Renders filtered workspaces and available shells; Enter or folder double-click launches the highlighted folder immediately with the default shell, while shell rows launch their selected shell. | When clicking the new terminal `+` dropdown. |
 | `useOpenPaneAtCurrentDirectory` | Open another local pane at the focused pane's current directory. | Preserve exact terminal context without forcing the user to navigate back to the folder. | Uses live session cwd plus current shell, expands/reserves a pane, and responds to the pane action/Ctrl+Shift+N event. | When a local pane has a reliable current directory and the user requests a sibling pane. |
@@ -122,7 +120,6 @@ When editing/launching connections or rendering/updating live sessions.
 - `ui/components/RDPView.tsx`
 - `ui/components/SessionControlButtons.tsx`
 - `ui/components/sessionControlOverflow.ts`
-- `ui/components/SessionPersistenceMenu.tsx`
 - `ui/components/SessionStatusIndicator.tsx`
 - `ui/components/SessionFooterBar.tsx`
 - `ui/components/SessionUnavailableOverlay.tsx`

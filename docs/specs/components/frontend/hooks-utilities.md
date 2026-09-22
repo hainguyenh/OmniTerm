@@ -65,7 +65,6 @@ Whenever owning components need lifecycle state, native events, or deterministic
 - `safeHttpUrl` / `isTerminalLinkModifierClick` — owned by this spec.
 - `findLinkOrPathAt` / `createTerminalContextMenu` — owned by this spec.
 - `parseAgentTitle` / `AGENT_REGISTRY` — owned by this spec.
-- `persistencePolicy` — owned by this spec.
 - `sessionStore` / `scrollbackStore` — owned by this spec.
 - `shortcutFormatting` — owned by this spec.
 - `themeCssVars` / `applyThemeVars` — owned by this spec.
@@ -85,15 +84,14 @@ Whenever owning components need lifecycle state, native events, or deterministic
 | `useTreeReveal` | Reveal tree ancestors. | Make target visible. | Compute ancestor keys and expand. | Programmatic reveal. |
 | `useWorkspaceMutations` / `useWorkspaceScan` | Workspace async lifecycle. | Separate writes/scans from rendering. | Call feature API and synchronize state. | Workspace actions. |
 | `useWindowRounding` | Detect OS window corner rounding capability. | Apply correct platform titlebar styling. | Check OS platform and Tauri window state. | Window mount or resize. |
-| `useSessionPersistence` / `useSessionRestore` | Snapshot and restore live sessions. | Preserve terminal state across runs. | Synchronize persistence policies and restore active PTYs. | Session mount/unmount and app launch. |
+| `useSessionPersistence` / `useSessionRestore` | Checkpoint and reconstruct pane layout plus working directories. | Preserve visual working context without keeping terminal processes alive. | Save versioned layout/cwd metadata; on startup register fresh shells at saved directories and restore panes/groups. | Layout/cwd changes, app shutdown, and next launch. |
 | `buildWorkspaceTree` / `filterTreeByQuery` | Build/search tree. | Pure deterministic workspace projection. | Map logical entries and preserve ancestors. | Tree render/search. |
 | `buildWorkspaceForest` / `workspaceDropIndex` | Hierarchy/order calculations. | Correct nested reordering. | Group/sort/calculate indexes. | Workspace list/drop. |
 | `createSessionChannel` / `attachTerminalStream` | Terminal event transport. | Reusable stream lifecycle. | Subscribe/cleanup/write chunks. | Terminal attach. |
 | `safeHttpUrl` / `isTerminalLinkModifierClick` | Gate terminal links. | Prevent unsafe output-controlled navigation. | Parse/allow HTTP(S) and verify platform modifier. | Modifier-click gate. |
 | `findLinkOrPathAt` / `createTerminalContextMenu` | Link/path detection and context menu handling. | Disambiguate link clicks from selection/paste. | Detect URLs/paths in terminal buffer and route contextmenu/mousedown. | Terminal interaction. |
-| `parseAgentTitle` / `AGENT_REGISTRY` | Detect AI coding agents from OSC titles and provide resume recipes. | Recognize agents (Claude, Gemini, Aider, etc.) and automate session resumption. | Match title patterns against known agent signatures and load recipe configuration. | When session tabs, headers, or footers render agent info. |
-| `persistencePolicy` | Derive and override per-session persistence policy (close-with-app, keep-running, freeze-while-closed, recover-after-reboot). | Consistent lifetime policy rules across renderer, snapshots, and daemon. | Validate policy types, default every terminal to close-with-app, and store explicit user overrides. | When persistence indicators render or policy is mutated. |
-| `sessionStore` / `scrollbackStore` | Snapshot session layouts and cache terminal scrollback. | Preserve tabs, view groups, focused panes, and terminal output across app restarts. | Serializes versioned layout to localStorage and chunks raw PTY output into IndexedDB. | On layout changes, app shutdown, and startup restore. |
+| `parseAgentTitle` / `AGENT_REGISTRY` | Detect AI coding agents from OSC titles and expose agent-specific metadata. | Recognize agents (Claude, Gemini, Aider, etc.) for terminal UX such as image-paste handling; restart reconstruction does not auto-run resume commands. | Match title patterns against known agent signatures and read static agent metadata only when a caller explicitly requests it. | When terminal UX needs agent identity or agent-specific behavior. |
+| `sessionStore` / `scrollbackStore` | Store restart layout metadata and optional runtime scrollback cache. | Preserve tabs, view groups, focused panes, and cwd while keeping terminal output out of restart reconstruction. | `sessionStore` serializes versioned layout/cwd metadata to localStorage; `scrollbackStore` is a bounded optional runtime cache used only when a stream is explicitly given a key. | Layout changes and terminal streaming. |
 | `shortcutFormatting` | Parse shortcut combos and extract labels for keycap/tooltip display. | Clean visual presentation of keyboard bindings. | Splits modifiers and key names into tokens and extracts clean label text. | When rendering Keycap badges and shortcut tooltips. |
 | `themeCssVars` / `applyThemeVars` | Project theme to CSS. | Consistent visual state. | Resolve fields and set CSS variables. | Theme change. |
 | `createWebglController` / pool helpers | Manage bounded WebGL contexts. | Avoid context exhaustion. | Acquire/touch/release pooled resources. | Terminal rendering. |

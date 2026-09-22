@@ -19,6 +19,7 @@ mod output;
 mod scrollback;
 mod server;
 mod summary;
+#[cfg(unix)]
 mod suspend;
 mod transport;
 

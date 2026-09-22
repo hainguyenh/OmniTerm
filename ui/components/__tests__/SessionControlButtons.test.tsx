@@ -24,7 +24,6 @@ beforeEach(() => {
       interruptSession: vi.fn().mockResolvedValue(undefined),
       localInput: vi.fn(),
       sshInput: vi.fn(),
-      setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
     },
   })
 })
@@ -82,7 +81,7 @@ describe('SessionControlButtons', () => {
     }
   })
 
-  it('opens Theme and Session persistence from their full overflow rows', () => {
+  it('opens Theme from its full overflow row', () => {
     const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
     const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 80 })
@@ -114,9 +113,71 @@ describe('SessionControlButtons', () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Theme' }))
       expect(screen.getByRole('button', { name: TOKYO_NIGHT.name })).toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Session persistence' }))
-      expect(screen.getByRole('menu', { name: 'Session persistence' })).toBeInTheDocument()
     } finally {
+      if (clientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', scrollWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth')
+    }
+  })
+
+  it('keeps actions in the More menu when a resize collapses the allocated width to zero', () => {
+    const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
+    let rootWidth = 160
+    const observations: Array<{ target: Element; callback: ResizeObserverCallback }> = []
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) { this.callback = callback }
+      private callback: ResizeObserverCallback
+      observe(target: Element) { observations.push({ target, callback: this.callback }) }
+      disconnect = vi.fn()
+      unobserve = vi.fn()
+    })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        if (this.hasAttribute('data-session-control-root')) return rootWidth
+        return 160
+      },
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return this instanceof HTMLElement && this.classList.contains('terminal-control-measurement') ? 100 : 160
+      },
+    })
+    try {
+      render(
+        <SessionControlButtons
+          conn={local}
+          sessionId="s1"
+          busy
+          detach="detach"
+          onToggleDetach={vi.fn()}
+          onToggleFullscreen={vi.fn()}
+        />,
+      )
+      expect(screen.queryByRole('button', { name: 'More terminal actions' })).not.toBeInTheDocument()
+
+      rootWidth = 0
+      const root = screen.getByTestId('session-control-root')
+      act(() => {
+        observations.filter(({ target }) => target === root).forEach(({ callback }) => callback([], {} as ResizeObserver))
+      })
+
+      expect(screen.getByRole('button', { name: 'More terminal actions' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Detach into its own window' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Focus pane full screen' })).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'More terminal actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Stop current process' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Clear terminal' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Detach into its own window' })).toBeInTheDocument()
+      expect(screen.getByRole('menuitem', { name: 'Focus pane full screen' })).toBeInTheDocument()
+    } finally {
+      vi.unstubAllGlobals()
       if (clientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth)
       else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
       if (scrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', scrollWidth)
@@ -227,7 +288,7 @@ describe('SessionControlButtons', () => {
     }
   })
 
-  it('renders Stop, Clear, Persistence, Detach, and Fullscreen for a local session', () => {
+  it('renders Stop, Clear, Copy, Detach, and Fullscreen for a local session', () => {
     render(
       <SessionControlButtons
         conn={local}
@@ -243,7 +304,7 @@ describe('SessionControlButtons', () => {
 
     expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear terminal' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Session persistence' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy terminal output' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Detach into its own window' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Focus pane full screen' })).toBeInTheDocument()
   })
@@ -306,7 +367,6 @@ describe('SessionControlButtons', () => {
     )
     expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Session persistence' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Detach into its own window' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Focus pane full screen' })).toBeInTheDocument()
   })

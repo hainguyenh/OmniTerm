@@ -27,7 +27,7 @@ fn shell_launch(command: &str) -> session_protocol::LaunchSpec {
 async fn handle_request(manager: &SessionManager, request: ClientRequest) -> ServerMessage {
     let (mut client, server) = duplex(8 * 1024);
     write_frame(&mut client, &request).await.unwrap();
-    handle_connection(manager.clone(), server).await;
+    handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())).await;
     read_frame::<ServerMessage>(&mut client).await.unwrap()
 }
 
@@ -213,7 +213,7 @@ async fn attach_on_existing_session_returns_attached_with_replay() {
     )
     .await
     .unwrap();
-    let handle = tokio::spawn(handle_connection(manager.clone(), server));
+    let handle = tokio::spawn(handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())));
     let response = read_frame::<ServerMessage>(&mut client).await.unwrap();
     match response {
         ServerMessage::Attached { replay, .. } => {
@@ -241,7 +241,7 @@ async fn client_lease_writes_ok_then_exits_when_stream_closes() {
     )
     .await
     .unwrap();
-    let handle = tokio::spawn(handle_connection(manager.clone(), server));
+    let handle = tokio::spawn(handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())));
     let ok = read_frame::<ServerMessage>(&mut client).await.unwrap();
     assert!(matches!(ok, ServerMessage::Ok));
     drop(client);
@@ -260,7 +260,7 @@ async fn handle_connection_returns_quietly_when_the_stream_closes_before_a_reque
     // `read_frame` fail with an EOF; `handle_connection` must return
     // without touching the manager.
     drop(client);
-    handle_connection(manager, server).await;
+    handle_connection(manager, server, std::sync::Arc::new(tokio::sync::Notify::new())).await;
 }
 
 #[tokio::test]

@@ -12,12 +12,14 @@
  * adapter and a reader having to check which half is real.
  */
 
+import type { ReplayMetadata } from '../tauriSessions'
+
 export interface SessionChannel {
   connect: () => void
   input: (data: string) => void
   resize: (size: { cols: number; rows: number }) => void
   /** Each `on*` returns a synchronous unsubscribe — see omnitermAPI.ts. */
-  onReady: (cb: (label?: string) => void) => () => void
+  onReady: (cb: (label?: string, replay?: ReplayMetadata) => void) => () => void
   onData: (cb: (data: Uint8Array) => void) => () => void
   onError: (cb: (err: string) => void) => () => void
   onClosed: (cb: (code?: number) => void) => () => void
@@ -34,12 +36,15 @@ export const createSessionChannel = (
   id: string,
   connId: string,
   shell?: string,
-  darkMode?: boolean,
+  darkMode?: boolean
 ): SessionChannel => (isLocal
   ? {
-      connect: () => darkMode === undefined
-        ? window.omnitermAPI.connect.local(id, connId, shell)
-        : window.omnitermAPI.connect.local(id, connId, shell, darkMode),
+      connect: () => {
+        if (darkMode === undefined) {
+          return window.omnitermAPI.connect.local(id, connId, shell)
+        }
+        return window.omnitermAPI.connect.local(id, connId, shell, darkMode)
+      },
       input: (d) => window.omnitermAPI.connect.localInput(id, d),
       resize: (s) => window.omnitermAPI.connect.localResize(id, s),
       onReady: (cb) => window.omnitermAPI.connect.onLocalReady(id, cb),

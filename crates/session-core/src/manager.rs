@@ -1,21 +1,16 @@
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-
 use dashmap::DashMap;
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use session_protocol::{
     DaemonStatus, LaunchSpec, PersistencePolicy, ServerMessage, SessionLifecycle, SessionSummary,
 };
 use tokio::sync::broadcast;
-
 use crate::manifest::{self, SessionManifest};
 use crate::output::{spawn_reader, Output};
-
 const INITIAL_COLS: u16 = 80;
 const INITIAL_ROWS: u16 = 24;
-
 pub struct AttachedSession {
     pub snapshot: session_protocol::AttachSnapshot,
     pub replay: Vec<u8>,
@@ -37,9 +32,6 @@ pub(crate) struct Session {
     pub(crate) policy: Mutex<PersistencePolicy>,
     pub(crate) owner_client: Mutex<String>,
     pub(crate) lifecycle: Arc<Mutex<SessionLifecycle>>,
-    pub(crate) frozen: AtomicBool,
-    pub(crate) frozen_pid: Mutex<Option<u32>>,
-    pub(crate) start_time: Mutex<Option<u64>>,
     #[cfg(windows)]
     pub(crate) job: Option<Arc<app_core::win_job::JobHandle>>,
 }
@@ -49,6 +41,7 @@ pub struct SessionManager {
     pub(crate) sessions: Arc<DashMap<String, Arc<Session>>>,
     interrupted: Arc<DashMap<String, SessionManifest>>,
     requests: Arc<DashMap<String, String>>,
+    create_guards: Arc<DashMap<String, Arc<Mutex<()>>>>,
     pub(crate) state_dir: Arc<PathBuf>,
 }
 
@@ -65,6 +58,7 @@ impl SessionManager {
             sessions: Arc::new(DashMap::new()),
             interrupted: Arc::new(interrupted),
             requests: Arc::new(DashMap::new()),
+            create_guards: Arc::new(DashMap::new()),
             state_dir: Arc::new(state_dir),
         })
     }
@@ -79,6 +73,14 @@ impl SessionManager {
         policy: PersistencePolicy,
         launch: LaunchSpec,
     ) -> Result<SessionSummary, String> {
+        let guard = self
+            .create_guards
+            .entry(session_id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
+        let _create_guard = guard
+            .lock()
+            .map_err(|_| "Session creation lock is poisoned".to_string())?;
         if let Some(existing_id) = self.requests.get(request_id) {
             if existing_id.as_str() == session_id {
                 if let Some(existing) = self.sessions.get(session_id) {
@@ -163,9 +165,6 @@ impl SessionManager {
             policy: Mutex::new(policy),
             owner_client: Mutex::new(client_id.to_string()),
             lifecycle: Arc::new(Mutex::new(SessionLifecycle::Live)),
-            frozen: AtomicBool::new(false),
-            frozen_pid: Mutex::new(None),
-            start_time: Mutex::new(None),
             #[cfg(windows)]
             job: job.clone(),
         });
@@ -192,7 +191,6 @@ impl SessionManager {
         if let Ok(mut owner) = session.owner_client.lock() {
             *owner = client_id.to_string();
         }
-        self.ensure_resumed(session_id, &session);
         let mut output = session
             .output
             .lock()
@@ -210,7 +208,6 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
-        self.ensure_resumed(session_id, &session);
         if let Ok(mut output) = session.output.lock() {
             output.note_input();
         }
@@ -232,7 +229,6 @@ impl SessionManager {
             .sessions
             .get(session_id)
             .ok_or_else(|| "Session not found".to_string())?;
-        self.ensure_resumed(session_id, &session);
         let master = session
             .master
             .lock()
@@ -298,7 +294,6 @@ impl SessionManager {
         policy: PersistencePolicy,
     ) -> Result<(), String> {
         if let Some(session) = self.sessions.get(session_id) {
-            self.ensure_resumed(session_id, &session);
             if let Ok(mut owner) = session.owner_client.lock() {
                 *owner = client_id.to_string();
             }
@@ -323,8 +318,14 @@ impl SessionManager {
         Err("Session not found".to_string())
     }
 
-    pub fn client_disconnected(&self, client_id: &str) {
-        crate::freeze::on_client_disconnected(self, client_id);
+    pub fn client_disconnected(&self, client_id: &str) -> bool {
+        let owned: Vec<_> = self.sessions.iter().filter_map(|entry| {
+            entry.owner_client.lock().ok()
+                .is_some_and(|owner| owner.as_str() == client_id)
+                .then(|| entry.key().clone())
+        }).collect();
+        for id in owned { let _ = self.disconnect(&id); }
+        self.sessions.is_empty()
     }
 
     pub(crate) fn update_activity(&self, session_id: &str, busy: bool) {
@@ -348,7 +349,7 @@ impl SessionManager {
             .policy
             .lock()
             .map(|value| *value)
-            .unwrap_or(PersistencePolicy::KeepRunning);
+            .unwrap_or(PersistencePolicy::CloseWithApp);
         let lifecycle = session
             .lifecycle
             .lock()
@@ -369,15 +370,9 @@ impl SessionManager {
             session.ssh,
         );
         record.lifecycle = lifecycle;
-        record.frozen = session.frozen.load(Ordering::Acquire);
-        record.pid = session.frozen_pid.lock().ok().and_then(|slot| *slot);
-        record.start_time = session.start_time.lock().ok().and_then(|slot| *slot);
         if let Err(error) = manifest::write(&self.state_dir, &record) {
             log::warn!("[sessiond] could not persist {id}: {error}");
         }
     }
 
-    fn ensure_resumed(&self, id: &str, session: &Arc<Session>) {
-        crate::freeze::ensure_resumed(self, id, session);
-    }
 }

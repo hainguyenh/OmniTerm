@@ -65,6 +65,7 @@ describe("createSessionChannel — LOCAL", () => {
     expect(connect.local.mock.calls[0]).toHaveLength(3);
   });
 
+
   it("subscribes each stream under the pane key", () => {
     const connect = spyConnect();
     const channel = createSessionChannel(true, "pane-1", "conn-a");

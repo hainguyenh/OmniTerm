@@ -267,6 +267,8 @@ mod tests {
                 error: None,
                 busy: false,
                 generation: 1,
+                replay_available: Some(false),
+                replay_bytes: Some(0),
             },
             replay: Vec::new(),
             stream: Box::new(client),

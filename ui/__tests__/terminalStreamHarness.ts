@@ -5,6 +5,7 @@
 import { vi } from "vitest";
 import { attachTerminalStream } from "../utils/terminalStream";
 import type { SessionChannel } from "../utils/sessionChannel";
+import type { ReplayMetadata } from "../tauriSessions";
 import type { Terminal } from "@xterm/xterm";
 
 export type ResumeSnapshot = Awaited<ReturnType<Window["omnitermAPI"]["terminalWindow"]["resume"]>>;
@@ -18,7 +19,7 @@ export function makeTerminal() {
 /** A channel that hands back the callbacks it was given, so a test can drive them directly. */
 export function makeChannel() {
   const fire: {
-    ready?: (label?: string) => void;
+    ready?: (label?: string, replay?: ReplayMetadata) => void;
     data?: (data: Uint8Array) => void;
     error?: (err: string) => void;
     closed?: (code?: number) => void;

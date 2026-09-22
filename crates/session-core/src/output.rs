@@ -37,6 +37,8 @@ pub(crate) struct Output {
     /// against its last-written value to skip idle sessions entirely.
     revision: u64,
     flushed_revision: Option<u64>,
+    historical_replay_available: bool,
+    historical_replay_bytes: usize,
 }
 
 impl Output {
@@ -50,10 +52,14 @@ impl Output {
             agent_activity: AgentActivityTracker::default(),
             revision: 0,
             flushed_revision: None,
+            historical_replay_available: false,
+            historical_replay_bytes: 0,
         }
     }
 
     pub(crate) fn seed(&mut self, bytes: &[u8]) {
+        self.historical_replay_available = !bytes.is_empty();
+        self.historical_replay_bytes = bytes.len();
         self.buffer.extend(bytes);
         self.trim();
         self.revision += 1;
@@ -61,12 +67,21 @@ impl Output {
 
     /// Bytes to persist, but only when the buffer changed since the last
     /// durable flush. Idle sessions cost zero disk I/O.
-    pub(crate) fn take_flush_snapshot(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn take_flush_snapshot(&self) -> Option<(u64, Vec<u8>)> {
         if self.flushed_revision == Some(self.revision) {
             return None;
         }
-        self.flushed_revision = Some(self.revision);
-        Some(self.buffer.iter().copied().collect())
+        Some((self.revision, self.buffer.iter().copied().collect()))
+    }
+
+    pub(crate) fn acknowledge_flush(&mut self, revision: u64) {
+        let advances_flush = match self.flushed_revision {
+            Some(flushed_revision) => revision > flushed_revision,
+            None => true,
+        };
+        if revision <= self.revision && advances_flush {
+            self.flushed_revision = Some(revision);
+        }
     }
 
     /// Test-only full-buffer read; production reads go through
@@ -131,7 +146,10 @@ impl Output {
     ) -> (AttachSnapshot, Vec<u8>, broadcast::Receiver<ServerMessage>) {
         let receiver = self.stream.subscribe();
         let replay = self.buffer.make_contiguous().to_vec();
-        (self.snapshot(generation), replay, receiver)
+        let mut snapshot = self.snapshot(generation);
+        snapshot.replay_available = Some(self.historical_replay_available);
+        snapshot.replay_bytes = Some(self.historical_replay_bytes);
+        (snapshot, replay, receiver)
     }
 
     pub(crate) fn note_input(&mut self) {
@@ -158,6 +176,8 @@ impl Output {
             error,
             busy: self.busy,
             generation,
+            replay_available: Some(false),
+            replay_bytes: Some(0),
         }
     }
 }
