@@ -68,10 +68,21 @@ export const installWindowsImeCompositionWorkaround = (
     syncCompositionPreviewPosition()
     compositionView.textContent = text
     compositionView.classList.toggle('active', text.length > 0)
+    compositionView.style.display = text.length > 0 ? 'block' : 'none'
     compositionView.style.userSelect = 'none'
     compositionView.style.textDecoration = 'none'
     compositionView.style.pointerEvents = 'none'
   }
+
+  const updateCompositionPreview = (data: string): void => {
+    compositionText = data
+    setCompositionPreview(pendingCompositionText(compositionBase, data))
+  }
+
+  const liveCompositionData = (fallback: string): string =>
+    textarea.value.length > 0 && textarea.value !== compositionBase
+      ? textarea.value
+      : fallback
 
   let compositionActive = false
   let compositionBase = ''
@@ -151,8 +162,10 @@ export const installWindowsImeCompositionWorkaround = (
 
   const onCompositionUpdate = (event: CompositionEvent): void => {
     if (event.target !== textarea) return
-    compositionText = event.data
-    setCompositionPreview(pendingCompositionText(compositionBase, event.data))
+    // Chromium sometimes reports the whole composition in the textarea while `data` only carries
+    // the latest edit. Prefer the textarea value so the preview follows the IME document exactly;
+    // the event data remains the fallback for browsers/tests that do not update the value first.
+    updateCompositionPreview(liveCompositionData(event.data))
     event.stopPropagation()
   }
 
@@ -170,19 +183,27 @@ export const installWindowsImeCompositionWorkaround = (
       return
     }
     if (!compositionActive) return
-    finishComposition(event.data)
+    finishComposition(compositionText || event.data)
   }
 
   const onInput = (event: Event): void => {
     if (event.target !== textarea) return
-    if (compositionActive || suppressNextInput) {
+    if (compositionActive) {
+      const inputEvent = event as InputEvent
+      // Windows Telex can deliver the live pre-edit text through `input` without a useful
+      // compositionupdate payload. Keep it visible, but never let this intermediate value reach
+      // xterm/PTY until compositionend or a delimiter commits it. This also handles Backspace:
+      // the textarea value is the source of truth after the IME removes a character.
+      updateCompositionPreview(liveCompositionData(inputEvent.data ?? ''))
       event.stopPropagation()
-      if (suppressNextInput && !compositionActive) {
-        suppressNextInput = false
-        if (suppressInputResetTimer !== undefined) {
-          window.clearTimeout(suppressInputResetTimer)
-          suppressInputResetTimer = undefined
-        }
+      return
+    }
+    if (suppressNextInput) {
+      event.stopPropagation()
+      suppressNextInput = false
+      if (suppressInputResetTimer !== undefined) {
+        window.clearTimeout(suppressInputResetTimer)
+        suppressInputResetTimer = undefined
       }
       return
     }
@@ -196,8 +217,15 @@ export const installWindowsImeCompositionWorkaround = (
       return
     }
 
+    if (event.key === 'Backspace' && compositionText.length > 0) {
+      // Backspace edits the native IME document. Committing the current composition here would
+      // replay the whole pre-edit string before the IME has applied the deletion.
+      event.stopPropagation()
+      return
+    }
+
     const suffix = getCompositionBoundaryInput(event)
-    if (suffix !== undefined && compositionText.length > 0) {
+    if (suffix !== undefined) {
       event.preventDefault()
       event.stopPropagation()
       finishComposition(compositionText, suffix)

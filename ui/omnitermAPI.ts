@@ -16,11 +16,12 @@ import { writeText, readText, readImage } from '@tauri-apps/plugin-clipboard-man
 import { open } from '@tauri-apps/plugin-dialog'
 import { homeDir } from '@tauri-apps/api/path'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { attachSession, failSession, onSession, startSession } from './tauriSessions'
+import { attachSession, failSession, onSession, startSession, type ReplayMetadata } from './tauriSessions'
 import { diag } from './diag'
 import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
 import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
+import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
 
 /**
  * Subscribe to a Tauri event, returning a synchronous unsubscribe.
@@ -133,15 +134,12 @@ function createTauriAPI(): any {
         invoke('send_session_input', { id, data }).catch(() => {}),
       localResize: (id: string, size: { cols: number; rows: number }) =>
         invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
-      onLocalReady: (id: string, cb: (label?: string) => void) => onSession(id, 'ready', cb),
+      onLocalReady: (id: string, cb: (label?: string, replay?: ReplayMetadata) => void) => onSession(id, 'ready', cb),
       onLocalData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
       onLocalError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
       onLocalClosed: (id: string, cb: (code: number) => void) => onSession(id, 'closed', cb),
       // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
       onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
-      listLocalSessions: () => invoke<any[]>('list_local_sessions').catch(() => []),
-      setPersistencePolicy: (id: string, policy: 'close-with-app' | 'keep-running' | 'recover-after-reboot' | 'freeze-while-closed') =>
-        invoke<void>('set_session_persistence', { id, policy }),
 
       // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt
       // is therefore native to ssh.exe and no credential crosses the frontend API.
@@ -190,9 +188,7 @@ function createTauriAPI(): any {
 
     // Detached terminal windows are disposable daemon clients; PTYs stay owned by sessiond.
     terminalWindow: {
-      // Truthy in a detached window, null in the main one. Derived from the window LABEL rather
-      // than a URL parameter because `getCurrentWindow()` is synchronous: App.tsx has to choose its
-      // root view before its first await. The session id itself arrives from `bootstrap()`.
+      // Derived from the synchronous window label so App.tsx can choose the detached root early.
       detachedSessionId: detachedWindowMarker(),
       detach: (payload: { sessionId: string; name: string; connection: any }) =>
         invoke<boolean>('detach_terminal', {
@@ -205,9 +201,7 @@ function createTauriAPI(): any {
         }),
       bootstrap: () =>
         invoke<any>('bootstrap_terminal_window').catch(() => null),
-      // Replay + live subscription for a window binding to a running session. `data` comes back
-      // empty on purpose: the scrollback is pushed down the data channel instead, so it reaches the
-      // caller's already-registered onData handler rather than riding here as a JSON number array.
+      // Replay rides the already-registered data channel; the returned data field stays empty.
       resume: async (sessionId: string) => {
         const snapshot = await attachSession(sessionId)
         return snapshot ? { ...snapshot, data: new Uint8Array(0) } : null
@@ -222,9 +216,15 @@ function createTauriAPI(): any {
       },
       onReattached: (cb: (sessionId: string) => void) =>
         onEvent<string>('terminal-window-reattached', cb),
-      // The detached window closed an idle session outright (no fold-back) — the session is gone.
       onClosed: (cb: (sessionId: string) => void) =>
         onEvent<string>('terminal-window-closed', cb),
+      reportContext: (sessionId: string, update: Omit<DetachedContextUpdate, 'sessionId'>) =>
+        invoke<void>('report_detached_terminal_context', {
+          sessionId,
+          cwd: update.cwd ?? null,
+          title: update.title ?? null,
+        }).catch((error) => diag.warn('[omnitermAPI] detached context report failed', error)),
+      onContext: (cb: (update: DetachedContextUpdate) => void) => onEvent<DetachedContextUpdate>('terminal-window-context', cb),
     },
 
     clipboard: {

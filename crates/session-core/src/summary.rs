@@ -1,5 +1,3 @@
-use std::sync::atomic::Ordering;
-
 use session_protocol::{PersistencePolicy, SessionLifecycle, SessionSummary};
 
 use crate::manager::Session;
@@ -9,7 +7,7 @@ pub(crate) fn session_summary(id: &str, session: &Session) -> SessionSummary {
         .policy
         .lock()
         .map(|value| *value)
-        .unwrap_or(PersistencePolicy::KeepRunning);
+        .unwrap_or(PersistencePolicy::CloseWithApp);
     let lifecycle = session
         .lifecycle
         .lock()
@@ -30,6 +28,6 @@ pub(crate) fn session_summary(id: &str, session: &Session) -> SessionSummary {
         busy,
         launched_with_command: session.launched_with_command,
         ssh: session.ssh,
-        frozen: session.frozen.load(Ordering::Acquire),
+        frozen: false,
     }
 }

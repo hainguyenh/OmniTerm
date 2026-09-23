@@ -188,8 +188,6 @@ const defaults: Api = {
     interruptSession: async () => {},
     localInput: () => {},
     localResize: () => {},
-    listLocalSessions: async () => [],
-    setPersistencePolicy: async () => {},
     onLocalReady: noopSub,
     onLocalData: noopSub,
     onLocalError: noopSub,
@@ -206,6 +204,8 @@ const defaults: Api = {
     release: () => {},
     onReattached: noopSub,
     onClosed: noopSub,
+    reportContext: async () => {},
+    onContext: noopSub,
   },
   clipboard: {
     writeText: async () => {},

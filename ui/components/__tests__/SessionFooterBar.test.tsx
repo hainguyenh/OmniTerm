@@ -14,7 +14,6 @@ beforeEach(() => {
   mockOmnitermAPI({
     connect: {
       localInput: vi.fn(),
-      setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
     },
   })
 })
@@ -47,13 +46,13 @@ const renderFooter = (overrides: Partial<React.ComponentProps<typeof SessionFoot
 }
 
 describe('SessionFooterBar controls', () => {
-  it('places the five terminal controls at the right side for the active agent session', () => {
+  it('places terminal controls at the right side for the active agent session', () => {
     renderFooter()
     // The session is connected, so Stop stays pressable even though the idle probe reads idle —
     // the probe misreads WSL and fast commands (see SessionControlButtons' live-session gate).
     expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Clear terminal' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Session persistence' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Copy terminal output' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Detach into its own window' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Focus pane full screen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Focus pane full screen' }).parentElement?.className).toContain('ml-auto')

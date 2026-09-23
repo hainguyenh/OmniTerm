@@ -12,6 +12,13 @@
 
 use app_protocol::shell_spec::{shell_quote, split_args, LocalShell};
 
+/// Keep PowerShell's inline history/plugin prediction out of the terminal input surface. A
+/// prediction is painted into the same ConPTY buffer as the user's command, so Windows Telex can
+/// mistake it for part of the native composition and replay it when a delimiter is pressed. The
+/// parameter check keeps this safe on older Windows PowerShell/PSReadLine versions that do not
+/// expose predictive suggestions at all.
+const POWERSHELL_INTERACTIVE_BOOTSTRAP: &str = "chcp 65001 >$null; $psr = Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue; if ($null -ne $psr -and $psr.Parameters.ContainsKey('PredictionSource')) { Set-PSReadLineOption -PredictionSource None }";
+
 /// Everything needed to start one local pane, after merging saved and ad-hoc params.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalLaunch {
@@ -128,13 +135,18 @@ impl LocalLaunch {
                     // `.ps1` runs arrive as `& '<path>'`, and PowerShell parses the whole string as
                     // one script, so a `;`-separated bootstrap is safe to prepend — unlike cmd's
                     // `/k`, PowerShell keeps a quoted path intact after the statement separator.
-                    args.push(format!("chcp 65001 >$null; {cmd}"));
+                    let bootstrap = if self.keep_open {
+                        POWERSHELL_INTERACTIVE_BOOTSTRAP
+                    } else {
+                        "chcp 65001 >$null"
+                    };
+                    args.push(format!("{bootstrap}; {cmd}"));
                 } else {
                     // `-NoExit` keeps the session interactive after the bootstrap runs, so the
                     // codepage is in place before the first prompt paints its window title.
                     args.push("-NoExit".to_string());
                     args.push("-Command".to_string());
-                    args.push("chcp 65001 >$null".to_string());
+                    args.push(POWERSHELL_INTERACTIVE_BOOTSTRAP.to_string());
                 }
                 args
             }

@@ -122,7 +122,7 @@ describe('GeneralSettings', () => {
     expect(select.value).toBe('sel:ws1::f1')
   })
 
-  it('exports an envelope that carries the renderer persistence policies', async () => {
+  it('exports the backend settings envelope unchanged', async () => {
     const exportAll = vi.fn(async () => ({
       version: 1,
       exportedAt: '2026-08-24T00:00:00Z',
@@ -136,8 +136,6 @@ describe('GeneralSettings', () => {
         importAll: vi.fn(async () => ({ imported: {} })),
       },
     })
-    localStorage.setItem('omniterm:terminal-persistence-policies', JSON.stringify({ tabA: 'keep-running' }))
-
     let capturedBlob: Blob | undefined
     URL.createObjectURL = vi.fn(((blob: Blob) => { capturedBlob = blob; return 'blob:x' }) as typeof URL.createObjectURL)
     URL.revokeObjectURL = vi.fn()
@@ -158,11 +156,11 @@ describe('GeneralSettings', () => {
     await waitFor(() => expect(clickSpy).toHaveBeenCalled())
     const written = JSON.parse(await (capturedBlob as Blob).text())
     expect(written.version).toBe(1)
-    expect(written.sections.persistencePolicies).toEqual({ tabA: 'keep-running' })
+    expect(written.sections.persistencePolicies).toBeUndefined()
     clickSpy.mockRestore()
   })
 
-  it('imports through the chosen strategy and applies persistence policies', async () => {
+  it('imports the chosen strategy without renderer-owned persistence data', async () => {
     const importAll = vi.fn(
       async (_envelope: unknown, _strategy: 'merge' | 'replace') => ({ imported: { appSettings: 1, workspaces: 2 } }),
     )
@@ -189,10 +187,7 @@ describe('GeneralSettings', () => {
     const envelope = {
       version: 1,
       exportedAt: '2026-08-24T00:00:00Z',
-      sections: {
-        appSettings: {},
-        persistencePolicies: { tabB: 'freeze-while-closed' },
-      },
+      sections: { appSettings: {} },
     }
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const file = new File([JSON.stringify(envelope)], 'backup.json', { type: 'application/json' })
@@ -205,9 +200,7 @@ describe('GeneralSettings', () => {
     await waitFor(() => expect(importAll).toHaveBeenCalledTimes(1))
     const [sentEnvelope, strategy] = importAll.mock.calls[0]
     expect(strategy).toBe('replace')
-    // Renderer-owned section stripped before the backend rejects it as unknown.
-    expect((sentEnvelope as { sections: Record<string, unknown> }).sections.persistencePolicies).toBeUndefined()
-    expect(JSON.parse(localStorage.getItem('omniterm:terminal-persistence-policies') ?? '{}')).toEqual({ tabB: 'freeze-while-closed' })
+    expect((sentEnvelope as { sections: Record<string, unknown> }).sections).toEqual({ appSettings: {} })
     // Choice row retires after a decision.
     expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument()
   })

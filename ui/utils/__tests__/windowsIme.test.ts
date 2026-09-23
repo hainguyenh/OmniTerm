@@ -68,7 +68,87 @@ describe('installWindowsImeCompositionWorkaround', () => {
     expect(terminal.compositionView.classList).toContain('active')
     expect(terminal.compositionView.style.userSelect).toBe('none')
     expect(terminal.compositionView.style.textDecoration).toBe('none')
+    expect(terminal.compositionView.style.display).toBe('block')
     expect(terminal.input).not.toHaveBeenCalled()
+
+    dispose.dispose()
+  })
+
+  it('refreshes the visible preview when Telex reports the live value through input', () => {
+    const terminal = createTerminal()
+    const dispose = installWindowsImeCompositionWorkaround(terminal, true)
+
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.value = 'tieengs'
+    terminal.textarea.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertCompositionText',
+      data: 's',
+    }))
+
+    expect(terminal.compositionView.textContent).toBe('tieengs')
+    expect(terminal.compositionView.classList).toContain('active')
+    expect(terminal.input).not.toHaveBeenCalled()
+
+    dispose.dispose()
+  })
+
+  it('commits the live input preview with a delimiter without replaying it', () => {
+    const terminal = createTerminal()
+    const dispose = installWindowsImeCompositionWorkaround(terminal, true)
+
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.value = 'claude'
+    terminal.textarea.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertCompositionText',
+      data: 'e',
+    }))
+
+    dispatchKeydown(terminal.textarea, '-', 189)
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('claude-')
+    expect(terminal.compositionView.textContent).toBe('')
+    expect(terminal.compositionView.classList).not.toContain('active')
+
+    dispose.dispose()
+  })
+
+  it('lets Backspace clear the live composition before typing a new value', () => {
+    const terminal = createTerminal()
+    const dispose = installWindowsImeCompositionWorkaround(terminal, true)
+
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.value = 'claude'
+    terminal.textarea.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertCompositionText',
+      data: 'e',
+    }))
+
+    for (const value of ['claud', 'clau', 'cla', 'cl', 'c', '']) {
+      const keydown = dispatchKeydown(terminal.textarea, 'Backspace', 8)
+      expect(keydown.defaultPrevented).toBe(false)
+      terminal.textarea.value = value
+      terminal.textarea.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        inputType: 'deleteContentBackward',
+        data: null,
+      }))
+    }
+
+    expect(terminal.input).not.toHaveBeenCalled()
+    expect(terminal.compositionView.textContent).toBe('')
+
+    terminal.textarea.value = 'xin'
+    terminal.textarea.dispatchEvent(new InputEvent('input', {
+      bubbles: true,
+      inputType: 'insertCompositionText',
+      data: 'n',
+    }))
+    dispatchKeydown(terminal.textarea, '-', 189)
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('xin-')
 
     dispose.dispose()
   })

@@ -12,6 +12,7 @@
  * adapter and a reader having to check which half is real.
  */
 
+import type { ReplayMetadata } from '../tauriSessions'
 import { createLatestResizeQueue } from './terminalResize'
 
 export interface SessionChannel {
@@ -20,7 +21,7 @@ export interface SessionChannel {
   resize: (size: { cols: number; rows: number }) => void
   dispose?: () => void
   /** Each `on*` returns a synchronous unsubscribe — see omnitermAPI.ts. */
-  onReady: (cb: (label?: string) => void) => () => void
+  onReady: (cb: (label?: string, replay?: ReplayMetadata) => void) => () => void
   onData: (cb: (data: Uint8Array) => void) => () => void
   onError: (cb: (err: string) => void) => () => void
   onClosed: (cb: (code?: number) => void) => () => void

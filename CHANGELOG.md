@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Terminal & Sessions
+- **Restart restores layout and working directories, not processes**: OmniTerm now persists pane/tab placement plus each terminal's last working directory and recreates fresh shells on the next launch instead of resuming daemon-owned process state.
+- **Process-persistence modes removed**: Removed the per-terminal Keep running, Freeze while closed, and Recover after reboot controls. New GUI PTYs always use close-with-app lifetime semantics.
+- **Daemon lifetime follows the GUI**: Losing the final GUI lease terminates owned PTYs and allows the session daemon to exit, while same-app detach/reattach continues to preserve a live terminal process.
+- **Retryable startup recovery**: Restored panes keep their saved cwd/layout metadata authoritative until native startup succeeds, and individual failed panes can be retried without reopening closed panes or resetting the current layout.
+
+### Reliability, Tests & Documentation
+- Added integrated renderer coverage for fresh-shell reconstruction, saved-cwd restore, pending acknowledgement, targeted retry, and layout retention.
+- Synchronized the terminal lifecycle, PTY detach, frontend/Rust session component specs, source inventories, README, and settings-transfer documentation with the layout/cwd-only restart model.
+- Hardened the shared mock-app workspace test path so the full Rust workspace gate is deterministic on Windows.
+- Removed obsolete live freeze/resume machinery left behind after process persistence was removed; only guarded legacy Unix orphan cleanup remains, with focused coverage for identity-match, incomplete-record, and recycled-PID branches.
+
 ## [v0.1.9] — 2026-09-21
 
 ### Terminal & Sessions

@@ -61,6 +61,11 @@ pub struct AttachSnapshot {
     pub error: Option<String>,
     pub busy: bool,
     pub generation: u64,
+    /// `None` means an older daemon did not advertise replay capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_available: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay_bytes: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
