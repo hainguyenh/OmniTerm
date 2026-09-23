@@ -27,7 +27,12 @@ fn shell_launch(command: &str) -> session_protocol::LaunchSpec {
 async fn handle_request(manager: &SessionManager, request: ClientRequest) -> ServerMessage {
     let (mut client, server) = duplex(8 * 1024);
     write_frame(&mut client, &request).await.unwrap();
-    handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())).await;
+    handle_connection(
+        manager.clone(),
+        server,
+        std::sync::Arc::new(tokio::sync::Notify::new()),
+    )
+    .await;
     read_frame::<ServerMessage>(&mut client).await.unwrap()
 }
 
@@ -213,7 +218,11 @@ async fn attach_on_existing_session_returns_attached_with_replay() {
     )
     .await
     .unwrap();
-    let handle = tokio::spawn(handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())));
+    let handle = tokio::spawn(handle_connection(
+        manager.clone(),
+        server,
+        std::sync::Arc::new(tokio::sync::Notify::new()),
+    ));
     let response = read_frame::<ServerMessage>(&mut client).await.unwrap();
     match response {
         ServerMessage::Attached { replay, .. } => {
@@ -241,7 +250,11 @@ async fn client_lease_writes_ok_then_exits_when_stream_closes() {
     )
     .await
     .unwrap();
-    let handle = tokio::spawn(handle_connection(manager.clone(), server, std::sync::Arc::new(tokio::sync::Notify::new())));
+    let handle = tokio::spawn(handle_connection(
+        manager.clone(),
+        server,
+        std::sync::Arc::new(tokio::sync::Notify::new()),
+    ));
     let ok = read_frame::<ServerMessage>(&mut client).await.unwrap();
     assert!(matches!(ok, ServerMessage::Ok));
     drop(client);
@@ -249,6 +262,35 @@ async fn client_lease_writes_ok_then_exits_when_stream_closes() {
         .await
         .unwrap()
         .unwrap();
+}
+
+#[tokio::test]
+async fn client_lease_signals_shutdown_when_no_sessions_remain() {
+    use std::time::Duration;
+    use tokio::sync::watch;
+
+    let dir = tempfile::tempdir().unwrap();
+    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
+    let (mut client, server) = duplex(8 * 1024);
+    let (shutdown, mut shutdown_rx) = watch::channel(false);
+    write_frame(
+        &mut client,
+        &ClientRequest::ClientLease {
+            client_id: "c".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let handle = tokio::spawn(handle_connection_with_shutdown(manager, server, shutdown));
+    let ok = read_frame::<ServerMessage>(&mut client).await.unwrap();
+    assert!(matches!(ok, ServerMessage::Ok));
+    drop(client);
+    tokio::time::timeout(Duration::from_millis(500), shutdown_rx.changed())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(*shutdown_rx.borrow());
+    handle.await.unwrap();
 }
 
 #[tokio::test]
@@ -260,7 +302,12 @@ async fn handle_connection_returns_quietly_when_the_stream_closes_before_a_reque
     // `read_frame` fail with an EOF; `handle_connection` must return
     // without touching the manager.
     drop(client);
-    handle_connection(manager, server, std::sync::Arc::new(tokio::sync::Notify::new())).await;
+    handle_connection(
+        manager,
+        server,
+        std::sync::Arc::new(tokio::sync::Notify::new()),
+    )
+    .await;
 }
 
 #[tokio::test]

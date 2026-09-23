@@ -304,6 +304,7 @@ export const attachTerminalStream = ({
       cleanupClosed()
       cleanupMetrics()
       cleanupActivity()
+      api.dispose?.()
       // Final scrollback flush — unmount is the last moment the full buffer is owned here.
       if (scrollTimer) clearTimeout(scrollTimer)
       scrollTimer = null

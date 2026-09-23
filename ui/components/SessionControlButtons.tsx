@@ -88,6 +88,10 @@ export default function SessionControlButtons({
         sendInput('\x03')
       }
     }
+    // A force-killed (or uncooperative, SIGINT-ignoring) TUI can leave the terminal in a mode it
+    // enabled but never got to undo — mouse tracking, bracketed paste, a hidden cursor. The pane
+    // itself (TerminalView) owns the fix, since only it can query and write to its xterm instance.
+    window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: sessionId } }))
     setMenuOpen(false)
   }
 
@@ -106,10 +110,10 @@ export default function SessionControlButtons({
         measured.set(element.dataset.controlKey as ControlKey, element.offsetWidth || element.scrollWidth)
       })
       const order: ControlKey[] = [
-        ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
-        ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
         ...(conn.type === 'LOCAL' && onOpenCurrentDirectory ? ['currentDir'] as ControlKey[] : []),
+        ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
         ...(detach ? ['detach'] as ControlKey[] : []),
+        ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
         ...(onToggleFullscreen ? ['fullscreen'] as ControlKey[] : []),
       ]
       const hidden: ControlKey[] = []
@@ -153,10 +157,10 @@ export default function SessionControlButtons({
   const openCurrentDirectory = (event: React.MouseEvent) => { event.stopPropagation(); onOpenCurrentDirectory?.(); setMenuOpen(false) }
   const toggleFullscreen = (event: React.MouseEvent) => { event.stopPropagation(); onToggleFullscreen?.(); setMenuOpen(false) }
   const availableControls: ControlKey[] = [
-    ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
-    ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
     ...(conn.type === 'LOCAL' && onOpenCurrentDirectory ? ['currentDir'] as ControlKey[] : []),
+    ...(conn.type !== 'RDP' ? ['stop', 'clear', 'copy'] as ControlKey[] : []),
     ...(detach ? ['detach'] as ControlKey[] : []),
+    ...(appearance ? ['theme', 'font'] as ControlKey[] : []),
     ...(onToggleFullscreen ? ['fullscreen'] as ControlKey[] : []),
   ]
   const isVisible = (key: ControlKey) => availableControls.includes(key) && !hiddenControls.includes(key)
@@ -221,19 +225,19 @@ export default function SessionControlButtons({
   return (
     <span ref={rootRef} data-testid="session-control-root" data-session-control-root className={`relative flex min-w-[18px] flex-1 items-center justify-end gap-0.5 ${className}`}>
       <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
-        {appearance && <><span data-control-key="theme" className="h-4 w-4" /><span data-control-key="font" className="h-4 w-[3.75rem]" /></>}
-        {conn.type !== 'RDP' && <><span data-control-key="stop" className={buttonClass} /><span data-control-key="clear" className={buttonClass} /><span data-control-key="copy" className={buttonClass} /></>}
         {conn.type === 'LOCAL' && onOpenCurrentDirectory && <span data-control-key="currentDir" className="h-4 w-5" />}
+        {conn.type !== 'RDP' && <><span data-control-key="stop" className={buttonClass} /><span data-control-key="clear" className={buttonClass} /><span data-control-key="copy" className={buttonClass} /></>}
         {detach && <span data-control-key="detach" className={buttonClass} />}
+        {appearance && <><span data-control-key="theme" className="h-4 w-4" /><span data-control-key="font" className="h-4 w-[3.75rem]" /></>}
         {onToggleFullscreen && <span data-control-key="fullscreen" className={buttonClass} />}
       </span>
-      {isVisible('theme') && themeControl}
-      {isVisible('font') && fontControl}
+      {isVisible('currentDir') && currentDirectoryControl}
       {isVisible('stop') && stopControl}
       {isVisible('clear') && clearControl}
       {isVisible('copy') && conn.type !== 'RDP' && <TerminalCopyMenu sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
-      {isVisible('currentDir') && currentDirectoryControl}
       {isVisible('detach') && detachControl}
+      {isVisible('theme') && themeControl}
+      {isVisible('font') && fontControl}
       {isVisible('fullscreen') && fullscreenControl}
       {hiddenControls.length > 0 && (
         <>
@@ -244,10 +248,6 @@ export default function SessionControlButtons({
           </Tooltip>
           {menuOpen && (
             <div role="menu" aria-label="More terminal actions" className={`absolute right-0 z-50 min-w-48 rounded-lg border border-theme-border bg-theme-popup p-1 shadow-xl ${tooltipPlacement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-              {hiddenControls.includes('theme') && overflowThemeControl}
-              {hiddenControls.includes('stop') && <button type="button" role="menuitem" disabled={!stopEnabled} onClick={stop} className={menuItemClass}><Square className="h-3.5 w-3.5 flex-shrink-0" />Stop current process</button>}
-              {hiddenControls.includes('clear') && <button type="button" role="menuitem" onClick={clear} className={menuItemClass}><Eraser className="h-3.5 w-3.5 flex-shrink-0" />Clear terminal</button>}
-              {hiddenControls.includes('copy') && conn.type !== 'RDP' && <TerminalCopyMenu sessionId={sessionId} menuItem />}
               {hiddenControls.includes('currentDir') && (
                 <button type="button" role="menuitem" onClick={openCurrentDirectory} className={menuItemClass}>
                   <svg viewBox="0 0 25 25" fill="none" className="h-4 w-4 flex-shrink-0" aria-hidden="true">
@@ -256,7 +256,11 @@ export default function SessionControlButtons({
                   Open new pane with current directory
                 </button>
               )}
+              {hiddenControls.includes('stop') && <button type="button" role="menuitem" disabled={!stopEnabled} onClick={stop} className={menuItemClass}><Square className="h-3.5 w-3.5 flex-shrink-0" />Stop current process</button>}
+              {hiddenControls.includes('clear') && <button type="button" role="menuitem" onClick={clear} className={menuItemClass}><Eraser className="h-3.5 w-3.5 flex-shrink-0" />Clear terminal</button>}
+              {hiddenControls.includes('copy') && conn.type !== 'RDP' && <TerminalCopyMenu sessionId={sessionId} menuItem />}
               {hiddenControls.includes('detach') && <button type="button" role="menuitem" onClick={toggleDetach} className={menuItemClass}>{detach === 'attach' ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />}{detachTitle(detach!, detachWhere)}</button>}
+              {hiddenControls.includes('theme') && overflowThemeControl}
               {hiddenControls.includes('fullscreen') && <button type="button" role="menuitem" onClick={toggleFullscreen} className={menuItemClass}>{fullscreen ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <Maximize2 className="h-3.5 w-3.5 flex-shrink-0" />}{fullscreen ? 'Restore view mode' : 'Focus pane full screen'}</button>}
               {hiddenControls.includes('font') && appearance && <div className="mt-1 border-t border-theme-border pt-1"><FontSizeControl fontSize={appearance.fontSize} scopeLabel={appearance.scopeLabel ?? 'this terminal'} onFontSizeChange={appearance.onFontSizeChange} compact fullWidth /></div>}
             </div>

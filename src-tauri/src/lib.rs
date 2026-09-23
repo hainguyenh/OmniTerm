@@ -29,6 +29,7 @@ pub use app_protocol::{openshell, session_status, shell_spec};
 pub use app_core::win_job;
 pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 pub mod pty;
+mod pty_lease;
 mod pty_interrupt;
 mod pty_status;
 pub mod pty_resolve;
@@ -182,6 +183,11 @@ pub fn run() {
             // reaping sessions during teardown and emitting fold-back events at a main window that
             // is itself closing.
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+                if let Some(pty) = app.try_state::<PtyManager>() {
+                    // Do not let the GUI lease retry loop respawn a daemon while the process is
+                    // already leaving; the daemon will stop itself after applying session policy.
+                    pty.begin_shutdown();
+                }
                 if let Some(registry) = app.try_state::<DetachRegistry>() {
                     registry.begin_shutdown();
                 }

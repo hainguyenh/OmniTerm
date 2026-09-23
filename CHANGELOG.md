@@ -7,11 +7,19 @@
 - **Process-persistence modes removed**: Removed the per-terminal Keep running, Freeze while closed, and Recover after reboot controls. New GUI PTYs always use close-with-app lifetime semantics.
 - **Daemon lifetime follows the GUI**: Losing the final GUI lease terminates owned PTYs and allows the session daemon to exit, while same-app detach/reattach continues to preserve a live terminal process.
 - **Retryable startup recovery**: Restored panes keep their saved cwd/layout metadata authoritative until native startup succeeds, and individual failed panes can be retried without reopening closed panes or resetting the current layout.
+- **Unicode input and display in terminal panes**: Typing and IME composition (Chinese, Japanese, Vietnamese, and other non-Latin scripts) now round-trips correctly through the pane, including Windows Telex/IME composition that previously produced duplicated or garbled characters.
+- **Command completion setting**: A new General setting toggles PowerShell's inline (PSReadLine) prediction on or off per the user's preference, default ON; a POSIX/UTF-8 codepage bootstrap still runs either way.
+- **Stop no longer leaves garbled terminal output**: Force-killing a pane's foreground process (Stop) now clears mouse-tracking, bracketed-paste, cursor-visibility, and alt-screen modes the process left enabled, instead of leaving raw escape sequences visible in the pane.
+- **Pane header actions reordered**: Pane header buttons now read current-directory, stop, clear, copy, detach, theme, font size, fullscreen, session picker, close — matching the intended visual grouping.
+- **Theme button matches other pane header controls**: The pane header's theme-switch button no longer draws a border/outline, consistent with the other icon buttons in the same row.
+- **Debug builds no longer break Node/Bun CLIs in panes**: A debug build launched from a debugger (e.g. VS Code's JS debugger) previously leaked its `NODE_OPTIONS`/`VSCODE_INSPECTOR_OPTIONS` inspector hooks into every pane's environment, causing Node/Bun-based CLIs such as Claude Code to exit immediately with no output. Debug builds now strip those variables before any session starts; production builds are unaffected.
 
 ### Reliability, Tests & Documentation
 - Added integrated renderer coverage for fresh-shell reconstruction, saved-cwd restore, pending acknowledgement, targeted retry, and layout retention.
 - Synchronized the terminal lifecycle, PTY detach, frontend/Rust session component specs, source inventories, README, and settings-transfer documentation with the layout/cwd-only restart model.
 - Hardened the shared mock-app workspace test path so the full Rust workspace gate is deterministic on Windows.
+- Added regression tests for IME/Unicode input handling, the command completion setting, the terminal interrupt mode reset, and debug-build environment stripping.
+- Closed Rust branch-coverage gaps: the command-completion setting's "on" argv path was only exercised by a Windows-gated test, so Linux CI never ran it; and `session-core`'s `spawn_reader`/`acknowledge_flush` never had their poisoned-lock recovery and stale-acknowledgement branches tested. All four now have dedicated regression tests.
 - Removed obsolete live freeze/resume machinery left behind after process persistence was removed; only guarded legacy Unix orphan cleanup remains, with focused coverage for identity-match, incomplete-record, and recycled-PID branches.
 
 ## [v0.1.9] — 2026-09-21

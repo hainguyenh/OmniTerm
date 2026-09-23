@@ -55,6 +55,7 @@ From terminal start through live IO, pane changes, close/disconnect, app shutdow
 - Stop is gated by an explicit live-session flag from the hosting header/footer, not by the activity probe.
 - Stop is immediate and session-preserving: LOCAL sessions invoke native `interrupt_session`; SSH sessions send ETX through their PTY input channel.
 - Connected-terminal close confirmation is shown by default. Choosing “Don't ask again” persists `skipTerminalCloseConfirm`; General settings can turn it off to restore the dialog.
+- Windows Telex composition stays visible in the xterm composition preview while typing; only the completed composition is forwarded to the PTY.
 - Visible xterm panes refit immediately and again on the next paint after a layout epoch change.
 
 ## Functionalities

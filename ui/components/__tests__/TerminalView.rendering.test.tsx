@@ -214,6 +214,42 @@ describe('TerminalView rendering & WebGL', () => {
     }
   })
 
+  it('refits from the window resize fallback when the observer misses a WebView2 resize', () => {
+    installApi()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      render(<TerminalView id="window-resize" connection={localConnection} />)
+      const fit = xterm.fits[0].fit
+      fit.mockClear()
+
+      window.dispatchEvent(new Event('resize'))
+      act(() => vi.runOnlyPendingTimers())
+
+      expect(fit).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('retries a fit that fails during an intermediate layout pass', () => {
+    installApi()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      render(<TerminalView id="fit-retry" connection={localConnection} />)
+      const fit = xterm.fits[0].fit
+      fit.mockClear()
+      fit.mockImplementationOnce(() => { throw new Error('layout not settled') })
+
+      act(() => { resizeCallback?.(); vi.advanceTimersByTime(70) })
+      expect(fit).toHaveBeenCalledTimes(1)
+
+      act(() => vi.advanceTimersByTime(70))
+      expect(fit).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   // The mount-time resize races session creation and is dropped by the backend; when the session
   // reports ready the pane must resend its grid even though cols/rows did not change, or the ConPTY
   // stays at its default 80x24 and wraps long lines at a width the pane never renders (the

@@ -13,6 +13,7 @@ fn defaults_expose_every_field_the_renderer_reads() {
     // Opt-in: the client-side highlighter rewrites output, which is wrong for TUIs by default.
     assert_eq!(d["smartColors"], json!(false));
     assert_eq!(d["checkUpdatesOnStartup"], json!(true));
+    assert_eq!(d["commandCompletion"], json!(true));
     assert_eq!(d["skippedVersion"], json!(null));
     assert_eq!(d["workspaces"], json!([]));
     assert!(d["shortcuts"].is_object());

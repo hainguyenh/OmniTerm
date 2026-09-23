@@ -328,6 +328,17 @@ impl SessionManager {
         self.sessions.is_empty()
     }
 
+    pub(crate) fn is_idle(&self) -> bool {
+        self.interrupted.is_empty()
+            && self.sessions.iter().all(|entry| {
+                entry
+                    .lifecycle
+                    .lock()
+                    .map(|lifecycle| *lifecycle != SessionLifecycle::Live)
+                    .unwrap_or(false)
+            })
+    }
+
     pub(crate) fn update_activity(&self, session_id: &str, busy: bool) {
         let Some(session) = self.sessions.get(session_id) else {
             return;
