@@ -177,11 +177,17 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
             onClick={toggleOpen}
             className={menuItem
               ? 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover'
-              : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
-              open
-                ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
-                : 'border-theme-border text-inherit opacity-70 hover:opacity-100'
-              }`}
+              : compact
+                // Borderless to match the other pane-header buttons (stop, clear, detach…) — only
+                // the icon color signals the open state, same as their hover/active treatment.
+                ? `inline-flex items-center justify-center ${btnSize} rounded transition-colors hover:bg-[#414868] ${
+                  open ? 'text-theme-accent' : 'text-theme-dim hover:text-theme-accent'
+                  }`
+                : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
+                open
+                  ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
+                  : 'border-theme-border text-inherit opacity-70 hover:opacity-100'
+                }`}
           >
             <Palette className={iconSize} />
             {menuItem && <span>Theme</span>}

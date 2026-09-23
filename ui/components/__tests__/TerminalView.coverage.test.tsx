@@ -7,6 +7,7 @@ import type { Connection } from '@omniterm/contract'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
+import { resolveTerminalFontFamily } from '../../utils/terminalOptions'
 import TerminalView from '../TerminalView'
 
 const xterm = vi.hoisted(() => {
@@ -26,8 +27,9 @@ const xterm = vi.hoisted(() => {
     selection = ''
     unicode = { activeVersion: '6' }
     // Enough of the buffer API for the visibility effect to decide whether the pane was pinned to
-    // the live tail. viewportY === baseY means "at the bottom".
-    buffer = { active: { viewportY: 0, baseY: 0 } }
+    // the live tail (viewportY === baseY means "at the bottom") and for the interrupt handler to
+    // tell whether an alternate-screen exit is safe to send.
+    buffer = { active: { viewportY: 0, baseY: 0, type: 'normal' as 'normal' | 'alternate' } }
     dataHandler: ((data: string) => void) | null = null
     selectionHandler: (() => void) | null = null
     keyHandler: ((event: KeyboardEvent) => boolean) | null = null
@@ -239,6 +241,24 @@ describe('TerminalView full lifecycle', () => {
     window.dispatchEvent(new CustomEvent('omniterm:focus-terminal', { detail: { id: 'other' } }))
     window.dispatchEvent(new CustomEvent('omniterm:focus-terminal', { detail: { id: 'local-session' } }))
     expect(term.focus).toHaveBeenCalled()
+
+    // Stop clears any mouse-tracking/bracketed-paste/hidden-cursor state a killed TUI left behind,
+    // so leftover reports (e.g. SGR mouse motion) don't get typed as literal shell input afterward.
+    // A pane for a different session must not react.
+    window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: 'other' } }))
+    expect(term.writes).not.toContain(expect.stringContaining('\x1b[?1000l'))
+    window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: 'local-session' } }))
+    const modeReset = term.writes.at(-1)
+    expect(modeReset).toContain('\x1b[?1000l')
+    expect(modeReset).toContain('\x1b[?2004l')
+    expect(modeReset).toContain('\x1b[?25h')
+    // Not currently on the alternate screen, so exiting it (and its cursor-restore side effect)
+    // must not be sent.
+    expect(modeReset).not.toContain('\x1b[?1049l')
+
+    term.buffer.active.type = 'alternate'
+    window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: 'local-session' } }))
+    expect(term.writes.at(-1)).toContain('\x1b[?1049l')
     act(() => resizeCallback?.())
     expect(fit.fit).toHaveBeenCalled()
     expect(window.omnitermAPI.connect.localResize).toHaveBeenCalledWith('local-session', { cols: 100, rows: 30 })
@@ -248,7 +268,7 @@ describe('TerminalView full lifecycle', () => {
       theme={{ ...TOKYO_NIGHT.terminal.dark, selectionForeground: '' }} fontSize={18}
       fontFamilyMono="JetBrains Mono" smartColors={false} />)
     expect(term.options.fontSize).toBe(18)
-    expect(term.options.fontFamily).toBe('JetBrains Mono')
+    expect(term.options.fontFamily).toBe(resolveTerminalFontFamily('JetBrains Mono'))
     expect(term.options.theme.selectionForeground).toBeUndefined()
 
     act(() => handlers.localError?.('boom'))

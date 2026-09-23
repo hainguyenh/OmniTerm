@@ -249,6 +249,17 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
       </div>
 
       <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
+        <span className={LABEL_CLS}>Command completion</span>
+        <ToggleRow
+          label="Command completion"
+          description="Show the shell's inline suggestions (PowerShell). Turn off if typing with a Windows IME such as Vietnamese Telex repeats text. Applies to new panes."
+          checked={appSettings.commandCompletion ?? true}
+          onChange={() => patch({ commandCompletion: !(appSettings.commandCompletion ?? true) })}
+          ariaLabel="Command completion"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
         <span className={LABEL_CLS}>Terminal close confirmation</span>
         <ToggleRow
           label="Don't ask before closing connected terminals"

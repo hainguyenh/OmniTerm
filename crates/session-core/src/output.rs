@@ -118,7 +118,12 @@ impl Output {
             .position(|&b| b == b'\n')
             .map(|idx| idx + 1)
             .unwrap_or(LINE_SCAN_LIMIT);
-        let drop_to = (start + drop_extra).min(self.buffer.len());
+        let mut drop_to = (start + drop_extra).min(self.buffer.len());
+        // The no-newline fallback cuts at a fixed byte offset; step past UTF-8 continuation bytes
+        // so the replay never opens mid-character (the renderer would paint U+FFFD).
+        while self.buffer.get(drop_to).is_some_and(|&b| b & 0xC0 == 0x80) {
+            drop_to += 1;
+        }
         self.buffer.drain(..drop_to);
     }
 

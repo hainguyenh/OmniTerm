@@ -55,6 +55,10 @@ pub fn defaults() -> Value {
         // existing installs keep whatever they already saved, since `save` writes every field.
         "smartColors": false,
         "checkUpdatesOnStartup": true,
+        // Shell inline prediction (PowerShell's PSReadLine). On by default so completion works out
+        // of the box; a Windows IME that repeats typed text (see windowsIme.ts) is the one known
+        // reason to turn it off — see the description shown next to this toggle in GeneralSettings.
+        "commandCompletion": true,
         "skippedVersion": null,
         // Cap on what the built-in viewer/editor will open or save, in whole MB. 1 MB covers every
         // script and config file this app manages; a user who wants to read a large log raises it.

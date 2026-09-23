@@ -9,6 +9,37 @@ fn colorfgbg_matches_the_terminal_appearance() {
 }
 
 #[test]
+fn command_completion_defaults_on_for_missing_or_malformed_values() {
+    assert!(command_completion_enabled(&serde_json::json!({})));
+    assert!(command_completion_enabled(
+        &serde_json::json!({ "commandCompletion": "no" })
+    ));
+    assert!(command_completion_enabled(
+        &serde_json::json!({ "commandCompletion": true })
+    ));
+    assert!(!command_completion_enabled(
+        &serde_json::json!({ "commandCompletion": false })
+    ));
+}
+
+#[test]
+fn utf8_locale_is_added_only_on_posix_hosts_without_a_locale() {
+    let none = |_: &str| None;
+    assert_eq!(
+        utf8_locale_fallback("macos", none),
+        Some(("LANG", "en_US.UTF-8"))
+    );
+    assert_eq!(utf8_locale_fallback("linux", none), Some(("LANG", "C.UTF-8")));
+    assert_eq!(utf8_locale_fallback("windows", none), None);
+    for set in ["LC_ALL", "LC_CTYPE", "LANG"] {
+        let lookup = |name: &str| (name == set).then(|| OsString::from("vi_VN.UTF-8"));
+        assert_eq!(utf8_locale_fallback("linux", lookup), None, "{set} is honoured");
+    }
+    let empty = |name: &str| (name == "LANG").then(OsString::new);
+    assert_eq!(utf8_locale_fallback("linux", empty), Some(("LANG", "C.UTF-8")));
+}
+
+#[test]
 fn pane_path_prepends_launcher_directory_and_preserves_path() {
     let _guard = test_support::lock();
     let app = test_support::mock_app();
