@@ -41,7 +41,6 @@ describe('PaneHeader remaining behavior', () => {
           localInput: vi.fn(),
           sshInput: vi.fn(),
           interruptSession: vi.fn().mockResolvedValue(undefined),
-          setPersistencePolicy: vi.fn().mockResolvedValue(undefined),
         },
       },
     })
@@ -96,44 +95,6 @@ describe('PaneHeader remaining behavior', () => {
   })
 
 
-  it('offers all Hybrid persistence modes from a button popover and persists a selection', () => {
-    setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
-    // Default for every terminal pane is close-with-app per persistencePolicy.ts.
-    const trigger = screen.getByRole('button', { name: 'Session persistence' })
-    expect(trigger).toHaveAttribute('aria-expanded', 'false')
-
-    fireEvent.click(trigger)
-    expect(trigger).toHaveAttribute('aria-expanded', 'true')
-
-    const close = screen.getByRole('menuitemradio', { name: 'Close with OmniTerm' })
-    const keep = screen.getByRole('menuitemradio', { name: 'Keep running' })
-    const recover = screen.getByRole('menuitemradio', { name: 'Recover after reboot' })
-    expect(close).toBeInTheDocument()
-    // 'close-with-app' is the default-effective policy, so it shows the radio check.
-    expect(close).toHaveAttribute('aria-checked', 'true')
-    expect(keep).toHaveAttribute('aria-checked', 'false')
-    expect(recover).toHaveAttribute('aria-checked', 'false')
-
-    fireEvent.click(recover)
-    expect(window.omnitermAPI.connect.setPersistencePolicy).toHaveBeenCalledWith('s1', 'recover-after-reboot')
-    expect(localStorage.getItem('omniterm:terminal-persistence-policies')).toContain('recover-after-reboot')
-    // The popover closes after a selection.
-    expect(trigger).toHaveAttribute('aria-expanded', 'false')
-  })
-
-  it('closes the persistence menu on Escape and on an outside click', () => {
-    setup({ conn: { ...ssh, type: 'SSH' }, sessionId: 's1' })
-    const trigger = screen.getByRole('button', { name: 'Session persistence' })
-    fireEvent.click(trigger)
-    expect(screen.getByRole('menuitemradio', { name: 'Keep running' })).toBeInTheDocument()
-
-    fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByRole('menuitemradio', { name: 'Keep running' })).not.toBeInTheDocument()
-
-    fireEvent.click(trigger)
-    fireEvent.mouseDown(document.body)
-    expect(screen.queryByRole('menuitemradio', { name: 'Keep running' })).not.toBeInTheDocument()
-  })
 
   it('renders the oscillating running indicator when busy is true', () => {
     const { container } = setup({ busy: true })

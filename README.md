@@ -25,6 +25,9 @@ browser engine for a single pane. OmniTerm takes a different approach:
   No Electron, no browser-engine-per-pane. Only a Tauri webview for the UI shell.
 - **Multi-window panes** -- Detach a terminal into its own OS window, re-attach it
   later. The PTY stays owned by Rust; output routing switches internally per-pane.
+- **Layout restart** -- OmniTerm saves terminal pane/view-group placement and each pane's latest
+  working directory. Closing the app terminates its terminal processes; the next launch recreates
+  fresh shells in the saved directories instead of resuming process state or terminal output.
 - **Plugin system** -- Unsandboxed Node.js sidecar. Plugins provide connection metadata,
   workspace content, app-open auth gates, and selected app features. Install only trusted packages.
 

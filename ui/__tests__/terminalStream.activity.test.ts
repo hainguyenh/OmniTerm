@@ -99,12 +99,14 @@ describe("attachTerminalStream — activity and scrollback", () => {
   it("paints saved scrollback before live output and saves the merged buffer on dispose", async () => {
     await saveScrollback("sb-pane-1", "saved history\r\n");
     const { term, fire, stream } = attach({
+      isLocal: true,
       scrollbackKey: "sb-pane-1",
       smartColors: () => false,
     });
 
     // Live bytes arrive before the store read resolves — they must queue behind it.
     fire.data?.(bytes("live output\r\n"));
+    fire.ready?.(undefined, { available: false, bytes: 0, generation: 1 });
     await vi.waitFor(() => expect(written(term)).toContain("live output"));
 
     expect(written(term)).toBe("saved history\r\nlive output\r\n");

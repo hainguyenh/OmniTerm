@@ -12,12 +12,74 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WRITE_CHUNK_SIZE } from "../utils/writeChunks";
 import { mockOmnitermAPI } from "../testUtils";
 import { attach, bytes, written, type ResumeSnapshot } from "./terminalStreamHarness";
+import { saveScrollback } from "../utils/scrollbackStore";
 
 beforeEach(() => {
   mockOmnitermAPI();
 });
 
 describe("attachTerminalStream — connect", () => {
+  it("uses IndexedDB history when a recovered daemon reports no replay", async () => {
+    await saveScrollback("sb-pane-1", "saved history\r\n");
+    const { term, fire } = attach({
+      isLocal: true,
+      mode: "connect",
+      scrollbackKey: "sb-pane-1",
+    });
+
+    fire.ready?.(undefined, { available: false, bytes: 0, generation: 2 });
+    fire.data?.(bytes("live output\r\n"));
+
+    await vi.waitFor(() => expect(written(term)).toContain("saved history\r\n"));
+    expect(written(term)).toBe("saved history\r\nlive output\r\n");
+  });
+
+  it("does not duplicate IndexedDB history when the daemon reports replay", async () => {
+    await saveScrollback("sb-pane-1", "stale renderer history\r\n");
+    const { term, fire } = attach({
+      isLocal: true,
+      mode: "connect",
+      scrollbackKey: "sb-pane-1",
+    });
+
+    fire.ready?.(undefined, { available: true, bytes: 18, generation: 2 });
+    fire.data?.(bytes("daemon history\r\n"));
+
+    await vi.waitFor(() => expect(written(term)).toContain("daemon history\r\n"));
+    expect(written(term)).not.toContain("stale renderer history");
+  });
+
+  it("waits for replay-source negotiation before releasing IndexedDB history", async () => {
+    await saveScrollback("sb-pane-1", "stale renderer history\r\n");
+    const { term, fire } = attach({
+      isLocal: true,
+      mode: "connect",
+      scrollbackKey: "sb-pane-1",
+    });
+
+    fire.data?.(bytes("live output\r\n"));
+    await Promise.resolve();
+    expect(written(term)).toBe("");
+
+    fire.ready?.(undefined, { available: true, bytes: 13, generation: 2 });
+    await vi.waitFor(() => expect(written(term)).toBe("live output\r\n"));
+  });
+
+  it("uses an older daemon's advertised replay payload when capability metadata is unknown", async () => {
+    await saveScrollback("sb-pane-1", "stale renderer history\r\n");
+    const { term, fire } = attach({
+      isLocal: true,
+      mode: "connect",
+      scrollbackKey: "sb-pane-1",
+    });
+
+    fire.ready?.(undefined, { bytes: 23, generation: 1 });
+    fire.data?.(bytes("legacy daemon history\r\n"));
+
+    await vi.waitFor(() => expect(written(term)).toContain("legacy daemon history"));
+    expect(written(term)).not.toContain("stale renderer history");
+  });
+
   it("holds a local pane at 'connecting' until the first byte arrives", () => {
     // A cold WSL VM answers the ConPTY handshake immediately and then goes silent for seconds.
     // Flipping to 'connected' on ready dropped the loading overlay onto a blank pane.

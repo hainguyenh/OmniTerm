@@ -1,21 +1,26 @@
-/** Restore saved PTY tabs by reattaching live daemon sessions before considering any cold launch. */
-import { useEffect } from 'react'
+/** Recreate saved pane/tab layout with fresh terminal processes at the saved working directories. */
+import { useEffect, useRef } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
-import { clearSnapshot, type PersistedConn, type SessionSnapshot } from '../utils/sessionStore'
+import { type PersistedConn, type SessionSnapshot } from '../utils/sessionStore'
+import { selectPendingSnapshotTabs } from '../utils/sessionCheckpoint'
 import { diag } from '../diag'
-import {
-  getPersistencePolicy,
-  hasExplicitPersistencePolicy,
-} from '../utils/persistencePolicy'
+import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
+  existingTabs?: { id: string; connId: string; name: string }[]
+  existingEphemeralConns?: Connection[]
+  isRestoreAllowed?: (sessionId: string) => boolean
   setActiveTabs: (fn: (prev: { id: string; connId: string; name: string }[]) => { id: string; connId: string; name: string }[]) => void
   setEphemeralConns: (fn: (prev: Connection[]) => Connection[]) => void
   setTabGroups: (fn: (prev: Record<string, string>) => Record<string, string>) => void
   setResumeMode: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
+  setRestoreOutcomes?: (outcomes: Record<string, RestoreOutcome>) => void
+  onRestoreResult?: (attemptedIds: string[], unresolvedIds: string[]) => void
+  restoreLayout?: boolean
+  retryToken?: number
   resolveConnection?: (id?: string) => Connection | undefined
   restoreGroups: (groups: ViewGroup[], activeId: string) => void
   setPanes: (panes: (string | null)[]) => void
@@ -37,115 +42,148 @@ function connectionFromSnapshot(conn: PersistedConn): Connection {
   }
 }
 
-export function useSessionRestore({
-  initialSnapshot,
-  setActiveTabs,
-  setEphemeralConns,
-  setTabGroups,
-  setResumeMode,
-  resolveConnection,
-  restoreGroups,
-  setPanes,
-  setLayoutMode,
-  setFocusedPane,
-}: SessionRestoreInput): void {
+function groupsForSnapshot(snapshot: SessionSnapshot): ViewGroup[] {
+  const ids = new Set(snapshot.activeTabs.map(tab => tab.id))
+  return snapshot.viewGroups.map(group => ({
+    ...group,
+    panes: group.panes.map(pane => pane && ids.has(pane) ? pane : null),
+  }))
+}
+
+export function useSessionRestore(input: SessionRestoreInput): void {
+  const latestInput = useRef(input)
+  latestInput.current = input
+  const { initialSnapshot, retryToken = 0 } = input
+
   useEffect(() => {
+    const current = latestInput.current
     if (!initialSnapshot || initialSnapshot.activeTabs.length === 0) return
     let cancelled = false
 
+    const allowedIds = new Set(initialSnapshot.activeTabs
+      .filter(tab => current.isRestoreAllowed?.(tab.id) !== false)
+      .map(tab => tab.id))
+    const snapshot = selectPendingSnapshotTabs(initialSnapshot, allowedIds)
+    if (!snapshot) return
+
+    current.setRestoreOutcomes?.(Object.fromEntries(snapshot.activeTabs.map(tab => [tab.id, {
+      phase: 'pending',
+      message: 'Restoring pane layout and working directory.',
+      retryable: false,
+    }])))
+
     void (async () => {
-      const daemonSessions = await window.omnitermAPI?.connect?.listLocalSessions?.() ?? []
-      const daemonById = new Map<string, (typeof daemonSessions)[number]>()
-      for (const session of daemonSessions) daemonById.set(session.id, session)
-      const savedConnById = new Map(initialSnapshot.ephemeralConns.map(conn => [conn.id, conn]))
+      const savedConnById = new Map(snapshot.ephemeralConns.map(conn => [conn.id, conn]))
       const restoredConns = new Map<string, Connection>()
       const restoredTabs: { id: string; connId: string; name: string }[] = []
-      const attachMode: Record<string, boolean> = {}
+      const outcomes: Record<string, RestoreOutcome> = {}
+      const unresolvedIds: string[] = []
+      const attemptedIds: string[] = []
 
-      for (const tab of initialSnapshot.activeTabs) {
-        const daemonSession = daemonById.get(tab.sessionId)
-        const live = daemonSession?.lifecycle === 'live'
+      for (const tab of snapshot.activeTabs) {
+        if (cancelled || latestInput.current.isRestoreAllowed?.(tab.id) === false) continue
+        attemptedIds.push(tab.id)
+
         const savedConn = savedConnById.get(tab.connId)
-        const localPolicy = getPersistencePolicy(tab.id)
-        const policy = daemonSession?.policy
-          ?? (hasExplicitPersistencePolicy(tab.id) ? localPolicy : tab.persistencePolicy)
-        let conn = resolveConnection?.(tab.connId) ?? (savedConn ? connectionFromSnapshot(savedConn) : undefined)
+        let conn = current.resolveConnection?.(tab.connId)
+          ?? (savedConn ? connectionFromSnapshot(savedConn) : undefined)
 
-        if (live) {
-          if (!conn) continue
-          restoredConns.set(conn.id, conn)
-          restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
-          attachMode[tab.id] = true
-          continue
-        }
+        // Never reattach old process state. If a stale daemon session exists under this tab id,
+        // kill it first, then reconstruct the pane with a fresh shell.
+        await window.omnitermAPI.connect.localDisconnect(tab.id)
 
-        const recover = policy === 'recover-after-reboot'
-          && (!daemonSession || daemonSession.lifecycle === 'interrupted')
-
-        if (savedConn && (savedConn.type ?? 'LOCAL') === 'LOCAL') {
-          const needsRegistration = savedConn.ephemeral || (recover && !!savedConn.initialCommand)
-          if (needsRegistration) {
-            try {
-              conn = undefined
-              const opened = await window.omnitermAPI.shells.open(
-                savedConn.shell,
-                savedConn.workspaceId ?? null,
-                undefined,
-                savedConn.localCwd ?? null,
-                recover ? savedConn.initialCommand ?? null : null,
-              ) as Connection | null
-              if (opened) conn = opened
-            } catch (error) {
-              diag.warn('[useSessionRestore] shell registration failed', error)
-            }
+        if ((savedConn?.type ?? conn?.type) === 'LOCAL' && savedConn) {
+          try {
+            const opened = await window.omnitermAPI.shells.open(
+              savedConn.shell ?? tab.recovery.shell,
+              savedConn.workspaceId ?? null,
+              undefined,
+              tab.recovery.cwd ?? savedConn.localCwd ?? null,
+              null,
+            ) as Connection | null
+            if (opened) conn = opened
+            else conn = undefined
+          } catch (error) {
+            diag.warn('[useSessionRestore] fresh shell registration failed', error)
+            conn = undefined
           }
         }
 
-        if (!conn) continue
+        if (cancelled || latestInput.current.isRestoreAllowed?.(tab.id) === false) {
+          if (conn && savedConn && conn.id !== savedConn.id) window.omnitermAPI.shells.release(conn.id)
+          continue
+        }
+
+        if (!conn) {
+          unresolvedIds.push(tab.id)
+          restoredTabs.push({ id: tab.id, connId: tab.connId, name: tab.name })
+          outcomes[tab.id] = {
+            phase: 'failed',
+            message: 'The pane could not start a fresh terminal. Retry when the shell is available.',
+            retryable: true,
+            action: 'retry-session',
+          }
+          continue
+        }
+
         restoredConns.set(conn.id, conn)
         restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
-        // A snapshot is renderer metadata, not proof that the daemon session still exists. Only a
-        // session reported as live above may use attach mode; every other restored tab starts a
-        // clean connection. Recover-after-reboot may still pass its allowlisted resume command to
-        // the new shell, while close/keep/freeze policies start without one.
-        attachMode[tab.id] = false
+        outcomes[tab.id] = {
+          phase: 'recovering',
+          message: 'Starting a fresh terminal in the saved folder.',
+          retryable: false,
+        }
       }
 
-      if (cancelled || restoredTabs.length === 0) return
+      if (cancelled || attemptedIds.length === 0) return
+      latestInput.current.onRestoreResult?.(attemptedIds, unresolvedIds)
+      if (restoredTabs.length === 0) return
 
-      setEphemeralConns(prev => {
-        const existing = new Set(prev.map(conn => conn.id))
-        return [...prev, ...[...restoredConns.values()].filter(conn => !existing.has(conn.id))]
-      })
-      setActiveTabs(prev => {
-        const existing = new Set(prev.map(tab => tab.id))
-        return [...prev, ...restoredTabs.filter(tab => !existing.has(tab.id))]
-      })
-      setResumeMode(prev => ({ ...prev, ...attachMode }))
-
-      const restoredIds = new Set(restoredTabs.map(tab => tab.id))
-      const restoredGroups: ViewGroup[] = initialSnapshot.viewGroups.map(group => ({
-        ...group,
-        panes: group.panes.map(id => (id !== null && restoredIds.has(id) ? id : null)),
+      const restoredById = new Map(restoredTabs.map(tab => [tab.id, tab]))
+      const existingTabs = latestInput.current.existingTabs ?? []
+      const resultingConnIds = new Set(existingTabs.map(tab => restoredById.get(tab.id)?.connId ?? tab.connId))
+      for (const tab of restoredTabs) resultingConnIds.add(tab.connId)
+      const replacedConnIds = new Set(existingTabs.flatMap(tab => {
+        const restored = restoredById.get(tab.id)
+        return restored && restored.connId !== tab.connId ? [tab.connId] : []
       }))
-      const restoredTabGroups: Record<string, string> = {}
-      for (const [tabId, groupId] of Object.entries(initialSnapshot.tabGroups)) {
-        if (restoredIds.has(tabId)) restoredTabGroups[tabId] = groupId
-      }
-      setTabGroups(() => restoredTabGroups)
-      restoreGroups(restoredGroups, initialSnapshot.activeGroupId)
-
-      const activeGroup = restoredGroups.find(group => group.id === initialSnapshot.activeGroupId)
-      if (activeGroup) {
-        setPanes(activeGroup.panes)
-        setLayoutMode(activeGroup.layoutMode)
-        setFocusedPane(Math.min(activeGroup.focusedPane, activeGroup.layoutMode - 1))
+      for (const conn of latestInput.current.existingEphemeralConns ?? []) {
+        if (replacedConnIds.has(conn.id) && !resultingConnIds.has(conn.id)) {
+          window.omnitermAPI.shells.release(conn.id)
+        }
       }
 
-      diag.log('[useSessionRestore] restored', restoredTabs.length, 'PTY session(s)')
-      if (!cancelled) clearSnapshot()
+      current.setEphemeralConns(previous => {
+        const retained = previous.filter(conn => !replacedConnIds.has(conn.id) || resultingConnIds.has(conn.id))
+        const ids = new Set(retained.map(conn => conn.id))
+        return [...retained, ...[...restoredConns.values()].filter(conn => !ids.has(conn.id))]
+      })
+      current.setActiveTabs(previous => {
+        const ids = new Set(previous.map(tab => tab.id))
+        const updated = previous.map(tab => restoredById.get(tab.id) ?? tab)
+        return [...updated, ...restoredTabs.filter(tab => !ids.has(tab.id))]
+      })
+      current.setResumeMode(previous => ({
+        ...previous,
+        ...Object.fromEntries(restoredTabs.map(tab => [tab.id, false])),
+      }))
+
+      if (current.restoreLayout !== false) {
+        current.setTabGroups(() => ({ ...snapshot.tabGroups }))
+        const groups = groupsForSnapshot(snapshot)
+        current.restoreGroups(groups, snapshot.activeGroupId)
+        const activeGroup = groups.find(group => group.id === snapshot.activeGroupId)
+        if (activeGroup) {
+          current.setPanes(activeGroup.panes)
+          current.setLayoutMode(activeGroup.layoutMode)
+          current.setFocusedPane(Math.min(activeGroup.focusedPane, activeGroup.layoutMode - 1))
+        }
+      }
+
+      current.setRestoreOutcomes?.(outcomes)
+      diag.log('[useSessionRestore] recreated', restoredTabs.length, 'terminal pane(s)')
     })()
 
     return () => { cancelled = true }
-  }, []) // startup-only restore
+  }, [initialSnapshot, retryToken])
 }

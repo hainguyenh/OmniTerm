@@ -74,10 +74,6 @@ const FIELD_CLS =
 const backupButtonClass =
   'flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-fg hover:text-theme-accent bg-theme-bg border border-theme-border rounded-lg transition-colors'
 
-/** Renderer-owned persistence-policy overrides ride inside the envelope's `sections`. */
-const POLICIES_SECTION = 'persistencePolicies'
-const POLICIES_STORAGE_KEY = 'omniterm:terminal-persistence-policies'
-
 const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   appSettings,
   setAppSettings,
@@ -122,14 +118,11 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
     if (showAlert) await showAlert(message, options)
   }
 
-  /** Backend builds the envelope; the renderer-owned policy overrides ride along as a section. */
+  /** Backend builds the complete settings envelope. */
   const handleExport = async () => {
     try {
       const envelope = await window.omnitermAPI.settings.exportAll()
-      let policies: Record<string, unknown> = {}
-      try { policies = JSON.parse(localStorage.getItem(POLICIES_STORAGE_KEY) ?? '{}') } catch { /* storage optional */ }
-      const withPolicies = { ...envelope, sections: { ...envelope.sections, [POLICIES_SECTION]: policies } }
-      const blob = new Blob([JSON.stringify(withPolicies, null, 2)], { type: 'application/json' })
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
@@ -159,18 +152,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   const runImport = async (strategy: 'merge' | 'replace') => {
     if (!pendingImport) return
     try {
-      // Persistence policies are renderer-owned: lift them out before the backend sees an
-      // unknown section, then apply them after the stores land.
-      const sections = { ...pendingImport.sections } as Record<string, unknown>
-      const policies = sections[POLICIES_SECTION]
-      delete sections[POLICIES_SECTION]
-      const report = await window.omnitermAPI.settings.importAll(
-        { ...pendingImport, sections: sections as SettingsTransferEnvelope['sections'] },
-        strategy,
-      )
-      if (policies && typeof policies === 'object') {
-        localStorage.setItem(POLICIES_STORAGE_KEY, JSON.stringify(policies))
-      }
+      const report = await window.omnitermAPI.settings.importAll(pendingImport, strategy)
       const counts = Object.entries(report.imported).map(([k, n]) => `${k}: ${n}`).join(', ') || 'nothing'
       await notify(`Settings imported (${strategy}) — ${counts}.`)
     } catch (error) {
@@ -403,14 +385,13 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         )}
       </div>
 
-      {/* Settings backup. The envelope is produced and applied by the backend; this UI only
-          stitches the renderer-owned persistence-policy overrides around those two calls.
-          Secrets cannot be in the file: the connection store holds none (connections.rs). */}
+      {/* Settings backup. The backend owns the envelope. Secrets cannot be in the file because
+          the connection store holds none (connections.rs). */}
       <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
         <span className={LABEL_CLS}>Backup &amp; restore</span>
         <p className="text-[11px] text-theme-dim -mt-0.5">
-          Export or import app settings, connections, themes, workspaces, and persistence policies
-          as one JSON file. Connection credentials are never stored, so none are ever exported.
+          Export or import app settings, connections, themes, and workspaces as one JSON file.
+          Connection credentials are never stored, so none are ever exported.
         </p>
         <div className="flex items-center gap-2">
           <button type="button" onClick={handleExport} className={backupButtonClass}>

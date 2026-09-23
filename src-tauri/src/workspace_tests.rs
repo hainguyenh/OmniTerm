@@ -61,6 +61,7 @@ fn empty_workspace_pins_are_serialized_for_the_renderer_contract() {
 
 #[test]
 fn workspaces_file_path_ends_with_workspaces_json() {
+    let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let path = workspaces_file(app.handle()).expect("should resolve");
     assert!(path.to_string_lossy().ends_with("workspaces.json"));

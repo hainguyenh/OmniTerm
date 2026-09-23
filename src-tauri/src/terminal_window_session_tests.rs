@@ -276,6 +276,8 @@ fn on_window_destroyed_folds_if_folding_back_is_set() {
         name: "test".to_string(),
         connection: serde_json::json!({}),
         folding_back: AtomicBool::new(true),
+        last_cwd: None,
+        last_title: None,
     };
     registry.entries.insert("session".to_string(), entry);
 

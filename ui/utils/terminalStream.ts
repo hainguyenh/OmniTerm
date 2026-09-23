@@ -75,14 +75,12 @@ export const attachTerminalStream = ({
   // pane looking blank the whole time. SSH's shell channel reliably sends a prompt/MOTD immediately,
   // so it keeps the old ready-is-connected behavior.
   let sawFirstData = !isLocal
-
-  const cleanupReady = api.onReady(() => {
-    if (!isLocal) {
-      onStatus('connected')
-      term.write('\r\n\x1b[32mConnected to ' + host + '\x1b[0m\r\n')
-    }
-    refit()
-  })
+  let historyState: 'pending' | 'indexeddb' | 'daemon' | 'none' = scrollbackKey && mode === 'connect' ? 'pending' : 'none'
+  let gated: string[] | null = historyState === 'pending' ? [] : null
+  let gatedReplay: boolean[] = []
+  let historyDecisionKnown = historyState !== 'pending'
+  let historyLoaded = historyState !== 'pending'
+  let savedHistory = ''
 
   // Stream pipeline: bytes → UTF-8 text (a streaming decoder handles chunk-split multibyte chars) →
   // optional smart colouring → terminal. The highlighter always sees the text so its
@@ -115,8 +113,6 @@ export const attachTerminalStream = ({
   let scrollBuffer = ''
   let scrollDirty = false
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
-  let gated: string[] | null = scrollbackKey && mode === 'connect' ? [] : null
-  let gatedReplay: boolean[] = []
   const SCROLLBACK_SAVE_MS = 3_000
 
   const appendScrollback = (text: string) => {
@@ -156,6 +152,37 @@ export const attachTerminalStream = ({
     // frame no matter where it came from. Text at or below the chunk size passes through as-is.
     writeChunked(term, highlighter.transform(text, smartColors()))
   }
+
+  const releaseHistory = () => {
+    if (gated === null || !historyDecisionKnown) return
+    if (historyState === 'indexeddb' && !historyLoaded) return
+    if (historyState === 'indexeddb' && savedHistory) {
+      scrollBuffer = savedHistory
+      highlighter.transform(savedHistory, false)
+      writeChunked(term, savedHistory)
+    }
+    const queued = gated
+    const queuedReplay = gatedReplay
+    gated = null
+    gatedReplay = []
+    queued.forEach((text, i) => handleText(text, queuedReplay[i]))
+    refit()
+  }
+
+  const cleanupReady = api.onReady((_, replay) => {
+    if (historyState === 'pending') {
+      historyDecisionKnown = true
+      const daemonHasHistory = replay?.available === true
+        || (replay?.available === undefined && (replay?.bytes ?? 0) > 0)
+      historyState = daemonHasHistory ? 'daemon' : 'indexeddb'
+      releaseHistory()
+    }
+    if (!isLocal) {
+      onStatus('connected')
+      term.write('\r\n\x1b[32mConnected to ' + host + '\x1b[0m\r\n')
+    }
+    refit()
+  })
 
   const cleanupData = api.onData((data: Uint8Array) => {
     if (!sawFirstData) {
@@ -218,19 +245,14 @@ export const attachTerminalStream = ({
   if (gated !== null && scrollbackKey) {
     const key = scrollbackKey
     void loadScrollback(key).then(saved => {
-      if (!isCurrent()) return // torn down while awaiting
-      if (saved) scrollBuffer = saved
-      if (scrollBuffer) {
-        // The seed is already the saved buffer — write it verbatim, no re-append.
-        highlighter.transform(scrollBuffer, false)
-        writeChunked(term, scrollBuffer)
-      }
-      const queued = gated ?? []
-      const queuedReplay = gatedReplay
-      gated = null
-      gatedReplay = []
-      queued.forEach((text, i) => handleText(text, queuedReplay[i]))
-      refit()
+      if (!isCurrent()) return
+      savedHistory = saved ?? ''
+      historyLoaded = true
+      releaseHistory?.()
+    }).catch(() => {
+      if (!isCurrent()) return
+      historyLoaded = true
+      releaseHistory?.()
     })
   }
 

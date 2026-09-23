@@ -104,7 +104,10 @@ mod windows {
     #[test]
     fn a_bare_powershell_bootstraps_utf8_and_stays_interactive() {
         let inv = launch(LocalShell::Powershell, None, true).invocation().unwrap();
-        assert_eq!(inv.args, vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]);
+        assert_eq!(
+            inv.args,
+            vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
+        );
     }
 
     /// `keepOpen` is the whole reason a script pane stays readable after it finishes.
@@ -127,7 +130,12 @@ mod windows {
             .unwrap();
         assert_eq!(
             stay.args,
-            vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null; & './x.ps1'"]
+            vec![
+                "-NoLogo".to_string(),
+                "-NoExit".to_string(),
+                "-Command".to_string(),
+                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; & './x.ps1'")
+            ]
         );
         let exit = launch(LocalShell::Powershell, Some("& './x.ps1'"), false)
             .invocation()
@@ -157,7 +165,13 @@ mod windows {
         ps.args = Some("-NoProfile".to_string());
         assert_eq!(
             ps.invocation().unwrap().args,
-            vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "chcp 65001 >$null; x"]
+            vec![
+                "-NoLogo".to_string(),
+                "-NoProfile".to_string(),
+                "-NoExit".to_string(),
+                "-Command".to_string(),
+                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; x")
+            ]
         );
     }
 
@@ -245,11 +259,11 @@ fn windows_argv_builder_is_tested_on_every_platform() {
     assert_eq!(
         ps_keep,
         vec![
-            "-NoLogo",
-            "-NoProfile",
-            "-NoExit",
-            "-Command",
-            "chcp 65001 >$null; echo hi"
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-NoExit".to_string(),
+            "-Command".to_string(),
+            format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; echo hi")
         ]
     );
     let ps_exit = launch(LocalShell::Default, None, false)
@@ -257,7 +271,7 @@ fn windows_argv_builder_is_tested_on_every_platform() {
     assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
     assert_eq!(
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None),
-        vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]
+        vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
     );
 
     let wsl_keep = launch(LocalShell::Wsl, None, true).windows_args(

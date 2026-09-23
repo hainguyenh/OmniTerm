@@ -31,6 +31,7 @@ pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_l
 pub mod pty;
 mod pty_lease;
 mod pty_interrupt;
+mod pty_status;
 pub mod pty_resolve;
 pub mod safepath_command;
 pub use app_core::safepath;
@@ -208,8 +209,6 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         pty_interrupt::interrupt_session,
         pty::resize_session,
         pty::disconnect_session,
-        pty::list_local_sessions,
-        pty::set_session_persistence,
         pty_resolve::prepare_ssh_session,
         // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
         // positioned a window that was never reparented and got no error saying so. Docking, if
@@ -219,6 +218,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         // Detached terminal windows
         terminal_window::detach_terminal,
         terminal_window::bootstrap_terminal_window,
+        terminal_window::report_detached_terminal_context,
         terminal_window::attach_session,
         terminal_window::reattach_terminal,
         terminal_window::focus_terminal_window,

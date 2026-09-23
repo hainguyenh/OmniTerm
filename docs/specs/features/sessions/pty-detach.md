@@ -24,30 +24,31 @@ properties:
 
 ## Description
 
-Defines native PTY ownership, output/activity processing and moving an existing session between main and detached windows.
+Defines native PTY ownership, output/activity processing, and moving an existing live session between main and detached windows during one OmniTerm run.
 
 ## What
 
-The out-of-process session daemon owns PTY/process handles and the live session registry; detachment changes presentation ownership only.
+The out-of-process session daemon owns PTY/process handles and the live session registry. Detachment changes presentation ownership only.
 
 ## Why
 
-OS resources must survive renderer remounts and detaching must not create a duplicate process.
+A terminal should move between OmniTerm windows without starting a duplicate process, while application exit must still terminate the process.
 
 ## How
 
-PTY commands operate on stable daemon session IDs. The daemon buffers output and derives shell/agent-aware activity, while the Tauri bridge forwards its stream over existing renderer channels. `terminal_window` maps existing session IDs to detached windows and reattaches without restarting the PTY.
+PTY commands operate on stable live session IDs. The daemon buffers runtime output and derives activity, while the Tauri bridge forwards its stream over renderer channels. `terminal_window` maps an existing session ID to a detached window and reattaches it without restarting the PTY.
 
 ## When
 
-On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
+On session start/input/resize/output/stop/disconnect and detach/reattach/focus, within the current app lifetime.
 
 ## Behavior
 
-- One native session per session ID.
-- Detach preserves process/session identity.
-- Replay is emitted before the live daemon stream, preserving output ordering across attach/restart.
-- `FreezeWhileClosed` sessions suspend their whole process tree when the owning GUI client disconnects (NtSuspendProcess per pid on Windows, `SIGSTOP` on the Unix process group) and resume before the next attach or mutation; a Unix boot sweep reaps verified frozen orphans via manifest pid + start-time match.
+- One live native session per session ID.
+- Detach/reattach preserves process/session identity while OmniTerm remains running.
+- Runtime replay is emitted before the live daemon stream when a detached renderer attaches, preserving output ordering within the current application lifetime.
+- Closing OmniTerm is not a detach operation: GUI lease loss terminates its owned PTYs, and the daemon exits when no owned sessions remain.
+- App restart reconstructs saved panes with fresh PTYs at saved working directories; detached/live process state is not resumed across app runs.
 
 ## Functionalities
 
@@ -55,7 +56,7 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 - `send_session_input` — owned by this spec.
 - `resize_session` — owned by this spec.
 - `kill_session` / `disconnect_session` — owned by this spec.
-- `list_local_sessions` / `set_session_persistence` — owned by this spec.
+- `attach_existing_session` — owned by this spec for same-app detached-window attach/reattach.
 - daemon output/activity streaming — owned by `session-core`.
 - `detach_terminal` — owned by this spec.
 - `reattach_terminal` — owned by this spec.
@@ -64,35 +65,40 @@ On session start/input/resize/output/kill/disconnect and detach/reattach/focus.
 
 | Component | What | Why | How | When |
 |---|---|---|---|---|
-| `start_local_session` | Start native PTY. | Own process lifecycle. | Resolve launch, spawn/register IO loops. | Session start. |
-| `send_session_input` | Write session input. | Interactive shell. | Lookup writer by session ID. | User input. |
+| `start_local_session` | Start a native PTY. | Own process lifecycle natively. | Resolve launch, kill stale same-ID state, create a close-with-app PTY, register IO loops. | Fresh session start. |
+| `send_session_input` | Write session input. | Interactive shell. | Lookup writer by live session ID. | User input. |
 | `resize_session` | Resize PTY. | Match UI geometry. | Lookup PTY and resize. | Pane/xterm resize. |
 | `kill_session` / `disconnect_session` | Stop/release session. | Explicit lifecycle. | Lookup registry and terminate/release. | Close/disconnect. |
-| `list_local_sessions` / `set_session_persistence` | Read/update daemon lifecycle state. | Restore and Hybrid lifetime policy. | Query or mutate sessiond records by stable session ID. | Startup/policy change. |
-| daemon output/activity | Buffer replay and publish runtime state. | Keep PTY continuity independent of renderer lifetime. | `session-core` owns the 256 KiB replay tail plus ordinary-shell process polling and agent-aware OSC/input/output activity tracking with fresh local input forcing idle. | Live session. |
-| `detach_terminal` | Create/focus detached renderer for existing session. | Move presentation without new PTY. | Bind session ID to Tauri window. | Detach. |
-| `reattach_terminal` | Return session presentation to main app. | Reversible detach. | Release detached mapping and reattach. | Reattach. |
+| `attach_existing_session` | Attach another OmniTerm window to an existing live PTY. | Move presentation without spawning. | Subscribe to current daemon replay/live stream. | Detach/reattach in the same app run. |
+| daemon output/activity | Buffer runtime replay and publish state. | Keep window moves independent of renderer lifetime. | `session-core` owns runtime replay plus process/activity sampling. | Live session. |
+| `detach_terminal` | Create/focus detached renderer for existing session. | Move presentation without a new PTY. | Bind session ID to a Tauri window. | Detach. |
+| `reattach_terminal` | Return presentation to main app. | Reversible detach. | Release detached mapping and reattach. | Reattach. |
 
 ## State and data
 
-- Daemon session registry
+- Live daemon session registry
 - Daemon-owned PTY handles
-- Bounded replay plus durable recovery tail
+- Bounded runtime replay
 - Daemon-owned activity metrics
 - Window attachment map
 
+No detached-window state is a guarantee of process survival after OmniTerm exits.
+
 ## Errors and edge cases
 
-- Unknown session/window, spawn/client or window creation errors are returned.
+- Unknown session/window, spawn/client, or window creation errors are explicit.
+- App restart never treats a previous detached session as attachable process state.
 
 ## Security and invariants
 
 - Renderer cannot access raw process handles or arbitrary executable launch through session mutation APIs.
+- Detach is presentation migration, not process persistence.
 
 ## Verification
 
-- session-core persistence/replay/activity tests
+- session-core lifecycle/replay/activity tests
 - Tauri bridge and terminal_window tests
+- GUI lease-loss termination tests
 
 ## Source map
 

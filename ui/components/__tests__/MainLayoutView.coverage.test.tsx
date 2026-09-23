@@ -372,6 +372,39 @@ describe('MainLayoutView coverage', () => {
     expect(container.querySelector('.hidden')).not.toBeInTheDocument()
   })
 
+  it('blocks pending/failed restore panes and retries a failed pane as a fresh terminal', () => {
+    const retryRestore = vi.fn()
+    const base = {
+      activeTabs: [{ id: 'restore-tab', connId: 'local', name: 'Restore' }],
+      panes: ['restore-tab'],
+      activeTabId: 'restore-tab',
+      retryRestore,
+    }
+    const { rerender } = render(<MainLayoutView model={model({
+      ...base,
+      restoreOutcomes: {
+        'restore-tab': { phase: 'failed', message: 'Could not start shell', retryable: true, action: 'retry-session' },
+      },
+    })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart terminal' }))
+    expect(retryRestore).toHaveBeenLastCalledWith('restore-tab')
+    expect(screen.queryByTestId('terminal-restore-tab')).not.toBeInTheDocument()
+
+    rerender(<MainLayoutView model={model({
+      ...base,
+      restoreOutcomes: { 'restore-tab': { phase: 'pending', message: 'Retrying', retryable: false } },
+    })} />)
+    expect(screen.queryByTestId('terminal-restore-tab')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Restart terminal' })).not.toBeInTheDocument()
+
+    rerender(<MainLayoutView model={model({
+      ...base,
+      restoreOutcomes: { 'restore-tab': { phase: 'recovering', message: 'Starting shell', retryable: false } },
+    })} />)
+    expect(screen.getByTestId('terminal-restore-tab')).toBeInTheDocument()
+  })
+
   it('opens, saves, and closes the workspace connection form', () => {
     const ref = { current: 'workspace-1' }
     const m = model({ connFormOpen: true, connFormTarget: { folders: [], rootLabel: 'Workspace', parentPath: 'ops' }, connFormInitial: ssh, wsConnFormRef: ref })
