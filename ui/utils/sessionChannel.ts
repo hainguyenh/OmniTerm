@@ -13,11 +13,13 @@
  */
 
 import type { ReplayMetadata } from '../tauriSessions'
+import { createLatestResizeQueue } from './terminalResize'
 
 export interface SessionChannel {
   connect: () => void
   input: (data: string) => void
   resize: (size: { cols: number; rows: number }) => void
+  dispose?: () => void
   /** Each `on*` returns a synchronous unsubscribe — see omnitermAPI.ts. */
   onReady: (cb: (label?: string, replay?: ReplayMetadata) => void) => () => void
   onData: (cb: (data: Uint8Array) => void) => () => void
@@ -36,31 +38,35 @@ export const createSessionChannel = (
   id: string,
   connId: string,
   shell?: string,
-  darkMode?: boolean
-): SessionChannel => (isLocal
-  ? {
-      connect: () => {
-        if (darkMode === undefined) {
-          return window.omnitermAPI.connect.local(id, connId, shell)
-        }
-        return window.omnitermAPI.connect.local(id, connId, shell, darkMode)
-      },
+  darkMode?: boolean,
+): SessionChannel => {
+  const resizeQueue = createLatestResizeQueue(size => isLocal
+    ? window.omnitermAPI.connect.localResize(id, size)
+    : window.omnitermAPI.connect.sshResize(id, size))
+  const channel: SessionChannel = isLocal
+    ? {
+      connect: () => darkMode === undefined
+        ? window.omnitermAPI.connect.local(id, connId, shell)
+        : window.omnitermAPI.connect.local(id, connId, shell, darkMode),
       input: (d) => window.omnitermAPI.connect.localInput(id, d),
-      resize: (s) => window.omnitermAPI.connect.localResize(id, s),
+      resize: resizeQueue.push,
       onReady: (cb) => window.omnitermAPI.connect.onLocalReady(id, cb),
       onData: (cb) => window.omnitermAPI.connect.onLocalData(id, cb),
       onError: (cb) => window.omnitermAPI.connect.onLocalError(id, cb),
       onClosed: (cb) => window.omnitermAPI.connect.onLocalClosed(id, cb),
     }
-  : {
+    : {
       connect: () => darkMode === undefined
         ? window.omnitermAPI.connect.ssh(id)
         : window.omnitermAPI.connect.ssh(id, darkMode),
       input: (d) => window.omnitermAPI.connect.sshInput(id, d),
-      resize: (s) => window.omnitermAPI.connect.sshResize(id, s),
+      resize: resizeQueue.push,
       onReady: (cb) => window.omnitermAPI.connect.onSSHReady(id, () => cb()),
       onData: (cb) => window.omnitermAPI.connect.onSSHData(id, cb),
       onError: (cb) => window.omnitermAPI.connect.onSSHError(id, cb),
       // SSH reports no status of its own, so a closed channel is reported as a clean exit.
       onClosed: (cb) => window.omnitermAPI.connect.onSSHClosed(id, () => cb(0)),
-    })
+    }
+  channel.dispose = resizeQueue.cancel
+  return channel
+}

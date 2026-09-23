@@ -11,7 +11,7 @@ import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
-import { createTerminalOptions, DEFAULT_MONO_STACK } from '../utils/terminalOptions'
+import { createTerminalOptions, DEFAULT_MONO_STACK, resolveTerminalFontFamily } from '../utils/terminalOptions'
 import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
 import { releasePastedImage, setLastPastedImage } from '../utils/pastedImageStore'
 import { attachTerminalStream } from '../utils/terminalStream'
@@ -24,6 +24,9 @@ import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
 import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
+import { observeTerminalResize } from '../utils/terminalResize'
+import { installImeInput } from '../utils/imeInput'
+import { installTerminalInterruptReset } from '../utils/terminalInterruptReset'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
@@ -123,7 +126,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // Apply font family changes dynamically.
   useEffect(() => {
     if (termRef.current && fontFamilyMono) {
-      termRef.current.options.fontFamily = fontFamilyMono
+      termRef.current.options.fontFamily = resolveTerminalFontFamily(fontFamilyMono)
       requestAnimationFrame(() => safeFitRef.current())
     }
   }, [fontFamilyMono])
@@ -148,6 +151,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(terminalRef.current)
+    const imeInput = installImeInput(term, window.omnitermAPI.app.platform)
     const titleDisposable = typeof term.onTitleChange === 'function'
       ? term.onTitleChange(title => {
           // Track the running agent for per-agent image paste; LATCHED (see latchAgent) because
@@ -218,7 +222,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         lastRows = term.rows
         api.resize({ cols: term.cols, rows: term.rows })
       } catch {
-        /* terminal not ready / not visible yet — ignore */
+        // Retry after an intermediate WebView2 layout pass.
+        fitCoalescer.schedule()
       }
     }
     safeFitRef.current = safeFit
@@ -226,10 +231,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
+      if (!imeInput.shouldForwardData(data)) return
       copyTracker.noteInput(data)
       api.input(data)
     })
-
     const onFocusIn = () => setIsFocused(true)
     const onFocusOut = () => setIsFocused(false)
     terminalRef.current?.addEventListener('focusin', onFocusIn)
@@ -286,7 +291,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       if ((e as CustomEvent).detail?.id === id) term.focus()
     }
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
-
+    const interruptReset = installTerminalInterruptReset(term, id)
     // The pane-header copy menu (TerminalCopyMenu) asks for this pane's text by session id; the
     // xterm instance lives only here, so the extraction runs at the request site.
     const disposeCopyRequests = registerTerminalCopyHandler({
@@ -379,8 +384,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     // Coalesced (not raw safeFit): a drag-resize fires this on every intermediate frame, and
     // fitting/resizing on each one is itself a source of TUI frame corruption.
-    const ro = new ResizeObserver(() => fitCoalescer.schedule())
-    ro.observe(terminalRef.current)
+    const disposeResizeObserver = observeTerminalResize(terminalRef.current, fitCoalescer.schedule)
     // Defer the first fit until after layout so dimensions are valid. Immediate, not coalesced —
     // there's nothing to collapse a burst with yet.
     // Wrapped: rAF passes a timestamp as the first argument, which would read as force=true.
@@ -390,7 +394,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       cancelAnimationFrame(raf)
       fitCoalescer.cancel()
       remeasureCoalescer.cancel()
-      ro.disconnect()
+      disposeResizeObserver()
       clipboard.dispose()
       terminalRef.current?.removeEventListener('focusin', onFocusIn)
       terminalRef.current?.removeEventListener('focusout', onFocusOut)
@@ -403,7 +407,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
       termEl.removeEventListener('wheel', handleWheel)
+      imeInput.dispose()
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
+      interruptReset.dispose()
       disposeCopyRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
@@ -472,7 +478,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         // one) so xterm always measures cells with the SAME font it renders with. Kept in sync with
         // the literal handed to `new Terminal({ fontFamily })` above via DEFAULT_MONO_STACK — letting
         // those two drift is what caused glyphs to be measured at one width and drawn at another.
-        '--pane-font-mono': fontFamilyMono ?? DEFAULT_MONO_STACK,
+        '--pane-font-mono': resolveTerminalFontFamily(fontFamilyMono),
         filter: blurStrength > 0 && !isFocused && !isHovered ? `blur(${blurStrength}px)` : 'none',
         transition: 'filter 120ms ease-out',
       } as React.CSSProperties}

@@ -104,7 +104,10 @@ mod windows {
     #[test]
     fn a_bare_powershell_bootstraps_utf8_and_stays_interactive() {
         let inv = launch(LocalShell::Powershell, None, true).invocation().unwrap();
-        assert_eq!(inv.args, vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]);
+        assert_eq!(
+            inv.args,
+            vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
+        );
     }
 
     /// `keepOpen` is the whole reason a script pane stays readable after it finishes.
@@ -127,7 +130,12 @@ mod windows {
             .unwrap();
         assert_eq!(
             stay.args,
-            vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null; & './x.ps1'"]
+            vec![
+                "-NoLogo".to_string(),
+                "-NoExit".to_string(),
+                "-Command".to_string(),
+                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; & './x.ps1'")
+            ]
         );
         let exit = launch(LocalShell::Powershell, Some("& './x.ps1'"), false)
             .invocation()
@@ -157,7 +165,13 @@ mod windows {
         ps.args = Some("-NoProfile".to_string());
         assert_eq!(
             ps.invocation().unwrap().args,
-            vec!["-NoLogo", "-NoProfile", "-NoExit", "-Command", "chcp 65001 >$null; x"]
+            vec![
+                "-NoLogo".to_string(),
+                "-NoProfile".to_string(),
+                "-NoExit".to_string(),
+                "-Command".to_string(),
+                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; x")
+            ]
         );
     }
 
@@ -218,6 +232,10 @@ mod windows {
     }
 }
 
+#[cfg(target_os = "windows")]
+#[path = "launch_completion_tests.rs"]
+mod launch_completion_tests;
+
 
 /// `windows_args` is ordinary platform-independent argv construction even though `invocation()`
 /// selects it only on Windows. Exercise it directly on Linux CI so every shell arm and keep-open
@@ -225,61 +243,74 @@ mod windows {
 #[test]
 fn windows_argv_builder_is_tested_on_every_platform() {
     let cmd_keep = launch(LocalShell::Cmd, None, true)
-        .windows_args(vec!["/v:on".to_string()], Some("build.bat".to_string()));
+        .windows_args(vec!["/v:on".to_string()], Some("build.bat".to_string()), false);
     assert_eq!(cmd_keep, vec!["/v:on", "/k", "build.bat"]);
     let cmd_exit = launch(LocalShell::Cmd, None, false)
-        .windows_args(Vec::new(), Some("build.bat".to_string()));
+        .windows_args(Vec::new(), Some("build.bat".to_string()), false);
     assert_eq!(cmd_exit, vec!["/c", "build.bat"]);
     assert_eq!(
-        launch(LocalShell::Cmd, None, true).windows_args(Vec::new(), None),
+        launch(LocalShell::Cmd, None, true).windows_args(Vec::new(), None, false),
         vec!["/k", "chcp 65001 >nul"]
     );
     assert_eq!(
         launch(LocalShell::Cmd, None, true)
-            .windows_args(vec!["/v:on".to_string()], None),
+            .windows_args(vec!["/v:on".to_string()], None, false),
         vec!["/v:on", "/k", "chcp 65001 >nul"]
     );
 
     let ps_keep = launch(LocalShell::Powershell, None, true)
-        .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()));
+        .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()), false);
     assert_eq!(
         ps_keep,
         vec![
-            "-NoLogo",
-            "-NoProfile",
-            "-NoExit",
-            "-Command",
-            "chcp 65001 >$null; echo hi"
+            "-NoLogo".to_string(),
+            "-NoProfile".to_string(),
+            "-NoExit".to_string(),
+            "-Command".to_string(),
+            format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; echo hi")
         ]
     );
     let ps_exit = launch(LocalShell::Default, None, false)
-        .windows_args(Vec::new(), Some("echo hi".to_string()));
+        .windows_args(Vec::new(), Some("echo hi".to_string()), false);
     assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
     assert_eq!(
-        launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None),
-        vec!["-NoLogo", "-NoExit", "-Command", "chcp 65001 >$null"]
+        launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, false),
+        vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
+    );
+    // `command_completion: true` is only exercised elsewhere by launch_completion_tests.rs, which
+    // is Windows-gated — cover the flag's other arm here so it counts on every CI platform too.
+    assert_eq!(
+        launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, true),
+        vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_UTF8_BOOTSTRAP]
+    );
+    let ps_completion_on_with_command = launch(LocalShell::Default, None, true)
+        .windows_args(Vec::new(), Some("echo hi".to_string()), true);
+    assert_eq!(
+        ps_completion_on_with_command.last().unwrap(),
+        &format!("{POWERSHELL_UTF8_BOOTSTRAP}; echo hi")
     );
 
     let wsl_keep = launch(LocalShell::Wsl, None, true).windows_args(
         vec!["-d".to_string(), "Ubuntu".to_string()],
         Some("make".to_string()),
+        false,
     );
     assert_eq!(
         wsl_keep,
         vec!["-d", "Ubuntu", "--", "bash", "-lc", "make; exec bash -l"]
     );
     let wsl_exit = launch(LocalShell::Wsl, None, false)
-        .windows_args(Vec::new(), Some("make".to_string()));
+        .windows_args(Vec::new(), Some("make".to_string()), false);
     assert_eq!(wsl_exit, vec!["--", "bash", "-lc", "make"]);
     assert_eq!(
         launch(LocalShell::Wsl, None, true)
-            .windows_args(vec!["-d".to_string(), "Debian".to_string()], None),
+            .windows_args(vec!["-d".to_string(), "Debian".to_string()], None, false),
         vec!["-d", "Debian"]
     );
 
     assert_eq!(
         launch(LocalShell::Bash, None, true)
-            .windows_args(vec!["--norc".to_string()], Some("ignored".to_string())),
+            .windows_args(vec!["--norc".to_string()], Some("ignored".to_string()), false),
         vec!["--norc"]
     );
 }

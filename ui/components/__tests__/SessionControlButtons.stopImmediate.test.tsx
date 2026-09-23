@@ -50,6 +50,19 @@ describe('SessionControlButtons immediate stop', () => {
     expect(screen.queryByRole('button', { name: /Force kill/i })).not.toBeInTheDocument()
   })
 
+  it('tells the pane to clear leftover terminal modes (mouse tracking, etc.) on every stop', () => {
+    renderControls({ busy: true, sessionLive: true })
+    const onInterrupted = vi.fn()
+    window.addEventListener('omniterm:terminal-interrupted', onInterrupted)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
+
+    expect(onInterrupted).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ detail: { id: 's1' } }),
+    )
+    window.removeEventListener('omniterm:terminal-interrupted', onInterrupted)
+  })
+
   it('falls back to ETX if the native interrupt command is unavailable at runtime', async () => {
     const localInput = vi.fn()
     mockOmnitermAPI({

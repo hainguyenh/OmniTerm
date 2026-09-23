@@ -12,6 +12,17 @@
 
 use app_protocol::shell_spec::{shell_quote, split_args, LocalShell};
 
+/// Switch the console codepage to UTF-8 without touching PSReadLine, so the shell's own inline
+/// prediction (and the user's profile) decide what appears while typing.
+const POWERSHELL_UTF8_BOOTSTRAP: &str = "chcp 65001 >$null";
+
+/// Keep PowerShell's inline history/plugin prediction out of the terminal input surface. Used when
+/// the user turns command completion off. A prediction is painted into the same ConPTY buffer as the user's command, so Windows Telex can
+/// mistake it for part of the native composition and replay it when a delimiter is pressed. The
+/// parameter check keeps this safe on older Windows PowerShell/PSReadLine versions that do not
+/// expose predictive suggestions at all.
+const POWERSHELL_INTERACTIVE_BOOTSTRAP: &str = "chcp 65001 >$null; $psr = Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue; if ($null -ne $psr -and $psr.Parameters.ContainsKey('PredictionSource')) { Set-PSReadLineOption -PredictionSource None }";
+
 /// Everything needed to start one local pane, after merging saved and ad-hoc params.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalLaunch {
@@ -67,8 +78,17 @@ pub fn resolve_launch(
 }
 
 impl LocalLaunch {
-    /// Build the executable + argv for this launch.
+    /// Build the executable + argv for this launch with PowerShell prediction disabled.
     pub fn invocation(&self) -> Result<Invocation, String> {
+        self.invocation_with_completion(false)
+    }
+
+    /// Build the executable + argv for this launch. `command_completion` leaves PowerShell's inline
+    /// prediction to PSReadLine instead of turning it off; other shells are unaffected.
+    pub fn invocation_with_completion(
+        &self,
+        command_completion: bool,
+    ) -> Result<Invocation, String> {
         let exe = self.shell.resolve_exe()?;
         let extra = match &self.args {
             Some(a) => split_args(a)?,
@@ -77,7 +97,7 @@ impl LocalLaunch {
         let command = self.command.as_ref().map(|c| c.trim().to_string());
 
         let args = if cfg!(target_os = "windows") {
-            self.windows_args(extra, command)
+            self.windows_args(extra, command, command_completion)
         } else {
             posix_args(&exe, extra, command, self.keep_open)
         };
@@ -93,7 +113,12 @@ impl LocalLaunch {
     /// (or any non-UTF-8) system the default codepage made window titles mojibake in the tab strip
     /// while the pane content stayed fine; `chcp 65001` is what Windows Terminal profiles use for
     /// the same reason. ` >nul`/` >$null` swallows chcp's "Active code page" line.
-    fn windows_args(&self, extra: Vec<String>, command: Option<String>) -> Vec<String> {
+    fn windows_args(
+        &self,
+        extra: Vec<String>,
+        command: Option<String>,
+        command_completion: bool,
+    ) -> Vec<String> {
         match self.shell {
             LocalShell::Cmd => {
                 let mut args = extra;
@@ -118,6 +143,11 @@ impl LocalLaunch {
             }
             // `default` resolves to the PowerShell executable, so it takes the PowerShell flags too.
             LocalShell::Powershell | LocalShell::Default => {
+                let interactive = if command_completion {
+                    POWERSHELL_UTF8_BOOTSTRAP
+                } else {
+                    POWERSHELL_INTERACTIVE_BOOTSTRAP
+                };
                 let mut args = vec!["-NoLogo".to_string()];
                 args.extend(extra);
                 if let Some(cmd) = command {
@@ -128,13 +158,18 @@ impl LocalLaunch {
                     // `.ps1` runs arrive as `& '<path>'`, and PowerShell parses the whole string as
                     // one script, so a `;`-separated bootstrap is safe to prepend — unlike cmd's
                     // `/k`, PowerShell keeps a quoted path intact after the statement separator.
-                    args.push(format!("chcp 65001 >$null; {cmd}"));
+                    let bootstrap = if self.keep_open {
+                        interactive
+                    } else {
+                        POWERSHELL_UTF8_BOOTSTRAP
+                    };
+                    args.push(format!("{bootstrap}; {cmd}"));
                 } else {
                     // `-NoExit` keeps the session interactive after the bootstrap runs, so the
                     // codepage is in place before the first prompt paints its window title.
                     args.push("-NoExit".to_string());
                     args.push("-Command".to_string());
-                    args.push("chcp 65001 >$null".to_string());
+                    args.push(interactive.to_string());
                 }
                 args
             }

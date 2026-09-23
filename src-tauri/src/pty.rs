@@ -35,6 +35,7 @@ pub struct PtyManager {
     pub sessions: Arc<DashMap<String, PtySessionMeta>>,
     client: OnceLock<SessionDaemonClient>,
     lease_started: AtomicBool,
+    shutdown_requested: Arc<AtomicBool>,
 }
 impl PtyManager {
     pub fn new() -> Self {
@@ -42,7 +43,12 @@ impl PtyManager {
             sessions: Arc::new(DashMap::new()),
             client: OnceLock::new(),
             lease_started: AtomicBool::new(false),
+            shutdown_requested: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    pub(crate) fn begin_shutdown(&self) {
+        self.shutdown_requested.store(true, Ordering::Release);
     }
 
     pub fn configure<R: Runtime>(&self, app: &AppHandle<R>) -> Result<(), String> {
@@ -58,37 +64,8 @@ impl PtyManager {
                 SessionDaemonClient::new(state_dir, executable, format!("gui-{}", Uuid::new_v4()));
             let _ = self.client.set(client);
         }
-        self.ensure_lease();
+        crate::pty_lease::ensure(&self.client, &self.lease_started, &self.shutdown_requested);
         Ok(())
-    }
-
-    fn ensure_lease(&self) {
-        if self.lease_started.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let Some(client) = self.client.get().cloned() else {
-            self.lease_started.store(false, Ordering::Release);
-            return;
-        };
-        tauri::async_runtime::spawn(async move {
-            // Exponential backoff between lease attempts. A daemon that is up
-            // re-accepts instantly (failures reset), but a dead or uninstallable
-            // daemon must not be hammered with connect/spawn attempts at 4 Hz.
-            const BASE_RETRY_MS: u64 = 250;
-            const MAX_BACKOFF_SHIFT: u32 = 5; // 250ms * 2^5 = 8s ceiling
-            let mut failures: u32 = 0;
-            loop {
-                match client.hold_lease().await {
-                    Ok(()) => failures = 0,
-                    Err(error) => {
-                        failures = failures.saturating_add(1);
-                        log::debug!("[sessiond] client lease ended: {error}");
-                    }
-                }
-                let delay = BASE_RETRY_MS << failures.min(MAX_BACKOFF_SHIFT);
-                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-            }
-        });
     }
 
     pub(crate) fn client(&self) -> Result<SessionDaemonClient, String> {
@@ -145,6 +122,37 @@ pub(crate) fn colorfgbg_for_dark_mode(dark_mode: Option<bool>) -> Option<&'stati
     dark_mode.map(|dark| if dark { "15;0" } else { "0;15" })
 }
 
+/// Whether the shell's own inline prediction (PowerShell's PSReadLine) should run. Missing or
+/// malformed settings default to on, matching `defaults()` — a corrupt or pre-upgrade settings
+/// file must not silently disable completion.
+pub(crate) fn command_completion_enabled(settings: &serde_json::Value) -> bool {
+    settings
+        .get("commandCompletion")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
+/// A `(name, value)` env pair that puts a POSIX shell in a UTF-8 locale, added only when the host
+/// has no locale opinion of its own. `LC_ALL`, `LC_CTYPE`, and `LANG` are all checked because any
+/// one of them can already fix a shell's locale; a `Some("")` (set but empty) counts as unset, the
+/// same way glibc treats it. Windows has ConPTY's `chcp 65001` for the equivalent job instead.
+pub(crate) fn utf8_locale_fallback(
+    os: &str,
+    lookup: impl Fn(&str) -> Option<OsString>,
+) -> Option<(&'static str, &'static str)> {
+    let has_locale = ["LC_ALL", "LC_CTYPE", "LANG"]
+        .iter()
+        .any(|name| lookup(name).is_some_and(|value| !value.is_empty()));
+    if has_locale {
+        return None;
+    }
+    match os {
+        "macos" => Some(("LANG", "en_US.UTF-8")),
+        "linux" => Some(("LANG", "C.UTF-8")),
+        _ => None,
+    }
+}
+
 // `clippy::too_many_arguments` allow: Tauri injects AppHandle, State, and the two Channels
 // positionally; the renderer args cannot collapse into a struct without changing the IPC contract.
 #[allow(clippy::too_many_arguments)]
@@ -161,7 +169,8 @@ pub async fn start_local_session<R: Runtime>(
 ) -> Result<(), String> {
     state.configure(&app)?;
     let launch = resolve_local_launch(&app, &conn_id, shell).await?;
-    let invocation = launch.invocation()?;
+    let command_completion = command_completion_enabled(&crate::settings::read_settings(&app));
+    let invocation = launch.invocation_with_completion(command_completion)?;
     let mut env = vec![
         ("TERM".to_string(), "xterm-256color".to_string()),
         ("COLORTERM".to_string(), "truecolor".to_string()),
@@ -171,6 +180,11 @@ pub async fn start_local_session<R: Runtime>(
     }
     if let Some(value) = colorfgbg_for_dark_mode(dark_mode) {
         env.push(("COLORFGBG".to_string(), value.to_string()));
+    }
+    if let Some((key, value)) = utf8_locale_fallback(std::env::consts::OS, |name| {
+        std::env::var_os(name)
+    }) {
+        env.push((key.to_string(), value.to_string()));
     }
     let launched_with_command = launch.command.is_some();
     let ssh = launch
