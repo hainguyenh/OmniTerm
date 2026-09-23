@@ -159,6 +159,67 @@ async fn spawn_reader_marks_error_on_read_failure() {
 }
 
 #[test]
+fn acknowledge_flush_ignores_a_revision_ahead_of_what_was_ever_pushed() {
+    // A stale or out-of-order acknowledgement naming a revision past `self.revision` (never
+    // produced by `push`) must not be trusted as "caught up" — otherwise a future real flush at
+    // or before that bogus revision would be wrongly skipped as already acknowledged.
+    let mut output = Output::new("test".into(), false);
+    output.push(b"hello");
+    output.acknowledge_flush(u64::MAX);
+    let first = output
+        .take_flush_snapshot()
+        .expect("push must still be flushable; the bogus ack must not have taken effect");
+    assert_eq!(first.1, b"hello");
+}
+
+#[tokio::test]
+async fn spawn_reader_survives_a_poisoned_output_lock_on_successful_read() {
+    // Poison the output mutex the same way a panicking holder would, so the `if let Ok(...)`
+    // recovery path on a successful read is exercised instead of assumed unreachable.
+    let output = Arc::new(Mutex::new(Output::new("test".into(), false)));
+    let lifecycle = Arc::new(Mutex::new(SessionLifecycle::Live));
+    let _ = poison_output(&output).join();
+    assert!(output.is_poisoned());
+
+    let reader: Box<dyn Read + Send> = Box::new(std::io::Cursor::new(b"hi".to_vec()));
+    spawn_reader(reader, Arc::clone(&output), lifecycle);
+    tokio::time::sleep(Duration::from_millis(100)).await;
+}
+
+#[tokio::test]
+async fn spawn_reader_survives_poisoned_locks_on_read_failure() {
+    // Same recovery path, but for the read-error arm: both locks are poisoned so neither
+    // `if let Ok(...)` guard on the error branch can assume its mutex is healthy.
+    let output = Arc::new(Mutex::new(Output::new("test".into(), false)));
+    let lifecycle = Arc::new(Mutex::new(SessionLifecycle::Live));
+    for poisoned in [poison_output(&output), poison_lifecycle(&lifecycle)] {
+        let _ = poisoned.join();
+    }
+    assert!(output.is_poisoned());
+    assert!(lifecycle.is_poisoned());
+
+    let reader: Box<dyn Read + Send> = Box::new(ErrorReader);
+    spawn_reader(reader, Arc::clone(&output), Arc::clone(&lifecycle));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+}
+
+fn poison_output(output: &Arc<Mutex<Output>>) -> std::thread::JoinHandle<()> {
+    let poison = Arc::clone(output);
+    std::thread::spawn(move || {
+        let _guard = poison.lock().unwrap();
+        panic!("deliberately poisoning the output lock for this test");
+    })
+}
+
+fn poison_lifecycle(lifecycle: &Arc<Mutex<SessionLifecycle>>) -> std::thread::JoinHandle<()> {
+    let poison = Arc::clone(lifecycle);
+    std::thread::spawn(move || {
+        let _guard = poison.lock().unwrap();
+        panic!("deliberately poisoning the lifecycle lock for this test");
+    })
+}
+
+#[test]
 fn flush_snapshot_skips_unchanged_buffers() {
     let mut output = Output::new("test".into(), false);
     let initial = output
@@ -201,4 +262,21 @@ fn fresh_output_is_not_reported_as_historical_replay() {
     assert_eq!(replay, b"fresh prompt");
     assert_eq!(snapshot.replay_available, Some(false));
     assert_eq!(snapshot.replay_bytes, Some(0));
+}
+
+#[test]
+fn trim_without_a_newline_never_cuts_inside_a_utf8_character() {
+    // Repeated 3-byte "ế" with 0..3 bytes of ASCII padding guarantees at least one case where the
+    // fixed-size cut lands on a continuation byte.
+    for pad in 0..3 {
+        let mut output = Output::new("test".into(), false);
+        let mut seed = vec![b'x'; pad];
+        seed.extend("ế".repeat(BUFFER_CAP / 3 + 40).as_bytes());
+        output.seed(&seed);
+        let replayed = output.replay();
+        assert!(
+            std::str::from_utf8(&replayed).is_ok(),
+            "pad {pad}: replay must start on a character boundary"
+        );
+    }
 }

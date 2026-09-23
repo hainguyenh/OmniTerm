@@ -5,6 +5,34 @@ import type { TerminalTheme } from '../themes'
 /** Mono stack every terminal falls back to. Shared with the CSS var wiring in index.css. */
 export const DEFAULT_MONO_STACK = '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace'
 
+/**
+ * Per-glyph fallbacks for scripts the Latin mono stacks above lack entirely (CJK, Korean, emoji),
+ * grouped by the platform that ships them. None of these are monospace, so they only ever supply
+ * glyphs the primary stack is missing — xterm falls through to them character by character.
+ */
+export const UNICODE_FALLBACK_FAMILIES = [
+  // Windows
+  'Microsoft YaHei', 'Yu Gothic', 'Malgun Gothic', 'Nirmala UI', 'Segoe UI Emoji',
+  // macOS
+  'PingFang SC', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Apple Color Emoji',
+  // Linux
+  'Noto Sans Mono CJK SC', 'Noto Color Emoji',
+] as const
+
+const familyKey = (family: string): string => family.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
+
+/**
+ * The font-family value xterm is actually constructed and measured with: the chosen stack (the
+ * default, a theme's, or the user's own), followed by any Unicode fallback family it does not
+ * already contain. A family already present (by name, ignoring quotes and case) is never added
+ * twice, so a user who lists "Microsoft YaHei" first keeps their own priority for it.
+ */
+export const resolveTerminalFontFamily = (stack: string = DEFAULT_MONO_STACK): string => {
+  const present = new Set(stack.split(',').map(familyKey))
+  const missing = UNICODE_FALLBACK_FAMILIES.filter(family => !present.has(familyKey(family)))
+  return missing.length === 0 ? stack : `${stack}, ${missing.map(family => `"${family}"`).join(', ')}`
+}
+
 export interface TerminalOptionsInput {
   /** LOCAL (WSL/PowerShell/CMD) panes run over ConPTY; an SSH channel does not. */
   isLocal: boolean
@@ -26,7 +54,7 @@ export const createTerminalOptions = ({ isLocal, darkMode, fontSize, fontFamilyM
   cursorStyle: 'block',
   cursorInactiveStyle: 'outline',
   fontSize: fontSize ?? 14,
-  fontFamily: fontFamilyMono ?? DEFAULT_MONO_STACK,
+  fontFamily: resolveTerminalFontFamily(fontFamilyMono),
   letterSpacing: 0,
   // 1.15 accumulated fractional-pixel rounding drift on the DOM renderer, misaligning box-drawing
   // rows in full-screen TUIs; 1.2 keeps rows on whole-pixel offsets.

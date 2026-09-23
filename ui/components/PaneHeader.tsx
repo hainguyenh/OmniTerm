@@ -183,6 +183,16 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               } : undefined}
             />
           )}
+          <Tooltip content="Choose session for this pane" placement="bottom">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
+              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+              aria-label="Choose session for this pane"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+          </Tooltip>
           {conn && sessionId && onClose && (
             <Tooltip content="Close pane" placement="bottom">
               <button
@@ -195,16 +205,6 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               </button>
             </Tooltip>
           )}
-          <Tooltip content="Choose session for this pane" placement="bottom">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
-              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-              aria-label="Choose session for this pane"
-            >
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </Tooltip>
         </span>
       </div>
       {pickerOpen && createPortal(

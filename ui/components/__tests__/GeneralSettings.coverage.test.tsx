@@ -36,6 +36,15 @@ describe('GeneralSettings', () => {
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ maxOpenFileMb: 1 })
   })
 
+  it('shows command completion on by default and saves it when toggled off', () => {
+    const setAppSettings = vi.fn()
+    render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const toggle = screen.getByRole('switch', { name: 'Command completion' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(toggle)
+    expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith({ commandCompletion: false })
+  })
+
   it('shows locked exclusions, dismisses the list, and rejects duplicate or protected extensions', async () => {
     const setAppSettings = vi.fn()
     const { container } = render(<GeneralSettings appSettings={{ excludedViewableExts: ['log'] }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)

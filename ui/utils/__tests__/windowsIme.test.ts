@@ -54,6 +54,34 @@ describe('installWindowsImeCompositionWorkaround', () => {
     dispose.dispose()
   })
 
+  it('commits a Chinese (Microsoft Pinyin) composition once', () => {
+    const terminal = createTerminal()
+    const dispose = installWindowsImeCompositionWorkaround(terminal, true)
+
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: '你好' }))
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '你好' }))
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('你好')
+    expect(terminal.textarea.value).toBe('')
+
+    dispose.dispose()
+  })
+
+  it('commits a Japanese (IME) composition once', () => {
+    const terminal = createTerminal()
+    const dispose = installWindowsImeCompositionWorkaround(terminal, true)
+
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionupdate', { bubbles: true, data: 'こんにちは' }))
+    terminal.textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: 'こんにちは' }))
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('こんにちは')
+    expect(terminal.textarea.value).toBe('')
+
+    dispose.dispose()
+  })
+
   it('shows a plain, non-selectable composition preview', () => {
     const terminal = createTerminal()
     const dispose = installWindowsImeCompositionWorkaround(terminal, true)
