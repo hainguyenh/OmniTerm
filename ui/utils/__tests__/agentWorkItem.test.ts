@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { extractAgentWorkItem } from '../agentWorkItem'
-import { normalizeReportedCwd } from '../terminalCwdReporting'
+import { normalizeReportedCwd, registerCwdReporting } from '../terminalCwdReporting'
 
 describe('extractAgentWorkItem', () => {
   it('reads the task Claude Code puts in its title, with or without the spinner', () => {
@@ -51,5 +51,52 @@ describe('normalizeReportedCwd', () => {
 
   it('takes a malformed escape verbatim instead of throwing', () => {
     expect(normalizeReportedCwd('C:/100%/x')).toBe('C:/100%/x')
+  })
+})
+
+describe('registerCwdReporting', () => {
+  it('does nothing when the terminal parser or callback is unavailable', () => {
+    expect(registerCwdReporting({} as never)).toEqual([])
+    expect(registerCwdReporting({ parser: {} } as never, undefined)).toEqual([])
+  })
+
+  it('registers OSC 7 and OSC 9;9 handlers and normalizes their payloads', () => {
+    const handlers = new Map<number, (data: string) => boolean | Promise<boolean>>()
+    const dispose7 = { dispose: vi.fn() }
+    const dispose9 = { dispose: vi.fn() }
+    const registerOscHandler = vi.fn((ident: number, callback: (data: string) => boolean | Promise<boolean>) => {
+      handlers.set(ident, callback)
+      return ident === 7 ? dispose7 : dispose9
+    })
+    const onCwdChange = vi.fn()
+    const term = { parser: { registerOscHandler } }
+
+    const disposables = registerCwdReporting(term as never, onCwdChange)
+
+    expect(disposables).toEqual([dispose7, dispose9])
+    expect(registerOscHandler).toHaveBeenCalledWith(7, expect.any(Function))
+    expect(registerOscHandler).toHaveBeenCalledWith(9, expect.any(Function))
+    expect(handlers.get(7)?.('   ')).toBe(true)
+    expect(handlers.get(7)?.('file://host/C:/repo')).toBe(false)
+    expect(handlers.get(9)?.('not-a-cwd')).toBe(false)
+    expect(handlers.get(9)?.('9;"C:/repo/my%20project"')).toBe(false)
+    expect(handlers.get(9)?.('9;   ')).toBe(true)
+    expect(onCwdChange).toHaveBeenNthCalledWith(1, 'C:/repo')
+    expect(onCwdChange).toHaveBeenNthCalledWith(2, 'C:/repo/my project')
+  })
+
+  it('ignores a file URL without a path after the host', () => {
+    const callback = vi.fn()
+    const registerOscHandler = vi.fn((_ident: number, handler: (data: string) => boolean) => ({
+      dispose: vi.fn(),
+      handler,
+    }))
+    const term = { parser: { registerOscHandler } }
+
+    registerCwdReporting(term as never, callback)
+    const osc7 = registerOscHandler.mock.results[0]?.value.handler as (data: string) => boolean
+
+    expect(osc7('file://host')).toBe(false)
+    expect(callback).not.toHaveBeenCalled()
   })
 })

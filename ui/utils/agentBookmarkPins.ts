@@ -8,11 +8,14 @@
 import { useSyncExternalStore } from 'react'
 import { isValidLauncher } from './agentSessionDetector'
 import { registerDurableSlice, scheduleDurableSave } from './agentSessionDurable'
+import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+
+const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot', 'gemini'])
 
 export interface AgentWorkspacePin {
   /** `<profileName>|<cwd lower-cased>` — one pin per profile and folder. */
   id: string
-  agent: 'claude'
+  agent: AgentBrand
   profileName: string
   launcher?: string
   cwd: string
@@ -35,7 +38,7 @@ function isValidPin(item: unknown): item is AgentWorkspacePin {
   if (!item || typeof item !== 'object') return false
   const p = item as Record<string, unknown>
   return typeof p.id === 'string'
-    && p.agent === 'claude'
+    && typeof p.agent === 'string' && VALID_AGENTS.has(p.agent)
     && typeof p.profileName === 'string' && p.profileName.trim().length > 0
     && typeof p.cwd === 'string' && p.cwd.trim().length > 0
     && typeof p.createdAt === 'number' && Number.isFinite(p.createdAt)

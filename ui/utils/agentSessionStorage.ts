@@ -12,15 +12,18 @@
 import { useSyncExternalStore } from 'react'
 import { isValidLauncher, isValidSessionId } from './agentSessionDetector'
 import { registerDurableSlice, scheduleDurableSave } from './agentSessionDurable'
+import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
 
 export type StoredSessionState = 'active' | 'interrupted' | 'saved'
 
+const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot', 'gemini'])
+
 export interface StoredAgentSession {
-  /** `claude:<sessionId>` — stable across restarts, and naturally dedupes by session. */
+  /** `<agent>:<sessionId>` — stable across restarts, and naturally dedupes by session. */
   id: string
   /** The pane tab id this session is bound to, while `state` is `active` or `interrupted`. */
   tabId?: string
-  agent: 'claude'
+  agent: AgentBrand
   launcher?: string
   profileName: string
   sessionId: string
@@ -45,14 +48,14 @@ const REFRESH_MS = 60_000
 
 let memoryStore: StoredAgentSession[] = []
 let cache: StoredAgentSession[] | null = null
-/** Tabs whose bookmark was requested before their Claude session id could be resolved. */
+/** Tabs whose bookmark was requested before their agent session id could be resolved. */
 const pendingBookmarks = new Set<string>()
 
 function isValidEntry(item: unknown): item is StoredAgentSession {
   if (!item || typeof item !== 'object') return false
   const s = item as Record<string, unknown>
   return typeof s.id === 'string'
-    && s.agent === 'claude'
+    && typeof s.agent === 'string' && VALID_AGENTS.has(s.agent)
     && isValidSessionId(s.sessionId)
     && typeof s.profileName === 'string' && s.profileName.trim().length > 0
     && (s.state === 'active' || s.state === 'interrupted' || s.state === 'saved')

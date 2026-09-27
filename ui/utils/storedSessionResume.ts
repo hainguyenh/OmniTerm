@@ -2,12 +2,21 @@
 import { formatAgentResumeCommand } from './agentRegistry'
 import { isBookmarked, removeStoredSession, type StoredAgentSession } from './agentSessionStorage'
 
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  agy: 'Antigravity CLI',
+  copilot: 'Copilot CLI',
+  gemini: 'Gemini CLI',
+}
+
 /**
- * `claude-work --resume <id>`: the launcher (or profile) is always passed, so a session is resumed
- * in the profile that owns its session file rather than the default `~/.claude`.
+ * Recreate the CLI resume command for any stored session (Claude, Codex, Antigravity, OpenCode).
  */
 export function resumeCommandFor(session: StoredAgentSession): string | null {
-  return formatAgentResumeCommand('Claude Code', session.sessionId, session.launcher, session.profileName)
+  const displayName = AGENT_DISPLAY_NAMES[session.agent] ?? 'Claude Code'
+  return formatAgentResumeCommand(displayName, session.sessionId, session.launcher, session.profileName)
 }
 
 /**

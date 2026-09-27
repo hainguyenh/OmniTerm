@@ -7,12 +7,12 @@
  * that guessing was unsafe. Only Claude sessions resolve to an id in this pass; Codex is detected
  * but not yet resumable (see AGENTS.md plan notes), and anything else is not tracked at all.
  */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-/** Matches the launcher naming rule enforced in `plugins/agent-quota/native/agent_detect.rs`. */
-const LAUNCHER_RE = /^(claude|codex)-[A-Za-z0-9_.]{1,40}$/
+const SESSION_ID_RE = /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|ses_[A-Za-z0-9_-]+|latest)$/i
+/** Matches the launcher naming rule for profile-specific commands. */
+const LAUNCHER_RE = /^(claude|codex|opencode|agy)-[A-Za-z0-9_.]{1,40}$/
 
 export function isValidSessionId(value: unknown): value is string {
-  return typeof value === 'string' && UUID_RE.test(value)
+  return typeof value === 'string' && SESSION_ID_RE.test(value)
 }
 
 export function isValidLauncher(value: unknown): value is string {
@@ -22,7 +22,7 @@ export function isValidLauncher(value: unknown): value is string {
 /** One pane's detected agent, as reported by `agent_quota_detect` (camelCase over IPC). */
 export interface DetectedPaneAgent {
   sessionId: string
-  agent: 'claude' | 'codex'
+  agent: 'claude' | 'codex' | 'agy' | 'opencode'
   pid: number
   startTime: number
   profileDir?: string

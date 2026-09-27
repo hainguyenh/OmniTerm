@@ -17,6 +17,7 @@ import {
 } from '../agentSessionStorage'
 import { clearPins, loadPins, togglePin } from '../agentBookmarkPins'
 import { hydrateAgentSessionStore, resetAgentSessionDurableForTests } from '../agentSessionDurable'
+import { resumeCommandFor } from '../storedSessionResume'
 
 const UUID = '12345678-1234-1234-1234-123456789abc'
 const OTHER = '87654321-4321-4321-4321-cba987654321'
@@ -176,3 +177,45 @@ describe('workspace pins', () => {
     expect(loadPins()).toHaveLength(0)
   })
 })
+
+describe('multi-agent bookmarks and resume commands', () => {
+  it('bookmarks and resumes sessions for Codex, Antigravity CLI, and OpenCode', () => {
+    const agySession = session({
+      id: `agy:${UUID}`,
+      agent: 'agy',
+      launcher: 'agy-work',
+      profileName: 'work',
+      sessionId: UUID,
+    })
+    const codexSession = session({
+      id: `codex:${UUID}`,
+      agent: 'codex',
+      launcher: 'codex-team',
+      profileName: 'team',
+      sessionId: UUID,
+    })
+    const opencodeSession = session({
+      id: 'opencode:ses_abc123xyz',
+      agent: 'opencode',
+      launcher: undefined,
+      profileName: 'opencode',
+      sessionId: 'ses_abc123xyz',
+    })
+
+    upsertSession(agySession)
+    upsertSession(codexSession)
+    upsertSession(opencodeSession)
+
+    setSessionBookmarked(`agy:${UUID}`, true)
+    setSessionBookmarked(`codex:${UUID}`, true)
+    setSessionBookmarked('opencode:ses_abc123xyz', true)
+
+    const stored = loadStoredSessions()
+    expect(stored.filter(s => s.bookmarked)).toHaveLength(3)
+
+    expect(resumeCommandFor(agySession)).toBe(`agy-work --conversation ${UUID}`)
+    expect(resumeCommandFor(codexSession)).toBe(`codex-team resume ${UUID}`)
+    expect(resumeCommandFor(opencodeSession)).toBe('opencode --session ses_abc123xyz')
+  })
+})
+

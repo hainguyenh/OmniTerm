@@ -30,7 +30,7 @@ export function requestRenewFromPane(sessionId: string): void {
 
 /** The in-agent command that starts a fresh conversation: Claude Code's `/clear`, Codex's `/new`. */
 function newConversationCommand(agent: string | undefined): string {
-  return agent === 'claude' ? '/clear' : '/new'
+  return agent === 'claude' || agent === 'agy' ? '/clear' : '/new'
 }
 
 export function resetRenewRememberedForTests(): void {
