@@ -24,10 +24,21 @@
   padding: 16px;
   border: 1px solid var(--theme-border);
   border-radius: 16px;
-  background: var(--theme-popup);
+  background: var(--theme-popup-bg, var(--theme-bg));
   color: var(--theme-fg);
   font-size: 12px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+/* The header row moves the dialog (dialogDrag.ts); its buttons keep the normal cursor. */
+.aq-pd-handle {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.aq-pd-handle button {
+  cursor: pointer;
 }
 
 .aq-pd-banner {
@@ -94,7 +105,7 @@
   position: relative;
   height: 6px;
   border-radius: 999px;
-  background: #15161e;
+  background: var(--aq-track-bg);
   overflow: visible;
 }
 

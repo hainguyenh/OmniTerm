@@ -1,5 +1,4 @@
 import { AgentIcon } from '../../plugins/agent-quota/app/QuotaLine'
-import { useQuota } from '../../plugins/agent-quota/app/quotaStore'
 import { agentBrandFor, agentTooltip } from '../utils/agentIdentity'
 import { Tooltip, type TooltipPlacement } from './Tooltip'
 
@@ -21,8 +20,6 @@ export function AgentBadge({
   placement?: TooltipPlacement
 }) {
   const brand = agentBrandFor(agent)
-  // The user's chosen emoji (Agent Quota settings) applies everywhere, not only in the quota strip.
-  const icon = useQuota(state => brand && (brand === 'claude' || brand === 'codex') ? state.config.agents[brand]?.icon : undefined)
   if (!brand) return null
   const tooltip = agentTooltip(brand, profileName)
   return (
@@ -33,7 +30,7 @@ export function AgentBadge({
         aria-label={tooltip}
         data-agent-badge={brand}
       >
-        <AgentIcon agent={brand} icon={icon} className={className} />
+        <AgentIcon agent={brand} className={className} />
       </span>
     </Tooltip>
   )

@@ -115,14 +115,11 @@ describe('AgentQuotaSettings', () => {
     expect(claude).toMatchObject({ limits: { weekly: 80 }, autoResume: false, resumeDelayMinutes: 120, guardMinutes: 1, hardStopAtPct: 97 })
   })
 
-  it('lets each agent replace the shared header icon', () => {
+  it('has no header icon setting: the busy header shows the loading artwork instead', () => {
     seed()
-    liveSave()
     render(<AgentQuotaSettings />)
-    fireEvent.change(claudeCard().getByLabelText('Claude Code header icon mode'), { target: { value: 'emoji' } })
-    fireEvent.change(claudeCard().getByLabelText('Claude Code custom header icon'), { target: { value: '🐙' } })
-    apply()
-    expect(getQuotaState().config.agents.claude.icon).toEqual({ mode: 'emoji', value: '🐙' })
+    expect(claudeCard().queryByText('Header icon')).toBeNull()
+    expect(claudeCard().queryByLabelText('Claude Code header icon mode')).toBeNull()
   })
 
   it('requires confirmation to turn suspend off for an agent, applied only after Apply', () => {

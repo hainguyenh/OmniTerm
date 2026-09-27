@@ -226,7 +226,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
-      if (!imeInput.shouldForwardData(data)) return
       if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       copyTracker.noteInput(data)
       api.input(data)

@@ -90,7 +90,7 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
       </div>
       <div className={`aq-lines ${stale ? 'aq-stale' : ''}`} title={stale ? profile?.snapshot?.message : undefined}>
         {windows.length === 0 && (
-          <span>{profile?.snapshot?.error ? profile.snapshot.message ?? 'Quota unavailable' : 'Reading quota…'}</span>
+          <span className="aq-lines-message">{profile?.snapshot?.error ? profile.snapshot.message ?? 'Quota unavailable' : 'Reading quota…'}</span>
         )}
         {windows.map((window) => (
           <QuotaLine

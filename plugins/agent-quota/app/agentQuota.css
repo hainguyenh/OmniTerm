@@ -13,6 +13,11 @@
   --aq-hot: #ff9e64;
   --aq-critical: #f7768e;
   --aq-over: var(--theme-error, #db4b4b);
+  /*
+   * The unused part of a quota track: the pane background a shade darker, so a dark theme keeps its
+   * near-black groove and a light theme gets a very light grey instead of black.
+   */
+  --aq-track-bg: color-mix(in srgb, var(--theme-bg) 92%, #000);
 }
 
 .aq-strip {
@@ -76,21 +81,32 @@
   white-space: nowrap;
 }
 
+/*
+ * Every line of a strip shares one grid (each line is a subgrid row), so the label, track and
+ * reset columns line up and the 5h, weekly and monthly tracks are always the same width, whatever
+ * each line's reset text measures.
+ */
 .aq-lines {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: 2.6rem minmax(96px, 1fr) auto;
+  align-content: center;
+  column-gap: 5px;
+  row-gap: 2px;
 }
 
 .aq-line {
   display: grid;
-  grid-template-columns: 2.6rem minmax(96px, 1fr) auto;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 5px;
   min-width: 0;
+}
+
+/* "Reading quota…" and other one-off messages span the whole grid. */
+.aq-lines-message {
+  grid-column: 1 / -1;
 }
 
 .aq-label {
@@ -133,13 +149,19 @@
   font-size: 14.5px;
 }
 
-/* A fill too short to hold its number: the number sits just after the fill instead. */
+/*
+ * A fill too short to hold its number: the number sits just after the fill instead, on the track
+ * background, so it takes the theme's text colour to stay readable in light themes too.
+ */
 .aq-used-value-outside {
   transform: translate(4px, -50%);
+  color: var(--theme-fg);
+  text-shadow: none;
 }
 
 .aq-danger-value {
-  color: color-mix(in srgb, var(--aq-over) 35%, #ffffff);
+  color: color-mix(in srgb, var(--aq-over) 65%, var(--theme-fg));
+  text-shadow: none;
 }
 
 .aq-reset {
@@ -155,9 +177,9 @@
   height: 20px;
   border-radius: 999px;
   overflow: visible;
-  background: #15161e;
-  border: 1px solid color-mix(in srgb, var(--theme-border) 70%, #000);
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
+  background: var(--aq-track-bg);
+  border: 1px solid color-mix(in srgb, var(--theme-border) 70%, var(--aq-track-bg));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   cursor: default;
 }
 
@@ -446,9 +468,9 @@
 
 /* Medium panes: short labels, no reset countdown. */
 @container (max-width: 440px) {
-  .aq-line {
+  .aq-lines {
     grid-template-columns: 2.2rem minmax(72px, 1fr) auto;
-    gap: 4px;
+    column-gap: 4px;
   }
 
   .aq-reset,
@@ -459,9 +481,9 @@
 
 /* Narrow panes: preserve the label and both percentages; hide only secondary controls. */
 @container (max-width: 240px) {
-  .aq-line {
+  .aq-lines {
     grid-template-columns: 2rem minmax(56px, 1fr);
-    gap: 3px;
+    column-gap: 3px;
   }
 
   .aq-danger-value,
