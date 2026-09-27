@@ -10,6 +10,7 @@ import { diag } from './diag'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
+import type { TerminalToolbarActions } from './terminalToolbar'
 
 interface AppSettings {
   themeId: string
@@ -23,6 +24,7 @@ interface AppSettings {
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
+  toolbarActions?: TerminalToolbarActions
   /** Any id from `shells.list`; the picker falls back when it is no longer available. */
   defaultShell?: string
   /** Where new terminals land when the launch site does not name a workspace itself. */
@@ -167,6 +169,7 @@ function App() {
   // defaults, which fall back to the app-wide settings. `perConn` is a plain settings key, so the
   // backend's shallow JSON merge persists it with no schema change.
   const appearanceOf = (id: string, connId: string): TerminalAppearance => ({
+    toolbarActions: appSettings.toolbarActions,
     ...(appSettings.perConn?.[connId] ?? {}),
     ...(tabAppearance[id] ?? {}),
   })
@@ -233,6 +236,14 @@ function App() {
     }
     setTabAppearance(prev => ({ ...prev, [t.id]: { ...(prev[t.id] ?? {}), themeId } }))
     persistConnAppearance(t.connId, { themeId })
+  }
+
+  /** Persist the visible terminal actions alongside the terminal's appearance settings. */
+  const setToolbarActions = (actions: TerminalToolbarActions, target?: { id: string; connId: string }) => {
+    const t = target ?? activeTerminal
+    if (!t) return
+    setTabAppearance(prev => ({ ...prev, [t.id]: { ...(prev[t.id] ?? {}), toolbarActions: actions } }))
+    persistConnAppearance(t.connId, { toolbarActions: actions })
   }
 
   /** Apply an absolute font size to every open terminal — the AppearanceMenu's "apply to all". Sets
@@ -359,6 +370,7 @@ function App() {
           onActiveTerminalChange={handleActiveTerminalChange}
           onFontSizeChange={changeFontSize}
           onThemeApply={applyTheme}
+          onToolbarActionsChange={setToolbarActions}
           onSettingsReload={handleSettingsReload}
           />
         </div>

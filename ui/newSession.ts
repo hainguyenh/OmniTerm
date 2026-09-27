@@ -22,11 +22,14 @@ export async function openNewSession(
   workspaceId?: string | null,
   folderId?: string | null,
   cwd?: string | null,
+  command?: string | null,
 ): Promise<void> {
-  const conn = cwd
-    ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId, cwd)
-    : folderId
-      ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId)
-      : await window.omnitermAPI.shells.open(shell, workspaceId)
+  const conn = command
+    ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId, cwd, command)
+    : cwd
+      ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId, cwd)
+      : folderId
+        ? await window.omnitermAPI.shells.open(shell, workspaceId, folderId)
+        : await window.omnitermAPI.shells.open(shell, workspaceId)
   if (conn) onConnect(conn)
 }

@@ -195,4 +195,10 @@ describe('formatTerminalTitle', () => {
     const formatted = formatTerminalTitle('', 'bash', 'Local Terminal')
     expect(formatted.displayTitle).toBe('Local Terminal // bash')
   })
+
+  it('does not reuse an agent fallback after a shell title arrives', () => {
+    const formatted = formatTerminalTitle('pwsh', 'PowerShell', 'Claude Code - OmniTerm')
+    expect(formatted.isAgent).toBe(false)
+    expect(formatted.displayTitle).toBe('OmniTerm // PowerShell')
+  })
 })

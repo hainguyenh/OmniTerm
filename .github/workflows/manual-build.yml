@@ -203,11 +203,12 @@ jobs:
         run: |
           pnpm build:plugin plugins/always-awake
           pnpm build:plugin plugins/blur
+          pnpm build:plugin plugins/agent-quota
 
       - name: Stage bundled plugin resources
         shell: pwsh
         run: |
-          $pluginNames = @('always-awake', 'blur')
+          $pluginNames = @('always-awake', 'blur', 'agent-quota')
           foreach ($pluginName in $pluginNames) {
             $stage = Join-Path (Get-Location) ".omniterm-build/plugins/$pluginName"
             New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -272,7 +273,8 @@ jobs:
             -ArchiveName "OmniTerm_${version}-${shortSha}_x64-portable.zip" `
             -Plugins @(
               @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') },
-              @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') }
+              @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') },
+              @{ Name = 'agent-quota'; Path = (Join-Path $repoRoot 'plugins/agent-quota') }
             )
           if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
           Get-Item -LiteralPath $portable | Select-Object FullName, Length

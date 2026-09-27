@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Agent Quota (new bundled plugin)
+- **No credentials, no network**: Quota comes only from the agents' own CLIs and Codex's session logs; no token is read and no request is made, enforced by a build-failing test. Antigravity is not monitored.
+- **Profiles by launcher**: A terminal started with a profile launcher such as `claude-th` is probed and woken through that same launcher (`claude-th -p /usage`), so profiles whose directory does not follow their name are read correctly.
+- **Security-scanner-safe process handling**: Suspend uses documented Win32 thread APIs instead of `ntdll!NtSuspendProcess`; other processes' memory is read only where it decides something (script hosts, the launcher's `cmd.exe`, one agent's profile variable); tests no longer copy or rename system executables. A Defender ML heuristic had flagged the previous test binary.
+- **Quota lines in every agent terminal**: Terminals running Claude Code or Codex show session, weekly and (when reported) monthly quota lines, coloured by zone relative to your limit, with a draggable limit line — now labelled with its own number — and escalating lightning, fire, burning and danger animations as usage nears it. Lines adapt to narrow panes.
+- **Weekly auto-hide and a usage-pace glyph**: The weekly line hides itself while under 20% is used and its reset is more than 50 hours away (a Display setting, on by default; the 5h line's tooltip still notes it). A turtle/rabbit/plane/superman glyph next to the 5h line shows whether usage is projected to land under, at, or over the limit by reset.
+- **Friendly reset times**: A reset on the next calendar day reads as `tomorrow 09:30` instead of a bare countdown; every reset's tooltip also shows the absolute local date and time.
+- **Global limits per agent, custom limits per terminal — draft, then Apply**: Settings → Agent Quota and the per-terminal popover both edit a local draft; nothing changes until Apply (disabled while a wake prompt is unsafe), Reset discards the draft, and an "also reset terminals with custom settings" checkbox folds in what used to be a separate "Apply to all terminals" banner.
+- **Suspend at the limit**: On by default. The agent and its AI sub-agents are frozen (scripts keep running), a watchdog confirms usage has stopped rising, and the agent resumes after the reset. Turning suspend off always asks for confirmation.
+- **Smart polling and wake-up**: Quota is read more often during heavy work and rarely when idle. Every open profile can be woken by hand from quick settings, or after each reset to start a new session window; a spent week is never woken.
+- **Quick settings and a live activity-bar icon**: A pinnable activity-bar icon (lit while monitoring is on, not just while its popover is open) and `Ctrl+Alt+Q` open quick settings with per-agent switches, every open agent terminal, and wake-all / resume-all. Disabling the plugin in the Plugin Manager now stops the engine and thaws anything frozen within seconds — no app restart needed either way.
+
+### Resumable Claude sessions
+- **Interrupted-session recovery, without guessing**: OmniTerm now detects which pane runs Claude (and which profile) from its own process tree — the same detection Agent Quota uses — and resolves its session file from that profile's own project directory. No terminal output is scanned, no unvalidated session id or profile name is ever run as a command, and no prompt text is stored.
+- **An interrupted pane offers to resume**: A pane restored after the app closed or was killed shows the agent, profile, folder and the exact resume command (copyable), only when a real session was found. Resuming opens a fresh pane; a live, running agent is never shown this overlay.
+- **A dashboard of interrupted and saved sessions**: The empty/waiting view lists resumable sessions with folder, state and relative time, plus Resume and Remove. Sessions expire after 14 days and are capped at 20.
+- **Bookmark the current session**: A header/footer button stores the pane's Claude session for later, available in both split and single-pane layouts.
+- Codex and Antigravity resume are not yet offered — Codex is detected but its session-file format still needs mapping, and Antigravity's resume syntax needs confirming; both are tracked for a follow-up.
+
 ### Terminal & Sessions
 - **Restart restores layout and working directories, not processes**: OmniTerm now persists pane/tab placement plus each terminal's last working directory and recreates fresh shells on the next launch instead of resuming daemon-owned process state.
 - **Process-persistence modes removed**: Removed the per-terminal Keep running, Freeze while closed, and Recover after reboot controls. New GUI PTYs always use close-with-app lifetime semantics.

@@ -155,6 +155,13 @@ export function useAppShortcuts({
         window.dispatchEvent(new CustomEvent('omniterm:command-palette'))
         return
       }
+
+      // Agent Quota quick settings; the plugin's root listens and ignores it when absent.
+      if (matches('agentQuota')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('omniterm:agent-quota'))
+        return
+      }
     }
 
     const handleWheel = (e: WheelEvent) => {

@@ -1,6 +1,7 @@
 import type { MainLayoutModel } from './useMainLayoutController'
 import WaitingPane from './WaitingPane'
 import { newTerminalHoverText } from '../utils/newTerminalDescription'
+import { removeStoredSession, type StoredAgentSession } from '../utils/agentSessionStorage'
 
 interface MainLayoutWaitingPaneProps {
   model: MainLayoutModel
@@ -12,6 +13,12 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
     model.shellOptions ?? [], model.appSettings.defaultShell, model.workspaces ?? [],
     model.selectedWorkspaceId ?? null, model.homeDir ?? '',
   )
+
+  const handleResumeSession = (session: StoredAgentSession, resumeCommand: string) => {
+    removeStoredSession(session.id)
+    model.requestNewSession(undefined, null, session.cwd ?? null, resumeCommand)
+  }
+
   return (
     <WaitingPane
       dark={!!model.appSettings.darkMode}
@@ -19,6 +26,7 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
       newSessionTitle={newSessionTitle}
       onPickShell={(rect) => model.setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
       customArtUrl={customArtUrl}
+      onResumeSession={handleResumeSession}
     />
   )
 }

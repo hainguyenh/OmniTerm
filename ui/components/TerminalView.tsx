@@ -2,8 +2,9 @@ import React, { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
-import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
+import { resolveShortcuts, matchesChromeShortcut, FALLBACK_SHORTCUTS } from '../utils/shortcuts'
 import { clipboardActionFor } from '../utils/paste'
+import { matchShortcut } from '../utils/keyboard'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { enterSequenceFor, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
@@ -22,7 +23,7 @@ import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
-import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
+import { createLastOutputTracker, registerTerminalCopyHandler, registerTerminalSaveExport, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
@@ -63,31 +64,24 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // The OSC-title-detected agent currently running in this pane (see utils/agentTitle.ts).
   // Decides the image-paste strategy per agent — read at paste time so a title change (agent
   // launched inside an existing shell) applies without a remount.
-  const agentNameRef = useRef<string | null>(null)
+  const agentNameRef = useRef<string | null>(parseAgentTitle(connection.name)?.agentName ?? parseAgentTitle(connection.shell)?.agentName ?? null)
   const canInsertImagePaths = () => imagePasteModeFor(agentNameRef.current) === 'insert-path'
 
   // Stable refs so callbacks don't re-trigger the main effect.
   const onStatusRef = useRef(onStatus)
   onStatusRef.current = onStatus
-
   const onRestartRef = useRef(onRestart)
   onRestartRef.current = onRestart
-
   const onMetricsRef = useRef(onMetrics)
   onMetricsRef.current = onMetrics
-
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
-
   const onTitleChangeRef = useRef(onTitleChange)
   onTitleChangeRef.current = onTitleChange
-
   const onCwdChangeRef = useRef(onCwdChange)
   onCwdChangeRef.current = onCwdChange
-
   const onExitRef = useRef(onExit)
   onExitRef.current = onExit
-
   const onFontSizeChangeRef = useRef(onFontSizeChange)
   onFontSizeChangeRef.current = onFontSizeChange
 
@@ -303,6 +297,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
           : viewportText(term.buffer, term.rows),
       write: (text) => void writeClipboardText(text),
     })
+    const disposeSaveRequests = registerTerminalSaveExport({ sessionId: id, isCurrent: () => termRef.current === term, buffer: term.buffer })
 
     // WebView zoom and late-loading fonts both invalidate xterm's cached character metrics with
     // no DOM resize event — see utils/terminalFontRemeasure.ts.
@@ -332,15 +327,17 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
       // Claimed FIRST so no user binding can shadow it, always with preventDefault() — otherwise
       // Chromium's native paste fires on top of ours and the PTY gets the clipboard twice (paste.ts).
-      // Alt+V belongs to the running agent when it binds its own clipboard reader (Antigravity
-      // CLI): forward the raw keystroke instead of claiming it for path insertion. Read at
-      // keydown time, so an agent launched mid-session flips the behavior immediately.
-      const clip = clipboardActionFor(e, isMac, imagePasteModeFor(agentNameRef.current) === 'forward')
+      const scriptShortcut = shortcutsRef.current?.pasteScript ?? FALLBACK_SHORTCUTS.pasteScript
+      const isScript = matchShortcut(e, scriptShortcut)
+      const clip = clipboardActionFor(e, isMac, false, isScript)
       if (clip) {
         e.preventDefault()
         e.stopPropagation()
-        if (clip === 'paste') void clipboard.paste()
-        else void clipboard.copySelection()
+        if (clip === 'paste-script') void clipboard.pasteScript()
+        else if (clip === 'paste') {
+          if (e.altKey) void clipboard.pasteImage()
+          else void clipboard.paste()
+        } else void clipboard.copySelection()
         return false
       }
 
@@ -411,6 +408,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
       interruptReset.dispose()
       disposeCopyRequests()
+      disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
       releasePastedImage(id)
@@ -461,7 +459,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     return () => { if (settleFrame) cancelAnimationFrame(settleFrame) }
   }, [active, layoutEpoch])
-
   return (
     <div
       className="terminal-pane relative h-full w-full"
@@ -496,5 +493,4 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     </div>
   )
 }
-
 export default TerminalView

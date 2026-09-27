@@ -28,6 +28,9 @@ interface ShortcutBindings {
   closeTab: string
   /** Whole-app fullscreen (native window + chrome hidden). Bare F-keys stay terminal-safe. */
   toggleAppFullscreen: string
+  /** Agent Quota quick settings (plugin); inert without the plugin. */
+  agentQuota: string
+  pasteScript: string
 }
 
 /**
@@ -38,6 +41,7 @@ interface ShortcutBindings {
 interface TerminalAppearance {
   fontSize?: number
   themeId?: string
+  toolbarActions?: import('./terminalToolbar').TerminalToolbarActions
 }
 
 /** Versioned backup envelope produced by `export_settings`; see settings_transfer.rs. */
@@ -64,6 +68,7 @@ interface AppSettings {
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
+  toolbarActions?: import('./terminalToolbar').TerminalToolbarActions
   /** Any id from `shells.list` — validated against that list before use, never assumed. */
   defaultShell?: string
   /** Where new terminals land when the launch site does not name a workspace itself. */
@@ -86,12 +91,13 @@ interface AppSettings {
   blurInactiveWindow?: number
   blurInactiveDock?: boolean
   blurEnabled?: boolean
-  /**
-   * What Shift+Enter / Ctrl+Enter send in a terminal: 'esc-cr' (ESC+CR, what AI agents expect), 'lf'
-   * (a literal newline) or 'off' (leave it to xterm, which collapses both to a plain Enter).
-   */
+  /** What Shift+Enter / Ctrl+Enter send: 'esc-cr' (ESC+CR for AI agents), 'lf' or 'off'. */
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
   ctrlEnter?: 'esc-cr' | 'lf' | 'off'
+  /** AI agent session renewal: 'reopen' (restart profile in folder) or 'new-command' (send /new). */
+  agentRenewStrategy?: 'reopen' | 'new-command'
+  /** Agent Quota plugin settings; validated by plugins/agent-quota/app/quotaConfig.ts. */
+  agentQuota?: unknown
 }
 
 interface SessionMetrics {
@@ -279,6 +285,7 @@ interface Window {
     }
     files: {
       exportJson: (opts: { suggestedName: string; content: string }) => Promise<boolean>
+      exportText: (opts: { suggestedName: string; content: string }) => Promise<boolean>
       importJson: () => Promise<string | null>
       // One shape only. There is no encrypted-backup variant, because there is no credential to
       // protect; the backend rejects an encrypted file from an older build with a migration hint.
@@ -287,9 +294,9 @@ interface Window {
       pickDirectory: (defaultPath?: string) => Promise<string | null>
     }
     customArt: {
-      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<string>
-      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<string | null>
-      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => Promise<void>
+      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) => Promise<string>
+      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) => Promise<string | null>
+      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) => Promise<void>
     }
     settings: {
       get: () => Promise<AppSettings>
@@ -350,6 +357,7 @@ interface Window {
       save: (theme: import('./themes').AppTheme) => Promise<void>
       delete: (id: string) => Promise<void>
     }
+    agentQuota: import('../plugins/agent-quota/app/agentQuotaAPI').AgentQuotaAPI
     alwaysAwake: {
       getState: () => Promise<AlwaysAwakeStatus>
       setState: (payload: { enabled: boolean; mode: AlwaysAwakeMode; expiresAtMs: number }) => Promise<AlwaysAwakeStatus>
@@ -374,11 +382,17 @@ interface Window {
        * The Tauri backend validates and registers the shell before a pane can resolve it.
        */
       open: (shell?: string, workspaceId?: string | null, folderId?: string | null, cwd?: string | null, command?: string | null) => Promise<Record<string, unknown> | null>
-      /**
-       * The shells installed on this machine.
-       */
+      /** The shells installed on this machine. */
       list: () => Promise<Array<{ id: string; label: string }>>
       onOpen: (cb: (conn: { id: string; name: string; type: 'LOCAL'; host: string; port: string; user: string; shell: 'wsl' | 'powershell' | 'cmd'; localCwd?: string; localCommand?: string; localArgs?: string; localKeepOpen?: boolean }) => void) => () => void
+    }
+    /**
+     * Which AI agent (if any) runs under each local pane's shell process tree, and its resumable
+     * Claude session id — never derived from terminal output or a renderer-supplied guess.
+     */
+    agentSessions?: {
+      detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
+      resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>
     }
   }
 }

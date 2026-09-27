@@ -3,16 +3,21 @@ import { useEffect, useRef } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
-import { type PersistedConn, type SessionSnapshot } from '../utils/sessionStore'
+import { type PersistedConn, type PersistedTab, type SessionSnapshot } from '../utils/sessionStore'
 import { selectPendingSnapshotTabs } from '../utils/sessionCheckpoint'
 import { diag } from '../diag'
 import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
+import { formatAgentResumeCommand } from '../utils/agentRegistry'
+import { parseAgentTitle } from '../utils/agentTitle'
+import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
   existingTabs?: { id: string; connId: string; name: string }[]
   existingEphemeralConns?: Connection[]
   isRestoreAllowed?: (sessionId: string) => boolean
+  /** Optional product policy for excluding panes that should never auto-resume. */
+  shouldRestoreTab?: (tab: PersistedTab) => boolean
   setActiveTabs: (fn: (prev: { id: string; connId: string; name: string }[]) => { id: string; connId: string; name: string }[]) => void
   setEphemeralConns: (fn: (prev: Connection[]) => Connection[]) => void
   setTabGroups: (fn: (prev: Record<string, string>) => Record<string, string>) => void
@@ -50,6 +55,24 @@ function groupsForSnapshot(snapshot: SessionSnapshot): ViewGroup[] {
   }))
 }
 
+function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
+  const stored = findSessionByTabId(tab.id)
+    ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+  const agentName = parseAgentTitle(tab.name)?.agentName
+    ?? parseAgentTitle(savedConn?.name)?.agentName
+    ?? (stored ? 'Claude Code' : undefined)
+  const launcher = stored?.launcher ?? (
+    stored?.profileName
+      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-')
+        ? stored.profileName
+        : stored.profileName !== 'claude' && stored.profileName !== 'codex'
+          ? `claude-${stored.profileName}`
+          : undefined
+      : undefined
+  )
+  return formatAgentResumeCommand(agentName, stored?.sessionId, launcher, stored?.profileName)
+}
+
 export function useSessionRestore(input: SessionRestoreInput): void {
   const latestInput = useRef(input)
   latestInput.current = input
@@ -61,6 +84,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
     let cancelled = false
 
     const allowedIds = new Set(initialSnapshot.activeTabs
+      .filter(tab => current.shouldRestoreTab?.(tab) !== false)
       .filter(tab => current.isRestoreAllowed?.(tab.id) !== false)
       .map(tab => tab.id))
     const snapshot = selectPendingSnapshotTabs(initialSnapshot, allowedIds)
@@ -81,7 +105,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
       const attemptedIds: string[] = []
 
       for (const tab of snapshot.activeTabs) {
-        if (cancelled || latestInput.current.isRestoreAllowed?.(tab.id) === false) continue
+        if (cancelled || latestInput.current.shouldRestoreTab?.(tab) === false || latestInput.current.isRestoreAllowed?.(tab.id) === false) continue
         attemptedIds.push(tab.id)
 
         const savedConn = savedConnById.get(tab.connId)
@@ -94,22 +118,33 @@ export function useSessionRestore(input: SessionRestoreInput): void {
 
         if ((savedConn?.type ?? conn?.type) === 'LOCAL' && savedConn) {
           try {
+            const resumeCommand = resumeCommandForTab(tab, savedConn)
             const opened = await window.omnitermAPI.shells.open(
               savedConn.shell ?? tab.recovery.shell,
               savedConn.workspaceId ?? null,
               undefined,
               tab.recovery.cwd ?? savedConn.localCwd ?? null,
-              null,
+              resumeCommand,
             ) as Connection | null
-            if (opened) conn = opened
-            else conn = undefined
+            if (opened) {
+              conn = opened
+              if (resumeCommand) {
+                const stored = findSessionByTabId(tab.id)
+                  ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+                if (stored) {
+                  upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })
+                }
+              }
+            } else {
+              conn = undefined
+            }
           } catch (error) {
             diag.warn('[useSessionRestore] fresh shell registration failed', error)
             conn = undefined
           }
         }
 
-        if (cancelled || latestInput.current.isRestoreAllowed?.(tab.id) === false) {
+        if (cancelled || latestInput.current.shouldRestoreTab?.(tab) === false || latestInput.current.isRestoreAllowed?.(tab.id) === false) {
           if (conn && savedConn && conn.id !== savedConn.id) window.omnitermAPI.shells.release(conn.id)
           continue
         }

@@ -27,7 +27,7 @@ export interface ClipboardKeyEvent {
   code: string
 }
 
-export type ClipboardAction = 'paste' | 'copy' | null
+export type ClipboardAction = 'paste' | 'paste-script' | 'copy' | null
 
 /**
  * Which clipboard action, if any, the app should handle for this keydown.
@@ -36,7 +36,7 @@ export type ClipboardAction = 'paste' | 'copy' | null
  * cancels the event and its native `paste` listener is already the sole writer. Intercepting there
  * would only add a way to double-fire, so we deliberately leave it alone.
  *
- * `altVPassthrough`: agents that bind Alt+V to their own clipboard reader (Antigravity CLI) need
+ * `altVPassthrough`: agents that bind Alt+V to their own clipboard reader need
  * the raw keystroke, not the app's path-insertion. Returning null lets the keydown fall through to
  * xterm, which encodes Alt+V to the PTY as usual.
  */
@@ -44,8 +44,14 @@ export const clipboardActionFor = (
   e: ClipboardKeyEvent,
   isMac: boolean,
   altVPassthrough = false,
+  isScriptPaste = false,
 ): ClipboardAction => {
-  // Alt+V is the explicit image-paste binding: agents like OpenCode read the
+  // Explicit script paste: triggered when matching the paste-script shortcut
+  if (isScriptPaste) {
+    return 'paste-script'
+  }
+
+  // Alt+V is the explicit image-paste binding: agents attach the
   // inserted file path from the prompt. Claimed so the Alt press cannot leak
   // an ESC-prefixed code into the PTY instead.
   if (e.code === 'KeyV' && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -80,4 +86,34 @@ export const clipboardActionFor = (
 export const normalizePastePayload = (text: string, bracketed: boolean): string => {
   const normalized = text.replace(/\r?\n/g, '\r')
   return bracketed ? `\x1b[200~${normalized}\x1b[201~` : normalized
+}
+
+/**
+ * Shape a multiline PowerShell (.ps1) script for safe interactive execution in pwsh.
+ *
+ * Wrapping the payload in `. { ... }` ensures that:
+ * 1. pwsh / PSReadLine treats the entire multiline script as a single continuation block
+ *    without auto-executing intermediate lines upon paste.
+ * 2. Any variables, functions, and aliases created by the script stay in the current
+ *    session scope (dot-sourcing semantics).
+ * 3. Comments on lines (including the last line) cannot comment out the closing brace,
+ *    because the closing brace is placed on its own newline.
+ * 4. The closing brace has no trailing carriage return/newline, so the prompt halts
+ *    at the end of the block, allowing the user to inspect/edit and press Enter to execute.
+ */
+export const formatPowerShellScriptForPaste = (script: string): string => {
+  const trimmed = script.trim()
+  if (!trimmed) return ''
+
+  // If already dot-sourced or call-wrapped (. { ... } or & { ... }), keep as-is without double wrapping
+  if (/^(\.|&)\s*\{[\s\S]*\}$/.test(trimmed)) {
+    return trimmed
+  }
+
+  // If already wrapped in a bare script block { ... }, dot-source it: . { ... }
+  if (/^\{[\s\S]*\}$/.test(trimmed)) {
+    return `. ${trimmed}`
+  }
+
+  return `. {\n${trimmed}\n}`
 }

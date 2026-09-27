@@ -25,7 +25,7 @@ const connection: Connection = {
 }
 
 describe('PaneHeader layout', () => {
-  it('keeps the shell label beside the name and reserves a growable control slot', () => {
+  it('leaves the shell label for the footer and reserves a growable control slot', () => {
     render(
       <PaneHeader
         paneIndex={0}
@@ -53,7 +53,7 @@ describe('PaneHeader layout', () => {
     )
 
     expect(screen.getByText('OmniTerm')).toHaveClass('shrink')
-    expect(screen.getByText('// PowerShell 7')).toHaveClass('max-w-[45%]')
+    expect(screen.queryByText('// PowerShell 7')).toBeNull()
     expect(screen.getByTestId('pane-header-controls')).toHaveClass('flex-1', 'min-w-[3.5rem]')
   })
 })

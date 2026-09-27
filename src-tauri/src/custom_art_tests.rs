@@ -9,6 +9,16 @@ fn test_valid_slots() {
     assert!(is_valid_slot("idle-dark"));
     assert!(is_valid_slot("loading-light"));
     assert!(is_valid_slot("loading-dark"));
+    assert!(is_valid_slot("session-light"));
+    assert!(is_valid_slot("session-dark"));
+    assert!(is_valid_slot("pace-slow-light"));
+    assert!(is_valid_slot("pace-slow-dark"));
+    assert!(is_valid_slot("pace-onTrack-light"));
+    assert!(is_valid_slot("pace-onTrack-dark"));
+    assert!(is_valid_slot("pace-fast-light"));
+    assert!(is_valid_slot("pace-fast-dark"));
+    assert!(is_valid_slot("pace-overshooting-light"));
+    assert!(is_valid_slot("pace-overshooting-dark"));
     assert!(!is_valid_slot("idle"));
     assert!(!is_valid_slot("loading"));
     assert!(!is_valid_slot("other"));

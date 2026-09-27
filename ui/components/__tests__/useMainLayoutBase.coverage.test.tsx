@@ -119,6 +119,7 @@ describe('useMainLayoutBase complete behavior', () => {
     expect(result.current.shellOptions).toEqual([{ id: 'powershell', label: 'PowerShell' }])
     expect(result.current.idleArtUrl).toBe('blob:idle-dark')
     expect(result.current.loadingArtUrl).toBe('blob:loading-dark')
+    expect(result.current.sessionArtUrl).toBe('blob:session-dark')
   })
 
   it('handles provider, art, and workspace load errors without crashing', async () => {
@@ -297,6 +298,8 @@ describe('useMainLayoutBase complete behavior', () => {
       expect(result.current.idleArtUrlDark).toBe('blob:idle-dark')
       expect(result.current.loadingArtUrlLight).toBe('blob:loading-light')
       expect(result.current.loadingArtUrlDark).toBe('blob:loading-dark')
+      expect(result.current.sessionArtUrlLight).toBe('blob:session-light')
+      expect(result.current.sessionArtUrlDark).toBe('blob:session-dark')
     })
     const menu = document.createElement('div')
     const button = document.createElement('button')

@@ -11,6 +11,8 @@ import {
 } from '../utils/workspaceSelection'
 import { Tooltip } from './Tooltip'
 import ToggleRow from './ToggleRow'
+import TerminalToolbarSettings from './TerminalToolbarSettings'
+import type { TerminalToolbarActions } from '../terminalToolbar'
 
 /**
  * The "General" block of the settings panel: the default terminal, and the size cap the built-in file
@@ -66,6 +68,11 @@ interface GeneralSettingsProps {
   onCloseSettings: () => void
   /** Shared notifier (useDialog) for backup success and failure messages. */
   showAlert?: UseDialogReturn['showAlert']
+}
+
+interface ToolbarAppearanceRecord {
+  toolbarActions?: TerminalToolbarActions
+  [key: string]: unknown
 }
 
 const LABEL_CLS = 'text-[10px] text-theme-fg uppercase font-bold tracking-widest ml-0.5'
@@ -269,6 +276,40 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           ariaLabel="Skip terminal close confirmation"
         />
       </div>
+
+      <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3">
+        <label htmlFor="agent-renew-strategy" className={LABEL_CLS}>AI Agent Renew Strategy</label>
+        <p className="text-[11px] text-theme-dim -mt-0.5">
+          Choose action when clicking the refresh button on an active agent session.
+        </p>
+        <div className="relative">
+          <select
+            id="agent-renew-strategy"
+            value={appSettings.agentRenewStrategy ?? 'reopen'}
+            onChange={(e) => patch({ agentRenewStrategy: e.target.value as 'reopen' | 'new-command' })}
+            className={`w-full py-2 pl-3 pr-8 appearance-none cursor-pointer ${FIELD_CLS}`}
+          >
+            <option value="reopen">Restart session with profile in current folder (default)</option>
+            <option value="new-command">Send /new command to active agent</option>
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-theme-dim">
+            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <TerminalToolbarSettings
+        value={appSettings.toolbarActions}
+        onChange={(toolbarActions: TerminalToolbarActions) => {
+          const perConn = Object.fromEntries(
+            Object.entries((appSettings.perConn ?? {}) as Record<string, ToolbarAppearanceRecord>).map(([id, appearance]) => {
+              const { toolbarActions: _override, ...rest } = appearance
+              return [id, rest]
+            }),
+          )
+          patch({ toolbarActions, perConn })
+        }}
+      />
 
       {/* Viewer size cap. 1 MB covers every script and config file in a normal workspace; this exists
           for the person who wants to read a 3 MB log without leaving the app. */}

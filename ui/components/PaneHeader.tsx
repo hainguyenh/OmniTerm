@@ -1,16 +1,19 @@
 import React, { useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, Monitor, ChevronDown, Check, X, Bot, Image as ImageIcon } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, FolderOpen, Image as ImageIcon, Bookmark, BookmarkCheck } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
 import { getLastPastedImage, requestOpen, subscribePastedImage } from '../utils/pastedImageStore'
 import type { DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import type { AppTheme } from '../themes'
+import type { TerminalToolbarAction, TerminalToolbarActions } from '../terminalToolbar'
 import { formatTerminalTitle } from '../utils/agentTitle'
 import SessionStatusIndicator from './SessionStatusIndicator'
 import SessionControlButtons from './SessionControlButtons'
 import { Tooltip } from './Tooltip'
+import { useBookmarkAgentSession } from '../hooks/useBookmarkAgentSession'
+import { QuotaAgentHeaderIndicator } from '../../plugins/agent-quota/app/paneHosts'
 
 /**
  * The mini header on top of every pane in split view: the pane's identity (shape + number in its own
@@ -29,6 +32,9 @@ interface PaneHeaderProps {
   liveFolder?: string
   /** Human-readable shell label, e.g. "PowerShell 7" — shown in agent mode. */
   shellLabel?: string
+  /** The live local directory represented by the folder label. */
+  folderPath?: string
+  onOpenFolder?: () => void
   focused: boolean
   sessionId: string | null
   tabs: SessionTabItem[]
@@ -60,6 +66,10 @@ interface PaneHeaderProps {
   /** Open another local terminal pane at this pane's exact live working directory. */
   onOpenCurrentDirectory?: () => void
   busy?: boolean
+  /** Reuse the configured loading artwork while the quota provider is fetching. */
+  loadingArtUrl?: string | null
+  /** Optional user artwork for a busy agent session; the converted defaults remain the fallback. */
+  sessionArtUrl?: string | null
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
   appearance?: {
     themes: AppTheme[]
@@ -68,15 +78,18 @@ interface PaneHeaderProps {
     darkMode: boolean
     onThemeApply: (themeId: string) => void
     onFontSizeChange: (delta: number) => void
+    headerActions?: readonly TerminalToolbarAction[]
+    footerActions?: readonly TerminalToolbarAction[]
+    onToolbarActionsChange?: (actions: TerminalToolbarActions) => void
     scopeLabel?: string
     buttonTitle?: string
   }
 }
 
 const PaneHeader: React.FC<PaneHeaderProps> = ({
-  paneIndex, conn, sessionTitle, liveFolder, shellLabel, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
+  paneIndex, conn, sessionTitle, liveFolder, shellLabel, folderPath, onOpenFolder, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, onClose, onOpenCurrentDirectory, fullscreen, onToggleFullscreen, appearance, busy,
+  onAssign, onClear, onClose, onOpenCurrentDirectory, fullscreen, onToggleFullscreen, appearance, busy, loadingArtUrl, sessionArtUrl,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -99,6 +112,14 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
     (cb) => subscribePastedImage(sessionId, cb),
     () => getLastPastedImage(sessionId),
   )
+  const { canBookmark, feedback: storedFeedback, store: storeAgentSession } = useBookmarkAgentSession(sessionId)
+
+  const handleStoreSession = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!conn) return
+    void storeAgentSession(folderPath ?? conn.localCwd ?? undefined, folderLabel)
+  }
+
   return (
     <div className="relative flex-shrink-0" data-pane-header>
       <div
@@ -121,28 +142,35 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         </span>
         {conn ? (
           <>
-            {formattedTitle.isAgent
-              ? <Bot className="w-3 h-3 flex-shrink-0 text-theme-accent" />
+            {sessionId && formattedTitle.isAgent
+              ? <QuotaAgentHeaderIndicator sessionId={sessionId} agentName={formattedTitle.agentName} loadingArtUrl={loadingArtUrl} sessionArtUrl={sessionArtUrl} busy={false} darkMode={appearance?.darkMode} />
               : conn.type === 'RDP'
                 ? <Monitor className="w-3 h-3 flex-shrink-0" />
                 : <Terminal className="w-3 h-3 flex-shrink-0" />
             }
             <span className="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
-              <span className={`min-w-0 shrink truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
-                {formattedTitle.isAgent
-                  ? `${formattedTitle.agentName}${folderLabel ? ` - ${folderLabel}` : ''}`
-                  : (folderLabel ?? formattedTitle.displayTitle)}
-              </span>
-              {formattedTitle.shellLabel && (
-                <span className="min-w-0 max-w-[45%] shrink truncate text-[9px] text-theme-dim font-normal">
-                  // {formattedTitle.shellLabel}
+              <span className={`min-w-0 shrink flex items-center gap-1 truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
+                <span className="truncate shrink">
+                  {folderLabel ?? formattedTitle.displayTitle}
                 </span>
-              )}
+                {folderPath && onOpenFolder && (
+                  <Tooltip content="Open project folder in Explorer" placement="bottom">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onOpenFolder() }}
+                      className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                      aria-label="Open project folder in Explorer"
+                    >
+                      <FolderOpen className="w-3 h-3" />
+                    </button>
+                  </Tooltip>
+                )}
+              </span>
             </span>
             {sessionId && (
               <SessionStatusIndicator
                 status={statuses[sessionId] ?? 'connecting'}
-                busy={busy}
+                busy={busy && !formattedTitle.isAgent && !sessionArtUrl && !loadingArtUrl}
                 isAgent={formattedTitle.isAgent}
                 runningStyle="oscillate"
               />
@@ -151,7 +179,54 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 items-center justify-end gap-1" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+          {sessionId && busy && (formattedTitle.isAgent || sessionArtUrl || loadingArtUrl) && (
+            <span className="aq-header-custom-loading flex items-center flex-shrink-0" title="Processing…">
+              {sessionArtUrl || loadingArtUrl ? (
+                <span className="aq-agent-header-icon aq-agent-header-loading">
+                  <span className="aq-agent-header-loading-travel">
+                    <img
+                      src={(sessionArtUrl || loadingArtUrl)!}
+                      alt="Loading"
+                      aria-hidden="true"
+                      draggable="false"
+                    />
+                  </span>
+                </span>
+              ) : (
+                <QuotaAgentHeaderIndicator
+                  sessionId={sessionId}
+                  agentName={formattedTitle.agentName}
+                  loadingArtUrl={loadingArtUrl}
+                  sessionArtUrl={sessionArtUrl}
+                  busy={busy}
+                  darkMode={appearance?.darkMode}
+                />
+              )}
+            </span>
+          )}
+          {conn && sessionId && canBookmark && (
+            <Tooltip
+              content={
+                storedFeedback === 'done' ? 'Session stored for later'
+                  : storedFeedback === 'unavailable' ? 'No resumable session found yet'
+                    : 'Store session for later'
+              }
+              placement="bottom"
+            >
+              <button
+                type="button"
+                onClick={handleStoreSession}
+                disabled={storedFeedback === 'pending'}
+                className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${
+                  storedFeedback === 'done' ? 'text-emerald-400' : 'text-theme-dim hover:bg-[#414868] hover:text-theme-accent'
+                }`}
+                aria-label="Store session for later"
+              >
+                {storedFeedback === 'done' ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
+              </button>
+            </Tooltip>
+          )}
           {conn && sessionId && pastedImage && (
             <Tooltip content="View last pasted image" placement="bottom">
               <button
@@ -173,6 +248,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
               detach={detach}
               onToggleDetach={onToggleDetach}
               onOpenCurrentDirectory={conn.type === 'LOCAL' ? onOpenCurrentDirectory : undefined}
+              surface="header"
               detachWhere="pane"
               fullscreen={fullscreen}
               onToggleFullscreen={onToggleFullscreen}
@@ -181,6 +257,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                 scopeLabel: `Pane ${paneIndex + 1}`,
                 buttonTitle: `Appearance — theme & font size (Pane ${paneIndex + 1})`,
               } : undefined}
+              layoutMode={layoutMode}
             />
           )}
           <Tooltip content="Choose session for this pane" placement="bottom">

@@ -2,14 +2,15 @@
  * @vitest-environment jsdom
  */
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../../themes'
 import type { ViewGroup } from '../../viewGroups'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
-import { useSessionRecoveryState } from '../useSessionRecoveryState'
+import { shouldAutoRestoreTab, useSessionRecoveryState } from '../useSessionRecoveryState'
 import { useSessionPersistence } from '../useSessionPersistence'
+import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
 
 vi.mock('../useSessionPersistence', () => ({ useSessionPersistence: vi.fn() }))
 
@@ -75,6 +76,7 @@ describe('useSessionRecoveryState', () => {
   const localDisconnect = vi.fn()
 
   beforeEach(() => {
+    clearStoredSessions()
     vi.mocked(useSessionPersistence).mockReturnValue({ initialSnapshot: snapshot })
     open.mockReset().mockImplementation((_shell, _workspace, _folder, cwd) => Promise.resolve({
       id: cwd === 'F:/a' ? 'fresh-a' : 'fresh-b',
@@ -95,6 +97,29 @@ describe('useSessionRecoveryState', () => {
         connect: { localDisconnect },
       },
     })
+  })
+
+  afterEach(() => clearStoredSessions())
+
+  it('does not auto-resume a plain PowerShell pane, while an agent-titled pane remains eligible', () => {
+    expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'PowerShell' })).toBe(false)
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'project // PowerShell 7' })).toBe(false)
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'Claude Code - project' })).toBe(true)
+  })
+
+  it('auto-restores a pane with a persisted agent session after its title fell back to the shell', () => {
+    upsertSession({
+      id: 'claude:22222222-2222-4222-8222-222222222222',
+      tabId: 'tab-a',
+      agent: 'claude',
+      profileName: 'work',
+      sessionId: '22222222-2222-4222-8222-222222222222',
+      state: 'interrupted',
+      updatedAt: Date.now(),
+    })
+    expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'PowerShell' })).toBe(false)
   })
 
   it('keeps successful registrations pending until native startup and can retry one while another pane is unresolved', async () => {

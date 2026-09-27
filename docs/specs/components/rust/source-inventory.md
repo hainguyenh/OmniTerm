@@ -137,6 +137,7 @@ ename_folder<br>`crates/app-core/src/workspace_model.rs` | Mutate/persist contro
 | `parse_import_content`<br>`src-tauri/src/connections.rs` | Parse/translate/resolve data | Centralize boundary/transformation semantics | Convert validated inputs into the domain/native representation | When crossing a model/launch/import boundary |
 | `import_outcome_to_value`<br>`src-tauri/src/connections.rs` | Parse/translate/resolve data | Centralize boundary/transformation semantics | Convert validated inputs into the domain/native representation | When crossing a model/launch/import boundary |
 | `export_json`<br>`src-tauri/src/connections.rs` | Parse/translate/resolve data | Centralize boundary/transformation semantics | Convert validated inputs into the domain/native representation | When crossing a model/launch/import boundary |
+| `export_text`<br>`src-tauri/src/connections.rs` | Initiate a native/runtime action | Keep OS/process/window behavior in Rust/Tauri | Resolve validated inputs then invoke the native/runtime service | On the matching user/runtime action |
 | `import_json`<br>`src-tauri/src/connections.rs` | Parse/translate/resolve data | Centralize boundary/transformation semantics | Convert validated inputs into the domain/native representation | When crossing a model/launch/import boundary |
 | `import_file`<br>`src-tauri/src/connections.rs` | Parse/translate/resolve data | Centralize boundary/transformation semantics | Convert validated inputs into the domain/native representation | When crossing a model/launch/import boundary |
 | `custom_art_dir`<br>`src-tauri/src/custom_art.rs` | Expose module behavior | Provide the module’s public/native capability | Execute the implementation in the owning Rust module with explicit inputs/results | When invoked by its caller/IPC flow |
@@ -276,6 +277,14 @@ ename_folder<br>`crates/app-core/src/workspace_model.rs` | Mutate/persist contro
 | `workspaces_file`<br>`src-tauri/src/workspace_persistence.rs` | Expose module behavior | Provide the module’s public/native capability | Execute the implementation in the owning Rust module with explicit inputs/results | When invoked by its caller/IPC flow |
 | `read_workspaces`<br>`src-tauri/src/workspace_persistence.rs` | Read/derive runtime or persisted data | Provide authoritative data to callers | Resolve state/path and return a typed value/result | On query/load/scan |
 | `write_workspaces`<br>`src-tauri/src/workspace_persistence.rs` | Mutate/persist controlled state | Centralize state changes and side effects | Validate/resolve target then perform the mutation | On a state-changing action |
+| `resolve_claude_session`, `is_uuid`, `encode_project_dir`<br>`src-tauri/src/agent_session.rs` | Resolve a pane's Claude session file from disk | Recover the session id to resume, without trusting terminal output or a renderer-supplied profile | Given the agent's own profile directory and cwd (from `agent_quota_detect`), find the newest strictly-UUID-named `.jsonl` no older than the agent's own start time | When a pane's Claude session is polled for tracking, bookmarking, or resume |
+| `plugin_available`<br>`src-tauri/src/plugin_commands.rs` | Check plugin host availability | Verify sidecar process is ready | Probe plugin host state | When querying plugin system availability |
+| `plugin_list`<br>`src-tauri/src/plugin_commands.rs` | List installed plugins | Enumerate registered plugins | Query plugin host registry | When managing plugins |
+| `plugin_set_enabled`<br>`src-tauri/src/plugin_commands.rs` | Toggle plugin active state | Enable or disable specified plugin | Update plugin enable state in host | When toggling plugin settings |
+| `plugin_select_connection_provider`<br>`src-tauri/src/plugin_commands.rs` | Select connection provider plugin | Activate plugin connection provider | Route selection to plugin host | When configuring connection provider |
+| `connection_provider_capabilities`<br>`src-tauri/src/plugin_commands.rs` | Query provider capabilities | Report provider feature support | Query active provider via host | When inspecting connection capabilities |
+| `plugin_invoke`<br>`src-tauri/src/plugin_commands.rs` | Invoke plugin method | Execute remote procedure on plugin sidecar | Forward method and arguments to host | When communicating with plugin |
+| `plugin_auth_gate`<br>`src-tauri/src/plugin_commands.rs` | Verify plugin authentication gate | Check if plugin auth requirements are met | Query host authentication gate | When gating plugin operations |
 
 ## State and data
 

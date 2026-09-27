@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockOmnitermAPI } from '../../testUtils'
 import GeneralSettings from '../GeneralSettings'
@@ -231,5 +231,37 @@ describe('GeneralSettings', () => {
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalCloseConfirm: false })
   })
 
+  it('applies global toolbar visibility and order to every connection', () => {
+    const setAppSettings = vi.fn()
+    render(<GeneralSettings appSettings={{ perConn: { saved: { toolbarActions: { footer: ['clear'] } } } }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
+    fireEvent.click(toolbar.getByRole('checkbox', { name: 'Stop current process' }))
+    fireEvent.click(toolbar.getByRole('button', { name: 'Move Save output to file up' }))
+    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      toolbarActions: expect.objectContaining({ footer: expect.arrayContaining(['save']) }),
+      perConn: { saved: {} },
+    }))
+    expect(setAppSettings).toHaveBeenLastCalledWith(expect.objectContaining({ perConn: { saved: {} } }))
+  })
 
+
+  it('persists AI agent renew strategy selection', async () => {
+    const setAppSettings = vi.fn()
+    render(
+      <GeneralSettings
+        appSettings={{ agentRenewStrategy: 'reopen' }}
+        setAppSettings={setAppSettings}
+        shellOptions={shells}
+        onCloseSettings={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
+
+    const select = screen.getByLabelText('AI Agent Renew Strategy') as HTMLSelectElement
+    expect(select.value).toBe('reopen')
+
+    fireEvent.change(select, { target: { value: 'new-command' } })
+    expect(setAppSettings).toHaveBeenLastCalledWith(expect.objectContaining({ agentRenewStrategy: 'new-command' }))
+    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ agentRenewStrategy: 'new-command' })
+  })
 })

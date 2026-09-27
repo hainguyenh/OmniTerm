@@ -212,9 +212,12 @@ export function formatTerminalTitle(
   fallbackCwd?: string,
 ): FormattedTerminalTitle {
   const title = rawTitle?.trim() || ''
-  const fallbackFolder = extractFolder(fallbackCwd) || extractFolder(fallbackName)
+  const fallbackFolder = extractFolder(fallbackCwd) || parseAgentTitle(fallbackName)?.folderName || extractFolder(fallbackName)
 
-  const agentCtx = parseAgentTitle(title) || parseAgentTitle(fallbackName)
+  // A fresh non-agent OSC title is authoritative. Falling back to the connection name in that
+  // case keeps a stale "Claude Code" label after `/exit` returns to pwsh.
+  const isShellTitle = SHELL_BINARIES.has(title.toLowerCase())
+  const agentCtx = isShellTitle ? null : parseAgentTitle(title) || (!title ? parseAgentTitle(fallbackName) : null)
   if (agentCtx) {
     const folder = agentCtx.folderName || fallbackFolder || 'workspace'
     const agentPart = `${agentCtx.agentName} - ${folder}`
