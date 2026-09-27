@@ -37,12 +37,32 @@ export function animationFor(zone: Zone, enabled: boolean): Animation {
   return enabled ? ANIMATIONS[zone] : 'none'
 }
 
-/** Zone boundaries on the 0–100 track for a given limit, for the faint zone bands behind a bar. */
-export function zoneBands(limit: number): Array<{ zone: Zone; start: number; end: number }> {
-  const edges = [0, 0.5, 0.7, 0.8, 0.9, 1].map((fraction) => Math.min(100, fraction * limit))
-  const zones: Zone[] = ['calm', 'watch', 'warm', 'hot', 'critical']
-  const bands = zones.map((zone, index) => ({ zone, start: edges[index], end: edges[index + 1] }))
-  return limit < 100 ? [...bands, { zone: 'over', start: limit, end: 100 }] : bands
+/** Below this much fill a number does not fit inside it, so it is drawn just after the fill. */
+const MIN_INSIDE_PCT = 12
+/** A danger zone narrower than this has no room for its own number. */
+const MIN_DANGER_LABEL_PCT = 6
+
+export interface TrackLabels {
+  /** The used number: centred in the fill, or just after it when the fill is too short. */
+  used: { text: string; at: number; fill: number; inside: boolean }
+  /** The danger zone's size, centred in it; null when the limit leaves no danger zone. */
+  danger: { text: string; at: number } | null
+}
+
+/**
+ * Where a quota track draws its numbers, all as % of the track width. The track is
+ * `[ used | remaining safe | danger zone ]`, with the danger zone running from the limit to 100%.
+ */
+export function trackLabels(usedPct: number, limit: number): TrackLabels {
+  const fill = Math.min(100, Math.max(0, usedPct))
+  const inside = fill >= MIN_INSIDE_PCT
+  const dangerWidth = Math.max(0, 100 - limit)
+  return {
+    used: { text: `${Math.round(fill)}%`, at: inside ? fill / 2 : fill, fill, inside },
+    danger: dangerWidth > 0
+      ? { text: dangerWidth >= MIN_DANGER_LABEL_PCT ? `${Math.round(dangerWidth)}%` : '', at: limit + dangerWidth / 2 }
+      : null,
+  }
 }
 
 /** Readings older than this are not trusted to suspend anything. */
@@ -127,9 +147,9 @@ export function formatResetAbsolute(at: number): string {
 }
 
 /**
- * Hide the weekly line while there is plenty of room left and no urgency to look at it: at least
- * 20% remains and its reset is 48 hours or more away. The boundary stays visible at exactly 48h
- * or 20% remaining so the user's urgency signal is never hidden.
+ * The weekly auto-hide rule (Settings → Agent Quota → "Auto-hide weekly while usage < N%"): the
+ * weekly line is hidden while its usage is below the threshold (default 60%), and shows again the
+ * moment usage reaches it. A terminal can opt out with its "Show weekly quota" override.
  */
 export function shouldHideWeekly(window: QuotaWindow, thresholdOrNow?: number, customThreshold?: number): boolean {
   if (window.kind !== 'weekly') return false
@@ -161,33 +181,22 @@ export function paceTier(window: QuotaWindow, limit: number, now: number): PaceT
   return 'overshooting'
 }
 
-const PACE_ORDER: Record<PaceTier, number> = {
-  slow: 0,
-  onTrack: 1,
-  fast: 2,
-  overshooting: 3,
-}
-
-function higherPace(left: PaceTier, right: PaceTier): PaceTier {
-  return PACE_ORDER[left] >= PACE_ORDER[right] ? left : right
-}
+/** Upper bounds, in % of the limit used, of the first three header artwork tiers. */
+export const HEADER_TIER_BOUNDS = { slow: 40, onTrack: 70, fast: 85 } as const
 
 /**
- * Choose the four-state header animation from both burn pace and remaining room before the
- * configured limit. The remaining-room floor keeps a late, low-quota process visually urgent even
- * when the provider has not accumulated enough history for a projection yet.
+ * The header busy artwork's tier, from how much of the 5h limit is used (used ÷ limit): up to 40%
+ * the cat (slow), up to 70% the horse (on track), up to 85% the airplane (fast), and past that
+ * sonic (critical). The art only reflects the room left, so it is readable at a glance; the pace
+ * projection stays with the pace glyph. With no reading yet it shows the on-track art.
  */
-export function headerLoadingTier(window: QuotaWindow | undefined, limit: number, now: number): PaceTier {
+export function headerLoadingTier(window: QuotaWindow | undefined, limit: number): PaceTier {
   if (!window || limit <= 0) return 'onTrack'
-  const remainingRatio = Math.max(0, (limit - window.usedPct) / limit)
-  const remainingTier: PaceTier = remainingRatio <= 0.1
-    ? 'overshooting'
-    : remainingRatio <= 0.25
-      ? 'fast'
-      : remainingRatio <= 0.55
-        ? 'onTrack'
-        : 'slow'
-  return higherPace(remainingTier, paceTier(window, limit, now) ?? 'slow')
+  const usedOfLimit = (window.usedPct / limit) * 100
+  if (usedOfLimit <= HEADER_TIER_BOUNDS.slow) return 'slow'
+  if (usedOfLimit <= HEADER_TIER_BOUNDS.onTrack) return 'onTrack'
+  if (usedOfLimit <= HEADER_TIER_BOUNDS.fast) return 'fast'
+  return 'overshooting'
 }
 
 /** `Pace: ~72% by reset (limit 90%)` — the same projection the tier above is based on. */

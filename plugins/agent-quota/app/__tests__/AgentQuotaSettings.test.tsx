@@ -21,6 +21,7 @@ function liveSave() {
 
 const claudeCard = () => within(screen.getByRole('region', { name: 'Claude Code quota settings' }))
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+const openGroup = (name: 'Agents' | 'Quota lines' | 'Loading artwork') => fireEvent.click(screen.getByRole('tab', { name }))
 
 beforeEach(() => resetQuotaStore())
 afterEach(() => resetQuotaStore())
@@ -41,16 +42,20 @@ describe('AgentQuotaSettings', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Applied')
   })
 
-  it('keeps custom session art hidden until enabled and preserves the mode-specific previews', () => {
+  it('keeps agent loading art hidden until enabled and offers uploads per built-in slot only', () => {
     seed()
     const save = liveSave()
-    render(<AgentQuotaSettings sessionArtUrlLight="blob:session-light" sessionArtUrlDark="blob:session-dark" />)
+    render(<AgentQuotaSettings />)
+    openGroup('Loading artwork')
     expect(screen.queryByRole('region', { name: 'Custom agent session artwork' })).toBeNull()
+    expect(screen.getByText('off: plain running dots')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Use custom session artwork' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Show agent loading artwork' }))
     const panel = screen.getByRole('region', { name: 'Custom agent session artwork' })
-    expect(within(panel).getByAltText('Light mode session artwork preview')).toHaveAttribute('src', 'blob:session-light')
-    expect(within(panel).getByAltText('Dark mode session artwork preview')).toHaveAttribute('src', 'blob:session-dark')
+    // Uploads live on each built-in slot; the separate "Custom artwork overrides" section is gone.
+    expect(within(panel).queryByText('Custom artwork overrides')).toBeNull()
+    expect(within(panel).queryByAltText('Light mode session artwork preview')).toBeNull()
+    expect(within(panel).getByRole('button', { name: 'Upload Slow light mode artwork' })).toBeInTheDocument()
     expect(within(panel).getByAltText('Slow light mode artwork')).toBeInTheDocument()
     expect(within(panel).getByAltText('Slow dark mode artwork')).toBeInTheDocument()
     expect(within(panel).getByAltText('On-track light mode artwork')).toBeInTheDocument()
@@ -171,6 +176,7 @@ describe('AgentQuotaSettings', () => {
     seed()
     liveSave()
     render(<AgentQuotaSettings />)
+    openGroup('Quota lines')
     fireEvent.click(screen.getByRole('button', { name: 'thick' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Monthly' }))
     fireEvent.click(screen.getByRole('checkbox', { name: 'Reset countdown' }))
@@ -189,7 +195,8 @@ describe('AgentQuotaSettings', () => {
     seed()
     const save = liveSave()
     render(<AgentQuotaSettings />)
-    const thresholdInput = screen.getByLabelText('Weekly line visibility threshold percentage')
+    openGroup('Quota lines')
+    const thresholdInput = screen.getByLabelText('Auto-hide weekly while usage is below this percentage')
     expect(thresholdInput).toHaveValue(60)
     fireEvent.change(thresholdInput, { target: { value: '75' } })
     apply()
@@ -213,11 +220,66 @@ describe('AgentQuotaSettings', () => {
     } as any
 
     render(<AgentQuotaSettings />)
-    fireEvent.click(screen.getByRole('switch', { name: 'Use custom session artwork' }))
+    openGroup('Loading artwork')
+    fireEvent.click(screen.getByRole('switch', { name: 'Show agent loading artwork' }))
     const uploadButton = screen.getByRole('button', { name: 'Upload Slow light mode artwork' })
     await act(async () => {
       fireEvent.click(uploadButton)
     })
     expect(uploadMock).toHaveBeenCalledWith('pace-slow-light')
+  })
+
+  it('shows one group at a time, starting with Agents', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings />)
+    expect(screen.getByRole('tab', { name: 'Agents' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('region', { name: 'Claude Code quota settings' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Preview')).toBeNull()
+
+    openGroup('Quota lines')
+    expect(screen.getByRole('tab', { name: 'Quota lines' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('region', { name: 'Claude Code quota settings' })).toBeNull()
+    expect(screen.getByLabelText('Preview')).toBeInTheDocument()
+
+    openGroup('Loading artwork')
+    expect(screen.queryByLabelText('Preview')).toBeNull()
+    expect(screen.getByRole('switch', { name: 'Show agent loading artwork' })).toBeInTheDocument()
+  })
+
+  it('summarises each agent on one line and expands it on demand', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings />)
+    const codex = within(screen.getByRole('region', { name: 'Codex quota settings' }))
+    expect(claudeCard().getByTestId('claude-summary')).toHaveTextContent('5h 90% · Weekly 95% · Monthly 95% · Suspend on · Wake off')
+    // Claude starts expanded, Codex collapsed.
+    expect(claudeCard().getByLabelText('Claude Code Weekly limit')).toBeInTheDocument()
+    expect(claudeCard().getByLabelText('Claude Code limits preview')).toBeInTheDocument()
+    expect(codex.queryByLabelText('Codex Weekly limit')).toBeNull()
+
+    fireEvent.click(claudeCard().getByRole('button', { name: 'Hide Claude Code settings' }))
+    expect(claudeCard().queryByLabelText('Claude Code Weekly limit')).toBeNull()
+    fireEvent.click(claudeCard().getByRole('button', { name: 'Show Claude Code settings' }))
+    fireEvent.change(claudeCard().getByLabelText('Claude Code Session (5h) limit'), { target: { value: '70' } })
+    expect(claudeCard().getByTestId('claude-summary')).toHaveTextContent('5h 70%')
+  })
+
+  it('previews every artwork tier at the chosen size and speed', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings />)
+    openGroup('Loading artwork')
+    fireEvent.click(screen.getByRole('switch', { name: 'Show agent loading artwork' }))
+    fireEvent.click(screen.getByRole('button', { name: 'large' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Slow (0.6x)' }))
+    const preview = screen.getByLabelText('Loading artwork preview')
+    for (const tier of ['slow', 'onTrack', 'fast', 'overshooting']) {
+      expect(within(preview).getByTestId(`art-preview-${tier}`)).toHaveClass(`aq-busy-art-${tier}`, 'aq-art-size-large', 'aq-art-speed-slow')
+    }
+    expect(screen.getByText('≤40% of limit')).toBeInTheDocument()
+    expect(screen.getByText('>85%')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'light' }))
+    expect(preview).toHaveAttribute('data-art-mode', 'light')
   })
 })

@@ -226,6 +226,12 @@ const defaults: Api = {
     readImage: async () => null,
     saveImageTemp: async () => "C:/temp/omniterm-paste-mock.png",
   },
+  attachments: {
+    save: async () => null,
+    importClipboardFiles: async () => [],
+    list: async () => ({ dir: "C:/data/attachments", files: [] }),
+    clear: async () => ({ removed: 0, bytes: 0, failed: 0 }),
+  },
   sftp: {
     home: async () => "/home",
     list: async () => [],

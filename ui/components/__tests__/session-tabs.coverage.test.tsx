@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import SessionTabs, { type SessionTabItem } from '../SessionTabs'
+import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 
 const connectionTypes: Record<string, 'LOCAL' | 'RDP' | 'SSH'> = {
   'local-c': 'LOCAL',
@@ -64,12 +65,24 @@ describe('SessionTabs', () => {
     expect(container.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
-  it('formats AI agent tabs as {AI agent} - {folder} // {shell}', () => {
+  it('shows an AI agent tab as its badge plus folder, naming the agent only in the badge', () => {
     renderTabs({
       tabs: [{ id: 'agent-1', connId: 'local-c', name: 'claude: ~/my-project' }],
       getShellLabel: () => 'PowerShell 7',
     })
-    expect(screen.getByText('Claude Code - my-project // PowerShell 7')).toBeInTheDocument()
+    expect(screen.getByText('my-project')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Claude Code' })).toBeInTheDocument()
+    expect(screen.queryByText(/Claude Code - /)).toBeNull()
+  })
+
+  it('shows an agent tab by its work item once the agent titles its task', () => {
+    setPanePresence({ 'agent-1': { agent: 'claude', profileName: 'claude-work', pid: 1, startTime: 1 } })
+    renderTabs({
+      tabs: [{ id: 'agent-1', connId: 'local-c', name: '✳ Fix header status' }],
+    })
+    expect(screen.getByText('Fix header status')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Claude Code · profile claude-work' })).toBeInTheDocument()
+    resetPanePresenceForTests()
   })
 
   it('selects, promotes, closes, and opens context actions', () => {

@@ -42,7 +42,6 @@ interface SessionControlButtonsProps {
   tooltipPlacement?: TooltipPlacement
   detachWhere?: 'pane' | 'footer'
   className?: string
-  layoutMode?: number
 }
 
 type ControlKey = 'currentDir' | 'stop' | 'clear' | 'copy' | 'save' | 'detach' | 'fullscreen' | 'theme' | 'font'
@@ -76,7 +75,6 @@ export default function SessionControlButtons({
   tooltipPlacement = 'bottom',
   detachWhere = 'footer',
   className = '',
-  layoutMode,
 }: SessionControlButtonsProps) {
   const resolvedSurface = surface ?? 'legacy'
   const rootRef = useRef<HTMLSpanElement>(null)
@@ -86,28 +84,23 @@ export default function SessionControlButtons({
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const stopEnabled = sessionLive ?? Boolean(busy)
 
-  const showFooterOnHeader = resolvedSurface === 'header' && (layoutMode === undefined || layoutMode < 4)
+  // Every layout has a footer carrying the footer actions, so the header shows only its own set;
+  // mirroring stop/clear/copy/save into the header duplicated them in split layouts.
   const headerActionList = toolbarActionsFor({
     header: appearance?.headerActions ? [...appearance.headerActions] : undefined,
   }, 'header')
   const footerActionList = toolbarActionsFor({
     footer: appearance?.footerActions ? [...appearance.footerActions] : undefined,
   }, 'footer')
-  const footerIconsForHeader: TerminalToolbarAction[] = ['stop', 'clear', 'copy', 'save']
 
   const selectedActions: TerminalToolbarAction[] = resolvedSurface === 'legacy'
     ? ['theme', 'detach', 'fullscreen', 'fontSize', 'stop', 'clear', 'copy', 'save']
-    : resolvedSurface === 'header'
-      ? (showFooterOnHeader
-          ? Array.from(new Set([...headerActionList, ...footerActionList.filter(action => footerIconsForHeader.includes(action))]))
-          : headerActionList)
-      : footerActionList
+    : resolvedSurface === 'header' ? headerActionList : footerActionList
 
   const supportedHeaderActions: TerminalToolbarAction[] = [
     ...(appearance?.themes && appearance.onThemeApply ? ['theme' as const] : []),
     ...(detach ? ['detach' as const] : []),
     ...(onToggleFullscreen ? ['fullscreen' as const] : []),
-    ...(showFooterOnHeader && conn.type !== 'RDP' ? ['stop', 'clear', 'copy', 'save'] as const : []),
   ]
   const supportedFooterActions: TerminalToolbarAction[] = [
     ...(appearance?.fontSize !== undefined && appearance.onFontSizeChange ? ['fontSize' as const] : []),

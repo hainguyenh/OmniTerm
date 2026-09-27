@@ -1,13 +1,18 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
 import type { AgentQuotaAPI } from './agentQuotaAPI'
+import type { DashboardDeps } from './profileDashboard'
 import type { QuotaConfig } from './quotaConfig'
 
 import { diag } from '../../../ui/diag'
+import { listAgentProfiles } from './agentQuotaAPI'
+import { setDashboardOpen, useProfileDashboard } from './profileDashboard'
 import { clearOverrides, getQuotaState, registerQuotaCommands, setQuickOpen, updateQuota, useQuota } from './quotaStore'
 import { parseQuotaConfig } from './quotaConfig'
 import { QuotaEngine } from './quotaEngine'
+import { LIVE_PROBE_IO, probeUsageInline } from './inlineUsageProbe'
 import { DangerConfirmDialog, QuotaNotices } from './QuotaOverlays'
+import { QuotaProfilesDashboard } from './QuotaProfilesDashboard'
 import { QuotaQuickPopover } from './QuotaQuickPopover'
 
 export interface AgentQuotaRootProps {
@@ -40,6 +45,8 @@ export const SETTINGS_TAB_EVENT = 'omniterm:settings-tab'
 export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, busy, openSettings }: AgentQuotaRootProps) {
   const available = useQuota((state) => state.available)
   const quickOpen = useQuota((state) => state.quickOpen)
+  const dashboardOpen = useProfileDashboard((state) => state.open)
+  const dashboardDeps = useMemo<DashboardDeps>(() => ({ listProfiles: listAgentProfiles, fetchUsage: (request) => api.fetchUsage(request) }), [api])
   const engineRef = useRef<QuotaEngine | null>(null)
   const latest = useRef({ appSettings, setAppSettings, openSettings })
   latest.current = { appSettings, setAppSettings, openSettings }
@@ -92,6 +99,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       random: Math.random,
       setTimer: (run, ms) => setTimeout(run, ms),
       clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      inlineProbe: (terminal) => probeUsageInline(terminal, LIVE_PROBE_IO),
     })
     engineRef.current = engine
     const unregister = registerQuotaCommands({
@@ -133,10 +141,16 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
     return () => window.removeEventListener(QUICK_SETTINGS_EVENT, toggle)
   }, [])
 
+  // The dashboard belongs to the plugin: it closes with it rather than reopening stale later.
+  useEffect(() => {
+    if (!available) setDashboardOpen(false)
+  }, [available])
+
   if (!available) return null
   return (
     <>
       {quickOpen && <QuotaQuickPopover />}
+      {dashboardOpen && <QuotaProfilesDashboard deps={dashboardDeps} />}
       <DangerConfirmDialog />
       <QuotaNotices />
     </>

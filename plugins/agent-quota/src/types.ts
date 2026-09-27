@@ -58,3 +58,13 @@ export interface WakeResult {
   ok: boolean
   message?: string
 }
+
+/** A profile the user can start, found by `agentQuota.listProfiles` (default dir or launcher). */
+export interface DiscoveredProfile {
+  agent: AgentKind
+  /** `claude` for the default profile, else the launcher name. */
+  profileName: string
+  /** The default profile's directory; null for a launcher, which sets its own. */
+  profileDir: string | null
+  launcher: string | null
+}

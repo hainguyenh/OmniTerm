@@ -1,7 +1,8 @@
 import type { MainLayoutModel } from './useMainLayoutController'
 import WaitingPane from './WaitingPane'
 import { newTerminalHoverText } from '../utils/newTerminalDescription'
-import { removeStoredSession, type StoredAgentSession } from '../utils/agentSessionStorage'
+import type { StoredAgentSession } from '../utils/agentSessionStorage'
+import { consumeForResume } from '../utils/storedSessionResume'
 
 interface MainLayoutWaitingPaneProps {
   model: MainLayoutModel
@@ -15,7 +16,7 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
   )
 
   const handleResumeSession = (session: StoredAgentSession, resumeCommand: string) => {
-    removeStoredSession(session.id)
+    consumeForResume(session)
     model.requestNewSession(undefined, null, session.cwd ?? null, resumeCommand)
   }
 

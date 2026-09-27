@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Zap, Cpu, MemoryStick, HardDrive, Clock } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, Clock, Signal, SignalHigh, SignalLow, SignalMedium, SignalZero } from 'lucide-react'
 import { SessionStatus } from './MainLayout'
 
 // ── Session metrics footer chips ────────────────────────────────────────────────
@@ -79,6 +79,17 @@ interface MetricsChipsProps {
   compact?: boolean
 }
 
+/**
+ * Latency as signal bars, so a healthy link reads as healthy at a glance (a lightning bolt read as
+ * a warning). Same thresholds as the colour: < 60 ms good, < 150 ms fair, < 300 ms slow.
+ */
+const LATENCY_LEVELS = [
+  { below: 60, Icon: Signal, word: 'good' },
+  { below: 150, Icon: SignalHigh, word: 'fair' },
+  { below: 300, Icon: SignalMedium, word: 'slow' },
+  { below: Infinity, Icon: SignalLow, word: 'poor' },
+] as const
+
 const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, connectedAt, compact }) => {
   if (status !== 'connected') return null
 
@@ -86,6 +97,9 @@ const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, c
     : latency < 60 ? 'text-theme-success'
     : latency < 150 ? 'text-theme-warning'
     : 'text-theme-error'
+
+  const level = latency == null ? null : LATENCY_LEVELS.find(entry => latency < entry.below) ?? LATENCY_LEVELS[3]
+  const LatencyIcon = level?.Icon ?? SignalZero
 
   const cpu = metrics?.cpu ?? null
   const memUsed = metrics?.memUsed ?? null
@@ -96,10 +110,10 @@ const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, c
   return (
     <div className={`flex items-center flex-shrink-0 ${compact ? 'gap-1' : 'gap-2'}`}>
       <MetricChip
-        icon={<Zap className="w-3 h-3" />}
+        icon={<LatencyIcon className="w-3 h-3" data-latency-level={level?.word ?? 'unknown'} />}
         value={latency == null ? '—' : `${latency}${compact ? '' : ' ms'}`}
         colorClass={latColor}
-        title="TCP latency to host"
+        title={level ? `TCP latency to host · ${level.word}` : 'TCP latency to host'}
         compact={compact}
       />
       {cpu != null && (

@@ -49,6 +49,31 @@ export type SessionEventKind = keyof SessionHandlers
 const handlers = new Map<string, Partial<SessionHandlers>>()
 
 /**
+ * The newest channel pair per session id. A pane that is renewed or reconnected keeps its id, but the
+ * process it replaced still has a stream (and an exit watcher) sending on the *old* channels — its
+ * final `closed`/`error` used to land on the new pane's handlers, which retired its input and showed
+ * Reconnect on a perfectly live shell. Only the latest generation is routed; older ones are dropped.
+ */
+const generations = new Map<string, number>()
+
+/**
+ * Read-only observers of a session's output, alongside (never instead of) the pane's own `data`
+ * handler — `onSession` keeps one handler per kind, so a second `data` subscriber would steal the
+ * pane's output. Used by the inline `/usage` probe to read an agent's reply.
+ */
+const taps = new Map<string, Set<(bytes: Uint8Array) => void>>()
+
+export function tapSessionOutput(id: string, tap: (bytes: Uint8Array) => void): () => void {
+  const set = taps.get(id) ?? new Set()
+  set.add(tap)
+  taps.set(id, set)
+  return () => {
+    set.delete(tap)
+    if (set.size === 0 && taps.get(id) === set) taps.delete(id)
+  }
+}
+
+/**
  * Subscribe to one kind of message for one session. Returns a synchronous unsubscribe, because every
  * caller is a React effect that has to return its cleanup immediately.
  */
@@ -92,11 +117,21 @@ export function failSession(id: string, message: string): void {
 
 /** Build the pair of channels a session streams over, routed to this module's handler map. */
 function sessionChannels(id: string) {
+  const generation = (generations.get(id) ?? 0) + 1
+  generations.set(id, generation)
+  const current = () => generations.get(id) === generation
+
   const onData = new Channel<ArrayBuffer | number[]>()
-  onData.onmessage = (message) => handlers.get(id)?.data?.(toBytes(message))
+  onData.onmessage = (message) => {
+    if (!current()) return
+    const bytes = toBytes(message)
+    handlers.get(id)?.data?.(bytes)
+    taps.get(id)?.forEach(tap => tap(bytes))
+  }
 
   const onStatus = new Channel<SessionStatus>()
   onStatus.onmessage = (status) => {
+    if (!current()) return
     const entry = handlers.get(id)
     if (status.kind === 'ready') entry?.ready?.(status.label ?? undefined, status.replay)
     else if (status.kind === 'error') entry?.error?.(status.message)
@@ -168,4 +203,6 @@ export async function attachSession(id: string): Promise<AttachSnapshot | null> 
 /** Exported for tests: drops all subscriptions so cases stay independent. */
 export function __resetSessionsForTests(): void {
   handlers.clear()
+  generations.clear()
+  taps.clear()
 }

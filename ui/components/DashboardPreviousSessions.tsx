@@ -1,12 +1,14 @@
 import React, { useState } from 'react'
-import { Bot, Clock, Folder, Play, Snowflake, Trash2, X } from 'lucide-react'
-import { formatAgentResumeCommand } from '../utils/agentRegistry'
+import { BookmarkCheck, Clock, Folder, Play, Snowflake, Trash2, X } from 'lucide-react'
 import {
   clearStoredSessions,
+  isBookmarked,
   removeStoredSession,
   useStoredSessions,
   type StoredAgentSession,
 } from '../utils/agentSessionStorage'
+import { formatTimeAgo, resumeCommandFor, sessionFolderName } from '../utils/storedSessionResume'
+import { AgentBadge } from './AgentBadge'
 import { Tooltip } from './Tooltip'
 
 interface DashboardPreviousSessionsProps {
@@ -14,22 +16,14 @@ interface DashboardPreviousSessionsProps {
   compact?: boolean
 }
 
-function formatTimeAgo(timestamp: number): string {
-  const diffSec = Math.floor((Date.now() - timestamp) / 1000)
-  if (diffSec < 60) return 'Just now'
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  const diffHour = Math.floor(diffMin / 60)
-  if (diffHour < 24) return `${diffHour}h ago`
-  const diffDays = Math.floor(diffHour / 24)
-  return `${diffDays}d ago`
-}
-
 export const DashboardPreviousSessions: React.FC<DashboardPreviousSessionsProps> = ({
   onResume,
   compact = false,
 }) => {
-  const sessions = useStoredSessions().filter(session => session.state !== 'active')
+  // Bookmarks lead: they are what the user explicitly asked to come back to.
+  const sessions = useStoredSessions()
+    .filter(session => session.state !== 'active')
+    .sort((a, b) => Number(isBookmarked(b)) - Number(isBookmarked(a)) || b.updatedAt - a.updatedAt)
   const [confirmingClear, setConfirmingClear] = useState(false)
 
   if (sessions.length === 0) {
@@ -72,8 +66,9 @@ export const DashboardPreviousSessions: React.FC<DashboardPreviousSessionsProps>
       <div className={`flex flex-col gap-2 overflow-y-auto ${compact ? 'max-h-48' : 'max-h-72'} pr-1`}>
         {sessions.map((session) => {
           const isInterrupted = session.state === 'interrupted'
-          const displayFolder = session.folderName || session.cwd?.replace(/\\/g, '/').split('/').filter(Boolean).pop() || 'Workspace'
-          const resumeCommand = formatAgentResumeCommand('Claude Code', session.sessionId, session.launcher)
+          const bookmarked = isBookmarked(session)
+          const displayFolder = sessionFolderName(session)
+          const resumeCommand = resumeCommandFor(session)
 
           return (
             <div
@@ -81,12 +76,14 @@ export const DashboardPreviousSessions: React.FC<DashboardPreviousSessionsProps>
               className="flex items-center justify-between p-2.5 rounded-lg border border-theme-border bg-theme-sidebar hover:border-theme-accent/60 transition-all text-xs group"
             >
               <div className="flex items-start gap-2.5 min-w-0 flex-1 pr-2">
-                <div className="p-1.5 rounded-md bg-theme-accent/10 text-theme-accent flex-shrink-0 mt-0.5">
-                  <Bot className="w-4 h-4" />
+                <div className="p-1.5 rounded-md bg-theme-accent/10 flex-shrink-0 mt-0.5">
+                  <AgentBadge agent={session.agent} profileName={session.profileName} className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1 flex flex-col gap-0.5">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-theme-fg">Claude Code</span>
+                    <span className="font-semibold text-theme-fg truncate max-w-[18rem]" title={session.title ?? displayFolder}>
+                      {session.title ?? displayFolder}
+                    </span>
                     {session.launcher && (
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-white/5 text-theme-dim border border-theme-border">
                         {session.launcher}
@@ -100,8 +97,13 @@ export const DashboardPreviousSessions: React.FC<DashboardPreviousSessionsProps>
                       }`}
                     >
                       {isInterrupted ? <Snowflake className="w-2.5 h-2.5" /> : null}
-                      {isInterrupted ? 'Interrupted' : 'Saved for later'}
+                      {isInterrupted ? 'Interrupted' : 'Bookmarked'}
                     </span>
+                    {isInterrupted && bookmarked && (
+                      <span className="inline-flex items-center text-theme-accent" aria-label="Bookmarked" title="Bookmarked">
+                        <BookmarkCheck className="w-3 h-3" fill="currentColor" />
+                      </span>
+                    )}
                     <span className="text-[10px] text-theme-dim ml-auto">
                       {formatTimeAgo(session.updatedAt)}
                     </span>

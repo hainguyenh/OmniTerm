@@ -13,8 +13,11 @@ import {
   type SessionSnapshot,
 } from '../utils/sessionStore'
 import { mergePendingSnapshot } from '../utils/sessionCheckpoint'
-import { detectPaneAgents, resolveClaudeSessionId } from '../utils/agentSessionDetector'
-import { clearActiveForTab, promoteStaleActiveSessions, upsertSession } from '../utils/agentSessionStorage'
+import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../utils/agentSessionDetector'
+import { bindActiveSession, clearActiveForTab, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
+import { hydrateAgentSessionStore } from '../utils/agentSessionDurable'
+import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../utils/agentPresenceStore'
+import { extractAgentWorkItem } from '../utils/agentWorkItem'
 
 /** How often each open pane's agent is re-detected and its Claude session file re-resolved. */
 const AGENT_POLL_MS = 5_000
@@ -32,6 +35,24 @@ interface PersistenceDeps {
 }
 
 type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
+
+/** A `claude-<suffix>` launcher for a named profile, so resume reopens the same profile. */
+function launcherFor(found: DetectedPaneAgent): string | undefined {
+  if (found.launcher) return found.launcher
+  if (!found.profileName || found.profileName === 'claude') return undefined
+  return found.profileName.startsWith('claude-') ? found.profileName : `claude-${found.profileName}`
+}
+
+function presenceOf(found: DetectedPaneAgent, claudeSessionId?: string): PanePresence {
+  return {
+    agent: found.agent,
+    profileName: found.profileName,
+    ...(found.launcher ? { launcher: found.launcher } : {}),
+    pid: found.pid,
+    startTime: found.startTime,
+    ...(claudeSessionId ? { claudeSessionId } : {}),
+  }
+}
 
 function folderNameOf(cwd: string | undefined): string | undefined {
   if (!cwd) return undefined
@@ -133,6 +154,8 @@ export function useSessionPersistence({
     // Any session still `active` belongs to a tab id from the previous run — whether that run ended
     // cleanly or was killed, this run has no such tab yet, so the session is now resumable.
     promoteStaleActiveSessions()
+    // Merge the crash-safe copy: after a hard kill, localStorage may be missing the last writes.
+    void hydrateAgentSessionStore()
   }
 
   // Layout/recovery snapshot: unrelated to which agent runs where, so it saves on its own schedule.
@@ -184,6 +207,11 @@ export function useSessionPersistence({
 
   // Which AI agent (if any) runs under each open pane, from its process tree — never from terminal
   // output or a title guess. Only Claude resolves to a resumable session id in this pass.
+  // Agents retitle their pane on every spinner frame, so the poll must not restart on a rename:
+  // it keys on which tabs exist and reads their latest names through a ref.
+  const latestTabsRef = useRef(activeTabs)
+  latestTabsRef.current = activeTabs
+  const tabsKey = activeTabs.map(tab => `${tab.id}:${tab.connId}`).join('|')
   useEffect(() => {
     const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
     const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
@@ -191,41 +219,47 @@ export function useSessionPersistence({
     let inFlight = false
 
     const poll = async () => {
+      const activeTabs = latestTabsRef.current
       if (inFlight || activeTabs.length === 0) return
       inFlight = true
       try {
         const detected = await detectPaneAgents()
         if (cancelled) return
         const byTabId = new Map(detected.map(entry => [entry.sessionId, entry]))
+        const nextPresence: Record<string, PanePresence> = {}
         for (const tab of activeTabs) {
           const found = byTabId.get(tab.id)
           if (!found) {
-            // No agent process under this pane anymore (never had one, or it exited) — nothing to track.
-            clearActiveForTab(tab.id)
+            // No agent process under this pane anymore (never had one, or it exited) — nothing to
+            // track. A pane just recreated by restore is spared: its `--resume` may not be up yet.
+            if (!isInRestoreGrace(tab.id)) clearActiveForTab(tab.id)
             continue
           }
+          const previous = getPanePresence(tab.id)
+          const sameProcess = previous?.pid === found.pid && previous.startTime === found.startTime
+          nextPresence[tab.id] = presenceOf(found, sameProcess ? previous.claudeSessionId : undefined)
           if (found.agent !== 'claude') continue // Codex/others: detected, not yet resumable.
           const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
           const sessionId = await resolveClaudeSessionId(found, cwd)
-          if (cancelled || !sessionId) continue
-          const launcher = found.launcher ?? (
-            found.profileName && found.profileName !== 'claude'
-              ? (found.profileName.startsWith('claude-') ? found.profileName : `claude-${found.profileName}`)
-              : undefined
-          )
-          upsertSession({
+          if (cancelled) return
+          if (!sessionId) continue
+          nextPresence[tab.id] = presenceOf(found, sessionId)
+          const title = extractAgentWorkItem(tab.name)
+          bindActiveSession({
             id: `claude:${sessionId}`,
             tabId: tab.id,
             agent: 'claude',
-            launcher,
+            launcher: launcherFor(found),
             profileName: found.profileName,
             sessionId,
             cwd,
             folderName: folderNameOf(cwd),
+            ...(title ? { title } : {}),
             state: 'active',
             updatedAt: Date.now(),
           })
         }
+        setPanePresence(nextPresence)
       } finally {
         inFlight = false
       }
@@ -237,7 +271,7 @@ export function useSessionPersistence({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [activeTabs, ephemeralConns, resolveConnection, sessionCwds])
+  }, [tabsKey, ephemeralConns, resolveConnection, sessionCwds])
 
   return { initialSnapshot: initialSnapshotRef.current }
 }

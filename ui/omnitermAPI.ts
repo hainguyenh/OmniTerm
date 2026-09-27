@@ -23,6 +23,7 @@ import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI
 import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
 import { createConnectAPI } from './omnitermAPIConnect'
+import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport } from './utils/attachmentTypes'
 import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
 import type { DetectedPaneAgent } from './utils/agentSessionDetector'
 
@@ -187,6 +188,17 @@ function createTauriAPI(): any {
       saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
     },
 
+    // Raw-body upload so a large file is not serialized as a JSON number array; the name is a hint.
+    attachments: {
+      save: (name: string, bytes: Uint8Array) =>
+        invoke<unknown>('save_attachment', bytes, {
+          headers: { 'x-omniterm-attachment-name': encodeURIComponent(name) },
+        }).then(parseAttachmentInfo),
+      importClipboardFiles: () => invoke<unknown>('import_clipboard_files').then(parseAttachmentList, () => []),
+      list: () => invoke<unknown>('list_attachments').then(parseAttachmentListing),
+      clear: () => invoke<unknown>('clear_attachments').then(parseClearReport),
+    },
+
     // SFTP rides on SSH, so it arrives with it.
     sftp: {
       home: (_id: string) => Promise.resolve(''),
@@ -325,6 +337,9 @@ function createTauriAPI(): any {
       detect: () => invoke<DetectedPaneAgent[]>('agent_quota_detect').catch(() => []),
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) =>
         invoke<string | null>('resolve_claude_session', { profileDir, cwd, sinceEpochSecs }).catch(() => null),
+      // Crash-safe copy of stored sessions/bookmarks in app data (see ui/utils/agentSessionDurable.ts).
+      loadStore: () => invoke<unknown>('agent_sessions_load'),
+      saveStore: (document: Record<string, unknown>) => invoke<void>('agent_sessions_save', { document }),
     },
   } as any
 }

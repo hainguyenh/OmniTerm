@@ -50,7 +50,8 @@ describe('PaneSessionOverlayHost', () => {
     const onResumeCommand = vi.fn()
     render(<PaneSessionOverlayHost sessionId="tab-1" onResumeCommand={onResumeCommand} />)
 
-    expect(screen.getByText('Interrupted Claude Code Session')).toBeInTheDocument()
+    expect(screen.getByText('Interrupted agent session')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Claude Code/ })).toBeInTheDocument()
     expect(screen.getByText('claude-th')).toBeInTheDocument()
 
     const resumeBtn = screen.getByRole('button', { name: /Resume Session/i })
@@ -97,6 +98,6 @@ describe('PaneSessionOverlayHost', () => {
     fireEvent.click(screen.getByRole('button', { name: /Dismiss/i }))
 
     rerender(<PaneSessionOverlayHost sessionId="tab-3" />)
-    expect(screen.queryByText(/Interrupted Claude Code Session/)).toBeNull()
+    expect(screen.queryByText(/Interrupted agent session/)).toBeNull()
   })
 })

@@ -154,4 +154,15 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByText('Reset'))
     expect(setAppSettings).toHaveBeenCalled()
   })
+
+  it('lists Ctrl+Alt+V and explains what the script paste does', () => {
+    renderModal()
+    fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
+
+    expect(screen.getByText('Paste Multi-line PowerShell Script')).toBeInTheDocument()
+    const description = screen.getByTestId('shortcut-description-pasteScript')
+    expect(description).toHaveTextContent('nothing runs until you press Enter')
+    expect(description).toHaveTextContent('========== Output ==========')
+    expect(description).toHaveTextContent('ordinary paste')
+  })
 })

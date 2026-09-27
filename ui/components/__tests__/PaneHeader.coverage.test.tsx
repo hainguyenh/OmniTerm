@@ -96,26 +96,33 @@ describe('PaneHeader remaining behavior', () => {
 
 
 
-  it('renders oscillating running indicator when busy is true and overrides with custom loading artwork', () => {
-    const { container, rerender, props } = setup({ busy: true })
+  it('renders the oscillating running indicator while busy', () => {
+    const { container } = setup({ busy: true })
     expect(container.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
     expect(container.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
     expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
 
     expect(container.querySelector('.animate-ping')).toBeNull()
-
-    rerender(<PaneHeader {...props} busy sessionArtUrl="blob:custom-loading" />)
-    expect(container.querySelector('.aq-header-custom-loading img')).toHaveAttribute('src', 'blob:custom-loading')
   })
 
-  it('shows footer process controls on the header when layoutMode < 4 and hides them when >= 4', () => {
-    const { rerender, props } = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true, layoutMode: 3 })
-    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear terminal' })).toBeInTheDocument()
+  it('shows a busy agent pane as running, never as Idle, with no loading artwork (regression)', () => {
+    const { container } = setup({
+      conn: { ...ssh, type: 'LOCAL', shell: 'powershell' },
+      sessionTitle: 'Claude Code - OmniTerm',
+      busy: true,
+    })
+    expect(container.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Idle')).toBeNull()
+    expect(container.querySelector('img')).toBeNull()
+  })
 
-    rerender(<PaneHeader {...props} layoutMode={4} />)
+  it('leaves stop/clear/copy/save to the footer in every layout', () => {
+    const { rerender, props } = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true, layoutMode: 3 })
     expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
+
+    rerender(<PaneHeader {...props} layoutMode={2} />)
+    expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
   })
 
   it('uses the agent icon and leaves the shell label for the footer', () => {
@@ -124,7 +131,7 @@ describe('PaneHeader remaining behavior', () => {
       sessionTitle: 'Claude Code - OmniTerm',
       shellLabel: 'PowerShell 7',
     })
-    expect(screen.getByRole('img', { name: 'Claude Code agent' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Claude Code' })).toBeInTheDocument()
     expect(screen.getByText('OmniTerm')).toBeInTheDocument()
     expect(screen.queryByText('// PowerShell 7')).toBeNull()
     expect(screen.queryByText('Claude Code')).toBeNull()

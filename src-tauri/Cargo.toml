@@ -88,4 +88,7 @@ windows = { version = "0.58", features = [
     "Win32_System_Power",
     "Win32_System_SystemInformation",
     "Win32_UI_Input_KeyboardAndMouse",
+    # Reading Explorer-copied files (CF_HDROP) for attachment paste; see attachments_clipboard_windows.rs.
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
 ] }

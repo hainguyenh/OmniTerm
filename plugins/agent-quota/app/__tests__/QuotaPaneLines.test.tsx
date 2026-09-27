@@ -23,8 +23,12 @@ describe('QuotaLine', () => {
     const line = screen.getByTestId('aq-line-session')
     expect(line).toHaveAttribute('data-zone', 'critical')
     expect(line).toHaveAttribute('data-animation', 'burning')
-    expect(line.querySelector('.aq-track-current')).toHaveTextContent('72%')
-    expect(line.querySelector('.aq-track-remaining')).toHaveTextContent('8%')
+    // Used % centred in the fill; the danger zone (limit→100%) labelled with its size.
+    expect(line.querySelector('.aq-used-value')).toHaveTextContent('72%')
+    expect(line.querySelector('.aq-used-value')).toHaveStyle({ left: '36%' })
+    expect(line.querySelector('.aq-danger-value')).toHaveTextContent('20%')
+    // The danger zone has no fill of its own: it shares the track background past the marker.
+    expect(line.querySelector('.aq-danger-zone')).toBeNull()
     expect(line).toHaveTextContent('1h 05m')
     expect(line.querySelector('.aq-marker')).toHaveStyle({ left: '80%' })
     expect(screen.queryByRole('slider')).toBeNull()
@@ -150,6 +154,25 @@ describe('QuotaPaneLines', () => {
       config: { ...DEFAULT_QUOTA_CONFIG, display: { ...DEFAULT_QUOTA_CONFIG.display, weeklyAutoHide: false } },
     })
     render(<QuotaPaneLines sessionId="s1" />)
+    expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
+  })
+
+  it('shows the weekly window in a terminal whose "Show weekly quota" override is on', () => {
+    seed({ profiles: [profile(reading(40, 10))] })
+    render(<QuotaPaneLines sessionId="s1" />)
+    expect(screen.queryByTestId('aq-line-weekly')).toBeNull()
+
+    act(() => setOverride('s1:10:100', { showWeekly: true }))
+    expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
+  })
+
+  it('offers "Show weekly quota" in the terminal popover and applies it as an override', () => {
+    seed({ profiles: [profile(reading(40, 10))] })
+    render(<QuotaPaneLines sessionId="s1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Quota limits for this terminal' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Always show the weekly quota line in this terminal' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(getQuotaState().overrides['s1:10:100']).toEqual({ showWeekly: true })
     expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
   })
 

@@ -10,6 +10,8 @@ import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
 import { formatAgentResumeCommand } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
+import { whenAgentSessionsHydrated } from '../utils/agentSessionDurable'
+import { markRestoredPane } from '../utils/agentPresenceStore'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
@@ -97,6 +99,9 @@ export function useSessionRestore(input: SessionRestoreInput): void {
     }])))
 
     void (async () => {
+      // The resume command comes from stored sessions, whose crash-safe copy may still be loading.
+      await whenAgentSessionsHydrated()
+      if (cancelled) return
       const savedConnById = new Map(snapshot.ephemeralConns.map(conn => [conn.id, conn]))
       const restoredConns = new Map<string, Connection>()
       const restoredTabs: { id: string; connId: string; name: string }[] = []
@@ -133,6 +138,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
                   ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
                 if (stored) {
                   upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })
+                  markRestoredPane(tab.id)
                 }
               }
             } else {

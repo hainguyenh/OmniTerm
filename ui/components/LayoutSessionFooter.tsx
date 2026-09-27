@@ -36,7 +36,9 @@ export function PaneSessionFooter({
   const { statuses, latencies, metrics, connectedAt, layoutMode, activity, resolveAppearance, reconnectSession, disconnectSession } = model
   const status = statuses[tab.id] ?? 'connecting'
   const latency = conn.type === 'RDP' ? (latencies[tab.id] ?? null) : (metrics[tab.id]?.latency ?? null)
-  const locationLabel = conn.type === 'LOCAL' ? (conn.localCwd ?? tab.name) : `${conn.user}@${conn.host}:${conn.port}`
+  // The live cwd (OSC 7 / 9;9) when the shell reports one — the launch folder goes stale after `cd`.
+  const liveCwd = model.sessionCwds?.[tab.id] ?? conn.localCwd
+  const locationLabel = conn.type === 'LOCAL' ? (liveCwd ?? tab.name) : `${conn.user}@${conn.host}:${conn.port}`
   const shell = conn.type === 'LOCAL' ? resolveShellLabel(model.shellOptions ?? [], conn.shell) : undefined
   const appearance = resolveAppearance?.(tab.id, tab.connId)
 
@@ -44,7 +46,6 @@ export function PaneSessionFooter({
     <SessionFooterBar
       conn={conn}
       sessionId={tab.id}
-      tabName={tab.name}
       status={status}
       latency={latency}
       metrics={metrics[tab.id]}

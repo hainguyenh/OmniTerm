@@ -5,11 +5,14 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import {
+  isRenewing,
+  requestRenewFromPane,
   useRenewSession,
   resetRenewRememberedForTests,
   getRenewRemembered,
 } from '../useRenewSession'
 import * as agentSessionStorage from '../../utils/agentSessionStorage'
+import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 
 describe('useRenewSession', () => {
   const localDisconnect = vi.fn().mockResolvedValue(undefined)
@@ -254,8 +257,119 @@ describe('useRenewSession', () => {
       await result.current.confirmRenew(false)
     })
 
-    expect(localInput).toHaveBeenCalledWith('tab-1', '/new\r')
+    // The command and its submit are separate writes, so an agent TUI can't read them as one paste.
+    expect(localInput).toHaveBeenCalledWith('tab-1', '/new')
+    await vi.waitFor(() => expect(localInput).toHaveBeenCalledWith('tab-1', '\r'))
     expect(localDisconnect).not.toHaveBeenCalled()
     expect(openShell).not.toHaveBeenCalled()
+  })
+
+  it('sends Claude Code its own new-conversation command (/clear)', async () => {
+    setPanePresence({ 'tab-1': { agent: 'claude', profileName: 'claude-work', pid: 1, startTime: 1 } })
+    const { result } = renderHook(() =>
+      useRenewSession({
+        activeTabs: tabs,
+        setActiveTabs,
+        ephemeralConns: [conns['conn-1']],
+        setEphemeralConns,
+        sessionCwds,
+        connById: (id) => conns[id],
+        reconnectSession,
+        appSettings: { agentRenewStrategy: 'new-command' },
+        activeTabId: 'tab-1',
+      }),
+    )
+    act(() => { result.current.requestRenewSession('tab-1') })
+    await act(async () => { await result.current.confirmRenew(false) })
+    expect(localInput).toHaveBeenCalledWith('tab-1', '/clear')
+    resetPanePresenceForTests()
+  })
+
+  it('marks the tab as renewing while its old process exits, so the exit cannot close it (regression)', async () => {
+    let renewingDuringDisconnect = false
+    localDisconnect.mockImplementationOnce(async () => { renewingDuringDisconnect = isRenewing('tab-1') })
+    openShell.mockResolvedValueOnce(makeConn({ id: 'conn-new', shell: 'powershell' }))
+    const { result } = renderHook(() =>
+      useRenewSession({
+        activeTabs: tabs,
+        setActiveTabs,
+        ephemeralConns: [conns['conn-1']],
+        setEphemeralConns,
+        sessionCwds,
+        connById: (id) => conns[id],
+        reconnectSession,
+        appSettings: { agentRenewStrategy: 'reopen' },
+        activeTabId: 'tab-1',
+      }),
+    )
+    act(() => { result.current.requestRenewSession('tab-1') })
+    await act(async () => { await result.current.confirmRenew(false) })
+
+    expect(renewingDuringDisconnect).toBe(true)
+    expect(isRenewing('tab-1')).toBe(true)
+    expect(reconnectSession).toHaveBeenCalledWith('tab-1')
+  })
+
+  it('falls back to the live agent profile when no session is stored', async () => {
+    vi.spyOn(agentSessionStorage, 'findSessionByTabId').mockReturnValue(undefined)
+    setPanePresence({ 'tab-1': { agent: 'claude', profileName: 'claude-work', launcher: 'claude-work', pid: 1, startTime: 1 } })
+    openShell.mockResolvedValueOnce(makeConn({ id: 'conn-new', shell: 'powershell' }))
+    const { result } = renderHook(() =>
+      useRenewSession({
+        activeTabs: tabs,
+        setActiveTabs,
+        ephemeralConns: [conns['conn-1']],
+        setEphemeralConns,
+        sessionCwds,
+        connById: (id) => conns[id],
+        reconnectSession,
+        appSettings: { agentRenewStrategy: 'reopen' },
+        activeTabId: 'tab-1',
+      }),
+    )
+    act(() => { result.current.requestRenewSession('tab-1') })
+    await act(async () => { await result.current.confirmRenew(false) })
+
+    expect(openShell).toHaveBeenCalledWith('powershell', 'ws-1', undefined, 'D:/workspace/project', 'claude-work')
+    resetPanePresenceForTests()
+  })
+
+  it('does not renew an SSH session with a local shell', async () => {
+    const sshConn = makeConn({ id: 'conn-ssh', type: 'SSH', host: 'h' })
+    const { result } = renderHook(() =>
+      useRenewSession({
+        activeTabs: [{ id: 'tab-ssh', connId: 'conn-ssh', name: 'ssh' }],
+        setActiveTabs,
+        ephemeralConns: [],
+        setEphemeralConns,
+        sessionCwds: {},
+        connById: () => sshConn,
+        reconnectSession,
+        appSettings: { agentRenewStrategy: 'reopen' },
+        activeTabId: 'tab-ssh',
+      }),
+    )
+    act(() => { result.current.requestRenewSession('tab-ssh') })
+    await act(async () => { await result.current.confirmRenew(false) })
+    expect(localDisconnect).not.toHaveBeenCalled()
+    expect(openShell).not.toHaveBeenCalled()
+  })
+
+  it('opens the confirmation when a pane header asks for a renew', () => {
+    const { result } = renderHook(() =>
+      useRenewSession({
+        activeTabs: tabs,
+        setActiveTabs,
+        ephemeralConns: [conns['conn-1']],
+        setEphemeralConns,
+        sessionCwds,
+        connById: (id) => conns[id],
+        reconnectSession,
+        appSettings: { agentRenewStrategy: 'reopen' },
+        activeTabId: 'tab-2',
+      }),
+    )
+    act(() => { requestRenewFromPane('tab-1') })
+    expect(result.current.pendingRenewSessionId).toBe('tab-1')
   })
 })

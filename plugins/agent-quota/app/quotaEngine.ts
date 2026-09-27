@@ -1,3 +1,4 @@
+import type { QuotaSnapshot } from '../src/types'
 import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
 import type { ProfileQuota, TerminalAgent } from './quotaStore'
 
@@ -23,6 +24,11 @@ export interface EngineDeps {
   random(): number
   setTimer(run: () => void, ms: number): unknown
   clearTimer(handle: unknown): void
+  /**
+   * Read quota from the agent itself on a profile's first launch (see inlineUsageProbe.ts); null
+   * when it can't, and the `-p /usage` read runs instead. Absent: always the `-p` read.
+   */
+  inlineProbe?(terminal: TerminalAgent): Promise<QuotaSnapshot | null>
 }
 
 export interface EngineInputs {
@@ -34,6 +40,8 @@ export interface EngineInputs {
 const TICK_MS = 1000
 const DETECT_MS = 5000
 const AFTER_WAKE_REFRESH_MS = 5000
+/** How long a profile's `-p` read waits for an inline probe before running anyway. */
+const INLINE_PROBE_HOLD_MS = 20_000
 
 export const instanceKeyOf = (agent: SessionAgent) => `${agent.sessionId}:${agent.pid}:${agent.startTime}`
 /** Profiles are keyed by the launcher the user ran when there is one, else by directory. */
@@ -121,6 +129,12 @@ export class QuotaEngine {
       terminals[row.sessionId] = { ...row, instanceKey: instanceKeyOf(row), profileKey: profileKeyOf(row) }
     }
     const live = new Set(Object.values(terminals).map((terminal) => terminal.instanceKey))
+    // A profile seen for the first time in this run: its agent was just launched, so it may be
+    // asked inline instead of through a `-p` read.
+    const firstLaunch = new Map<string, TerminalAgent>()
+    for (const terminal of Object.values(terminals)) {
+      if (!current.profiles[terminal.profileKey] && !firstLaunch.has(terminal.profileKey)) firstLaunch.set(terminal.profileKey, terminal)
+    }
     for (const old of Object.values(current.terminals)) {
       if (!live.has(old.instanceKey) && isHeld(current.guards[old.instanceKey])) void this.track(this.deps.api.resume(old.sessionId))
     }
@@ -151,6 +165,24 @@ export class QuotaEngine {
         editing: state.editing && terminals[state.editing] ? state.editing : null,
       }
     })
+    if (this.deps.inlineProbe) {
+      for (const [key, terminal] of firstLaunch) {
+        if (!this.configsForProfile(key).some((config) => config.enabled)) continue
+        this.patchProfile(key, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
+        void this.track(this.probeInline(key, terminal))
+      }
+    }
+  }
+
+  private async probeInline(key: string, terminal: TerminalAgent): Promise<void> {
+    const snapshot = await this.deps.inlineProbe?.(terminal).catch(() => null)
+    if (!snapshot || snapshot.error || snapshot.windows.length === 0) {
+      // Fall back to the background read right away.
+      this.patchProfile(key, () => ({ nextFetchAt: 0 }))
+      return
+    }
+    this.patchProfile(key, () => ({ fetching: true }))
+    await this.record(key, snapshot)
   }
 
   private patchProfile(key: string, patch: (profile: ProfileQuota) => Partial<ProfileQuota>): void {
@@ -183,6 +215,13 @@ export class QuotaEngine {
     if (!profile || !this.configsForProfile(key).some((config) => config.enabled)) return
     this.patchProfile(key, () => ({ fetching: true }))
     const snapshot = await this.deps.api.fetchUsage({ agent: profile.agent, profileDir: profile.profileDir, launcher: profile.launcher })
+    await this.record(key, snapshot)
+  }
+
+  /** Apply one reading — from the `-p` read or the inline probe — then schedule the next read. */
+  private async record(key: string, snapshot: QuotaSnapshot): Promise<void> {
+    const profile = getQuotaState().profiles[key]
+    if (!profile) return
     const now = this.deps.now()
     const session = windowOf(snapshot, 'session')
     const global = getQuotaState().config.agents[profile.agent]

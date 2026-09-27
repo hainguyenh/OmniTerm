@@ -11,6 +11,7 @@ import { KeycapCombo } from './Keycap'
 import { appLogo } from '../assets/appLogo'
 import { diag } from '../diag'
 import { DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
+import { SHORTCUT_DESCRIPTIONS } from '../shortcutHelp'
 import type { ShellOption } from '../shellOptions'
 import AgentQuotaSettings from '../../plugins/agent-quota/app/AgentQuotaSettings'
 import { SETTINGS_TAB_EVENT } from '../../plugins/agent-quota/app/AgentQuotaRoot'
@@ -47,8 +48,6 @@ export interface SettingsModalProps {
   idleArtUrlDark?: string | null
   loadingArtUrlLight?: string | null
   loadingArtUrlDark?: string | null
-  sessionArtUrlLight?: string | null
-  sessionArtUrlDark?: string | null
   refreshCustomArt?: () => void
 }
 
@@ -89,8 +88,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   idleArtUrlDark,
   loadingArtUrlLight,
   loadingArtUrlDark,
-  sessionArtUrlLight,
-  sessionArtUrlDark,
   refreshCustomArt,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general')
@@ -207,9 +204,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isRecording = recordingAction === key
 
                     return (
-                      <div key={key} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20">
-                        <span className="text-xs text-theme-fg font-medium">{label}</span>
-                        <div className="flex items-center gap-2">
+                      <div key={key} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20">
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <span className="text-xs text-theme-fg font-medium">{label}</span>
+                          {SHORTCUT_DESCRIPTIONS[key] && (
+                            <span className="text-[10.5px] leading-snug text-theme-dim" data-testid={`shortcut-description-${key}`}>
+                              {SHORTCUT_DESCRIPTIONS[key]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {!isRecording && currentBinding !== 'None' && (
                             <KeycapCombo shortcut={currentBinding} />
                           )}
@@ -253,8 +257,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'quota' && quotaAvailable && (
               <AgentQuotaSettings
-                sessionArtUrlLight={sessionArtUrlLight}
-                sessionArtUrlDark={sessionArtUrlDark}
                 refreshCustomArt={refreshCustomArt}
               />
             )}

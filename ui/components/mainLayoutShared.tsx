@@ -51,7 +51,7 @@ export const shortcutLabels = {
   closeTab: 'Close Tab',
   toggleAppFullscreen: 'Toggle Full Screen',
   agentQuota: 'Agent Quota Quick Settings',
-  pasteScript: 'Paste PowerShell Script',
+  pasteScript: 'Paste Multi-line PowerShell Script',
 } satisfies Record<keyof ShortcutBindings, string>
 export const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',

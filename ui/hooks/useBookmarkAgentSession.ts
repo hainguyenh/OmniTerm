@@ -1,56 +1,60 @@
-/** Bookmark the Claude session running in one pane, so it shows up on the dashboard later. */
-import { useEffect, useRef, useState } from 'react'
-import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../utils/agentSessionDetector'
-import { upsertSession } from '../utils/agentSessionStorage'
+/**
+ * Bookmark the Claude session running in one pane, so it survives the pane (as a `saved` entry on
+ * the launch page and in the Bookmarks view) and is never expired.
+ *
+ * The button's state is derived from the stores, never from a local timer: it stays "bookmarked"
+ * for as long as the stored entry says so. When the session id is not known yet (Claude has not
+ * written its session file), the request is queued and applied by the pane poll once it resolves.
+ */
+import { useSyncExternalStore } from 'react'
+import { usePanePresence } from '../utils/agentPresenceStore'
+import {
+  cancelPendingBookmark,
+  isBookmarkPending,
+  isBookmarked,
+  loadStoredSessions,
+  requestPendingBookmark,
+  setSessionBookmarked,
+  subscribeStoredSessions,
+} from '../utils/agentSessionStorage'
 
-export type BookmarkFeedback = 'idle' | 'pending' | 'done' | 'unavailable'
+export type BookmarkState = 'none' | 'pending' | 'bookmarked'
 
-export function useBookmarkAgentSession(sessionId: string | null | undefined) {
-  const [claudeAgent, setClaudeAgent] = useState<DetectedPaneAgent | null>(null)
-  const [feedback, setFeedback] = useState<BookmarkFeedback>('idle')
-  const feedbackTimerRef = useRef<number | null>(null)
+function bookmarkStateFor(tabId: string, claudeSessionId: string | undefined): BookmarkState {
+  const entry = claudeSessionId
+    ? loadStoredSessions().find(item => item.id === `claude:${claudeSessionId}`)
+    : undefined
+  if (entry && isBookmarked(entry)) return 'bookmarked'
+  return isBookmarkPending(tabId) ? 'pending' : 'none'
+}
 
-  useEffect(() => {
-    if (!sessionId) {
-      setClaudeAgent(null)
+export function useBookmarkAgentSession(tabId: string | null | undefined) {
+  const presence = usePanePresence(tabId)
+  const claudeSessionId = presence?.agent === 'claude' ? presence.claudeSessionId : undefined
+  const state = useSyncExternalStore(
+    subscribeStoredSessions,
+    () => (tabId ? bookmarkStateFor(tabId, claudeSessionId) : 'none'),
+    () => 'none' as const,
+  )
+
+  const toggle = () => {
+    if (!tabId || presence?.agent !== 'claude') return
+    if (state === 'pending') {
+      cancelPendingBookmark(tabId)
       return
     }
-    let cancelled = false
-    void detectPaneAgents().then(list => {
-      if (cancelled) return
-      setClaudeAgent(list.find(entry => entry.sessionId === sessionId && entry.agent === 'claude') ?? null)
-    })
-    return () => { cancelled = true }
-  }, [sessionId])
-
-  useEffect(() => () => {
-    if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current)
-  }, [])
-
-  const store = async (cwd: string | undefined, folderName: string | undefined) => {
-    if (!sessionId || !claudeAgent || feedback === 'pending') return
-    setFeedback('pending')
-    const claudeSessionId = await resolveClaudeSessionId(claudeAgent, cwd)
     if (!claudeSessionId) {
-      setFeedback('unavailable')
-      feedbackTimerRef.current = window.setTimeout(() => setFeedback('idle'), 2000)
+      requestPendingBookmark(tabId)
       return
     }
-    upsertSession({
-      id: `claude:${claudeSessionId}`,
-      tabId: sessionId,
-      agent: 'claude',
-      launcher: claudeAgent.launcher,
-      profileName: claudeAgent.profileName,
-      sessionId: claudeSessionId,
-      cwd,
-      folderName,
-      state: 'saved',
-      updatedAt: Date.now(),
-    })
-    setFeedback('done')
-    feedbackTimerRef.current = window.setTimeout(() => setFeedback('idle'), 2000)
+    const id = `claude:${claudeSessionId}`
+    if (!loadStoredSessions().some(item => item.id === id)) {
+      // Resolved but not yet stored (the poll stores it right after): queue it the same way.
+      requestPendingBookmark(tabId)
+      return
+    }
+    setSessionBookmarked(id, state !== 'bookmarked')
   }
 
-  return { canBookmark: Boolean(claudeAgent), feedback, store }
+  return { canBookmark: presence?.agent === 'claude', state, toggle }
 }

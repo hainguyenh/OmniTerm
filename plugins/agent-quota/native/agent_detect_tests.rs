@@ -81,7 +81,7 @@ fn scripts_shells_tools_and_other_agents_are_not_monitored() {
 }
 
 #[test]
-fn a_launcher_names_the_profile_without_reading_any_environment() {
+fn a_launcher_names_the_profile_and_only_the_main_agent_environment_is_read() {
     let rows = vec![
         shell(),
         row(
@@ -106,7 +106,40 @@ fn a_launcher_names_the_profile_without_reading_any_environment() {
     assert_eq!(found.launcher.as_deref(), Some("claude-th"));
     assert_eq!(found.profile_name, "claude-th");
     assert_eq!(found.sub_agent_count, 1);
-    assert_eq!(needs_profile_env(&rows, SHELL), None);
+    assert_eq!(needs_profile_env(&rows, SHELL), Some(102));
+}
+
+#[test]
+fn a_launcher_profile_directory_comes_from_the_agent_environment() {
+    // Regression: `claude-work.cmd` sets CLAUDE_CONFIG_DIR, and resume must search that folder —
+    // not ~/.claude, where the launcher profile's session files never are.
+    let rows = vec![
+        shell(),
+        row(
+            101,
+            SHELL,
+            20,
+            "cmd.exe",
+            &[
+                "C:\\WINDOWS\\system32\\cmd.exe",
+                "/d",
+                "/c",
+                "\"C:\\Users\\me\\.local\\bin\\claude-work.cmd\"",
+            ],
+        ),
+        with_env(
+            row(102, 101, 21, "claude.exe", &["claude"]),
+            "CLAUDE_CONFIG_DIR",
+            "C:\\Users\\me\\claude-profiles\\claude-work",
+        ),
+    ];
+    let found = detect_main_agent(&rows, SHELL, Some("C:\\Users\\me")).expect("an agent");
+    assert_eq!(found.launcher.as_deref(), Some("claude-work"));
+    assert_eq!(found.profile_name, "claude-work");
+    assert_eq!(
+        found.profile_dir.as_deref(),
+        Some("C:\\Users\\me\\claude-profiles\\claude-work")
+    );
 }
 
 #[test]

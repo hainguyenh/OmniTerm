@@ -1,8 +1,11 @@
 import React, { useEffect, useRef } from 'react'
-import { AlertCircle, Bot, Copy, Folder, Play, Plus, X } from 'lucide-react'
+import { AlertCircle, Copy, Folder, Play, Plus, X } from 'lucide-react'
+
+import { AgentBadge } from './AgentBadge'
 
 interface UnexpectedSessionOverlayProps {
-  agentName: string
+  /** Detected agent kind (`claude`) or display name; shown as its badge, named in the tooltip. */
+  agent: string
   profileName?: string
   sessionId?: string
   /** The exact command Resume will launch — shown so the user can see and copy it, never typed silently. */
@@ -14,7 +17,7 @@ interface UnexpectedSessionOverlayProps {
 }
 
 export const UnexpectedSessionOverlay: React.FC<UnexpectedSessionOverlayProps> = ({
-  agentName,
+  agent,
   profileName,
   sessionId,
   resumeCommand,
@@ -50,7 +53,7 @@ export const UnexpectedSessionOverlay: React.FC<UnexpectedSessionOverlayProps> =
       <div className="flex flex-col items-center gap-3.5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-sidebar-bg)] p-5 text-center shadow-2xl max-w-md w-full">
         <div className="relative">
           <div className="w-12 h-12 rounded-xl bg-[var(--theme-accent)]/15 text-[var(--theme-accent)] flex items-center justify-center border border-[var(--theme-accent)]/30">
-            <Bot className="w-6 h-6" />
+            <AgentBadge agent={agent} profileName={profileName} className="w-6 h-6" />
           </div>
           <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center">
             <AlertCircle className="w-3.5 h-3.5" />
@@ -59,7 +62,7 @@ export const UnexpectedSessionOverlay: React.FC<UnexpectedSessionOverlayProps> =
 
         <div className="flex flex-col items-center gap-1">
           <h3 id="unexpected-session-title" className="text-sm font-bold text-[var(--theme-fg)]">
-            Interrupted {agentName} Session
+            Interrupted agent session
           </h3>
           <p className="text-xs text-[var(--theme-dim)]">
             This session was still open when OmniTerm last closed.

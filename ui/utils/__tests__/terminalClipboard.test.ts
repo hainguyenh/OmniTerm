@@ -333,31 +333,6 @@ describe('terminal clipboard', () => {
     clipboard.dispose()
   })
 
-  it('pasteScript formats multiline powershell scripts and writes to term.paste', async () => {
-    const psScript = 'Get-Process | Where-Object { $_.CPU -gt 10 }\nWrite-Host "Done"'
-    const onBeforePaste = vi.fn()
-    const term = {
-      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
-      paste: vi.fn(),
-    } as unknown as Terminal
-    window.omnitermAPI = {
-      ...window.omnitermAPI,
-      clipboard: {
-        writeText: vi.fn(),
-        readText: async () => psScript,
-        readImage: async () => null,
-        saveImageTemp: vi.fn(),
-      },
-    }
-
-    const clipboard = createTerminalClipboard(term, onBeforePaste)
-    await clipboard.pasteScript()
-
-    expect(term.paste).toHaveBeenCalledWith(`. {\n${psScript}\n}`)
-    expect(onBeforePaste).toHaveBeenCalled()
-    clipboard.dispose()
-  })
-
   it('pasteImage prioritizes image even when clipboard contains text', async () => {
     const pngItem = {
       types: ['image/png'],

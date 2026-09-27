@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const invoke = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }))
 
-import { createAgentQuotaAPI, parseSessionAgents, parseSnapshot } from './agentQuotaAPI'
+import { createAgentQuotaAPI, listAgentProfiles, parseDiscoveredProfiles, parseSessionAgents, parseSnapshot } from './agentQuotaAPI'
 
 describe('parseSessionAgents', () => {
   it('keeps well-formed rows and drops the rest', () => {
@@ -104,5 +104,35 @@ describe('createAgentQuotaAPI', () => {
     expect(await api.wake({ agent: 'claude', prompt: 'hi' })).toEqual({ ok: false, message: 'No answer.' })
     invoke.mockRejectedValueOnce('boom')
     expect(await api.wake({ agent: 'claude', prompt: 'hi' })).toEqual({ ok: false, message: 'boom' })
+  })
+})
+
+describe('parseDiscoveredProfiles', () => {
+  it('keeps launchers for their own agent and default directories, drops the rest', () => {
+    expect(parseDiscoveredProfiles([
+      { agent: 'claude', profileName: 'claude', profileDir: 'C:\\Users\\me\\.claude', launcher: null },
+      { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' },
+      { agent: 'claude', profileName: 'x', launcher: 'codex-alt' },
+      { agent: 'claude', profileName: 'x', launcher: 'C:\\bin\\claude-x.cmd' },
+      { agent: 'claude', profileName: 'x', launcher: 'claude-a & calc' },
+      { agent: 'claude', profileName: '', launcher: 'claude-a' },
+      { agent: 'claude', profileName: 'n'.repeat(81), launcher: 'claude-a' },
+      { agent: 'claude', profileName: 'nothing', profileDir: null, launcher: null },
+      { agent: 'gemini', profileName: 'g', launcher: null, profileDir: 'x' },
+      'junk',
+    ])).toEqual([
+      { agent: 'claude', profileName: 'claude', profileDir: 'C:\\Users\\me\\.claude', launcher: null },
+      { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' },
+    ])
+    expect(parseDiscoveredProfiles({})).toEqual([])
+  })
+
+  it('asks the sidecar and treats a missing plugin as no profiles', async () => {
+    invoke.mockReset()
+    invoke.mockResolvedValueOnce([{ agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' }])
+    expect(await listAgentProfiles()).toEqual([{ agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' }])
+    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.listProfiles', args: [] })
+    invoke.mockRejectedValueOnce(new Error('no plugin'))
+    expect(await listAgentProfiles()).toEqual([])
   })
 })

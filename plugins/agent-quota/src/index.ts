@@ -5,6 +5,7 @@ import { createNodeDeps } from './deps'
 import { isLauncherName } from './launcher'
 import { fetchClaudeUsage } from './providers/claude'
 import { fetchCodexUsage } from './providers/codex'
+import { listProfiles } from './profiles'
 import { wakeAgent } from './wake'
 
 type InvokeHandler = (method: string, ...args: unknown[]) => unknown
@@ -94,7 +95,7 @@ export function createService(deps: ProviderDeps) {
     return run
   }
 
-  return { fetchUsage, wake }
+  return { fetchUsage, wake, listProfiles: () => listProfiles(deps) }
 }
 
 export function activate(host: Host, deps: ProviderDeps = createNodeDeps((message) => host.services.log(message))): void {
@@ -105,6 +106,7 @@ export function activate(host: Host, deps: ProviderDeps = createNodeDeps((messag
     }
     if (method === 'agentQuota.fetchUsage') return service.fetchUsage(parseFetchRequest(args[0]))
     if (method === 'agentQuota.wake') return service.wake(parseWakeRequest(args[0]))
+    if (method === 'agentQuota.listProfiles') return service.listProfiles()
     throw new Error(`Unknown Agent Quota method "${method}"`)
   })
   host.services.log('Agent Quota activated')

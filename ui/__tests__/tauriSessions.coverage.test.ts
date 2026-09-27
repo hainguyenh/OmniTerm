@@ -103,4 +103,42 @@ describe('session channel edge behavior', () => {
     await sessions.startSession('s1', 'c1')
     expect(errors).toEqual(['reader failed', '[object Object]'])
   })
+
+  it('drops late closed/data from a replaced process so a renewed pane stays live (regression)', async () => {
+    const closed: number[] = []
+    const data: number[][] = []
+    sessions.onSession('s1', 'closed', (code) => closed.push(code))
+    sessions.onSession('s1', 'data', (bytes) => data.push([...bytes]))
+
+    await sessions.startSession('s1', 'c1')
+    const [oldData, oldStatus] = state.channels
+    await sessions.startSession('s1', 'c2')
+    const [, , newData, newStatus] = state.channels
+
+    oldStatus.onmessage?.({ kind: 'closed', code: 1 })
+    oldData.onmessage?.(new Uint8Array([7]))
+    expect(closed).toEqual([])
+    expect(data).toEqual([])
+
+    newData.onmessage?.(new Uint8Array([5]))
+    newStatus.onmessage?.({ kind: 'closed', code: 0 })
+    expect(data).toEqual([[5]])
+    expect(closed).toEqual([0])
+  })
+
+  it('lets an output tap observe a session without taking the pane\u2019s data handler', async () => {
+    const pane: number[][] = []
+    const tapped: number[][] = []
+    sessions.onSession('s1', 'data', (bytes) => pane.push([...bytes]))
+    const untap = sessions.tapSessionOutput('s1', (bytes) => tapped.push([...bytes]))
+
+    await sessions.startSession('s1', 'c1')
+    const [data] = state.channels
+    data.onmessage?.(new Uint8Array([1]))
+    untap()
+    data.onmessage?.(new Uint8Array([2]))
+
+    expect(pane).toEqual([[1], [2]])
+    expect(tapped).toEqual([[1]])
+  })
 })

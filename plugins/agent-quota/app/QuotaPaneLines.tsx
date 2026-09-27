@@ -64,7 +64,9 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
   }
   const stale = !!profile?.snapshot?.error
   const weeklyWindow = rawWindows.find((window) => window.kind === 'weekly')
-  const weeklyHidden = display.weeklyAutoHide && !!weeklyWindow && shouldHideWeekly(weeklyWindow, display.weeklyThresholdPct ?? 60)
+  // The terminal's "Show weekly quota" override beats the global auto-hide.
+  const weeklyHidden = !override?.showWeekly && display.weeklyAutoHide && !!weeklyWindow
+    && shouldHideWeekly(weeklyWindow, display.weeklyThresholdPct ?? 60)
   const windows = rawWindows
     .filter((window) => display.lines[window.kind])
     .filter((window) => !(window.kind === 'weekly' && weeklyHidden))
