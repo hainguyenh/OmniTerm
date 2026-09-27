@@ -52,7 +52,9 @@ pub fn save_store(path: &Path, document: &Value) -> io::Result<()> {
         ));
     }
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
     }
     let temp = path.with_extension("json.tmp");
     {
