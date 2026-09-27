@@ -18,6 +18,8 @@ import { bindActiveSession, clearActiveForTab, promoteStaleActiveSessions } from
 import { hydrateAgentSessionStore } from '../utils/agentSessionDurable'
 import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../utils/agentPresenceStore'
 import { extractAgentWorkItem } from '../utils/agentWorkItem'
+import { parseAgentTitle } from '../utils/agentTitle'
+import { agentBrandFor } from '../utils/agentIdentity'
 
 /** How often each open pane's agent is re-detected and its Claude session file re-resolved. */
 const AGENT_POLL_MS = 5_000
@@ -36,21 +38,21 @@ interface PersistenceDeps {
 
 type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
 
-/** A `claude-<suffix>` launcher for a named profile, so resume reopens the same profile. */
-function launcherFor(found: DetectedPaneAgent): string | undefined {
+/** A launcher for a named profile, so resume reopens the same profile. */
+function launcherFor(found: { launcher?: string; profileName?: string; agent: string }): string | undefined {
   if (found.launcher) return found.launcher
-  if (!found.profileName || found.profileName === 'claude') return undefined
-  return found.profileName.startsWith('claude-') ? found.profileName : `claude-${found.profileName}`
+  if (!found.profileName || found.profileName === found.agent) return undefined
+  return found.profileName.startsWith(`${found.agent}-`) ? found.profileName : `${found.agent}-${found.profileName}`
 }
 
-function presenceOf(found: DetectedPaneAgent, claudeSessionId?: string): PanePresence {
+function presenceOf(found: { agent: DetectedPaneAgent['agent']; profileName: string; launcher?: string; pid: number; startTime: number }, sessionId?: string): PanePresence {
   return {
     agent: found.agent,
     profileName: found.profileName,
     ...(found.launcher ? { launcher: found.launcher } : {}),
     pid: found.pid,
     startTime: found.startTime,
-    ...(claudeSessionId ? { claudeSessionId } : {}),
+    ...(sessionId ? { claudeSessionId: sessionId, agentSessionId: sessionId } : {}),
   }
 }
 
@@ -230,6 +232,34 @@ export function useSessionPersistence({
         for (const tab of activeTabs) {
           const found = byTabId.get(tab.id)
           if (!found) {
+            const parsed = parseAgentTitle(tab.name) || parseAgentTitle(connectionFor(tab.connId)?.name)
+            const brand = parsed ? agentBrandFor(parsed.agentName) : null
+            if (brand && (brand === 'agy' || brand === 'opencode' || brand === 'codex')) {
+              const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+              const previous = getPanePresence(tab.id)
+              const agentSessionId = previous?.agentSessionId ?? 'latest'
+              nextPresence[tab.id] = {
+                agent: brand,
+                profileName: brand,
+                pid: previous?.pid ?? 0,
+                startTime: previous?.startTime ?? 0,
+                agentSessionId,
+              }
+              const title = extractAgentWorkItem(tab.name)
+              bindActiveSession({
+                id: `${brand}:${brand}-${tab.id}`,
+                tabId: tab.id,
+                agent: brand,
+                profileName: brand,
+                sessionId: agentSessionId,
+                cwd,
+                folderName: folderNameOf(cwd),
+                ...(title ? { title } : {}),
+                state: 'active',
+                updatedAt: Date.now(),
+              })
+              continue
+            }
             // No agent process under this pane anymore (never had one, or it exited) — nothing to
             // track. A pane just recreated by restore is spared: its `--resume` may not be up yet.
             if (!isInRestoreGrace(tab.id)) clearActiveForTab(tab.id)
@@ -237,18 +267,23 @@ export function useSessionPersistence({
           }
           const previous = getPanePresence(tab.id)
           const sameProcess = previous?.pid === found.pid && previous.startTime === found.startTime
-          nextPresence[tab.id] = presenceOf(found, sameProcess ? previous.claudeSessionId : undefined)
-          if (found.agent !== 'claude') continue // Codex/others: detected, not yet resumable.
+          const priorSessionId = sameProcess ? (previous.agentSessionId ?? previous.claudeSessionId) : undefined
+          nextPresence[tab.id] = presenceOf(found, priorSessionId)
           const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
-          const sessionId = await resolveClaudeSessionId(found, cwd)
-          if (cancelled) return
+          let sessionId = priorSessionId
+          if (found.agent === 'claude') {
+            sessionId = (await resolveClaudeSessionId(found, cwd)) ?? priorSessionId
+            if (cancelled) return
+          } else if (!sessionId) {
+            sessionId = 'latest'
+          }
           if (!sessionId) continue
           nextPresence[tab.id] = presenceOf(found, sessionId)
           const title = extractAgentWorkItem(tab.name)
           bindActiveSession({
-            id: `claude:${sessionId}`,
+            id: `${found.agent}:${sessionId === 'latest' ? `${found.agent}-${tab.id}` : sessionId}`,
             tabId: tab.id,
-            agent: 'claude',
+            agent: found.agent,
             launcher: launcherFor(found),
             profileName: found.profileName,
             sessionId,

@@ -57,7 +57,7 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('OpenCode')).toBe('opencode --continue')
     expect(formatAgentResumeCommand('Claude Code')).toBe('claude --continue')
     expect(formatAgentResumeCommand('Aider')).toBe('aider --restore-chat-history')
-    expect(formatAgentResumeCommand('Antigravity CLI')).toBe('agy resume')
+    expect(formatAgentResumeCommand('Antigravity CLI')).toBe('agy --continue')
     expect(formatAgentResumeCommand('Codex')).toBe('codex resume --last')
     expect(formatAgentResumeCommand('Gemini CLI')).toBe('gemini --resume')
     expect(formatAgentResumeCommand('Copilot CLI')).toBe('copilot --continue')
@@ -65,16 +65,18 @@ describe('agentRegistry', () => {
   })
 
   const VALID_UUID = '11111111-1111-1111-1111-111111111111'
+  const VALID_OPENCODE_ID = 'ses_01ad7ee46ffekzMVuUzDD3wgD5'
 
   it('only builds a resume command for a strictly-shaped session id', () => {
-    // A non-UUID session id (the old, unvalidated shape) must never reach a shell string.
+    // A non-UUID / non-session-id must never reach a shell string.
     expect(formatAgentResumeCommand('Claude Code', '111-222', 'claude-th')).toBeNull()
     expect(formatAgentResumeCommand('Codex', '111-222')).toBeNull()
     expect(formatAgentResumeCommand('Antigravity CLI', '111-222')).toBeNull()
 
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, 'claude-th')).toBe(`claude-th --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Codex', VALID_UUID)).toBe(`codex resume ${VALID_UUID}`)
-    expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID)).toBe(`agy resume ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID)).toBe(`agy --conversation ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('OpenCode', VALID_OPENCODE_ID)).toBe(`opencode --session ${VALID_OPENCODE_ID}`)
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID)).toBe(`claude --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, undefined, 'work')).toBe(`claude-work --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, undefined, 'claude-th')).toBe(`claude-th --resume ${VALID_UUID}`)

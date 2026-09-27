@@ -20,34 +20,37 @@ import {
 
 export type BookmarkState = 'none' | 'pending' | 'bookmarked'
 
-function bookmarkStateFor(tabId: string, claudeSessionId: string | undefined): BookmarkState {
-  const entry = claudeSessionId
-    ? loadStoredSessions().find(item => item.id === `claude:${claudeSessionId}`)
-    : undefined
+function bookmarkStateFor(tabId: string, agentSessionId: string | undefined, agent: string | undefined): BookmarkState {
+  const sessions = loadStoredSessions()
+  const entry = agent && agentSessionId
+    ? sessions.find(item => item.id === `${agent}:${agentSessionId}` || (item.tabId === tabId && isBookmarked(item)))
+    : sessions.find(item => item.tabId === tabId && isBookmarked(item))
   if (entry && isBookmarked(entry)) return 'bookmarked'
   return isBookmarkPending(tabId) ? 'pending' : 'none'
 }
 
 export function useBookmarkAgentSession(tabId: string | null | undefined) {
   const presence = usePanePresence(tabId)
-  const claudeSessionId = presence?.agent === 'claude' ? presence.claudeSessionId : undefined
+  const agent = presence?.agent
+  const agentSessionId = presence?.agentSessionId ?? presence?.claudeSessionId
+  const canBookmark = Boolean(agent)
   const state = useSyncExternalStore(
     subscribeStoredSessions,
-    () => (tabId ? bookmarkStateFor(tabId, claudeSessionId) : 'none'),
+    () => (tabId ? bookmarkStateFor(tabId, agentSessionId, agent) : 'none'),
     () => 'none' as const,
   )
 
   const toggle = () => {
-    if (!tabId || presence?.agent !== 'claude') return
+    if (!tabId || !agent) return
     if (state === 'pending') {
       cancelPendingBookmark(tabId)
       return
     }
-    if (!claudeSessionId) {
+    if (!agentSessionId) {
       requestPendingBookmark(tabId)
       return
     }
-    const id = `claude:${claudeSessionId}`
+    const id = `${agent}:${agentSessionId}`
     if (!loadStoredSessions().some(item => item.id === id)) {
       // Resolved but not yet stored (the poll stores it right after): queue it the same way.
       requestPendingBookmark(tabId)
@@ -56,5 +59,5 @@ export function useBookmarkAgentSession(tabId: string | null | undefined) {
     setSessionBookmarked(id, state !== 'bookmarked')
   }
 
-  return { canBookmark: presence?.agent === 'claude', state, toggle }
+  return { canBookmark, state, toggle }
 }

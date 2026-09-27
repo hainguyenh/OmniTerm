@@ -18,6 +18,8 @@ export interface PanePresence {
   startTime: number
   /** The resolved Claude session id, once its session file exists. */
   claudeSessionId?: string
+  /** The resolved session id for any agent, once known. */
+  agentSessionId?: string
 }
 
 /** How long a restored pane is given for its resumed agent to appear before it is untracked. */
@@ -36,6 +38,7 @@ function samePresence(a: PanePresence | undefined, b: PanePresence | undefined):
   if (!a || !b) return false
   return a.agent === b.agent && a.profileName === b.profileName && a.launcher === b.launcher
     && a.pid === b.pid && a.startTime === b.startTime && a.claudeSessionId === b.claudeSessionId
+    && a.agentSessionId === b.agentSessionId
 }
 
 /** Replace every pane's presence in one step; unchanged panes keep their object identity. */

@@ -92,7 +92,7 @@ function FolderSection({ folder, profileName, launcher, ...actions }: { folder: 
                 type="button"
                 className={`${iconButton} ${folder.pinned ? 'text-theme-accent' : revealOnHover}`}
                 aria-label={folder.pinned ? `Unpin ${folder.folderName}` : `Pin ${folder.folderName}`}
-                onClick={() => togglePin({ agent: 'claude', profileName, launcher, cwd, folderName: folder.folderName })}
+                onClick={() => togglePin({ agent: folder.sessions[0]?.agent ?? 'claude', profileName, launcher, cwd, folderName: folder.folderName })}
               >
                 {folder.pinned ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
               </button>
@@ -184,9 +184,9 @@ export default function BookmarksPanel({ onLaunch, onShowTab, launchCommandFor }
         )}
 
         {groups.map(group => (
-          <section key={group.profileName} aria-label={`Profile ${group.profileName}`}>
+          <section key={`${group.agent ?? 'claude'}:${group.profileName}`} aria-label={`Profile ${group.profileName}`}>
             <h3 className="flex items-center gap-1.5 px-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-theme-dim">
-              <AgentBadge agent="claude" profileName={group.profileName} placement="right" />
+              <AgentBadge agent={group.agent ?? 'claude'} profileName={group.profileName} placement="right" />
               <span className="truncate normal-case font-mono">{group.profileName}</span>
               <span className="ml-auto font-normal">{group.folders.reduce((count, folder) => count + folder.sessions.length, 0)}</span>
             </h3>

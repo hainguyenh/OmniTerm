@@ -57,18 +57,27 @@ function groupsForSnapshot(snapshot: SessionSnapshot): ViewGroup[] {
   }))
 }
 
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  agy: 'Antigravity CLI',
+  copilot: 'Copilot CLI',
+  gemini: 'Gemini CLI',
+}
+
 function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
   const stored = findSessionByTabId(tab.id)
     ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
   const agentName = parseAgentTitle(tab.name)?.agentName
     ?? parseAgentTitle(savedConn?.name)?.agentName
-    ?? (stored ? 'Claude Code' : undefined)
+    ?? (stored ? (AGENT_DISPLAY_NAMES[stored.agent] ?? 'Claude Code') : undefined)
   const launcher = stored?.launcher ?? (
     stored?.profileName
-      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-')
+      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-') || stored.profileName.startsWith('opencode-') || stored.profileName.startsWith('agy-')
         ? stored.profileName
-        : stored.profileName !== 'claude' && stored.profileName !== 'codex'
-          ? `claude-${stored.profileName}`
+        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy'
+          ? `${stored.agent}-${stored.profileName}`
           : undefined
       : undefined
   )

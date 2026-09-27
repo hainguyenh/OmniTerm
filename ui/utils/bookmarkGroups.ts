@@ -8,6 +8,8 @@ import { pinIdFor } from './agentBookmarkPins'
 import { isBookmarked, type StoredAgentSession } from './agentSessionStorage'
 import { sessionFolderName } from './storedSessionResume'
 
+import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+
 export interface FolderGroup {
   /** Stable key: the pin id for this profile + folder. */
   key: string
@@ -18,6 +20,7 @@ export interface FolderGroup {
 }
 
 export interface ProfileGroup {
+  agent?: AgentBrand
   profileName: string
   launcher?: string
   folders: FolderGroup[]
@@ -43,23 +46,25 @@ export function groupBookmarks(
 ): ProfileGroup[] {
   const query = rawQuery.trim().toLowerCase()
   const pinned = new Set(pins.map(pin => pin.id))
-  const byProfile = new Map<string, { launcher?: string; folders: Map<string, FolderGroup> }>()
+  const byProfile = new Map<string, { agent?: AgentBrand; profileName: string; launcher?: string; folders: Map<string, FolderGroup> }>()
 
   for (const session of sessions) {
     if (!isListedInBookmarks(session)) continue
     const folderName = sessionFolderName(session)
     if (!matches(query, session.title, folderName, session.cwd, session.profileName, session.launcher)) continue
-    const profile = byProfile.get(session.profileName) ?? { launcher: session.launcher, folders: new Map() }
-    byProfile.set(session.profileName, profile)
+    const groupKey = `${session.agent}:${session.profileName}`
+    const profile = byProfile.get(groupKey) ?? { agent: session.agent, profileName: session.profileName, launcher: session.launcher, folders: new Map() }
+    byProfile.set(groupKey, profile)
     const key = pinIdFor(session.profileName, session.cwd ?? folderName)
     const folder = profile.folders.get(key) ?? { key, cwd: session.cwd, folderName, pinned: pinned.has(key), sessions: [] }
     profile.folders.set(key, folder)
     folder.sessions.push(session)
   }
 
-  return [...byProfile.entries()]
-    .map(([profileName, profile]) => ({
-      profileName,
+  return [...byProfile.values()]
+    .map(profile => ({
+      agent: profile.agent,
+      profileName: profile.profileName,
       launcher: profile.launcher,
       folders: [...profile.folders.values()]
         .map(folder => ({ ...folder, sessions: [...folder.sessions].sort((a, b) => b.updatedAt - a.updatedAt) }))
