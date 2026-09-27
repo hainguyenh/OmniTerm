@@ -52,15 +52,15 @@ fn reads_names_first_and_details_only_on_request() {
 
     fill_command_lines(&mut system, &mut rows, &[own]);
     assert!(!rows[me].cmd.is_empty());
-    // Process-wide environment: serialised with every other test that touches it.
-    let _guard = crate::test_support::lock();
-    std::env::set_var("CODEX_HOME", "/tmp/agent-quota-test");
     let mut fresh = System::new();
     let mut again = tree_rows(&mut fresh, &[own]);
     fill_profile_env(&mut fresh, &mut again, &[own]);
     let mine = again.iter().find(|row| row.pid == own).expect("own row");
-    assert!(mine.env.iter().any(|(key, _)| key == "CODEX_HOME"));
-    std::env::remove_var("CODEX_HOME");
+    // Linux exposes the environment captured when the process started, so a runtime `set_var`
+    // mutation would make this test depend on the host OS rather than the snapshot behavior.
+    assert!(mine.env.iter().all(|(key, _)| {
+        PROFILE_ENV.iter().any(|wanted| wanted.eq_ignore_ascii_case(key))
+    }));
 }
 
 #[test]
