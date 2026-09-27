@@ -14,6 +14,7 @@ $FullPlugin = Join-Path $RepoRoot 'plugins\full-connection-manager'
 $LimitedPlugin = Join-Path $RepoRoot 'plugins\native-batch-connections'
 $AlwaysAwakePlugin = Join-Path $RepoRoot 'plugins\always-awake'
 $BlurPlugin = Join-Path $RepoRoot 'plugins\blur'
+$AgentQuotaPlugin = Join-Path $RepoRoot 'plugins\agent-quota'
 
 function Write-Title([string]$Text) {
   Write-Host ''
@@ -39,7 +40,8 @@ function Select-Plugin {
   Write-Host '    2. Limited Connections (OS launch scripts; never stores passwords)'
   Write-Host '    3. Always Awake (Windows sleep prevention)'
   Write-Host '    4. Blur (inactive-window privacy filter)'
-  do { $choice = Read-Host '  Select plugin [1-4]' } until ($choice -in @('1', '2', '3', '4'))
+  Write-Host '    5. Agent Quota (AI agent quota lines, limits and wake-up)'
+  do { $choice = Read-Host '  Select plugin [1-5]' } until ($choice -in @('1', '2', '3', '4', '5'))
   if ($choice -eq '1') {
     return @{ Name = 'full'; Path = $FullPlugin }
   }
@@ -49,7 +51,10 @@ function Select-Plugin {
   if ($choice -eq '3') {
     return @{ Name = 'always-awake'; Path = $AlwaysAwakePlugin }
   }
-  return @{ Name = 'blur'; Path = $BlurPlugin }
+  if ($choice -eq '4') {
+    return @{ Name = 'blur'; Path = $BlurPlugin }
+  }
+  return @{ Name = 'agent-quota'; Path = $AgentQuotaPlugin }
 }
 
 function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {

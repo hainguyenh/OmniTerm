@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Activity, Cpu, MemoryStick, HardDrive, Clock } from 'lucide-react'
+import { Zap, Cpu, MemoryStick, HardDrive, Clock } from 'lucide-react'
 import { SessionStatus } from './MainLayout'
 
 // ── Session metrics footer chips ────────────────────────────────────────────────
@@ -96,7 +96,7 @@ const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, c
   return (
     <div className={`flex items-center flex-shrink-0 ${compact ? 'gap-1' : 'gap-2'}`}>
       <MetricChip
-        icon={<Activity className="w-3 h-3" />}
+        icon={<Zap className="w-3 h-3" />}
         value={latency == null ? '—' : `${latency}${compact ? '' : ' ms'}`}
         colorClass={latColor}
         title="TCP latency to host"

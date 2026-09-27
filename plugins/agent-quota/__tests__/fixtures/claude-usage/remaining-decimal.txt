@@ -1,0 +1,3 @@
+5-hour limit: 12.5% remaining (resets in 2h 13m)
+  - Weekly limit: 40,5% used | resets tomorrow, 14:30
+Monthly limit: 3% used

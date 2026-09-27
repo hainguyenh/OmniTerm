@@ -1,0 +1,5 @@
+Last 24h · 132 requests · 2 sessions
+  100% of your usage came from subagent-heavy sessions
+  59% of your usage was at >150k context
+Session
+  59% of your usage was at >150k context

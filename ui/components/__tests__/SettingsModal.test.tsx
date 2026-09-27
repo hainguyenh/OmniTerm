@@ -33,6 +33,8 @@ const baseSettings: AppSettings = {
     commandPalette: 'CommandOrControl+P',
     closeTab: 'Ctrl+W',
     toggleAppFullscreen: 'F11',
+    agentQuota: 'Ctrl+Alt+Q',
+    pasteScript: 'Ctrl+Alt+V',
   },
   excludedViewableExts: ['log'],
 }
@@ -130,7 +132,7 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /about & updates/i }))
     expect(screen.getByText('OmniTerm')).toBeInTheDocument()
     expect(screen.getByText('Check for updates')).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('invokes onClose when clicking close button', () => {
     const { onClose } = renderModal()

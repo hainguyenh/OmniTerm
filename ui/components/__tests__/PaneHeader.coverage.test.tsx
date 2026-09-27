@@ -96,46 +96,50 @@ describe('PaneHeader remaining behavior', () => {
 
 
 
-  it('renders the oscillating running indicator when busy is true', () => {
-    const { container } = setup({ busy: true })
-    // The pane header owns the wider header slot, so it uses the oscillating dot — not the ping ring.
-    expect(screen.getByLabelText('Running process')).toBeInTheDocument()
+  it('renders oscillating running indicator when busy is true and overrides with custom loading artwork', () => {
+    const { container, rerender, props } = setup({ busy: true })
     expect(container.querySelector('.animate-running-dot-oscillate')).toBeInTheDocument()
-    expect(container.querySelector('.animate-ping')).toBeNull()
     expect(container.querySelector('.running-dot-ghost-1')).toBeInTheDocument()
     expect(container.querySelector('.running-dot-ghost-2')).toBeInTheDocument()
+
+    expect(container.querySelector('.animate-ping')).toBeNull()
+
+    rerender(<PaneHeader {...props} busy sessionArtUrl="blob:custom-loading" />)
+    expect(container.querySelector('.aq-header-custom-loading img')).toHaveAttribute('src', 'blob:custom-loading')
   })
 
-  it('sends Ctrl+C from the Stop button while busy and keeps it enabled once a live session goes idle', () => {
-    const x = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true })
-    const stop = screen.getByRole('button', { name: 'Stop current process' })
-    expect(stop).toBeEnabled()
-    fireEvent.click(stop)
-    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledWith('s1')
-    x.rerender(<PaneHeader {...x.props} busy={false} />)
-    // The idle probe misreads WSL/fast commands, so a still-connected session keeps Stop enabled.
-    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
+  it('shows footer process controls on the header when layoutMode < 4 and hides them when >= 4', () => {
+    const { rerender, props } = setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: true, layoutMode: 3 })
+    expect(screen.getByRole('button', { name: 'Stop current process' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear terminal' })).toBeInTheDocument()
+
+    rerender(<PaneHeader {...props} layoutMode={4} />)
+    expect(screen.queryByRole('button', { name: 'Stop current process' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
   })
 
-  it('clears the terminal via the same input channel as cls, even while idle', () => {
-    setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: false })
-    fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
-    expect(window.omnitermAPI.connect.localInput).toHaveBeenCalledWith('s1', '\x0c')
+  it('uses the agent icon and leaves the shell label for the footer', () => {
+    setup({
+      conn: { ...ssh, type: 'LOCAL', shell: 'powershell' },
+      sessionTitle: 'Claude Code - OmniTerm',
+      shellLabel: 'PowerShell 7',
+    })
+    expect(screen.getByRole('img', { name: 'Claude Code agent' })).toBeInTheDocument()
+    expect(screen.getByText('OmniTerm')).toBeInTheDocument()
+    expect(screen.queryByText('// PowerShell 7')).toBeNull()
+    expect(screen.queryByText('Claude Code')).toBeNull()
   })
 
-  it('routes Stop and Clear through the SSH input channel for SSH panes', () => {
-    setup({ conn: ssh, sessionId: 's1', busy: true })
-    fireEvent.click(screen.getByRole('button', { name: 'Stop current process' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Clear terminal' }))
-    expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x03')
-    expect(window.omnitermAPI.connect.sshInput).toHaveBeenCalledWith('s1', '\x0c')
-    expect(window.omnitermAPI.connect.interruptSession).not.toHaveBeenCalled()
+  it('keeps the pane header clear of terminal output controls when layoutMode >= 4', () => {
+    setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', busy: false, layoutMode: 4 })
+    expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
   })
 
-  it('opens a new local pane at the current directory from the icon-only header action', () => {
+  it('opens a new local pane at the current directory from the header overflow menu', () => {
     const onOpenCurrentDirectory = vi.fn()
     setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', onOpenCurrentDirectory })
-    fireEvent.click(screen.getByRole('button', { name: 'Open new pane with current directory' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More terminal actions' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open new pane with current directory' }))
     expect(onOpenCurrentDirectory).toHaveBeenCalledOnce()
   })
 

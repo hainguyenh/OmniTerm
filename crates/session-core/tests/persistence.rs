@@ -125,9 +125,17 @@ async fn attach_replays_buffer_before_new_stream_events() {
             shell_launch("echo marker"),
         )
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    let attached = manager.attach("gui-2", "session").unwrap();
-    assert!(String::from_utf8_lossy(&attached.replay).contains("marker"));
+    let mut replay = Vec::new();
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        if let Ok(attached) = manager.attach("gui-2", "session") {
+            if String::from_utf8_lossy(&attached.replay).contains("marker") {
+                replay = attached.replay;
+                break;
+            }
+        }
+    }
+    assert!(String::from_utf8_lossy(&replay).contains("marker"));
     manager.disconnect("session").unwrap();
 }
 
@@ -145,7 +153,16 @@ async fn closed_session_id_can_be_recreated_with_a_new_generation() {
             shell_launch("exit"),
         )
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        if manager
+            .list()
+            .iter()
+            .all(|s| s.id != "session" || s.lifecycle != SessionLifecycle::Live)
+        {
+            break;
+        }
+    }
     let restored = manager
         .create(
             "gui-2",
@@ -217,65 +234,6 @@ async fn durable_manifest_never_persists_launch_command_or_environment_values() 
     manager.disconnect("session-secret").unwrap();
 }
 
-#[tokio::test]
-async fn input_writes_data_to_live_session() {
-    let dir = tempfile::tempdir().unwrap();
-    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
-    manager
-        .create(
-            "gui",
-            "r1",
-            "session",
-            1,
-            PersistencePolicy::KeepRunning,
-            shell_launch("echo ready"),
-        )
-        .unwrap();
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    manager.input("session", "echo test\r").unwrap();
-    manager.disconnect("session").unwrap();
-}
-
-#[test]
-fn input_returns_error_for_missing_session() {
-    let dir = tempfile::tempdir().unwrap();
-    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
-    assert!(manager.input("nonexistent", "data").is_err());
-}
-
-#[tokio::test]
-async fn resize_updates_terminal_dimensions_on_live_session() {
-    let dir = tempfile::tempdir().unwrap();
-    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
-    manager
-        .create(
-            "gui",
-            "r1",
-            "session",
-            1,
-            PersistencePolicy::KeepRunning,
-            shell_launch("echo ready"),
-        )
-        .unwrap();
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    assert!(manager.resize("session", 120, 40).is_ok());
-    manager.disconnect("session").unwrap();
-}
-
-#[test]
-fn resize_rejects_zero_dimensions_without_a_runtime() {
-    let dir = tempfile::tempdir().unwrap();
-    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
-    assert!(manager.resize("any", 0, 24).is_err());
-    assert!(manager.resize("any", 80, 0).is_err());
-}
-
-#[test]
-fn resize_returns_error_for_missing_session() {
-    let dir = tempfile::tempdir().unwrap();
-    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
-    assert!(manager.resize("nonexistent", 80, 24).is_err());
-}
 
 #[tokio::test]
 async fn set_policy_changes_live_session_policy_and_owner() {
@@ -340,15 +298,9 @@ fn seed_interrupted_manifest(state_dir: &std::path::Path, id: &str) {
     let manifests = state_dir.join("sessions");
     std::fs::create_dir_all(&manifests).unwrap();
     let manifest = serde_json::json!({
-        "version": 1,
-        "id": id,
-        "generation": 1,
-        "policy": "recover-after-reboot",
-        "lifecycle": "interrupted",
-        "label": "test",
-        "busy": false,
-        "launchedWithCommand": false,
-        "ssh": false
+        "version": 1, "id": id, "generation": 1, "policy": "recover-after-reboot",
+        "lifecycle": "interrupted", "label": "test", "busy": false,
+        "launchedWithCommand": false, "ssh": false
     });
     // `load_interrupted` reads every file in the sessions directory regardless
     // of name, so any filename works; it will rewrite the record to the

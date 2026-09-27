@@ -32,6 +32,40 @@ A plugin runs as the current user in a Node.js sidecar and is **not sandboxed**.
 such as `fs`, `net`, and `child_process`. Install only trusted plugins. Permission declarations gate
 OmniTerm host APIs, but they cannot restrict arbitrary Node code.
 
+### Bundled Agent Quota plugin
+
+The bundled Agent Quota plugin (`plugins/agent-quota`) reads **no credential and makes no network
+request**. Its only inputs are:
+
+- the agents' own CLIs: `claude -p /usage`, run through the user's profile launcher when the
+  terminal used one (`claude-th -p /usage`), and a one-line wake prompt when the user asks for one;
+- Codex's own session logs (`<CODEX_HOME>/sessions/**/rollout-*.jsonl`), which record the rate
+  limits after every reply.
+
+Invoke results carry only usage percentages and reset times. A launcher crosses the IPC boundary as
+a bare validated name (`claude-<x>` / `codex-<x>`) and is resolved by the sidecar itself, so the
+webview can never make it run a path.
+
+Its native half inspects processes as little as possible: the process tree is built from names;
+command lines are read only for `node`/`bun`/`deno` hosts and for the `cmd.exe` that started a
+detected agent; the environment is read only for a main agent whose launcher is unknown, and only
+`CLAUDE_CONFIG_DIR` / `CODEX_HOME` are kept. Suspending an agent uses documented Win32 thread APIs
+(`SuspendThread` / `ResumeThread`) on processes verified by pid and start time as that terminal's
+agent or its AI sub-agents. Disabling the plugin, or quitting the app, thaws anything it froze — the
+host keeps re-checking whether the plugin is still enabled, so this takes effect within seconds and
+needs no restart in either direction.
+
+`pnpm tauri:dev` (and the Basic installer) load no plugin at all. To see Agent Quota while
+developing, build it once and point dev mode at it:
+
+```bash
+pnpm build:plugin plugins/agent-quota
+pnpm tauri:dev:quota
+```
+
+The packaged "App with Plugin" installer bundles exactly one plugin at a time (see
+`scripts/Build-OmniTerm.ps1`); Agent Quota is one of the choices there.
+
 Plugins are discovered under the app's plugin directory:
 
 ```text

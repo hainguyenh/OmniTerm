@@ -313,6 +313,30 @@ pub async fn export_json(suggested_name: String, content: String) -> Result<bool
     Ok(true)
 }
 
+/// Export terminal output through the native save dialog without letting the renderer choose a
+/// filesystem path. The name is only a suggestion and must remain a file name, not a path.
+#[tauri::command]
+pub async fn export_text(suggested_name: String, content: String) -> Result<bool, String> {
+    let name = suggested_name.trim();
+    if name.is_empty()
+        || name.contains('/')
+        || name.contains('\\')
+        || name.chars().any(char::is_control)
+    {
+        return Err("Invalid suggested text filename.".to_string());
+    }
+    let Some(handle) = rfd::AsyncFileDialog::new()
+        .add_filter("Text Files", &["txt", "log"])
+        .set_file_name(name)
+        .save_file()
+        .await
+    else {
+        return Ok(false);
+    };
+    fs::write(handle.path(), content).map_err(|e| e.to_string())?;
+    Ok(true)
+}
+
 /// Returns the chosen file's *contents*, never a filesystem path — the webview has no business
 /// holding one, and an earlier port that returned the path had the renderer trying to `JSON.parse` it.
 #[tauri::command]

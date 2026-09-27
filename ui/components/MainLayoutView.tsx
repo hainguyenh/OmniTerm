@@ -12,7 +12,7 @@ import ConnectingOverlay from './ConnectingOverlay'
 import DetachedPlaceholder from './DetachedPlaceholder'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import ConnectionForm from './ConnectionForm'
-import { SessionFooterBar } from './SessionFooterBar'
+import LayoutSessionFooter, { PaneSessionFooter } from './LayoutSessionFooter'
 import SessionTabs from './SessionTabs'
 import WaitingPane from './WaitingPane'
 import { PaneResizers } from './PaneResizers'
@@ -27,14 +27,17 @@ import { Grid3Icon, Grid5Icon, Grid6Icon, Grid7Icon, Grid8Icon } from './mainLay
 import MainLayoutOverlays from './MainLayoutOverlays'
 import FullscreenRestoreControl from './FullscreenRestoreControl'
 import MainLayoutWaitingPane from './MainLayoutWaitingPane'
+import { createTerminalAppearance } from './terminalAppearance'
+import { PaneSessionOverlayHost } from './PaneSessionOverlayHost'
 import type { MainLayoutModel } from './useMainLayoutController'
 import ViewGroupTabs from './ViewGroupTabs'
 import { Tooltip } from './Tooltip'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
+import { QuotaPaneLines, SuspendedOverlay } from '../../plugins/agent-quota/app/paneHosts'
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
+  const { appSettings, setAppSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, requestRenewSession = () => {}, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
   const handleRestoreStatus = model.handleRestoreStatus ?? setStatus
   const alwaysAwake = awakeState ?? {
     enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
@@ -48,12 +51,21 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const activeEditorWorkspace = activeTabId ? model.editorTabs[activeTabId]?.workspaceId : undefined
   const activeConnId = activeTabId ? activeTabs.find(tab => tab.id === activeTabId)?.connId : undefined
   const activeConnection = activeConnId ? connById(activeConnId) : undefined
+  const activeTarget = activeTabId && activeConnId ? { id: activeTabId, connId: activeConnId } : null
+  const activeResolvedAppearance = activeTarget ? resolveAppearance?.(activeTarget.id, activeTarget.connId) : undefined
+  const activeTerminalAppearance = activeTarget ? createTerminalAppearance({
+    themes, appSettings, resolved: activeResolvedAppearance, target: activeTarget,
+    onThemeApply: model.onThemeApply,
+    onFontSizeChange: model.onFontSizeChange,
+    onToolbarActionsChange: model.onToolbarActionsChange,
+  }) : undefined
   const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
   const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
   const footerWorkingFolder = activeTabId
     ? workingFolderLabel(model.sessionCwds?.[activeTabId] ?? activeConnection?.localCwd, model.workspaces ?? [])
     : undefined
-  const footerLocationLabel = footerWorkingFolder ?? footerWorkspaceTitle
+  const localFooterLocationLabel = footerWorkingFolder ?? footerWorkspaceTitle
+  const activeShellLabel = activeConnection?.type === 'LOCAL' ? shellLabel(shellOptions ?? [], activeConnection.shell) : undefined
   const newSessionTitle = newTerminalHoverText(
     shellOptions ?? [], appSettings.defaultShell, model.workspaces ?? [],
     model.selectedWorkspaceId ?? null, model.homeDir ?? '',
@@ -66,8 +78,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const waitingPane = <MainLayoutWaitingPane model={model} customArtUrl={idleArtUrl} />
     return (
       <div className="h-full w-full flex bg-theme-bg overflow-hidden">
-        {/* ── Activity Bar (icon rail — always visible) ────────────────── */}
-        {/* Chrome-hidden fullscreen hides it along with the side panel and tab strip. */}
         {!chromeHidden && (
           <ActivityBar
             activeView={activeView}
@@ -115,7 +125,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             )}
           </div>
         )}
-        {/* ── Resize Handle ────────────────────────────────────────────────── */}
         {!chromeHidden && activeView !== null && sidebarVisible && (
           <div
             className="w-1.5 flex-shrink-0 cursor-col-resize hover:bg-[var(--theme-accent)] transition-colors active:bg-[var(--theme-accent)] z-10"
@@ -124,10 +133,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
         )}
         {/* ── Main area ───────────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* Panel header — session tabs fill the full width, layout picker on the right.
-              Keeping the tabs in this fixed header row (above the content area) means
-              the embedded RDP desktop can never paint over them. Chrome-hidden fullscreen
-              hides this whole row; panes and the status footer stay. */}
           {!chromeHidden && (
           <div className="relative z-30 flex flex-col border-b border-[var(--theme-border)] flex-shrink-0">
             {viewGroups.length > 0 && <ViewGroupTabs groups={viewGroups} activeGroupId={activeGroupId} totalTabCount={ungroupedTabCount} onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }} onUpdate={notifyViewGroupUpdate} onReorder={notifyViewGroupReorder} onUngroup={notifyViewGroupUngroup} />}
@@ -169,8 +174,22 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               />
             </div>
   
-            {/* Layout picker — pinned to the right edge, slightly larger for prominence */}
-            <div className="ml-auto flex items-center rounded-lg border border-[var(--theme-border)] overflow-hidden bg-black/10 flex-shrink-0">
+            {/* Header controls: Renew session + Layout picker */}
+            <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
+              {activeTabId && (
+                <Tooltip content="Renew current session" placement="bottom">
+                  <button
+                    type="button"
+                    data-testid="header-renew-session-button"
+                    aria-label="Renew current session"
+                    onClick={() => requestRenewSession(activeTabId)}
+                    className="flex items-center justify-center w-6 h-6 rounded-lg border border-[var(--theme-border)] bg-black/10 text-theme-dim hover:text-theme-accent hover:bg-white/10 transition-colors"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              )}
+              <div className="flex items-center rounded-lg border border-[var(--theme-border)] overflow-hidden bg-black/10 flex-shrink-0">
               {([
                 [1, Square, 'Single view'],
                 [2, Columns2, 'Split 2'],
@@ -237,63 +256,28 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 )
               })}
             </div>
+            </div>
    
             </div>
           </div>
           )}
 
-          {activeTabId && (() => {
-            const conn = activeConnection
-            if (!conn) {
-              return (
-                <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-                  <span className="truncate">{footerWorkspaceTitle}</span>
-                  <span className="opacity-60">·</span>
-                  <span className="truncate">Editor active</span>
-                  {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
-                </div>
-              )
-            }
-            const status = statuses[activeTabId] ?? 'connecting'
-            const resolvedLatency = conn.type === 'RDP'
-              ? (latencies[activeTabId] ?? null)
-              : (metrics[activeTabId]?.latency ?? null)
-            const footerShellLabel = conn.type === 'LOCAL'
-              ? shellLabel(shellOptions, conn.shell)
-              : `${conn.user}@${conn.host}:${conn.port}`
-            return (
-              <SessionFooterBar
-                conn={conn}
-                sessionId={activeTabId}
-                tabName={activeTabs.find(tab => tab.id === activeTabId)?.name ?? conn.name}
-                status={status}
-                latency={resolvedLatency}
-                metrics={metrics[activeTabId]}
-                connectedAt={connectedAt[activeTabId]}
-                layoutMode={layoutMode}
-                focusedPane={focusedPane}
-                busy={conn.type === 'LOCAL' ? (activity[activeTabId] ?? false) : undefined}
-                workspaceTitle={footerLocationLabel}
-                footerShellLabel={footerShellLabel}
-                zoomFactor={zoomFactor}
-                detach={detachControl.stateOf(activeTabId)}
-                onToggleDetach={() => detachControl.toggle(activeTabId)}
-                fullscreen={fullscreenPane === focusedPane}
-                onToggleFullscreen={() => setFullscreenPane(current => current === focusedPane ? null : focusedPane)}
-                onReconnect={() => reconnectSession(activeTabId)}
-                onDisconnect={() => disconnectSession(activeTabId)}
-                onZoomReset={onZoomReset}
-              />
-            )
-          })()}
-          {!activeTabId && (
-            <div className="relative z-30 order-last min-h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 text-[10px] text-theme-dim">
-              <span className="truncate">{footerWorkspaceTitle}</span>
-              <span className="opacity-60">·</span>
-              <span>No active terminal</span>
-              {typeof zoomFactor === 'number' && <span className="ml-auto font-mono">{Math.round(zoomFactor * 100)}%</span>}
-            </div>
-          )}
+          <LayoutSessionFooter
+            activeTabId={activeTabId}
+            conn={activeConnection}
+            footerWorkspaceTitle={footerWorkspaceTitle}
+            localLocationLabel={localFooterLocationLabel}
+            shellLabel={activeShellLabel}
+            statuses={statuses}
+            latencies={latencies}
+            metrics={metrics}
+            connectedAt={connectedAt}
+            layoutMode={layoutMode}
+            activity={activity}
+            appearance={activeTerminalAppearance}
+            onReconnect={reconnectSession}
+            onDisconnect={disconnectSession}
+          />
           {/* Session content; hidden panes remain mounted to preserve terminal scroll state.
               overflow-hidden clips oversized xterm canvases instead of scrolling the whole
               desktop — panes must stay inside the container, never scroll it. */}
@@ -463,11 +447,19 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                         }` : ''}`}
                       >
                         {split && renderPaneHeader(paneIdx, conn ?? null)}
-                        <div className={`flex-1 min-h-0 relative ${split ? 'rounded-b-lg overflow-hidden' : ''}`}>
+                        <QuotaPaneLines sessionId={tab.id} />
+                        <div className={`flex-1 min-h-0 relative ${split && (layoutMode > 4 || !conn) ? 'rounded-b-lg ' : ''}overflow-hidden`}>
                           {sessionView}
+                          <SuspendedOverlay sessionId={tab.id} />
+                          <PaneSessionOverlayHost
+                            sessionId={tab.id}
+                            onResumeCommand={(command, cwd) => requestNewSession(undefined, model.selectedWorkspaceId, cwd ?? null, command)}
+                            onNewSession={() => { setFocusedPane(paneIdx); requestNewSession(undefined, model.selectedWorkspaceId) }}
+                          />
 
                           {statuses[tab.id] === 'connecting' && !poppedOut[tab.id] && <ConnectingOverlay dark={appSettings.darkMode} customArtUrl={loadingArtUrl} />}
                         </div>
+                        {split && conn && <PaneSessionFooter tab={tab} conn={conn} model={model} />}
                       </div>
                     </div>
                   )

@@ -32,7 +32,9 @@ const baseSettings: AppSettings = {
     toggleSidebar: "Ctrl+B",
     commandPalette: "CommandOrControl+P",
     closeTab: "Ctrl+W",
-    toggleAppFullscreen: "F11"
+    toggleAppFullscreen: "F11",
+    agentQuota: "Ctrl+Alt+Q",
+    pasteScript: "Ctrl+Alt+V"
   },
 };
 

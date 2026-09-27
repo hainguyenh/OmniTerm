@@ -17,7 +17,20 @@ pub fn custom_art_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String>
 fn is_valid_slot(slot: &str) -> bool {
     matches!(
         slot,
-        "idle-light" | "idle-dark" | "loading-light" | "loading-dark"
+        "idle-light"
+            | "idle-dark"
+            | "loading-light"
+            | "loading-dark"
+            | "session-light"
+            | "session-dark"
+            | "pace-slow-light"
+            | "pace-slow-dark"
+            | "pace-onTrack-light"
+            | "pace-onTrack-dark"
+            | "pace-fast-light"
+            | "pace-fast-dark"
+            | "pace-overshooting-light"
+            | "pace-overshooting-dark"
     )
 }
 

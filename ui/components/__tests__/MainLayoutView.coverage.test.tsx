@@ -78,6 +78,7 @@ describe('MainLayoutView coverage', () => {
         pins: [],
       }],
     })} />)
+    expect(document.querySelector('[data-session-footer]')).toBeInTheDocument()
     expect(screen.getByLabelText('Working folder: Bravo.UI')).toHaveTextContent('Bravo.UI')
   })
 
@@ -204,13 +205,10 @@ describe('MainLayoutView coverage', () => {
       resolveAppearance: vi.fn(() => ({ fontSize: 19 })),
     })
     const { rerender } = render(<MainLayoutView model={m} />)
-    const footer = document.querySelector('.order-last') as HTMLElement
-    expect(within(footer).getByText('SSH')).toBeInTheDocument()
+    expect(screen.getByLabelText('Remote host: me@server:22')).toHaveTextContent('me@server:22')
     expect(screen.getByTestId('metrics')).toHaveTextContent('error:12:true')
     fireEvent.click(screen.getByText('Reconnect'))
-    fireEvent.click(screen.getByRole('button', { name: '125%' }))
     expect(m.reconnectSession).toHaveBeenCalledWith('ssh-tab')
-    expect(m.onZoomReset).toHaveBeenCalled()
 
     const connected = model({ activeTabs: [{ id: 'rdp-tab', connId: 'rdp', name: 'RDP' }], panes: ['rdp-tab'], activeTabId: 'rdp-tab', statuses: { 'rdp-tab': 'connected' }, latencies: { 'rdp-tab': 44 }, detachControl: { stateOf: vi.fn(() => 'detach'), toggle: vi.fn() } })
     rerender(<MainLayoutView model={connected} />)
@@ -222,7 +220,7 @@ describe('MainLayoutView coverage', () => {
 
     const localModel = model({ activeTabs: [{ id: 'local-tab', connId: 'local', name: 'Local' }], panes: ['local-tab'], activeTabId: 'local-tab', statuses: { 'local-tab': 'connected' }, activity: { 'local-tab': true }, onFontSizeChange: undefined, zoomFactor: undefined })
     rerender(<MainLayoutView model={localModel} />)
-    expect(screen.getByText('PowerShell')).toBeInTheDocument()
+    expect(screen.queryByText('PowerShell')).not.toBeInTheDocument()
     expect(screen.queryByTitle('Increase font size')).not.toBeInTheDocument()
     expect(screen.queryByText('Disconnect')).not.toBeInTheDocument()
   })

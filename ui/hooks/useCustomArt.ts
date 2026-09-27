@@ -5,16 +5,22 @@ export function useCustomArt(darkMode: boolean) {
   const [idleArtUrlDark, setIdleArtUrlDark] = useState<string | null>(null)
   const [loadingArtUrlLight, setLoadingArtUrlLight] = useState<string | null>(null)
   const [loadingArtUrlDark, setLoadingArtUrlDark] = useState<string | null>(null)
+  const [sessionArtUrlLight, setSessionArtUrlLight] = useState<string | null>(null)
+  const [sessionArtUrlDark, setSessionArtUrlDark] = useState<string | null>(null)
   const refreshCustomArt = useCallback(() => {
     window.omnitermAPI.customArt.get('idle-light').then(setIdleArtUrlLight).catch(() => setIdleArtUrlLight(null))
     window.omnitermAPI.customArt.get('idle-dark').then(setIdleArtUrlDark).catch(() => setIdleArtUrlDark(null))
     window.omnitermAPI.customArt.get('loading-light').then(setLoadingArtUrlLight).catch(() => setLoadingArtUrlLight(null))
     window.omnitermAPI.customArt.get('loading-dark').then(setLoadingArtUrlDark).catch(() => setLoadingArtUrlDark(null))
+    window.omnitermAPI.customArt.get('session-light').then(setSessionArtUrlLight).catch(() => setSessionArtUrlLight(null))
+    window.omnitermAPI.customArt.get('session-dark').then(setSessionArtUrlDark).catch(() => setSessionArtUrlDark(null))
   }, [])
   useEffect(() => { refreshCustomArt() }, [refreshCustomArt])
   return {
     idleArtUrl: darkMode ? idleArtUrlDark : idleArtUrlLight,
     loadingArtUrl: darkMode ? loadingArtUrlDark : loadingArtUrlLight,
-    idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, refreshCustomArt,
+    sessionArtUrl: darkMode ? sessionArtUrlDark : sessionArtUrlLight,
+    idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark,
+    sessionArtUrlLight, sessionArtUrlDark, refreshCustomArt,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { clipboardActionFor, normalizePastePayload } from "../utils/paste";
+import { clipboardActionFor, formatPowerShellScriptForPaste, normalizePastePayload } from "../utils/paste";
 
 const key = (code: string, mods: Partial<{ ctrlKey: boolean; shiftKey: boolean; altKey: boolean; metaKey: boolean }> = {}) => ({
   code,
@@ -73,7 +73,43 @@ describe("normalizePastePayload", () => {
     expect(normalizePastePayload("a\r\nb", true)).toBe("\x1b[200~a\rb\x1b[201~");
   });
 
+  it("recognizes explicit script paste when isScriptPaste is true", () => {
+    expect(clipboardActionFor(key("KeyV", { ctrlKey: true, altKey: true }), false, false, true)).toBe("paste-script");
+  });
+
   it("passes text with no line breaks through untouched", () => {
     expect(normalizePastePayload("plain text", false)).toBe("plain text");
+  });
+});
+
+describe("formatPowerShellScriptForPaste", () => {
+  it("returns empty string for empty or whitespace-only inputs", () => {
+    expect(formatPowerShellScriptForPaste("")).toBe("");
+    expect(formatPowerShellScriptForPaste("   \n  \t  ")).toBe("");
+  });
+
+  it("wraps a multiline script in a dot-sourced scriptblock", () => {
+    const script = 'Get-Process | Where-Object { $_.CPU -gt 10 }\nWrite-Host "Done"';
+    const formatted = formatPowerShellScriptForPaste(script);
+    expect(formatted).toBe('. {\nGet-Process | Where-Object { $_.CPU -gt 10 }\nWrite-Host "Done"\n}');
+  });
+
+  it("places closing brace on a new line so trailing comments do not comment it out", () => {
+    const script = 'Write-Host "Hello"\n# This is a trailing comment';
+    const formatted = formatPowerShellScriptForPaste(script);
+    expect(formatted).toBe('. {\nWrite-Host "Hello"\n# This is a trailing comment\n}');
+  });
+
+  it("preserves existing dot-sourced or call-wrapped blocks without double wrapping", () => {
+    const dotSourced = '. {\n  Write-Host "Hi"\n}';
+    expect(formatPowerShellScriptForPaste(dotSourced)).toBe(dotSourced);
+
+    const callWrapped = '& {\n  Write-Host "Child"\n}';
+    expect(formatPowerShellScriptForPaste(callWrapped)).toBe(callWrapped);
+  });
+
+  it("prepends dot-sourcing if script is already wrapped in bare curly braces", () => {
+    const bareBlock = '{\n  Write-Host "Bare"\n}';
+    expect(formatPowerShellScriptForPaste(bareBlock)).toBe('. {\n  Write-Host "Bare"\n}');
   });
 });

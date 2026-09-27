@@ -1,8 +1,9 @@
 /** @vitest-environment jsdom */
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import { mockOmnitermAPI } from '../../testUtils'
+import { releasePastedImage, setLastPastedImage, subscribeOpen } from '../../utils/pastedImageStore'
 import { SessionFooterBar } from '../SessionFooterBar'
 
 const local: Connection = {
@@ -11,6 +12,11 @@ const local: Connection = {
 
 beforeEach(() => {
   localStorage.clear()
+  vi.restoreAllMocks()
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:mock-image')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  releasePastedImage('s1')
+  releasePastedImage('s2')
   mockOmnitermAPI({
     connect: {
       localInput: vi.fn(),
@@ -22,47 +28,88 @@ const renderFooter = (overrides: Partial<React.ComponentProps<typeof SessionFoot
   const props: React.ComponentProps<typeof SessionFooterBar> = {
     conn: local,
     sessionId: 's1',
-    tabName: 'Antigravity CLI - repo',
     status: 'connected',
     latency: null,
     metrics: undefined,
     connectedAt: undefined,
     layoutMode: 1,
-    focusedPane: 0,
     busy: false,
-    workspaceTitle: 'Dev - repo',
-    footerShellLabel: 'PowerShell 7',
-    zoomFactor: 1,
-    detach: 'detach',
-    onToggleDetach: vi.fn(),
-    fullscreen: false,
-    onToggleFullscreen: vi.fn(),
+    locationLabel: 'F:/repo',
+    appearance: {
+      fontSize: 14,
+      onFontSizeChange: vi.fn(),
+      footerActions: ['fontSize', 'stop', 'clear', 'copy', 'save'],
+      onToolbarActionsChange: vi.fn(),
+    },
+    onSaveOutput: vi.fn(),
     onReconnect: vi.fn(),
     onDisconnect: vi.fn(),
-    onZoomReset: vi.fn(),
     ...overrides,
   }
   return { props, ...render(<SessionFooterBar {...props} />) }
 }
 
 describe('SessionFooterBar controls', () => {
-  it('places terminal controls at the right side for the active agent session', () => {
+  it('places terminal state and utility controls at the right side', () => {
     renderFooter()
     // The session is connected, so Stop stays pressable even though the idle probe reads idle —
     // the probe misreads WSL and fast commands (see SessionControlButtons' live-session gate).
     expect(screen.getByRole('button', { name: 'Stop current process' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Clear terminal' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Copy terminal output' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Detach into its own window' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Focus pane full screen' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Focus pane full screen' }).parentElement?.className).toContain('ml-auto')
+    expect(screen.getByRole('button', { name: 'Save terminal output to file' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Customize terminal actions' })).toBeInTheDocument()
+    expect(screen.getByText('F:/repo')).toBeInTheDocument()
   })
 
-  it('invokes detach and fullscreen from the footer', () => {
+  it('shows the shell in the footer and keeps the main latency icon', () => {
+    renderFooter({ latency: 42, shellLabel: 'PowerShell 7', loadingArtUrl: 'blob:loading-gif' })
+    expect(screen.getByText('// PowerShell 7')).toBeInTheDocument()
+    expect(screen.getByTitle('TCP latency to host').querySelector('svg')).toBeInTheDocument()
+  })
+
+  it('keeps the main latency icon when no custom art is configured', () => {
+    renderFooter({ latency: 42, appearance: { fontSize: 14, darkMode: false, onFontSizeChange: vi.fn() } })
+    expect(screen.getByTitle('TCP latency to host').querySelector('svg')).toBeInTheDocument()
+  })
+
+  it('opens the customize dialog from the footer', () => {
     const { props } = renderFooter()
-    fireEvent.click(screen.getByRole('button', { name: 'Detach into its own window' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Focus pane full screen' }))
-    expect(props.onToggleDetach).toHaveBeenCalledOnce()
-    expect(props.onToggleFullscreen).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Customize terminal actions' }))
+    expect(screen.getByRole('dialog', { name: 'Customize terminal actions' })).toBeInTheDocument()
+    expect(props.appearance?.onToolbarActionsChange).not.toHaveBeenCalled()
+  })
+
+  it('shows the pasted image review button when images exist and triggers viewer on click', () => {
+    const { unmount } = renderFooter()
+    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
+
+    act(() => {
+      setLastPastedImage('s1', { bytes: new Uint8Array([1, 2]), path: 'C:/temp/agent-shot.png' })
+    })
+
+    const button = screen.getByRole('button', { name: 'View last pasted image' })
+    expect(button).toBeInTheDocument()
+
+    const onOpen = vi.fn()
+    const unsubscribe = subscribeOpen('s1', onOpen)
+    fireEvent.click(button)
+    expect(onOpen).toHaveBeenCalledTimes(1)
+    unsubscribe()
+
+    act(() => {
+      releasePastedImage('s1')
+    })
+    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
+    unmount()
+  })
+
+  it('does not display image button for a different session', () => {
+    act(() => {
+      setLastPastedImage('s2', { bytes: new Uint8Array([1]), path: 'C:/temp/other.png' })
+    })
+    const { unmount } = renderFooter({ sessionId: 's1' })
+    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
+    unmount()
   })
 })

@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
+import { formatPowerShellScriptForPaste } from './paste'
 
 /**
  * Native `paste` event gate for one pane.
@@ -139,6 +140,8 @@ const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
 
 export interface TerminalClipboard {
   paste: () => Promise<void>
+  pasteImage: () => Promise<void>
+  pasteScript: () => Promise<void>
   copySelection: () => Promise<void>
   /** Detach the selection listener. */
   dispose: () => void
@@ -225,6 +228,58 @@ export const createTerminalClipboard = (
           onImageSaved?.(saved)
           onBeforePaste?.()
           term.paste(saved.path)
+        }
+      } finally {
+        pasteInFlight = false
+      }
+    },
+    pasteImage: async () => {
+      if (pasteInFlight) return
+      pasteInFlight = true
+      try {
+        const saved = await readImageFromClipboard()
+        if (saved) {
+          onImageSaved?.(saved)
+          onBeforePaste?.()
+          term.paste(saved.path)
+          return
+        }
+        let text = ''
+        try {
+          text = await window.omnitermAPI.clipboard.readText()
+        } catch {
+          text = ''
+        }
+        if (text) {
+          onBeforePaste?.()
+          term.paste(text)
+        }
+      } finally {
+        pasteInFlight = false
+      }
+    },
+    pasteScript: async () => {
+      if (pasteInFlight) return
+      pasteInFlight = true
+      try {
+        let text = ''
+        try {
+          text = await window.omnitermAPI.clipboard.readText()
+        } catch {
+          text = ''
+        }
+        if (!text) {
+          try {
+            text = (await navigator.clipboard?.readText()) ?? ''
+          } catch {
+            text = ''
+          }
+        }
+        if (!text) return
+        const formatted = formatPowerShellScriptForPaste(text)
+        if (formatted) {
+          onBeforePaste?.()
+          term.paste(formatted)
         }
       } finally {
         pasteInFlight = false
