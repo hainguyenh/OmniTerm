@@ -64,7 +64,8 @@ describe('listProfiles', () => {
 
   it('is served as agentQuota.listProfiles', async () => {
     let handler: InvokeHandler | undefined
-    const deps = fakeDeps({}, { listDir: async (dir) => (dir === bin ? ['claude-x.cmd'] : []) })
+    const launcherFile = process.platform === 'win32' ? 'claude-x.cmd' : 'claude-x'
+    const deps = fakeDeps({}, { listDir: async (dir) => (dir === bin ? [launcherFile] : []) })
     activate({ registerInvokeHandler: (registered) => { handler = registered }, services: { log: vi.fn() } }, deps)
     const listed = await handler?.('agentQuota.listProfiles') as Array<{ launcher: string | null }>
     expect(listed.map((profile) => profile.launcher)).toContain('claude-x')
