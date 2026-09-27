@@ -57,6 +57,13 @@ describe('profile dashboard store', () => {
     expect(getProfileDashboard().listing).toBe(false)
   })
 
+  it('lists Claude profiles only, even when the engine monitors a codex one', async () => {
+    const codex: DiscoveredProfile = { agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' }
+    const monitored = profile(good(40), { key: 'codex:launcher:codex', agent: 'codex', profileName: 'codex', launcher: 'codex', profileDir: null })
+    await loadDashboardProfiles(deps({ listProfiles: vi.fn(async () => [DEFAULT, codex]) }), { [monitored.key]: monitored })
+    expect(getProfileDashboard().rows.map((row) => row.agent)).toEqual(['claude'])
+  })
+
   it('fetches every profile two at a time, a launcher without a directory of its own', async () => {
     let running = 0
     let peak = 0

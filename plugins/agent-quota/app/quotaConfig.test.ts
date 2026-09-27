@@ -44,6 +44,11 @@ describe('parseQuotaConfig', () => {
     expect(Object.keys(parseQuotaConfig({ agents: { antigravity: { enabled: true } } }).agents)).toEqual(['claude', 'codex'])
   })
 
+  it('drops the retired per-agent header icon', () => {
+    const parsed = parseQuotaConfig({ agents: { claude: { icon: { mode: 'emoji', value: '🐙' } } } })
+    expect(parsed.agents.claude).not.toHaveProperty('icon')
+  })
+
   it('keeps valid pace glyphs and weeklyAutoHide, rejecting malformed ones', () => {
     const parsed = parseQuotaConfig({
       display: {

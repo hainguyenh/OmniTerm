@@ -2,7 +2,7 @@ import type React from 'react'
 import { useRef } from 'react'
 
 import type { QuotaWindow } from '../src/types'
-import type { AgentIconConfig, LineSize } from './quotaConfig'
+import type { LineSize } from './quotaConfig'
 import { iconForAgent, type AgentBrand } from './agentBrand'
 
 import { clampLimit, WINDOW_LABELS } from './quotaConfig'
@@ -10,10 +10,7 @@ import { animationFor, formatReset, lineTooltip, trackLabels, zoneFor } from './
 
 export type { AgentBrand } from './agentBrand'
 
-export function AgentIcon({ agent, icon, className = 'w-3 h-3' }: { agent: AgentBrand; icon?: AgentIconConfig; className?: string }) {
-  if (icon?.mode === 'emoji' && icon.value) {
-    return <span className={className} role="img" aria-label={`${agent} agent icon`}>{icon.value}</span>
-  }
+export function AgentIcon({ agent, className = 'w-3 h-3' }: { agent: AgentBrand; className?: string }) {
   const Icon = iconForAgent(agent)
   return <Icon className={className} />
 }

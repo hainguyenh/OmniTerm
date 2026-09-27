@@ -139,7 +139,9 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 basis-0 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
+        {/* Only as wide as its buttons (at most half the header): the title's activity zone takes
+            the rest, so the busy artwork travels right up to the first control. */}
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[50%] flex-initial items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && (
             <SessionControlButtons
               conn={conn}

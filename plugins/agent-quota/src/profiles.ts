@@ -5,7 +5,8 @@ import type { AgentKind, DiscoveredProfile } from './types'
 
 import { DEFAULT_DIR, isLauncherName } from './launcher'
 
-const AGENTS: readonly AgentKind[] = ['claude', 'codex']
+/** Claude only for now: codex profiles are not offered until their quota reading is supported. */
+const AGENTS: readonly AgentKind[] = ['claude']
 /** Only launchers the sidecar can run again by name (see deps.launcherCandidates) are listed. */
 const WINDOWS_LAUNCHER_EXTENSIONS = ['.cmd', '.bat', '.exe']
 /** A PATH with hundreds of `claude-*` files is not a real setup; the dashboard stays readable. */
@@ -49,7 +50,7 @@ function searchDirs(deps: ProviderDeps, platform: NodeJS.Platform): string[] {
 
 /**
  * Every agent profile this user can start: each agent's default profile when its directory exists
- * (`~/.claude`, `~/.codex`), then every profile launcher (`claude-work`, `codex-alt`) found in
+ * (`~/.claude`), then every profile launcher (`claude-work`) found in
  * `~/.local/bin` or on PATH — the same places `resolveLauncher` looks, so each listed launcher can
  * be probed by name. Names are matched with the launcher rule, never executed here, and
  * de-duplicated the way the OS resolves them (case-insensitively on Windows).

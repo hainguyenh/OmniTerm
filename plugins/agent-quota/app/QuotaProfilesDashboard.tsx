@@ -1,5 +1,5 @@
 import { Check, Copy, RefreshCw, Sparkles, Users, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { AgentKind, QuotaSnapshot, QuotaWindow } from '../src/types'
 import type { ProfileAdvice, Recommendation } from './profileAdvisor'
@@ -7,6 +7,7 @@ import type { DashboardDeps, DashboardRow } from './profileDashboard'
 
 import './profilesDashboard.css'
 import { AgentIcon } from './QuotaLine'
+import { useDialogDrag } from './dialogDrag'
 import { adviseProfiles } from './profileAdvisor'
 import {
   fetchDashboardProfiles,
@@ -164,15 +165,18 @@ function AgentGroup({ agent, rows, showHeading, deps, now }: { agent: AgentKind;
 }
 
 /**
- * The Profiles dashboard: every profile the user can start, its 5h and weekly quota with reset
- * times, and which one to use now (profileAdvisor.ts). View only, and read only on request — the
- * list is discovered on open, quota is read when the user presses Fetch.
+ * The Profiles dashboard: every Claude profile the user can start, its 5h and weekly quota with
+ * reset times, and which one to use now (profileAdvisor.ts). View only, and read only on request —
+ * the list is discovered on open, quota is read when the user presses Fetch. The header row drags
+ * the dialog out of the way of what it covers.
  */
 export function QuotaProfilesDashboard({ deps }: { deps: DashboardDeps }) {
   const rows = useProfileDashboard((state) => state.rows)
   const listing = useProfileDashboard((state) => state.listing)
   const fetchingAll = useProfileDashboard((state) => state.fetchingAll)
   const now = useCoarseNow()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const drag = useDialogDrag(dialogRef)
 
   useEffect(() => {
     void loadDashboardProfiles(deps, getQuotaState().profiles)
@@ -189,8 +193,8 @@ export function QuotaProfilesDashboard({ deps }: { deps: DashboardDeps }) {
   const busy = fetchingAll || rows.some((row) => row.fetching)
   return (
     <div className="aq-pd-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDashboardOpen(false) }}>
-      <div role="dialog" aria-modal="true" aria-label="Agent profiles" className="aq-pd-dialog">
-        <div className="flex items-center gap-2">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Agent profiles" className="aq-pd-dialog" style={drag.style}>
+        <div className="aq-pd-handle flex items-center gap-2" data-testid="aq-pd-handle" title="Drag to move" {...drag.handleProps}>
           <Users className="w-4 h-4 text-theme-accent" />
           <div className="flex-1 min-w-0">
             <div className="font-bold tracking-wide">Profiles</div>

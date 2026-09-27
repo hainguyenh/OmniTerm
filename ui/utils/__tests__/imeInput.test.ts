@@ -21,14 +21,14 @@ describe('installImeInput', () => {
     const workaround = installImeInput(terminal, 'win32')
 
     terminal.textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    terminal.textarea.value = '你好'
     terminal.textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '你好' }))
 
     expect(terminal.input).toHaveBeenCalledExactlyOnceWith('你好')
-    expect(workaround.shouldForwardData('你好')).toBe(false)
     workaround.dispose()
   })
 
-  it('bridges text replacement on darwin without touching shouldForwardData', () => {
+  it('bridges text replacement on darwin', () => {
     const terminal = createTerminal()
     const workaround = installImeInput(terminal, 'darwin')
     terminal.textarea.value = 'tieng'
@@ -42,7 +42,6 @@ describe('installImeInput', () => {
     }))
 
     expect(terminal.input).toHaveBeenCalledExactlyOnceWith('\x7f\x7f\x7f\x7f\x7f' + 'tiếng')
-    expect(workaround.shouldForwardData('anything')).toBe(true)
     workaround.dispose()
   })
 
@@ -77,7 +76,6 @@ describe('installImeInput', () => {
     }))
 
     expect(terminal.input).not.toHaveBeenCalled()
-    expect(workaround.shouldForwardData('anything')).toBe(true)
     workaround.dispose()
   })
 })

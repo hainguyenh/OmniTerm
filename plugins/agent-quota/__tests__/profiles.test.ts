@@ -12,7 +12,7 @@ const bin = path.join(HOME, '.local', 'bin')
 const tools = path.join(HOME, 'tools')
 
 describe('listProfiles', () => {
-  it('lists default profiles that exist, then runnable launchers from ~/.local/bin and PATH', async () => {
+  it('lists Claude default profiles that exist, then runnable Claude launchers from ~/.local/bin and PATH', async () => {
     const deps = fakeDeps({
       [path.join(HOME, '.claude', 'settings.json')]: '{}',
       [path.join(bin, 'claude-work.cmd')]: '',
@@ -25,13 +25,13 @@ describe('listProfiles', () => {
       [path.join(tools, 'readme.txt')]: '',
     }, {
       env: { PATH: `${tools};${tools};` },
-      mtime: async (file) => (file === path.join(HOME, '.claude') ? 1 : null),
+      // A codex home and launcher exist too; only Claude profiles are supported for now.
+      mtime: async (file) => (file === path.join(HOME, '.claude') || file === path.join(HOME, '.codex') ? 1 : null),
     })
     expect(await listProfiles(deps, 'win32')).toEqual([
       { agent: 'claude', profileName: 'claude', profileDir: path.join(HOME, '.claude'), launcher: null },
       { agent: 'claude', profileName: 'claude-th', profileDir: null, launcher: 'claude-th' },
       { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' },
-      { agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' },
     ])
   })
 

@@ -12,14 +12,8 @@ export const WINDOW_KINDS: readonly WindowKind[] = ['session', 'weekly', 'monthl
 
 export type WakeMode = 'off' | 'timeOfDay' | 'afterReset'
 export type LineSize = 'thin' | 'normal' | 'thick'
-export type AgentIconMode = 'default' | 'emoji'
 export type ArtSpeed = 'slow' | 'normal' | 'fast'
 export type ArtSize = 'compact' | 'normal' | 'large'
-
-export interface AgentIconConfig {
-  mode: AgentIconMode
-  value: string
-}
 
 export interface WakeConfig {
   mode: WakeMode
@@ -32,8 +26,6 @@ export interface WakeConfig {
 
 export interface AgentConfig {
   enabled: boolean
-  /** Shared visual used by the quota strip and the terminal header. */
-  icon: AgentIconConfig
   /** Used-percent at which the window counts as exhausted, per window. */
   limits: Record<WindowKind, number>
   suspendAtLimit: boolean
@@ -107,7 +99,6 @@ export interface AgentOverride {
 
 const defaultAgent = (enabled: boolean): AgentConfig => ({
   enabled,
-  icon: { mode: 'default', value: '' },
   limits: { session: 90, weekly: 95, monthly: 95 },
   suspendAtLimit: true,
   autoResume: true,
@@ -169,13 +160,10 @@ function parseAgent(value: unknown, fallback: AgentConfig): AgentConfig {
   const source = record(value)
   const limits = record(source.limits)
   const wake = record(source.wake)
-  const icon = record(source.icon)
-  const iconMode = oneOf(icon.mode, ['default', 'emoji'] as const, fallback.icon.mode)
-  const iconValue = typeof icon.value === 'string' && icon.value.length <= 8 ? icon.value : fallback.icon.value
   const hardStop = source.hardStopAtPct
+  // A stored `icon` (the retired header-icon setting) is dropped here and on the next save.
   return {
     enabled: bool(source.enabled, fallback.enabled),
-    icon: { mode: iconMode, value: iconValue },
     limits: {
       session: num(limits.session, fallback.limits.session, MIN_LIMIT, MAX_LIMIT),
       weekly: num(limits.weekly, fallback.limits.weekly, MIN_LIMIT, MAX_LIMIT),

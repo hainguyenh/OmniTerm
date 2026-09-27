@@ -121,6 +121,39 @@ describe('SessionControlButtons', () => {
     }
   })
 
+  it('asks the header for exactly the width its controls need, and nothing on the footer', () => {
+    const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return this instanceof HTMLElement && this.classList.contains('terminal-control-measurement') ? 100 : 0
+      },
+    })
+    try {
+      const { unmount } = render(
+        <SessionControlButtons conn={local} sessionId="s1" detach="detach" onToggleDetach={vi.fn()} onToggleFullscreen={vi.fn()} surface="header" />,
+      )
+      const header = screen.getByTestId('session-control-root')
+      expect(header).toHaveClass('flex-initial')
+      expect(header.style.width).toBe('100px')
+      unmount()
+
+      // The header's "open here" action lives only in More, so its button is part of the width.
+      const { unmount: unmountWithMore } = render(
+        <SessionControlButtons conn={local} sessionId="s1" detach="detach" onToggleDetach={vi.fn()} onOpenCurrentDirectory={vi.fn()} surface="header" />,
+      )
+      expect(screen.getByTestId('session-control-root').style.width).toBe('120px')
+      unmountWithMore()
+
+      render(<SessionControlButtons conn={local} sessionId="s1" detach="detach" onToggleDetach={vi.fn()} surface="footer" />)
+      expect(screen.getByTestId('session-control-root')).toHaveClass('flex-1')
+      expect(screen.getByTestId('session-control-root').style.width).toBe('')
+    } finally {
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', scrollWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth')
+    }
+  })
+
   it('keeps actions in the More menu when a resize collapses the allocated width to zero', () => {
     const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
     const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')

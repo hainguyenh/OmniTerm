@@ -113,6 +113,22 @@ describe('QuotaProfilesDashboard', () => {
     expect(getProfileDashboard().open).toBe(true)
   })
 
+  it('moves by its header, while the header buttons stay clicks', async () => {
+    render(<QuotaProfilesDashboard deps={deps({})} />)
+    await screen.findByRole('listitem', { name: 'claude-work profile' })
+    const dialog = screen.getByRole('dialog')
+    const handle = screen.getByTestId('aq-pd-handle')
+
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 100, clientY: 100 })
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160, clientY: 140 })
+    fireEvent.pointerUp(handle, { pointerId: 1 })
+    expect(dialog.style.transform).toBe('translate(60px, 40px)')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Fetch all' }), { button: 0, pointerId: 2, clientX: 0, clientY: 0 })
+    fireEvent.pointerMove(handle, { pointerId: 2, clientX: 300, clientY: 300 })
+    expect(dialog.style.transform).toBe('translate(60px, 40px)')
+  })
+
   it('opens from the quick settings, which close behind it', () => {
     render(<QuotaQuickPopover />)
     fireEvent.click(screen.getByRole('button', { name: 'Profiles' }))

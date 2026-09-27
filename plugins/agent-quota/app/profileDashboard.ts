@@ -37,6 +37,8 @@ export interface DashboardDeps {
 
 /** Two `claude -p /usage` runs at a time: each starts a full CLI, so a long list must not fork them all. */
 const FETCH_CONCURRENCY = 2
+/** Profiles are Claude-only for now, whatever the engine monitors. */
+const DASHBOARD_AGENTS: readonly AgentKind[] = ['claude']
 
 const initialState = (): DashboardState => ({ open: false, listing: false, fetchingAll: false, rows: [] })
 
@@ -89,7 +91,8 @@ export function freshestReading(row: DashboardRow, engine: Record<string, Profil
 
 /**
  * Refresh the list of profiles: the sidecar's discovery plus any profile the engine monitors that
- * discovery cannot see (a custom `CLAUDE_CONFIG_DIR` set by hand). Readings already taken are kept.
+ * discovery cannot see (a custom `CLAUDE_CONFIG_DIR` set by hand), Claude profiles only. Readings
+ * already taken are kept.
  */
 export async function loadDashboardProfiles(deps: DashboardDeps, engine: Record<string, ProfileQuota> = {}): Promise<void> {
   update((current) => ({ ...current, listing: true }))
@@ -99,7 +102,7 @@ export async function loadDashboardProfiles(deps: DashboardDeps, engine: Record<
     const rows = new Map<string, DashboardRow>()
     const add = (profile: DiscoveredProfile) => {
       const key = dashboardKey(profile)
-      if (rows.has(key)) return
+      if (rows.has(key) || !DASHBOARD_AGENTS.includes(profile.agent)) return
       const kept = previous.get(key)
       rows.set(key, {
         key,

@@ -80,6 +80,10 @@ export default function SessionControlButtons({
   const rootRef = useRef<HTMLSpanElement>(null)
   const measurementRef = useRef<HTMLSpanElement>(null)
   const [hiddenControls, setHiddenControls] = useState<ControlKey[]>([])
+  // Header only: the width every control needs, so the slot asks for no more than its buttons and
+  // the pane title's activity zone runs up to the first one. Kept while controls sit in "More",
+  // so a pane that widens again gets them back.
+  const [neededWidth, setNeededWidth] = useState<number>()
   const [menuOpen, setMenuOpen] = useState(false)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const stopEnabled = sessionLive ?? Boolean(busy)
@@ -155,6 +159,10 @@ export default function SessionControlButtons({
         setHiddenControls(previous => previous.length === 0 ? previous : [])
         return
       }
+      if (resolvedSurface === 'header' && measurement.scrollWidth > 0) {
+        const needed = measurement.scrollWidth + (overflowOnlyControls.length > 0 ? MORE_BUTTON_WIDTH + 2 : 0)
+        setNeededWidth(needed)
+      }
       if (!availableWidth) {
         setHiddenControls(typeof ResizeObserver === 'undefined' ? [] : availableControls)
         return
@@ -187,7 +195,7 @@ export default function SessionControlButtons({
     const slot = root.parentElement
     if (slot && slot !== root) observer.observe(slot)
     return () => observer.disconnect()
-  }, [availableControls.join('|'), resolvedSurface])
+  }, [availableControls.join('|'), resolvedSurface, overflowOnlyControls.length])
 
   useEffect(() => {
     if (!menuOpen && !customizeOpen) return
@@ -285,7 +293,13 @@ export default function SessionControlButtons({
   const footerActions = toolbarActionsFor({ footer: appearance?.footerActions ? [...appearance.footerActions] : undefined }, 'footer')
 
   return (
-    <span ref={rootRef} data-testid="session-control-root" data-session-control-root className={`relative flex min-w-[18px] flex-1 items-center justify-end gap-0.5 ${className}`}>
+    <span
+      ref={rootRef}
+      data-testid="session-control-root"
+      data-session-control-root
+      className={`relative flex min-w-[18px] ${resolvedSurface === 'header' ? 'flex-initial' : 'flex-1'} items-center justify-end gap-0.5 ${className}`}
+      style={resolvedSurface === 'header' && neededWidth !== undefined ? { width: neededWidth } : undefined}
+    >
       <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
         {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
       </span>

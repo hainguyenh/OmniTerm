@@ -31,9 +31,10 @@ interface PaneHeaderTitleProps {
  * only an icon — its name and profile are in the icon's tooltip. The process-tree presence wins
  * over title parsing, so a pane counts as an agent pane even while its title shows only a task.
  *
- * Layout: this cluster takes the header's left half (the controls take the right half), and the
- * activity zone fills whatever the title leaves of it — so the status dot, the running dots or the
- * agent's loading artwork animate inside a fixed area and never push a header button around.
+ * Layout: the controls take only the width their buttons need (at most half the header) and this
+ * cluster takes the rest; the activity zone fills whatever the title leaves of it, up to the first
+ * control (the theme button) — so the status dot, the running dots or the agent's loading artwork
+ * animate inside a fixed area and never push a header button around.
  */
 export function PaneHeaderTitle({
   conn, sessionId, sessionTitle, liveFolder, shellLabel, folderPath, onOpenFolder, status, busy, darkMode,

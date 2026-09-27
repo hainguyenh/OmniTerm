@@ -39,7 +39,9 @@ function agentSummary(config: AgentConfig): string {
 
 /**
  * One agent's global quota settings: a one-line summary row with the monitor switch, expanding to
- * Limits (with a live preview), Protection, Wake-up and Header icon. Edits go to the parent's draft.
+ * Limits (with a live preview), Protection and Wake-up. A busy pane's header shows the loading
+ * artwork (Loading artwork group), so there is no separate header icon to pick here. Edits go to the
+ * parent's draft.
  */
 export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = false }: AgentSettingsCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
@@ -66,7 +68,7 @@ export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = f
           className="flex flex-1 min-w-0 items-center gap-2 text-left disabled:cursor-default"
         >
           <Chevron className={`w-3.5 h-3.5 shrink-0 text-theme-dim ${config.enabled ? '' : 'opacity-0'}`} />
-          <AgentIcon agent={agent} icon={config.icon} className="w-4 h-4 shrink-0" />
+          <AgentIcon agent={agent} className="w-4 h-4 shrink-0" />
           <span className="font-semibold text-theme-fg text-sm shrink-0">{name}</span>
           <span className="truncate text-[11px] text-theme-dim" data-testid={`${agent}-summary`}>{agentSummary(config)}</span>
         </button>
@@ -167,30 +169,6 @@ export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = f
               )}
             </div>
             {config.wake.mode !== 'off' && !promptValid && <span className="text-theme-error">Use letters, digits and simple punctuation only.</span>}
-          </div>
-
-          <div className="flex items-center gap-2 text-theme-dim">
-            <label htmlFor={`${agent}-header-icon`} className="w-20">Header icon</label>
-            <select
-              id={`${agent}-header-icon`}
-              aria-label={`${name} header icon mode`}
-              className={FIELD}
-              value={config.icon.mode}
-              onChange={(event) => patch({ icon: { ...config.icon, mode: event.target.value as AgentConfig['icon']['mode'] } })}
-            >
-              <option value="default">Default</option>
-              <option value="emoji">Custom emoji</option>
-            </select>
-            {config.icon.mode === 'emoji' && (
-              <input
-                aria-label={`${name} custom header icon`}
-                className={`${FIELD} w-14 text-center`}
-                maxLength={8}
-                value={config.icon.value}
-                placeholder="🐙"
-                onChange={(event) => patch({ icon: { ...config.icon, value: event.target.value } })}
-              />
-            )}
           </div>
         </div>
       )}
