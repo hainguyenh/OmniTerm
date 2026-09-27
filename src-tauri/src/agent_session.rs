@@ -9,9 +9,11 @@
 //! agent process itself — so a file planted before the agent started, or named to look like a
 //! shell command, is never picked up or returned.
 
+use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(test)]
 #[path = "agent_session_tests.rs"]
@@ -105,4 +107,36 @@ pub async fn resolve_claude_session(
     })
     .await
     .map_err(|error| format!("Session lookup failed: {error}"))
+}
+
+fn store_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|dir| dir.join("agent-sessions.json"))
+        .map_err(|error| format!("Failed to get app data dir: {error}"))
+}
+
+/// The crash-safe copy of the renderer's resumable sessions and bookmarks (see
+/// `app_core::agent_sessions`), or `null` when there is none yet or it is unreadable.
+#[tauri::command]
+pub async fn agent_sessions_load<R: Runtime>(app: AppHandle<R>) -> Result<Option<Value>, String> {
+    let path = store_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || app_core::agent_sessions::load_store(&path))
+        .await
+        .map_err(|error| format!("Session store read failed: {error}"))
+}
+
+/// Atomically replace the crash-safe copy. The renderer re-validates everything it reads back.
+#[tauri::command]
+pub async fn agent_sessions_save<R: Runtime>(
+    app: AppHandle<R>,
+    document: Value,
+) -> Result<(), String> {
+    let path = store_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app_core::agent_sessions::save_store(&path, &document)
+    })
+    .await
+    .map_err(|error| format!("Session store write failed: {error}"))?
+    .map_err(|error| format!("Session store write failed: {error}"))
 }

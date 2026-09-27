@@ -2,4 +2,5 @@
 export { QuotaPaneLines } from './QuotaPaneLines'
 export { SuspendedOverlay } from './SuspendedOverlay'
 export { FrozenSessionStatus } from './FrozenSessionStatus'
-export { QuotaAgentHeaderIndicator } from './QuotaAgentHeaderIndicator'
+export { HeaderBusyArt } from './HeaderBusyArt'
+export { UsageProbeOverlay } from './UsageProbeOverlay'

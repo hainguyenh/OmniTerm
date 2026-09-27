@@ -12,6 +12,7 @@ import {
 import { Tooltip } from './Tooltip'
 import ToggleRow from './ToggleRow'
 import TerminalToolbarSettings from './TerminalToolbarSettings'
+import AttachmentsSettings from './AttachmentsSettings'
 import type { TerminalToolbarActions } from '../terminalToolbar'
 
 /**
@@ -290,7 +291,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             className={`w-full py-2 pl-3 pr-8 appearance-none cursor-pointer ${FIELD_CLS}`}
           >
             <option value="reopen">Restart session with profile in current folder (default)</option>
-            <option value="new-command">Send /new command to active agent</option>
+            <option value="new-command">Start a new conversation in the agent (/clear, /new)</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-theme-dim">
             <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
@@ -436,6 +437,8 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           </div>
         )}
       </div>
+
+      <AttachmentsSettings />
 
       {/* Settings backup. The backend owns the envelope. Secrets cannot be in the file because
           the connection store holds none (connections.rs). */}

@@ -101,6 +101,8 @@ export interface AgentOverride {
   autoResume?: boolean
   /** Optional per-terminal wake profile; absent means the global profile applies. */
   wake?: WakeConfig
+  /** Show the weekly line in this terminal even while the global auto-hide would hide it. */
+  showWeekly?: boolean
 }
 
 const defaultAgent = (enabled: boolean): AgentConfig => ({
@@ -290,6 +292,8 @@ export function pruneOverride(global: AgentConfig, override: AgentOverride): Age
     ...(override.suspendAtLimit !== undefined && override.suspendAtLimit !== global.suspendAtLimit ? { suspendAtLimit: override.suspendAtLimit } : {}),
     ...(override.autoResume !== undefined && override.autoResume !== global.autoResume ? { autoResume: override.autoResume } : {}),
     ...(override.wake && !sameWakeConfig(override.wake, global.wake) ? { wake: override.wake } : {}),
+    // Display-only: there is no global counterpart, so only `true` is a difference worth keeping.
+    ...(override.showWeekly ? { showWeekly: true } : {}),
   }
   return Object.keys(pruned).length > 0 ? pruned : null
 }

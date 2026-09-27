@@ -32,7 +32,7 @@ export const RenewSessionModal: React.FC<RenewSessionModalProps> = ({
   }
 
   const description = strategy === 'new-command'
-    ? 'Send the "/new" command to start a fresh conversation session with the active AI agent?'
+    ? 'Start a fresh conversation in the active AI agent (/clear for Claude Code, /new for others)?'
     : 'Terminate the current session process tree and restart the AI agent profile in the current directory?'
 
   return (

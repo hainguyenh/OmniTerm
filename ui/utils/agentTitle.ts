@@ -83,6 +83,18 @@ const AGENTS: ReadonlyArray<{ displayName: string; aliases: string[] }> = [
   { displayName: 'Gemini CLI', aliases: ['gemini cli', 'gemini'] },
 ]
 
+/** True when `text` opens with a known agent's name, e.g. "Claude Code - app" or "codex". */
+export function startsWithAgentName(text: string): boolean {
+  const lower = text.trim().toLowerCase()
+  return AGENTS.some(agent => agent.aliases.some(alias =>
+    lower.startsWith(alias) && !/[a-z0-9]/.test(lower.charAt(alias.length))))
+}
+
+/** True when `text` is only a shell executable name, e.g. "pwsh" or "cmd.exe". */
+export function isShellBinaryName(text: string): boolean {
+  return SHELL_BINARIES.has(text.trim().toLowerCase())
+}
+
 /**
  * Attempt to extract the last meaningful folder/directory segment from a path or title string.
  *

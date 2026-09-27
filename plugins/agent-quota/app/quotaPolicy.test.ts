@@ -15,7 +15,7 @@ import {
   paceTooltip,
   pressure,
   shouldHideWeekly,
-  zoneBands,
+  trackLabels,
   zoneFor,
 } from './quotaPolicy'
 import { burnRate, guardInterval, heldInterval, nextInterval, pushSample } from './smartInterval'
@@ -48,16 +48,29 @@ describe('zones', () => {
     expect(animationFor('over', false)).toBe('none')
   })
 
-  it('draws bands up to the limit and an over band past it', () => {
-    expect(zoneBands(80)).toEqual([
-      { zone: 'calm', start: 0, end: 40 },
-      { zone: 'watch', start: 40, end: 56 },
-      { zone: 'warm', start: 56, end: 64 },
-      { zone: 'hot', start: 64, end: 72 },
-      { zone: 'critical', start: 72, end: 80 },
-      { zone: 'over', start: 80, end: 100 },
-    ])
-    expect(zoneBands(100)).toHaveLength(5)
+  it('centres the used number in the fill and the danger-zone size in the danger zone', () => {
+    expect(trackLabels(60, 80)).toEqual({
+      used: { text: '60%', at: 30, fill: 60, inside: true },
+      danger: { text: '20%', at: 90 },
+    })
+  })
+
+  it('moves the danger zone with the limit and drops it at 100%', () => {
+    expect(trackLabels(60, 70).danger).toEqual({ text: '30%', at: 85 })
+    expect(trackLabels(60, 100).danger).toBeNull()
+    // Too narrow for its number: the zone is still drawn, unlabelled.
+    expect(trackLabels(60, 97).danger).toEqual({ text: '', at: 98.5 })
+  })
+
+  it('puts a short fill\'s number just after it, and clamps over-100 readings', () => {
+    expect(trackLabels(5, 80).used).toEqual({ text: '5%', at: 5, fill: 5, inside: false })
+    expect(trackLabels(130, 80).used).toMatchObject({ text: '100%', fill: 100 })
+  })
+
+  it('colours by used ÷ limit, so a lower limit makes the same usage hotter', () => {
+    expect(zoneFor(60, 100)).toBe('watch')
+    expect(zoneFor(60, 70)).toBe('hot')
+    expect(zoneFor(60, 60)).toBe('over')
   })
 })
 
@@ -178,17 +191,23 @@ describe('pace', () => {
     expect(paceTooltip(session(20, resetsAt), limit, NOW)).toBe('Pace: ~100% by reset (limit 90%)')
   })
 
-  it('maps remaining quota to a header loading tier when pace history is unavailable', () => {
-    expect(headerLoadingTier(undefined, limit, NOW)).toBe('onTrack')
-    expect(headerLoadingTier({ kind: 'session', label: 's', usedPct: 10 }, limit, NOW)).toBe('slow')
-    expect(headerLoadingTier({ kind: 'session', label: 's', usedPct: 45 }, limit, NOW)).toBe('onTrack')
-    expect(headerLoadingTier({ kind: 'session', label: 's', usedPct: 70 }, limit, NOW)).toBe('fast')
-    expect(headerLoadingTier({ kind: 'session', label: 's', usedPct: 82 }, limit, NOW)).toBe('overshooting')
+  it('picks the header art from used ÷ limit: ≤40% cat, ≤70% horse, ≤85% airplane, then sonic', () => {
+    const used = (usedPct: number) => ({ kind: 'session' as const, label: 's', usedPct })
+    expect(headerLoadingTier(undefined, 100)).toBe('onTrack')
+    expect(headerLoadingTier(used(40), 100)).toBe('slow')
+    expect(headerLoadingTier(used(41), 100)).toBe('onTrack')
+    expect(headerLoadingTier(used(70), 100)).toBe('onTrack')
+    expect(headerLoadingTier(used(71), 100)).toBe('fast')
+    expect(headerLoadingTier(used(85), 100)).toBe('fast')
+    expect(headerLoadingTier(used(86), 100)).toBe('overshooting')
+    // Relative to the limit, not to 100%: 45% used of a 90% limit is 50% of it.
+    expect(headerLoadingTier(used(45), limit)).toBe('onTrack')
+    expect(headerLoadingTier(used(36), limit)).toBe('slow')
+    expect(headerLoadingTier(used(80), limit)).toBe('overshooting')
   })
 
-  it('lets an aggressive burn projection escalate the header tier', () => {
-    expect(headerLoadingTier(session(20, resetsAt), limit, NOW)).toBe('fast')
-    expect(headerLoadingTier(session(30, resetsAt), limit, NOW)).toBe('overshooting')
+  it('ignores the burn projection: a fast early burn under 40% of the limit is still the cat', () => {
+    expect(headerLoadingTier(session(30, resetsAt), limit)).toBe('slow')
   })
 })
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
-import { formatAgentResumeCommand } from '../utils/agentRegistry'
 import { findInterruptedSessionByTabId, removeStoredSession, useStoredSessions } from '../utils/agentSessionStorage'
+import { consumeForResume, resumeCommandFor } from '../utils/storedSessionResume'
 import { UnexpectedSessionOverlay } from './UnexpectedSessionOverlay'
 
 interface PaneSessionOverlayHostProps {
@@ -24,11 +24,11 @@ export const PaneSessionOverlayHost: React.FC<PaneSessionOverlayHostProps> = ({
     return null
   }
 
-  const resumeCommand = formatAgentResumeCommand('Claude Code', session.sessionId, session.launcher)
+  const resumeCommand = resumeCommandFor(session)
 
   const handleResume = () => {
     if (!resumeCommand) return
-    removeStoredSession(session.id)
+    consumeForResume(session)
     setDismissed(true)
     onResumeCommand?.(resumeCommand, session.cwd)
   }
@@ -45,7 +45,7 @@ export const PaneSessionOverlayHost: React.FC<PaneSessionOverlayHostProps> = ({
 
   return (
     <UnexpectedSessionOverlay
-      agentName="Claude Code"
+      agent={session.agent}
       profileName={session.profileName}
       sessionId={session.sessionId}
       resumeCommand={resumeCommand}

@@ -6,7 +6,7 @@ import type { AgentIconConfig, LineSize } from './quotaConfig'
 import { iconForAgent, type AgentBrand } from './agentBrand'
 
 import { clampLimit, WINDOW_LABELS } from './quotaConfig'
-import { animationFor, formatReset, lineTooltip, zoneBands, zoneFor } from './quotaPolicy'
+import { animationFor, formatReset, lineTooltip, trackLabels, zoneFor } from './quotaPolicy'
 
 export type { AgentBrand } from './agentBrand'
 
@@ -26,21 +26,26 @@ interface QuotaLineProps {
   now: number
   /** Called with a new limit when the marker is dragged or nudged; omitted makes it read-only. */
   onLimitChange?: (limit: number) => void
-  /** `thin` has no room for the marker's own number, so it's folded into `.aq-pct` instead. */
+  /** Track height; the numbers inside scale with it. */
   size?: LineSize
   /** Appended to the computed tooltip — e.g. noting a sibling window that's hidden right now. */
   tooltipSuffix?: string
 }
 
 /**
- * One quota window: faint zone bands, the used fill coloured by zone, and a vertical limit marker.
- * The marker is a slider: drag it, or focus it and use the arrow keys (Shift for steps of 5).
+ * One quota window, as `[ used | remaining safe | danger zone ]`: the safe range runs up to the
+ * limit marker, the danger zone from the limit to 100%. Both unused ranges share the track's own
+ * background — the marker is the boundary. The fill's colour is the zone of used ÷ limit, so moving
+ * the limit re-colours it immediately. The used % is centred in the fill and the danger zone's size
+ * centred in the danger zone. The limit marker is a slider: drag it, or focus it and use the arrow
+ * keys (Shift for steps of 5).
  */
 export function QuotaLine({ window, limit, animations, showReset, now, onLimitChange, size = 'normal', tooltipSuffix }: QuotaLineProps) {
   const trackRef = useRef<HTMLDivElement>(null)
   const zone = zoneFor(window.usedPct, limit)
   const animation = animationFor(zone, animations)
   const label = WINDOW_LABELS[window.kind]
+  const labels = trackLabels(window.usedPct, limit)
 
   const limitAt = (clientX: number) => {
     const rect = trackRef.current?.getBoundingClientRect()
@@ -77,21 +82,21 @@ export function QuotaLine({ window, limit, animations, showReset, now, onLimitCh
     >
       <span className="aq-label">{label.short}</span>
       <div className="aq-track" ref={trackRef}>
-        <span
-          className="aq-used-container"
-          style={{ clipPath: `inset(0 ${Math.max(0, 100 - Math.min(100, window.usedPct))}% 0 0 round 999px)` }}
-        >
-          {zoneBands(limit).map((band) => (
-            <span
-              key={band.zone}
-              className={`aq-band aq-band-${band.zone}`}
-              style={{ left: `${band.start}%`, width: `${band.end - band.start}%` }}
-            />
-          ))}
-          <span className="aq-fill" style={{ width: `${Math.min(100, window.usedPct)}%` }} />
+        <span className="aq-used-container">
+          <span className="aq-fill" style={{ width: `${labels.used.fill}%` }} />
         </span>
-        <span className="aq-track-current aq-track-value" aria-label={`${label.long} current usage`}>{Math.round(window.usedPct)}%</span>
-        <span className="aq-track-remaining" aria-label={`${label.long} remaining to limit`}>{Math.max(0, Math.round(limit - window.usedPct))}%</span>
+        <span
+          className={`aq-track-value aq-used-value${labels.used.inside ? '' : ' aq-used-value-outside'}`}
+          style={{ left: `${labels.used.at}%` }}
+          aria-label={`${label.long} current usage`}
+        >
+          {labels.used.text}
+        </span>
+        {labels.danger && (
+          <span className="aq-track-value aq-danger-value" style={{ left: `${labels.danger.at}%` }} aria-label={`${label.long} danger zone above the limit`}>
+            {labels.danger.text}
+          </span>
+        )}
         <span className="aq-marker" style={{ left: `${limit}%` }} />
         {onLimitChange && (
           <button

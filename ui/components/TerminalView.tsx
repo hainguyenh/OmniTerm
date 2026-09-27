@@ -3,7 +3,8 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { resolveShortcuts, matchesChromeShortcut, FALLBACK_SHORTCUTS } from '../utils/shortcuts'
-import { clipboardActionFor } from '../utils/paste'
+import { canPasteAsPowerShellScript, clipboardActionFor } from '../utils/paste'
+import { interceptPaneInput } from '../utils/paneInputHold'
 import { matchShortcut } from '../utils/keyboard'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
@@ -14,7 +15,7 @@ import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK, resolveTerminalFontFamily } from '../utils/terminalOptions'
 import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
-import { releasePastedImage, setLastPastedImage } from '../utils/pastedImageStore'
+import { recordPastedImage, recordSavedAttachments, releaseSessionMedia } from '../utils/sessionAttachmentStore'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
@@ -226,6 +227,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     term.onData(data => {
       if (!imeInput.shouldForwardData(data)) return
+      if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       copyTracker.noteInput(data)
       api.input(data)
     })
@@ -238,7 +240,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
-    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths, (saved) => setLastPastedImage(id, saved))
+    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths, (saved) => recordPastedImage(id, saved), (files) => recordSavedAttachments(id, files))
     // Powers the pane-header copy menu's "last output" slice; fed from term.onData below.
     // The wrapper (not `.active`) is handed over so every read resolves the current buffer —
     // xterm's active view can be swapped underneath by resets/replays. The live marker keeps
@@ -262,7 +264,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       noteLocalEcho: () => noteLocalEcho(),
       isSuppressed: () => performance.now() <= suppressNativePasteUntil,
       canInsertImagePaths,
-      onImageSaved: (saved) => setLastPastedImage(id, saved),
+      onImageSaved: (saved) => recordPastedImage(id, saved),
+      onFilesSaved: (files) => recordSavedAttachments(id, files),
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
@@ -273,6 +276,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const onAltClickMove = createAltClickMoveHandler(term, api)
     termEl.addEventListener('mousedown', onAltClickMove)
     termEl.addEventListener('paste', onNativePaste, true)
+    clipboard.installDrop(termEl) // files dropped on an agent pane become attachments (attachmentInput.ts)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
     termEl.addEventListener('mouseup', onMouseUp)
 
@@ -329,11 +333,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       // Chromium's native paste fires on top of ours and the PTY gets the clipboard twice (paste.ts).
       const scriptShortcut = shortcutsRef.current?.pasteScript ?? FALLBACK_SHORTCUTS.pasteScript
       const isScript = matchShortcut(e, scriptShortcut)
-      const clip = clipboardActionFor(e, isMac, false, isScript)
+      const clip = clipboardActionFor(e, isMac, imagePasteModeFor(agentNameRef.current) === 'forward', isScript)
       if (clip) {
         e.preventDefault()
         e.stopPropagation()
-        if (clip === 'paste-script') void clipboard.pasteScript()
+        if (clip === 'paste-script') void clipboard.pasteScript(canPasteAsPowerShellScript({ platform: window.omnitermAPI.app.platform, connectionType: connection.type, shell: connection.shell, agentName: agentNameRef.current }))
         else if (clip === 'paste') {
           if (e.altKey) void clipboard.pasteImage()
           else void clipboard.paste()
@@ -411,7 +415,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
-      releasePastedImage(id)
+      releaseSessionMedia(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
       termRef.current = null

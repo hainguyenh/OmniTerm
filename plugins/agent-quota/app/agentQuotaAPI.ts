@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 
-import type { AgentKind, FetchUsageRequest, QuotaSnapshot, QuotaWindow, WakeRequest, WakeResult } from '../src/types'
+import type { AgentKind, DiscoveredProfile, FetchUsageRequest, QuotaSnapshot, QuotaWindow, WakeRequest, WakeResult } from '../src/types'
 
 /** The main agent Rust found in a terminal session (`agent_quota_detect`). */
 export interface SessionAgent {
@@ -101,6 +101,29 @@ function parseReport(value: unknown): SuspendReport {
 }
 
 const count = (value: unknown) => (isInt(value) ? value : 0)
+
+/**
+ * Validate `agentQuota.listProfiles`: a launcher must be a bare name for its own agent, the name a
+ * short label, the directory a plain string. Anything else is dropped, never shown or probed.
+ */
+export function parseDiscoveredProfiles(value: unknown): DiscoveredProfile[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((row): DiscoveredProfile[] => {
+    if (!isRecord(row) || !AGENTS.includes(row.agent as string)) return []
+    const agent = row.agent as AgentKind
+    if (typeof row.profileName !== 'string' || row.profileName.length === 0 || row.profileName.length > 80) return []
+    const launcher = row.launcher === null || row.launcher === undefined ? null : row.launcher
+    if (launcher !== null && (typeof launcher !== 'string' || !LAUNCHER.test(launcher) || !launcher.startsWith(`${agent}-`))) return []
+    const profileDir = typeof row.profileDir === 'string' && row.profileDir.length <= 1024 ? row.profileDir : null
+    if (launcher === null && profileDir === null) return []
+    return [{ agent, profileName: row.profileName, profileDir, launcher }]
+  })
+}
+
+/** Every profile the user can start (the Profiles dashboard); an absent or failing sidecar lists none. */
+export function listAgentProfiles(): Promise<DiscoveredProfile[]> {
+  return invoke<unknown>('plugin_invoke', { method: 'agentQuota.listProfiles', args: [] }).then(parseDiscoveredProfiles, () => [])
+}
 
 export interface AgentQuotaAPI {
   info(): Promise<boolean>

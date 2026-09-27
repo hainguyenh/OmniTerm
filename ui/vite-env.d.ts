@@ -254,14 +254,9 @@ interface Window {
       reportContext: (sessionId: string, update: { cwd?: string; title?: string }) => Promise<void>
       onContext: (cb: (update: import('./utils/sessionRecoveryTypes').DetachedContextUpdate) => void) => () => void
     }
-    clipboard: {
-      writeText: (text: string) => Promise<void>
-      readText: () => Promise<string>
-      /** Native RGBA clipboard read; null when the clipboard holds no image or the read fails. */
-      readImage: () => Promise<{ rgba: Uint8Array; width: number; height: number } | null>
-      /** Persist clipboard-image bytes to a temp PNG; resolves to its absolute path. */
-      saveImageTemp: (bytes: Uint8Array) => Promise<string>
-    }
+    clipboard: import('./utils/attachmentTypes').ClipboardAPI
+    /** The app's attachment folder: images and files pasted or dropped into agent panes. */
+    attachments: import('./utils/attachmentTypes').AttachmentsAPI
     sftp: {
       home: (id: string) => Promise<string>
       list: (id: string, path: string) => Promise<Array<{ name: string; size: number; mtime: number; isDir: boolean; isSymlink: boolean }>>
@@ -393,6 +388,8 @@ interface Window {
     agentSessions?: {
       detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>
+      loadStore?: () => Promise<unknown>
+      saveStore?: (document: Record<string, unknown>) => Promise<void>
     }
   }
 }

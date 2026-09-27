@@ -3,8 +3,8 @@
  *
  * Both image-paste paths (the native paste-event gate and the Ctrl+V clipboard reader) already
  * hold the image bytes while persisting the temp PNG the agent attaches by path; this store keeps
- * blob URLs for those bytes so the pane header can offer a native, full-resolution preview and the
- * viewer can flip back through earlier pastes — TUI agents render the same image as unreadable
+ * blob URLs for those bytes so the pane footer's attachment list can offer a native, full-resolution
+ * preview and the viewer can flip back through earlier pastes — TUI agents render the same image as unreadable
  * cell-block art.
  *
  * One history per session id, appended on every paste and capped so long sessions cannot leak
@@ -84,11 +84,6 @@ export const setLastPastedImage = (sessionId: string | null, saved: SavedPastedI
 export const getPastedImages = (sessionId: string | null): PastedImage[] =>
   sessionId ? slots.get(sessionId) ?? EMPTY_HISTORY : EMPTY_HISTORY
 
-export const getLastPastedImage = (sessionId: string | null): PastedImage | null => {
-  const history = getPastedImages(sessionId)
-  return history.length > 0 ? history[history.length - 1] : null
-}
-
 /** Drop the whole history and revoke its URLs (pane unmount / session close). */
 export const releasePastedImage = (sessionId: string | null): void => {
   if (!sessionId) return
@@ -102,7 +97,7 @@ export const releasePastedImage = (sessionId: string | null): void => {
 export const subscribePastedImage = (sessionId: string | null, listener: Listener): (() => void) =>
   sessionId ? addListener(slotListeners, sessionId, listener) : () => {}
 
-/** Button-to-viewer signal: the pane header asks TerminalView's viewer host to open. */
+/** Button-to-viewer signal: the footer's attachment list asks TerminalView's viewer host to open. */
 export const requestOpen = (sessionId: string | null): void => {
   if (sessionId) notify(openListeners, sessionId)
 }

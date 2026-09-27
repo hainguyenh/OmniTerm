@@ -4,6 +4,8 @@
 //! this crate directly and supplies Tauri-bound wrappers around any
 //! behavior that needs the host runtime.
 
+pub mod agent_sessions;
+pub mod attachments;
 pub mod launch;
 pub mod proc_activity;
 pub mod rdp_launch;

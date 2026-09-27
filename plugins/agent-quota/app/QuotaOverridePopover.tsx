@@ -29,6 +29,7 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
   const committed = useQuota((state) => state.overrides[terminal.instanceKey])
   const guard = useQuota((state) => state.guards[terminal.instanceKey])
   const windows = useQuota((state) => state.profiles[terminal.profileKey]?.lastGood?.windows)
+  const display = useQuota((state) => state.config.display)
   // Edits land in a local draft first — nothing here reaches the running engine until Apply, so
   // dragging a slider can't misfire a suspend/resume decision on a half-typed prompt.
   const [draft, setDraft] = useState<AgentOverride | undefined>(committed)
@@ -113,6 +114,18 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
           <span className="w-9 text-right tabular-nums">{config.limits[kind]}%</span>
         </label>
       ))}
+
+      {display.weeklyAutoHide && (
+        <ToggleRow
+          label="Show weekly quota"
+          description={draft?.showWeekly
+            ? 'Always shown in this terminal.'
+            : `Hidden while weekly usage is below ${display.weeklyThresholdPct ?? 60}% (global auto-hide).`}
+          checked={Boolean(draft?.showWeekly)}
+          onChange={() => apply({ showWeekly: !draft?.showWeekly })}
+          ariaLabel="Always show the weekly quota line in this terminal"
+        />
+      )}
 
       <ToggleRow
         label="Monitor this terminal"

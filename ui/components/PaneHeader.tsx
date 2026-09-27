@@ -1,24 +1,24 @@
-import React, { useSyncExternalStore } from 'react'
+import React from 'react'
 import { createPortal } from 'react-dom'
-import { Terminal, Monitor, ChevronDown, Check, X, FolderOpen, Image as ImageIcon, Bookmark, BookmarkCheck } from 'lucide-react'
+import { Terminal, Monitor, ChevronDown, Check, X, RotateCw } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { paneIdentity, paneSurfaceColor, withAlpha } from '../paneIdentity'
-import { getLastPastedImage, requestOpen, subscribePastedImage } from '../utils/pastedImageStore'
 import type { DetachAction } from '../detachControl'
 import type { SessionTabItem } from './SessionTabs'
 import type { AppTheme } from '../themes'
 import type { TerminalToolbarAction, TerminalToolbarActions } from '../terminalToolbar'
 import { formatTerminalTitle } from '../utils/agentTitle'
+import { requestRenewFromPane } from '../hooks/useRenewSession'
 import SessionStatusIndicator from './SessionStatusIndicator'
 import SessionControlButtons from './SessionControlButtons'
+import { PaneHeaderTitle } from './PaneHeaderTitle'
 import { Tooltip } from './Tooltip'
-import { useBookmarkAgentSession } from '../hooks/useBookmarkAgentSession'
-import { QuotaAgentHeaderIndicator } from '../../plugins/agent-quota/app/paneHosts'
 
 /**
- * The mini header on top of every pane in split view: the pane's identity (shape + number in its own
- * hue — see paneIdentity.ts), the session it holds, a drag handle for rearranging panes, and a chevron
- * opening the picker that fills/re-assigns the pane.
+ * The mini header on top of every terminal: the pane's identity (shape + number in its own hue — see
+ * paneIdentity.ts), the session it holds, a drag handle for rearranging panes, and a chevron opening
+ * the picker that fills/re-assigns the pane. In single view (`single`) there is nothing to arrange,
+ * so the pane identity, drag handle and picker are left out and only the session's own row remains.
  *
  * The identity hue is what ties a pane to its tabs in the strip above; focus is carried by brightness
  * and by a filled (vs outlined) shape, so the two signals never compete for the same colour.
@@ -66,10 +66,8 @@ interface PaneHeaderProps {
   /** Open another local terminal pane at this pane's exact live working directory. */
   onOpenCurrentDirectory?: () => void
   busy?: boolean
-  /** Reuse the configured loading artwork while the quota provider is fetching. */
-  loadingArtUrl?: string | null
-  /** Optional user artwork for a busy agent session; the converted defaults remain the fallback. */
-  sessionArtUrl?: string | null
+  /** Single view: one terminal fills the window, so pane arrangement controls are hidden. */
+  single?: boolean
   /** This pane's effective look, and the palette to change it — omitted while the pane is empty. */
   appearance?: {
     themes: AppTheme[]
@@ -89,7 +87,7 @@ interface PaneHeaderProps {
 const PaneHeader: React.FC<PaneHeaderProps> = ({
   paneIndex, conn, sessionTitle, liveFolder, shellLabel, folderPath, onOpenFolder, focused, sessionId, tabs, panes, layoutMode, statuses, connType,
   pickerOpen, pickerRef, pickerAnchor, detach, onToggleDetach, onFocus, onDragStart, onDragEnd, onTogglePicker,
-  onAssign, onClear, onClose, onOpenCurrentDirectory, fullscreen, onToggleFullscreen, appearance, busy, loadingArtUrl, sessionArtUrl,
+  onAssign, onClear, onClose, onOpenCurrentDirectory, fullscreen, onToggleFullscreen, appearance, busy, single = false,
 }) => {
   const identity = paneIdentity(paneIndex)
   const Shape = identity.icon
@@ -101,144 +99,47 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
       ? false
       : true
     : false
-  // Derive agent and folder context from the live OSC title, connection name, or local cwd
-  const formattedTitle = formatTerminalTitle(sessionTitle, shellLabel, conn?.name, conn?.localCwd)
-  // A shell-reported cwd (OSC 7 / 9;9) is the freshest folder signal — it wins
-  // over the title-derived one and updates as the user moves around.
-  const folderLabel = liveFolder ?? formattedTitle.folderName
-  // Full-res preview slot for this pane's last pasted image; the button stays hidden until an
-  // image paste happens (see pastedImageStore.ts — one slot per session, replaced per paste).
-  const pastedImage = useSyncExternalStore(
-    (cb) => subscribePastedImage(sessionId, cb),
-    () => getLastPastedImage(sessionId),
-  )
-  const { canBookmark, feedback: storedFeedback, store: storeAgentSession } = useBookmarkAgentSession(sessionId)
-
-  const handleStoreSession = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (!conn) return
-    void storeAgentSession(folderPath ?? conn.localCwd ?? undefined, folderLabel)
-  }
+  const arrangeable = !!conn && !single
 
   return (
     <div className="relative flex-shrink-0" data-pane-header>
       <div
-        draggable={!!conn}
-        onDragStart={conn ? (e) => {
+        draggable={arrangeable}
+        onDragStart={arrangeable ? (e) => {
           e.dataTransfer.setData('text/plain', String(paneIndex))
           e.dataTransfer.effectAllowed = 'move'
           onDragStart()
         } : undefined}
         onDragEnd={onDragEnd}
         onMouseDown={onFocus}
-        className={`h-6 flex items-center gap-1.5 px-2 text-[11px] select-none ${conn ? 'cursor-grab active:cursor-grabbing' : ''} ${
+        className={`h-6 flex items-center gap-1.5 px-2 text-[11px] select-none ${arrangeable ? 'cursor-grab active:cursor-grabbing' : ''} ${
           focused ? 'bg-theme-bg text-theme-fg' : 'bg-theme-sidebar text-theme-dim'
         }`}
-        style={conn ? { backgroundColor: paneSurfaceColor(identity, focused) } : undefined}
+        style={conn && !single ? { backgroundColor: paneSurfaceColor(identity, focused) } : undefined}
       >
-        <span className="flex items-center gap-1 flex-shrink-0">
-          <Shape className="w-3.5 h-3.5" style={{ color: hue }} fill={focused ? identity.color : 'none'} />
-          <span className="text-[9px] font-bold" style={{ color: hue }}>{paneIndex + 1}</span>
-        </span>
+        {!single && (
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <Shape className="w-3.5 h-3.5" style={{ color: hue }} fill={focused ? identity.color : 'none'} />
+            <span className="text-[9px] font-bold" style={{ color: hue }}>{paneIndex + 1}</span>
+          </span>
+        )}
         {conn ? (
-          <>
-            {sessionId && formattedTitle.isAgent
-              ? <QuotaAgentHeaderIndicator sessionId={sessionId} agentName={formattedTitle.agentName} loadingArtUrl={loadingArtUrl} sessionArtUrl={sessionArtUrl} busy={false} darkMode={appearance?.darkMode} />
-              : conn.type === 'RDP'
-                ? <Monitor className="w-3 h-3 flex-shrink-0" />
-                : <Terminal className="w-3 h-3 flex-shrink-0" />
-            }
-            <span className="flex min-w-0 flex-1 items-baseline gap-1 font-medium">
-              <span className={`min-w-0 shrink flex items-center gap-1 truncate ${formattedTitle.isAgent ? 'text-theme-accent' : ''}`}>
-                <span className="truncate shrink">
-                  {folderLabel ?? formattedTitle.displayTitle}
-                </span>
-                {folderPath && onOpenFolder && (
-                  <Tooltip content="Open project folder in Explorer" placement="bottom">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onOpenFolder() }}
-                      className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-                      aria-label="Open project folder in Explorer"
-                    >
-                      <FolderOpen className="w-3 h-3" />
-                    </button>
-                  </Tooltip>
-                )}
-              </span>
-            </span>
-            {sessionId && (
-              <SessionStatusIndicator
-                status={statuses[sessionId] ?? 'connecting'}
-                busy={busy && !formattedTitle.isAgent && !sessionArtUrl && !loadingArtUrl}
-                isAgent={formattedTitle.isAgent}
-                runningStyle="oscillate"
-              />
-            )}
-          </>
+          <PaneHeaderTitle
+            conn={conn}
+            sessionId={sessionId}
+            sessionTitle={sessionTitle}
+            liveFolder={liveFolder}
+            shellLabel={shellLabel}
+            folderPath={folderPath}
+            onOpenFolder={onOpenFolder}
+            status={sessionId ? statuses[sessionId] ?? 'connecting' : undefined}
+            busy={busy}
+            darkMode={appearance?.darkMode}
+          />
         ) : (
           <span className="truncate min-w-0 flex-1">Empty pane</span>
         )}
-        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 items-center justify-end gap-1" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
-          {sessionId && busy && (formattedTitle.isAgent || sessionArtUrl || loadingArtUrl) && (
-            <span className="aq-header-custom-loading flex items-center flex-shrink-0" title="Processing…">
-              {sessionArtUrl || loadingArtUrl ? (
-                <span className="aq-agent-header-icon aq-agent-header-loading">
-                  <span className="aq-agent-header-loading-travel">
-                    <img
-                      src={(sessionArtUrl || loadingArtUrl)!}
-                      alt="Loading"
-                      aria-hidden="true"
-                      draggable="false"
-                    />
-                  </span>
-                </span>
-              ) : (
-                <QuotaAgentHeaderIndicator
-                  sessionId={sessionId}
-                  agentName={formattedTitle.agentName}
-                  loadingArtUrl={loadingArtUrl}
-                  sessionArtUrl={sessionArtUrl}
-                  busy={busy}
-                  darkMode={appearance?.darkMode}
-                />
-              )}
-            </span>
-          )}
-          {conn && sessionId && canBookmark && (
-            <Tooltip
-              content={
-                storedFeedback === 'done' ? 'Session stored for later'
-                  : storedFeedback === 'unavailable' ? 'No resumable session found yet'
-                    : 'Store session for later'
-              }
-              placement="bottom"
-            >
-              <button
-                type="button"
-                onClick={handleStoreSession}
-                disabled={storedFeedback === 'pending'}
-                className={`w-4 h-4 flex items-center justify-center rounded transition-colors ${
-                  storedFeedback === 'done' ? 'text-emerald-400' : 'text-theme-dim hover:bg-[#414868] hover:text-theme-accent'
-                }`}
-                aria-label="Store session for later"
-              >
-                {storedFeedback === 'done' ? <BookmarkCheck className="w-3 h-3" /> : <Bookmark className="w-3 h-3" />}
-              </button>
-            </Tooltip>
-          )}
-          {conn && sessionId && pastedImage && (
-            <Tooltip content="View last pasted image" placement="bottom">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); requestOpen(sessionId) }}
-                className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-                aria-label="View last pasted image"
-              >
-                <ImageIcon className="w-3 h-3" />
-              </button>
-            </Tooltip>
-          )}
+        <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] flex-1 basis-0 items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && (
             <SessionControlButtons
               conn={conn}
@@ -257,31 +158,49 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
                 scopeLabel: `Pane ${paneIndex + 1}`,
                 buttonTitle: `Appearance — theme & font size (Pane ${paneIndex + 1})`,
               } : undefined}
-              layoutMode={layoutMode}
             />
           )}
-          <Tooltip content="Choose session for this pane" placement="bottom">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
-              className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
-              aria-label="Choose session for this pane"
-            >
-              <ChevronDown className="w-3 h-3" />
-            </button>
-          </Tooltip>
-          {conn && sessionId && onClose && (
-            <Tooltip content="Close pane" placement="bottom">
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onClose() }}
-                className="ml-1 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-theme-error/20 hover:text-theme-error transition-colors"
-                aria-label="Close pane"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </Tooltip>
-          )}
+          {/* Anchored group: renew, picker and close keep their spot whatever the controls before
+              them do (overflowing into "More" as the pane narrows). */}
+          <span className="flex flex-shrink-0 items-center gap-0.5" data-testid="pane-header-anchored">
+            {conn?.type === 'LOCAL' && sessionId && (
+              <Tooltip content="Renew session: restart this terminal (and its agent) fresh" placement="bottom">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); requestRenewFromPane(sessionId) }}
+                  className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                  aria-label="Renew session"
+                  data-testid="pane-renew-session-button"
+                >
+                  <RotateCw className="w-3 h-3" />
+                </button>
+              </Tooltip>
+            )}
+            {!single && (
+              <Tooltip content="Choose session for this pane" placement="bottom">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onTogglePicker(e.currentTarget.getBoundingClientRect()) }}
+                  className="w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors"
+                  aria-label="Choose session for this pane"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              </Tooltip>
+            )}
+            {conn && sessionId && onClose && !single && (
+              <Tooltip content="Close pane" placement="bottom">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onClose() }}
+                  className="ml-1 w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-theme-error/20 hover:text-theme-error transition-colors"
+                  aria-label="Close pane"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </Tooltip>
+            )}
+          </span>
         </span>
       </div>
       {pickerOpen && createPortal(

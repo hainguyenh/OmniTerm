@@ -1,4 +1,4 @@
-import { AlarmClock, Gauge, Pin, PinOff, Play, RefreshCw, Settings, Snowflake, X } from 'lucide-react'
+import { AlarmClock, Gauge, Pin, PinOff, Play, RefreshCw, Settings, Snowflake, Users, X } from 'lucide-react'
 import { useEffect } from 'react'
 
 import type { AgentKind } from '../src/types'
@@ -7,6 +7,7 @@ import type { QuotaConfig } from './quotaConfig'
 import { confirmDisableSuspend } from './dangerConfirm'
 import { AgentIcon, QuotaLine } from './QuotaLine'
 import { AGENT_KINDS, AGENT_LABELS, effectiveConfig } from './quotaConfig'
+import { setDashboardOpen } from './profileDashboard'
 import { isHeld } from './quotaGuard'
 import { quotaCommands, setQuickOpen, useQuota } from './quotaStore'
 
@@ -123,6 +124,9 @@ export function QuotaQuickPopover() {
         )}
         <button type="button" onClick={() => quotaCommands().refresh()} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-theme-border hover:border-theme-accent">
           <RefreshCw className="w-3 h-3" /> Refresh
+        </button>
+        <button type="button" onClick={() => { setQuickOpen(false); setDashboardOpen(true) }} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-theme-border hover:border-theme-accent">
+          <Users className="w-3 h-3" /> Profiles
         </button>
         <button type="button" onClick={() => quotaCommands().openSettings()} className="flex items-center gap-1 px-2 py-1 rounded-lg border border-theme-border hover:border-theme-accent">
           <Settings className="w-3 h-3" /> Settings

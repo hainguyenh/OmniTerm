@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import { mockOmnitermAPI } from '../../testUtils'
-import { releasePastedImage, setLastPastedImage, subscribeOpen } from '../../utils/pastedImageStore'
+import { recordPastedImage, releaseSessionMedia } from '../../utils/sessionAttachmentStore'
 import { SessionFooterBar } from '../SessionFooterBar'
 
 const local: Connection = {
@@ -15,8 +15,8 @@ beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:mock-image')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-  releasePastedImage('s1')
-  releasePastedImage('s2')
+  releaseSessionMedia('s1')
+  releaseSessionMedia('s2')
   mockOmnitermAPI({
     connect: {
       localInput: vi.fn(),
@@ -63,14 +63,15 @@ describe('SessionFooterBar controls', () => {
   })
 
   it('shows the shell in the footer and keeps the main latency icon', () => {
-    renderFooter({ latency: 42, shellLabel: 'PowerShell 7', loadingArtUrl: 'blob:loading-gif' })
+    renderFooter({ latency: 42, shellLabel: 'PowerShell 7' })
     expect(screen.getByText('// PowerShell 7')).toBeInTheDocument()
-    expect(screen.getByTitle('TCP latency to host').querySelector('svg')).toBeInTheDocument()
+    // A healthy link shows full signal bars, not a warning-looking bolt.
+    expect(screen.getByTitle('TCP latency to host · good').querySelector('[data-latency-level="good"]')).toBeInTheDocument()
   })
 
   it('keeps the main latency icon when no custom art is configured', () => {
-    renderFooter({ latency: 42, appearance: { fontSize: 14, darkMode: false, onFontSizeChange: vi.fn() } })
-    expect(screen.getByTitle('TCP latency to host').querySelector('svg')).toBeInTheDocument()
+    renderFooter({ latency: 420, appearance: { fontSize: 14, darkMode: false, onFontSizeChange: vi.fn() } })
+    expect(screen.getByTitle('TCP latency to host · poor').querySelector('[data-latency-level="poor"]')).toBeInTheDocument()
   })
 
   it('opens the customize dialog from the footer', () => {
@@ -80,36 +81,15 @@ describe('SessionFooterBar controls', () => {
     expect(props.appearance?.onToolbarActionsChange).not.toHaveBeenCalled()
   })
 
-  it('shows the pasted image review button when images exist and triggers viewer on click', () => {
-    const { unmount } = renderFooter()
-    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
-
+  it('leaves identity and status to the pane header, and owns the pane\u2019s attachments', () => {
+    const { container, unmount } = renderFooter({ status: 'connected', busy: true })
+    expect(screen.queryByRole('button', { name: /Attachments/ })).toBeNull()
     act(() => {
-      setLastPastedImage('s1', { bytes: new Uint8Array([1, 2]), path: 'C:/temp/agent-shot.png' })
+      recordPastedImage('s1', { bytes: new Uint8Array([1, 2]), path: 'C:/data/attachments/agent-shot.png' })
     })
-
-    const button = screen.getByRole('button', { name: 'View last pasted image' })
-    expect(button).toBeInTheDocument()
-
-    const onOpen = vi.fn()
-    const unsubscribe = subscribeOpen('s1', onOpen)
-    fireEvent.click(button)
-    expect(onOpen).toHaveBeenCalledTimes(1)
-    unsubscribe()
-
-    act(() => {
-      releasePastedImage('s1')
-    })
-    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
-    unmount()
-  })
-
-  it('does not display image button for a different session', () => {
-    act(() => {
-      setLastPastedImage('s2', { bytes: new Uint8Array([1]), path: 'C:/temp/other.png' })
-    })
-    const { unmount } = renderFooter({ sessionId: 's1' })
-    expect(screen.queryByRole('button', { name: 'View last pasted image' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Attachments (1)' })).toBeInTheDocument()
+    expect(screen.queryByText('Connected')).toBeNull()
+    expect(container.querySelector('[data-agent-badge]')).toBeNull()
     unmount()
   })
 })

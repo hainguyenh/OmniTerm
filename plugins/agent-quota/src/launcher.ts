@@ -27,7 +27,7 @@ export interface AgentCommand {
 }
 
 const PROFILE_VARIABLE = { claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME' } as const
-const DEFAULT_DIR = { claude: '.claude', codex: '.codex' } as const
+export const DEFAULT_DIR = { claude: '.claude', codex: '.codex' } as const
 
 /**
  * How to run `agent` for a profile: its launcher when the terminal used one (the launcher then sets

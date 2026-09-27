@@ -5,6 +5,7 @@ import { newTerminalHoverText } from '../utils/newTerminalDescription'
 import ActivityBar from './ActivityBar'
 import FileBrowser from './FileBrowser'
 import WorkspacePanel from './WorkspacePanel'
+import BookmarksPanel from './BookmarksPanel'
 import ScriptViewer from './ScriptViewer'
 import TerminalView from './TerminalView'
 import RDPView from './RDPView'
@@ -20,6 +21,8 @@ import { Columns2, LayoutGrid, RotateCw, Square } from 'lucide-react'
 import { paneIdentity } from '../paneIdentity'
 import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
+import { isRenewing } from '../hooks/useRenewSession'
+import { formatAgentProfileCommand } from '../utils/agentRegistry'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { workspaceForConnection } from '../utils/workspaceIdentity'
@@ -35,9 +38,9 @@ import { Tooltip } from './Tooltip'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
-import { QuotaPaneLines, SuspendedOverlay } from '../../plugins/agent-quota/app/paneHosts'
+import { QuotaPaneLines, SuspendedOverlay, UsageProbeOverlay } from '../../plugins/agent-quota/app/paneHosts'
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, requestRenewSession = () => {}, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
+  const { appSettings, setAppSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
   const handleRestoreStatus = model.handleRestoreStatus ?? setStatus
   const alwaysAwake = awakeState ?? {
     enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
@@ -118,6 +121,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 revealRequest={revealRequest}
                 onWorkspacesChanged={model.refreshWorkspaces}
               />
+            ) : activeView === 'bookmarks' ? (
+              <BookmarksPanel
+                onLaunch={(command, cwd) => requestNewSession(undefined, null, cwd ?? null, command)}
+                onShowTab={showTab}
+                launchCommandFor={(pin) => formatAgentProfileCommand(pin.agent, pin.launcher, pin.profileName)}
+              />
             ) : activeView === 'files' && activeSshId && activeSshName ? (
               <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
             ) : (
@@ -174,21 +183,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               />
             </div>
   
-            {/* Header controls: Renew session + Layout picker */}
+            {/* Header controls: Layout picker. Renew lives in each terminal's own header. */}
             <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-              {activeTabId && (
-                <Tooltip content="Renew current session" placement="bottom">
-                  <button
-                    type="button"
-                    data-testid="header-renew-session-button"
-                    aria-label="Renew current session"
-                    onClick={() => requestRenewSession(activeTabId)}
-                    className="flex items-center justify-center w-6 h-6 rounded-lg border border-[var(--theme-border)] bg-black/10 text-theme-dim hover:text-theme-accent hover:bg-white/10 transition-colors"
-                  >
-                    <RotateCw className="w-3.5 h-3.5" />
-                  </button>
-                </Tooltip>
-              )}
               <div className="flex items-center rounded-lg border border-[var(--theme-border)] overflow-hidden bg-black/10 flex-shrink-0">
               {([
                 [1, Square, 'Single view'],
@@ -408,7 +404,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       layoutEpoch={`${fullscreenTabId ? 'fullscreen' : layoutMode}:${sourcePaneIdx}`}
                       darkMode={appSettings.darkMode}
                       blurStrength={blurAvailable && (appSettings.blurEnabled ?? true) && appSettings.blurInactiveDock ? appSettings.blurInactiveWindow ?? 0 : 0}
-                      onStatus={(status: SessionStatus) => handleRestoreStatus(tab.id, status)}
+                      // The process a renew replaces ends on purpose; its closed/error is not the pane's state.
+                      onStatus={(status: SessionStatus) => { if (!(isRenewing(tab.id) && (status === 'closed' || status === 'error'))) handleRestoreStatus(tab.id, status) }}
                       onMetrics={(m) => setMetric(tab.id, m)}
                       onActivity={(busy) => setBusy(tab.id, busy)}
                       onTitleChange={(title) => {
@@ -418,7 +415,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                       onCwdChange={(cwd) => setSessionCwd(tab.id, cwd)}
                       // A run-to-completion pane has nothing left once its shell exits, so it takes its
                       // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
-                      onExit={(code) => { if (closesOnExit(conn, code)) closeTabs([tab.id], true) }}
+                      // Renew kills this process on purpose; that exit must not close the tab.
+                      onExit={(code) => { if (!isRenewing(tab.id) && closesOnExit(conn, code)) closeTabs([tab.id], true) }}
                       theme={appSettings.darkMode ? terminalTheme.terminal.dark : terminalTheme.terminal.light}
                       fontSize={terminalFontSize} smartColors={appSettings.smartColors}
                       onFontSizeChange={onFontSizeChange
@@ -446,11 +444,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                           isDropTarget ? 'border-dashed border-theme-accent' : isFocused ? '' : 'border-theme-border'
                         }` : ''}`}
                       >
-                        {split && renderPaneHeader(paneIdx, conn ?? null)}
+                        {visible && (split || conn) && renderPaneHeader(fullscreenTabId ? sourcePaneIdx : paneIdx, conn ?? null, !split)}
                         <QuotaPaneLines sessionId={tab.id} />
                         <div className={`flex-1 min-h-0 relative ${split && (layoutMode > 4 || !conn) ? 'rounded-b-lg ' : ''}overflow-hidden`}>
                           {sessionView}
                           <SuspendedOverlay sessionId={tab.id} />
+                          <UsageProbeOverlay sessionId={tab.id} />
                           <PaneSessionOverlayHost
                             sessionId={tab.id}
                             onResumeCommand={(command, cwd) => requestNewSession(undefined, model.selectedWorkspaceId, cwd ?? null, command)}

@@ -1,0 +1,168 @@
+/*
+ * The Profiles dashboard (QuotaProfilesDashboard.tsx). Zone colours come from the `--aq-*` tokens
+ * agentQuota.css defines, so a bar here means the same as the pane quota lines.
+ */
+
+.aq-pd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.aq-pd-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 44rem;
+  max-height: 80vh;
+  padding: 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  background: var(--theme-popup);
+  color: var(--theme-fg);
+  font-size: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.aq-pd-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  line-height: 1.45;
+}
+
+.aq-pd-banner[data-kind="best"] {
+  border-color: color-mix(in srgb, var(--theme-accent) 60%, var(--theme-border));
+  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
+}
+
+.aq-pd-banner[data-kind="wait"] {
+  border-color: color-mix(in srgb, var(--aq-warm) 60%, var(--theme-border));
+}
+
+.aq-pd-command {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+}
+
+.aq-pd-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+}
+
+.aq-pd-row[data-status="best"] {
+  border-color: color-mix(in srgb, var(--theme-accent) 60%, var(--theme-border));
+}
+
+.aq-pd-name,
+.aq-pd-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.aq-pd-cell-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--theme-dim);
+}
+
+.aq-pd-bar {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: #15161e;
+  overflow: visible;
+}
+
+.aq-pd-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+}
+
+.aq-pd-limit {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--theme-fg);
+  opacity: 0.7;
+}
+
+.aq-pd-reset {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--theme-dim);
+  font-size: 10px;
+}
+
+.aq-pd-status-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.aq-pd-status {
+  padding: 1px 6px;
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--theme-dim);
+}
+
+.aq-pd-row[data-status="best"] .aq-pd-status {
+  border-color: var(--theme-accent);
+  color: var(--theme-accent);
+}
+
+.aq-pd-row[data-status="ok"] .aq-pd-status {
+  color: var(--aq-calm);
+}
+
+.aq-pd-row[data-status="limited"] .aq-pd-status {
+  border-color: color-mix(in srgb, var(--aq-warm) 60%, var(--theme-border));
+  color: var(--aq-warm);
+}
+
+.aq-pd-row[data-status="error"] .aq-pd-status {
+  border-color: color-mix(in srgb, var(--aq-over) 60%, var(--theme-border));
+  color: var(--aq-over);
+}
+
+/* Narrow windows: stack the two quota cells under the name. */
+@media (max-width: 560px) {
+  .aq-pd-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

@@ -1,9 +1,9 @@
 import React from 'react'
-import { Eye, FolderOpen, FolderGit2, Gauge, MoonStar, Settings } from 'lucide-react'
+import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, MoonStar, Settings } from 'lucide-react'
 import { useQuotaActivityEntry } from '../../plugins/agent-quota/app/activityEntry'
 import { Tooltip } from './Tooltip'
 
-export type ActivityView = 'files' | 'workspace'
+export type ActivityView = 'files' | 'workspace' | 'bookmarks'
 
 interface ActivityBarProps {
   /** Which secondary panel is active, or null when the panel is collapsed. */
@@ -69,6 +69,12 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           active={activeView === 'files'}
           disabled={!filesEnabled}
           onClick={() => handleIconClick('files')}
+        />
+        <ActivityIcon
+          icon={<Bookmark className="w-5 h-5" />}
+          label="Bookmarks"
+          active={activeView === 'bookmarks'}
+          onClick={() => handleIconClick('bookmarks')}
         />
       </div>
 

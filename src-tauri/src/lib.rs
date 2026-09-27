@@ -3,6 +3,7 @@ pub mod agent_quota;
 #[path = "../../plugins/always-awake/native/always_awake.rs"]
 pub mod always_awake;
 mod app_utils;
+mod attachments;
 pub mod agent_session;
 mod launcher;
 mod os_actions;
@@ -294,7 +295,6 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         app_utils::reveal_log,
         app_utils::clear_log,
         app_utils::get_version,
-        app_utils::save_temp_image,
         app_utils::open_in_system,
         // Ad-hoc shells + launcher
         adhoc::shells_ready,
@@ -322,6 +322,13 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         agent_quota::agent_quota_resume_all,
         agent_quota::agent_quota_terminate,
         agent_session::resolve_claude_session,
+        agent_session::agent_sessions_load,
+        agent_session::agent_sessions_save,
+        attachments::save_temp_image,
+        attachments::save_attachment,
+        attachments::import_clipboard_files,
+        attachments::list_attachments,
+        attachments::clear_attachments,
     ])
 }
 

@@ -15,6 +15,10 @@ interface ImeTerminal {
 export interface WindowsImeWorkaround {
   dispose(): void
   shouldForwardData(data: string): boolean
+  /** A composition is in progress (the direct-edit bridge must stay out of it). */
+  isComposing(): boolean
+  /** An edit this module swallows: part of a composition, or the echo of one it just committed. */
+  ownsInput(event: InputEvent): boolean
 }
 
 const getCompositionBoundaryInput = (event: KeyboardEvent): string | undefined => {
@@ -51,6 +55,8 @@ export const installWindowsImeCompositionWorkaround = (
     return {
       dispose: () => {},
       shouldForwardData: () => true,
+      isComposing: () => false,
+      ownsInput: () => false,
     }
   }
 
@@ -280,5 +286,8 @@ export const installWindowsImeCompositionWorkaround = (
     element.removeEventListener('input', onInput, true)
     element.removeEventListener('keydown', onKeyDown, true)
   }
-  return { dispose, shouldForwardData }
+  const ownsInput = (event: InputEvent): boolean =>
+    compositionActive || suppressNextInput || (event.data !== null && expectedDuplicates.includes(event.data))
+
+  return { dispose, shouldForwardData, isComposing: () => compositionActive, ownsInput }
 }

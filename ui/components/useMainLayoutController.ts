@@ -16,6 +16,7 @@ export function useMainLayoutController(props: MainLayoutProps) {
     reconnectSession: sessions.reconnectSession,
     appSettings: base.appSettings,
     activeTabId: base.activeTabId,
+    onError: (message) => { void base.showAlert(message, { title: 'Renew session', tone: 'error' }) },
   })
   return { ...base, ...sessions, ...renew }
 }

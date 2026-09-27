@@ -312,12 +312,15 @@ pub fn launcher_host_pids(rows: &[ProcRow], shell_pid: u32) -> Vec<u32> {
     out
 }
 
-/// The main agent under `shell_pid` whose profile is not known from a launcher: the one process
-/// whose environment is worth reading. Every other process's environment is left unread.
+/// The main agent under `shell_pid`: the one process whose environment is worth reading. Every
+/// other process's environment is left unread.
+///
+/// A launcher (`claude-work.cmd`) names the profile, but not where it lives: the script sets
+/// `CLAUDE_CONFIG_DIR` to a folder of its choosing, so the directory must still come from the
+/// agent's own environment. Without it, session lookup fell back to `~/.claude` and never found a
+/// launcher profile's session files.
 pub fn needs_profile_env(rows: &[ProcRow], shell_pid: u32) -> Option<u32> {
-    detect_main_agent(rows, shell_pid, None)
-        .filter(|found| found.launcher.is_none())
-        .map(|found| found.pid)
+    detect_main_agent(rows, shell_pid, None).map(|found| found.pid)
 }
 
 /// What to freeze for the main agent `(pid, start_time)`: the main process itself plus every
