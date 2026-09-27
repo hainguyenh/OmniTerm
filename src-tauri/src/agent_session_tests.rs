@@ -106,3 +106,22 @@ async fn command_rejects_blank_inputs() {
         .expect("command should not error");
     assert_eq!(resolved, None);
 }
+
+#[tokio::test]
+async fn durable_session_commands_round_trip_through_app_data() {
+    let app = crate::test_support::mock_app();
+    let document = serde_json::json!({
+        "sessions": [{ "id": "claude:session" }],
+        "pins": []
+    });
+
+    agent_sessions_save(app.handle().clone(), document.clone())
+        .await
+        .expect("session document should save");
+    assert_eq!(
+        agent_sessions_load(app.handle().clone())
+            .await
+            .expect("session document should load"),
+        Some(document)
+    );
+}
