@@ -18,6 +18,7 @@ import { profileEnv } from './cli'
 const LAUNCHER_NAME = /^(claude|codex|agy)-[A-Za-z0-9_.]{1,40}$/
 
 export function isLauncherName(name: string, agent: AgentKind): boolean {
+  if (name === 'agy-gemini') return false
   return LAUNCHER_NAME.test(name) && name.startsWith(`${agent}-`)
 }
 

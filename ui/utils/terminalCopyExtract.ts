@@ -8,7 +8,7 @@
  * stand in plain objects for xterm's buffer.
  */
 
-export type TerminalCopyAction = 'last-output' | 'viewport'
+export type TerminalCopyAction = 'last-output' | 'viewport' | 'all'
 
 /** Event name for copy requests dispatched by the pane-header menu. */
 export const TERMINAL_COPY_EVENT = 'omniterm:copy-terminal'
@@ -22,8 +22,13 @@ export interface TerminalBufferLineLike {
 
 export interface TerminalBufferLike {
   active: {
+    readonly type?: string
     readonly length: number
     readonly viewportY: number
+    getLine: (line: number) => TerminalBufferLineLike | undefined
+  }
+  normal?: {
+    readonly length: number
     getLine: (line: number) => TerminalBufferLineLike | undefined
   }
 }
@@ -80,9 +85,14 @@ export const viewportText = (buffer: TerminalBufferLike, rows: number): string =
   return joinTrimmingTrailingBlanks(lines)
 }
 
-/** Complete terminal scrollback, including the current viewport and all retained history. */
+/** Complete terminal scrollback, including normal buffer history and any active alternate screen. */
 export const bufferText = (buffer: TerminalBufferLike): string => {
   const lines: string[] = []
+  if (buffer.active.type === 'alternate' && buffer.normal && buffer.normal.length > 0) {
+    for (let index = 0; index < buffer.normal.length; index += 1) {
+      lines.push(buffer.normal.getLine(index)?.translateToString(true) ?? '')
+    }
+  }
   for (let index = 0; index < buffer.active.length; index += 1) {
     lines.push(buffer.active.getLine(index)?.translateToString(true) ?? '')
   }
@@ -219,6 +229,6 @@ export const parseTerminalCopyEvent = (
   if (!(event instanceof CustomEvent)) return null
   const detail = event.detail as { sessionId?: unknown; action?: unknown } | undefined
   if (typeof detail?.sessionId !== 'string' || detail.sessionId === '') return null
-  if (detail.action !== 'last-output' && detail.action !== 'viewport') return null
+  if (detail.action !== 'last-output' && detail.action !== 'viewport' && detail.action !== 'all') return null
   return { sessionId: detail.sessionId, action: detail.action }
 }

@@ -33,10 +33,19 @@ describe('TerminalCopyMenu', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('dispatches a viewport request for "Copy all terminal"', async () => {
+  it('dispatches an all request for "Copy all terminal"', async () => {
     render(<TerminalCopyMenu sessionId="s2" placement="top" />)
     fireEvent.click(screen.getByRole('button', { name: 'Copy terminal output' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /Copy all terminal/ }))
+    await waitFor(() => expect(lastListener).toHaveBeenCalled())
+    const detail = (lastListener.mock.calls.at(-1)?.[0] as CustomEvent).detail
+    expect(detail).toEqual({ sessionId: 's2', action: 'all' })
+  })
+
+  it('dispatches a viewport request for "Copy visible screen"', async () => {
+    render(<TerminalCopyMenu sessionId="s2" placement="top" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy terminal output' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Copy visible screen/ }))
     await waitFor(() => expect(lastListener).toHaveBeenCalled())
     const detail = (lastListener.mock.calls.at(-1)?.[0] as CustomEvent).detail
     expect(detail).toEqual({ sessionId: 's2', action: 'viewport' })

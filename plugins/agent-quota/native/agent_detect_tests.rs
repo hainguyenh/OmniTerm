@@ -231,6 +231,12 @@ fn falls_back_to_the_default_profile_directory() {
         "claude"
     );
     assert_eq!(profile_name(AgentKind::Codex, Some("")), "codex");
+    assert_eq!(
+        profile_name(AgentKind::Agy, Some("C:\\Users\\me\\.gemini\\")),
+        "agy"
+    );
+    assert_eq!(profile_name(AgentKind::Agy, None), "agy");
+    assert_eq!(launcher_name("agy-gemini.cmd", AgentKind::Agy), None);
 }
 
 #[test]

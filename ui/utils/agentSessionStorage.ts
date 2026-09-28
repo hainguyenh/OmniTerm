@@ -61,16 +61,29 @@ function isValidEntry(item: unknown): item is StoredAgentSession {
     && (s.state === 'active' || s.state === 'interrupted' || s.state === 'saved')
     && typeof s.updatedAt === 'number' && Number.isFinite(s.updatedAt)
     && (s.tabId === undefined || typeof s.tabId === 'string')
-    && (s.launcher === undefined || isValidLauncher(s.launcher))
+    && (s.launcher === undefined || s.launcher === 'agy-gemini' || isValidLauncher(s.launcher))
     && (s.cwd === undefined || typeof s.cwd === 'string')
     && (s.folderName === undefined || typeof s.folderName === 'string')
     && (s.title === undefined || (typeof s.title === 'string' && s.title.length <= MAX_TITLE_LENGTH))
     && (s.bookmarked === undefined || typeof s.bookmarked === 'boolean')
 }
 
-/** A `saved` entry from before bookmarks became a flag was always a bookmark. */
+/** A `saved` entry from before bookmarks became a flag was always a bookmark; heals legacy agy-gemini. */
 function normalize(entry: StoredAgentSession): StoredAgentSession {
-  return entry.state === 'saved' && !entry.bookmarked ? { ...entry, bookmarked: true } : entry
+  const cleanLauncher = entry.launcher === 'agy-gemini' ? undefined : entry.launcher
+  const cleanProfile = entry.profileName === 'agy-gemini' ? 'agy' : entry.profileName
+  const cleanBookmarked = entry.state === 'saved' && !entry.bookmarked ? true : entry.bookmarked
+  const result: StoredAgentSession = {
+    ...entry,
+    profileName: cleanProfile,
+    ...(cleanBookmarked !== undefined ? { bookmarked: cleanBookmarked } : {}),
+  }
+  if (cleanLauncher) {
+    result.launcher = cleanLauncher
+  } else {
+    delete result.launcher
+  }
+  return result
 }
 
 export function isBookmarked(entry: StoredAgentSession): boolean {

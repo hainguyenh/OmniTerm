@@ -2,14 +2,16 @@ import { Users, X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
 import type { AgentKind, QuotaSnapshot, QuotaWindow } from '../src/types'
+import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { ProfileAdvice } from './profileAdvisor'
 import type { DashboardRow } from './profileDashboard'
 
 import './profilesDashboard.css'
 import { AgentIcon } from './QuotaLine'
+import { createAgentQuotaAPI, listAgentProfiles } from './agentQuotaAPI'
 import { useDialogDrag } from './dialogDrag'
 import { adviseProfiles } from './profileAdvisor'
-import { dashboardRows, setDashboardOpen } from './profileDashboard'
+import { dashboardRows, fetchAllMissingProfiles, fetchInactiveProfile, setDashboardOpen, setDiscoveredProfiles, useProfileDashboard } from './profileDashboard'
 import { AGENT_KINDS, AGENT_LABELS } from './quotaConfig'
 import { formatCountdown, formatReset, windowOf, zoneFor } from './quotaPolicy'
 import { useCoarseNow, useQuota } from './quotaStore'
@@ -28,23 +30,26 @@ function WindowCell({ label, window, limit, now }: { label: string; window: Quot
         <span className="aq-pd-fill" style={{ width: `${Math.min(100, used)}%`, background: `var(--aq-${zoneFor(used, limit)})` }} />
         <span className="aq-pd-limit" style={{ left: `${limit}%` }} />
       </span>
-      <span className="aq-pd-reset">{reset ? `resets ${reset}` : ' '}</span>
+      <span className="aq-pd-reset">{reset ? `resets ${reset}` : ' '}</span>
     </span>
   )
 }
 
 const STATUS_TEXT: Record<ProfileAdvice['status'], string> = { best: 'Ready', ok: 'Ready', limited: 'Limited', noData: 'No data' }
 
-function ProfileRow({ row, reading, advice, limits, now }: {
+function ProfileRow({ row, reading, advice, limits, now, onFetch }: {
   row: DashboardRow
   reading: QuotaSnapshot | undefined
   advice: ProfileAdvice
   limits: { session: number; weekly: number }
   now: number
+  onFetch?: () => void
 }) {
   const wait = advice.status === 'limited' ? formatCountdown(advice.availableAt, now) : ''
   const status = row.error && advice.status === 'noData' ? 'Error' : wait ? `Limited · ${wait}` : STATUS_TEXT[advice.status]
-  const activity = `${row.activeTerminalCount} active terminal${row.activeTerminalCount === 1 ? '' : 's'}`
+  const activity = row.activeTerminalCount > 0
+    ? `${row.activeTerminalCount} active terminal${row.activeTerminalCount === 1 ? '' : 's'}`
+    : 'inactive'
   const detail = row.fetching
     ? 'Updating quota…'
     : row.error
@@ -63,14 +68,31 @@ function ProfileRow({ row, reading, advice, limits, now }: {
       </span>
       <WindowCell label="5h" window={windowOf(reading, 'session')} limit={limits.session} now={now} />
       <WindowCell label="Week" window={windowOf(reading, 'weekly')} limit={limits.weekly} now={now} />
-      <span className="aq-pd-status-cell">
+      <span className="aq-pd-status-cell flex items-center gap-1.5 justify-end">
         <span className="aq-pd-status" title={advice.reason}>{status}</span>
+        {row.activeTerminalCount === 0 && onFetch && (
+          <button
+            type="button"
+            aria-label={`Fetch quota for ${row.profileName}`}
+            disabled={row.fetching}
+            className="px-2 py-0.5 rounded text-[11px] border border-theme-border hover:border-theme-accent hover:text-theme-accent disabled:opacity-40 transition-colors"
+            onClick={onFetch}
+          >
+            {row.fetching ? 'Fetching…' : 'Fetch'}
+          </button>
+        )}
       </span>
     </li>
   )
 }
 
-function AgentGroup({ agent, rows, showHeading, now }: { agent: AgentKind; rows: DashboardRow[]; showHeading: boolean; now: number }) {
+function AgentGroup({ agent, rows, showHeading, now, onFetch }: {
+  agent: AgentKind
+  rows: DashboardRow[]
+  showHeading: boolean
+  now: number
+  onFetch: (row: DashboardRow) => void
+}) {
   const limits = useQuota((state) => state.config.agents[agent].limits)
   const advice = adviseProfiles(rows.map((row) => ({ key: row.key, name: row.profileName, reading: row.reading })), limits, now)
   const byKey = new Map(rows.map((row) => [row.key, row]))
@@ -80,7 +102,7 @@ function AgentGroup({ agent, rows, showHeading, now }: { agent: AgentKind; rows:
       <ul className="flex flex-col gap-1">
         {advice.ranked.map((entry) => {
           const row = byKey.get(entry.key)
-          return row ? <ProfileRow key={entry.key} row={row} reading={row.reading} advice={entry} limits={limits} now={now} /> : null
+          return row ? <ProfileRow key={entry.key} row={row} reading={row.reading} advice={entry} limits={limits} now={now} onFetch={() => onFetch(row)} /> : null
         })}
       </ul>
     </section>
@@ -88,13 +110,20 @@ function AgentGroup({ agent, rows, showHeading, now }: { agent: AgentKind; rows:
 }
 
 /** The live Profiles view: one row per active profile, sourced from the quota engine snapshot. */
-export function QuotaProfilesDashboard() {
+export function QuotaProfilesDashboard({ api }: { api?: AgentQuotaAPI } = {}) {
+  const quotaApi = useRef(api ?? createAgentQuotaAPI()).current
   const profiles = useQuota((current) => current.profiles)
   const terminals = useQuota((current) => current.terminals)
-  const rows = dashboardRows({ profiles, terminals })
+  const discovered = useProfileDashboard((current) => current.discovered)
+  const manualReadings = useProfileDashboard((current) => current.manualReadings)
+  const rows = dashboardRows({ profiles, terminals }, discovered, manualReadings)
   const now = useCoarseNow()
   const dialogRef = useRef<HTMLDivElement>(null)
   const drag = useDialogDrag(dialogRef)
+
+  useEffect(() => {
+    void (quotaApi.listProfiles ? quotaApi.listProfiles() : listAgentProfiles()).then(setDiscoveredProfiles)
+  }, [quotaApi])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -104,6 +133,23 @@ export function QuotaProfilesDashboard() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  const handleFetch = (row: DashboardRow) => {
+    void fetchInactiveProfile(row, quotaApi)
+  }
+
+  const handleFetchAll = () => {
+    void fetchAllMissingProfiles(rows, quotaApi)
+  }
+
+  const activeCount = rows.filter((r) => r.activeTerminalCount > 0).length
+  const inactiveCount = rows.filter((r) => r.activeTerminalCount === 0).length
+  const missingRows = rows.filter((r) => r.activeTerminalCount === 0 && !r.reading)
+  const isFetchingAll = missingRows.some((r) => r.fetching)
+  const canFetchAll = missingRows.some((r) => !r.fetching)
+  const summary = inactiveCount === 0
+    ? `${activeCount} active profile${activeCount === 1 ? '' : 's'} · live engine status`
+    : `${activeCount} active · ${inactiveCount} inactive`
+
   const agents = AGENT_KINDS.filter((agent) => rows.some((row) => row.agent === agent))
   return (
     <div className="aq-pd-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDashboardOpen(false) }}>
@@ -112,8 +158,19 @@ export function QuotaProfilesDashboard() {
           <Users className="w-4 h-4 text-theme-accent" />
           <div className="flex-1 min-w-0">
             <div className="font-bold tracking-wide">Profiles</div>
-            <div className="text-theme-dim">{rows.length} active profile{rows.length === 1 ? '' : 's'} · live engine status</div>
+            <div className="text-theme-dim">{summary}</div>
           </div>
+          {inactiveCount > 0 && (
+            <button
+              type="button"
+              aria-label="Fetch all"
+              disabled={!canFetchAll}
+              className="px-2 py-0.5 rounded text-[11px] border border-theme-border hover:border-theme-accent hover:text-theme-accent disabled:opacity-40 transition-colors"
+              onClick={handleFetchAll}
+            >
+              {isFetchingAll ? 'Fetching…' : 'Fetch all'}
+            </button>
+          )}
           <button type="button" aria-label="Close profiles" className="aq-icon-button" onClick={() => setDashboardOpen(false)}>
             <X className="w-3.5 h-3.5" />
           </button>
@@ -121,7 +178,7 @@ export function QuotaProfilesDashboard() {
         <div className="flex flex-col gap-4 overflow-y-auto min-h-0">
           {rows.length === 0 && <span className="text-theme-dim">No Claude Code profile is active in an open terminal.</span>}
           {agents.map((agent) => (
-            <AgentGroup key={agent} agent={agent} rows={rows.filter((row) => row.agent === agent)} showHeading={agents.length > 1} now={now} />
+            <AgentGroup key={agent} agent={agent} rows={rows.filter((row) => row.agent === agent)} showHeading={agents.length > 1} now={now} onFetch={handleFetch} />
           ))}
         </div>
       </div>

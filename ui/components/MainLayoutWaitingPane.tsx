@@ -1,5 +1,5 @@
 import type { MainLayoutModel } from './useMainLayoutController'
-import WaitingPane from './WaitingPane'
+import WaitingPane, { type FallbackNavigatorTarget } from './WaitingPane'
 import { newTerminalHoverText } from '../utils/newTerminalDescription'
 import type { StoredAgentSession } from '../utils/agentSessionStorage'
 import { consumeForResume } from '../utils/storedSessionResume'
@@ -20,6 +20,17 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
     model.requestNewSession(undefined, null, session.cwd ?? null, resumeCommand)
   }
 
+  const fallbackTargets: FallbackNavigatorTarget[] = (model.viewGroups ?? [])
+    .filter(g => g.id !== model.activeGroupId)
+    .map(g => {
+      const openTabCount = (model.activeTabs ?? []).filter(t => (
+        g.id === 'ungrouped' ? !model.tabGroups?.[t.id] : model.tabGroups?.[t.id] === g.id
+      )).length
+      const label = g.label?.trim() ? g.label : (g.id === 'ungrouped' ? 'Ungrouped' : g.id)
+      return { id: g.id, label, openTabCount, color: g.color }
+    })
+    .filter(target => target.openTabCount > 0)
+
   return (
     <WaitingPane
       dark={!!model.appSettings.darkMode}
@@ -28,6 +39,8 @@ export default function MainLayoutWaitingPane({ model, customArtUrl }: MainLayou
       onPickShell={(rect) => model.setShellMenu({ x: rect.left, y: rect.bottom + 4 })}
       customArtUrl={customArtUrl}
       onResumeSession={handleResumeSession}
+      fallbackTargets={fallbackTargets}
+      onNavigateTarget={model.switchViewGroup}
     />
   )
 }

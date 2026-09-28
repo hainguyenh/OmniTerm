@@ -1,6 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { dashboardRows, getProfileDashboard, resetProfileDashboard, setDashboardOpen } from './profileDashboard'
+import type { AgentQuotaAPI } from './agentQuotaAPI'
+import type { QuotaSnapshot } from '../src/types'
+
+import { dashboardRows, fetchAllMissingProfiles, getProfileDashboard, resetProfileDashboard, setDashboardOpen } from './profileDashboard'
 import { getQuotaState, resetQuotaStore } from './quotaStore'
 import { profile, reading, seed, terminal } from './__tests__/quotaFixtures'
 
@@ -58,5 +61,63 @@ describe('profile dashboard store', () => {
       error: 'Quota service timed out.',
       activeTerminalCount: 1,
     })
+  })
+
+  it('includes discovered inactive profiles with 0 active terminals', () => {
+    const discovered = [
+      { agent: 'claude' as const, profileName: 'claude-inactive', profileDir: null, launcher: 'claude-inactive' },
+    ]
+    const rows = dashboardRows({ profiles: {}, terminals: {} }, discovered)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      profileName: 'claude-inactive',
+      activeTerminalCount: 0,
+      reading: undefined,
+    })
+  })
+
+  it('fetches only inactive profiles without readings in fetchAllMissingProfiles', async () => {
+    const discovered = [
+      { agent: 'claude' as const, profileName: 'claude-first', profileDir: null, launcher: 'claude-first' },
+      { agent: 'claude' as const, profileName: 'claude-second', profileDir: null, launcher: 'claude-second' },
+    ]
+    const readingNow: QuotaSnapshot = {
+      windows: [{ kind: 'session', label: 'Session', usedPct: 10, resetsAt: Date.now() + 3600_000 }],
+      fetchedAt: Date.now(),
+      source: 'cli',
+    }
+    const fetchUsage = vi.fn().mockImplementation(async (req) => {
+      if (req.launcher === 'claude-first') return readingNow
+      return { windows: [], fetchedAt: Date.now(), error: 'failed', message: 'Read error' }
+    })
+    const mockApi: AgentQuotaAPI = {
+      info: vi.fn(),
+      detect: vi.fn(),
+      suspend: vi.fn(),
+      resume: vi.fn(),
+      resumeAll: vi.fn(),
+      terminate: vi.fn(),
+      fetchUsage,
+      listProfiles: vi.fn(),
+      wake: vi.fn(),
+    }
+
+    // claude-first already has a reading; claude-second does not
+    const rows = dashboardRows(
+      { profiles: {}, terminals: {} },
+      discovered,
+      { 'claude:launcher:claude-first': { reading: readingNow } },
+    )
+    expect(rows).toHaveLength(2)
+
+    await fetchAllMissingProfiles(rows, mockApi)
+
+    // claude-first should NOT have been fetched; only claude-second
+    expect(fetchUsage).toHaveBeenCalledTimes(1)
+    expect(fetchUsage).toHaveBeenCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-second' })
+
+    const manual = getProfileDashboard().manualReadings
+    expect(manual['claude:launcher:claude-second']?.error).toBe('Read error')
+    expect(manual['claude:launcher:claude-second']?.fetching).toBe(false)
   })
 })

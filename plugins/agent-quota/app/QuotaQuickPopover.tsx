@@ -5,8 +5,8 @@ import type { AgentKind } from '../src/types'
 import type { QuotaConfig } from './quotaConfig'
 
 import { confirmDisableSuspend } from './dangerConfirm'
-import { AgentIcon, QuotaLine } from './QuotaLine'
-import { AGENT_KINDS, AGENT_LABELS, effectiveConfig } from './quotaConfig'
+import { AgentIcon } from './QuotaLine'
+import { AGENT_KINDS, AGENT_LABELS } from './quotaConfig'
 import { setDashboardOpen } from './profileDashboard'
 import { isHeld } from './quotaGuard'
 import { quotaCommands, setQuickOpen, useQuota } from './quotaStore'
@@ -23,15 +23,12 @@ function Switch({ checked, label, onChange }: { checked: boolean; label: string;
 
 /**
  * Quick settings, opened from the pinned activity-bar icon or the shortcut: the global switch, a
- * switch per agent, and every open agent terminal with its lines — plus "wake all" and "resume all".
+ * switch per agent, plus "wake all" and "resume all".
  */
 export function QuotaQuickPopover() {
   const config = useQuota((state) => state.config)
   const terminals = useQuota((state) => state.terminals)
-  const profiles = useQuota((state) => state.profiles)
-  const overrides = useQuota((state) => state.overrides)
   const guards = useQuota((state) => state.guards)
-  const now = useQuota((state) => state.now)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setQuickOpen(false)
@@ -87,28 +84,6 @@ export function QuotaQuickPopover() {
           <span className="flex-1">Suspend at limit (all agents)</span>
           <Switch checked={AGENT_KINDS.every((agent) => config.agents[agent].suspendAtLimit)} label="Suspend every agent at its limit" onChange={toggleGlobalSuspend} />
         </div>
-      </div>
-
-      <div className="flex flex-col gap-2 border-t border-theme-border pt-2">
-        {rows.length === 0 && <span className="text-theme-dim">No AI agent is running in an open terminal.</span>}
-        {rows.map((terminal) => {
-          const agentConfig = effectiveConfig(config.agents[terminal.agent], overrides[terminal.instanceKey])
-          const reading = profiles[terminal.profileKey]?.lastGood
-          return (
-            <div key={terminal.sessionId} className="aq-strip aq-size-thin rounded-lg border border-theme-border">
-              <div className="aq-meta">
-                <AgentIcon agent={terminal.agent} />
-                <span className="aq-meta-name">{terminal.profileName}</span>
-                {isHeld(guards[terminal.instanceKey]) && <Snowflake className="w-3 h-3 text-theme-warning" aria-label="Suspended" />}
-              </div>
-              <div className="aq-lines">
-                {(reading?.windows ?? []).map((window) => (
-                  <QuotaLine key={window.kind} window={window} limit={agentConfig.limits[window.kind]} animations={config.display.animations} showReset={false} now={now} />
-                ))}
-              </div>
-            </div>
-          )
-        })}
       </div>
 
       <div className="flex flex-wrap gap-1.5">
