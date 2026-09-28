@@ -15,7 +15,7 @@ import { profileEnv } from './cli'
  * resolved here from the user's own bin directory and PATH, so the renderer can never make the
  * sidecar run an arbitrary file.
  */
-const LAUNCHER_NAME = /^(claude|codex)-[A-Za-z0-9_.]{1,40}$/
+const LAUNCHER_NAME = /^(claude|codex|agy)-[A-Za-z0-9_.]{1,40}$/
 
 export function isLauncherName(name: string, agent: AgentKind): boolean {
   return LAUNCHER_NAME.test(name) && name.startsWith(`${agent}-`)
@@ -26,8 +26,8 @@ export interface AgentCommand {
   env: NodeJS.ProcessEnv
 }
 
-const PROFILE_VARIABLE = { claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME' } as const
-export const DEFAULT_DIR = { claude: '.claude', codex: '.codex' } as const
+const PROFILE_VARIABLE = { claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME', agy: 'AGY_HOME' } as const
+export const DEFAULT_DIR = { claude: '.claude', codex: '.codex', agy: '.gemini' } as const
 
 /**
  * How to run `agent` for a profile: its launcher when the terminal used one (the launcher then sets

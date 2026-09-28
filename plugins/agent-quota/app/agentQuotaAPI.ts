@@ -27,8 +27,8 @@ export interface SuspendReport {
   errors: string[]
 }
 
-const AGENTS: readonly string[] = ['claude', 'codex']
-const LAUNCHER = /^(claude|codex)-[A-Za-z0-9_.]{1,40}$/
+const AGENTS: readonly string[] = ['claude', 'codex', 'agy']
+const LAUNCHER = /^(claude|codex|agy)-[A-Za-z0-9_.]{1,40}$/
 const KINDS: readonly string[] = ['session', 'weekly', 'monthly']
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

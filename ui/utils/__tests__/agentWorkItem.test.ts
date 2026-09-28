@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { extractAgentWorkItem } from '../agentWorkItem'
+import { extractAgentWorkItem, namesFolder } from '../agentWorkItem'
 import { normalizeReportedCwd, registerCwdReporting } from '../terminalCwdReporting'
 
 describe('extractAgentWorkItem', () => {
@@ -35,6 +35,19 @@ describe('extractAgentWorkItem', () => {
   it('handles empty input', () => {
     expect(extractAgentWorkItem(undefined)).toBeUndefined()
     expect(extractAgentWorkItem('   ')).toBeUndefined()
+  })
+})
+
+describe('namesFolder', () => {
+  it('matches a work item that is only the folder name, from a label or a full path', () => {
+    expect(namesFolder('OmniTerm', ['omniterm'])).toBe(true)
+    expect(namesFolder('repo', [undefined, 'D:\\work\\repo\\'])).toBe(true)
+    expect(namesFolder('repo', ['/home/me/repo'])).toBe(true)
+  })
+
+  it('keeps a real task and ignores missing folders', () => {
+    expect(namesFolder('Fix header status', ['repo', 'D:/repo'])).toBe(false)
+    expect(namesFolder('repo', [undefined, ''])).toBe(false)
   })
 })
 

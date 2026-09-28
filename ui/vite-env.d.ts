@@ -386,7 +386,7 @@ interface Window {
      * Claude session id — never derived from terminal output or a renderer-supplied guess.
      */
     agentSessions?: {
-      detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
+      detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex' | 'agy'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>
       loadStore?: () => Promise<unknown>
       saveStore?: (document: Record<string, unknown>) => Promise<void>

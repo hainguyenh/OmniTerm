@@ -51,6 +51,16 @@ describe('PaneHeader agent identity', () => {
     expect(screen.queryByText('Claude Code')).toBeNull()
   })
 
+  it('does not repeat the folder after the bookmark when the title only names the folder (regression)', () => {
+    setPanePresence({ 'tab-1': { agent: 'claude', profileName: 'claude', pid: 1, startTime: 1 } })
+    setup({ sessionTitle: 'repo', folderPath: 'D:/repo', onOpenFolder: vi.fn() })
+
+    const title = screen.getByTestId('pane-header-title')
+    expect(within(title).getAllByText(/repo/)).toHaveLength(1)
+    expect(within(title).queryByText('· repo')).toBeNull()
+    expect(within(title).getByRole('button', { name: 'Bookmark session' })).toBeInTheDocument()
+  })
+
   it('detects an agent started after the pane mounted, from the shared presence store (regression)', () => {
     setup({ sessionTitle: '✳ Plan the fix' })
     expect(screen.queryByRole('button', { name: 'Bookmark session' })).toBeNull()

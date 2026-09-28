@@ -45,9 +45,13 @@ async function readTail(file: string, bytes: number): Promise<string | null> {
 
 function candidates(agent: AgentKind, home: string, env: NodeJS.ProcessEnv): string[] {
   if (process.platform !== 'win32') {
-    return agent === 'claude'
-      ? [path.join(home, '.local', 'bin', 'claude'), path.join(home, '.claude', 'local', 'claude')]
-      : [path.join(home, '.local', 'bin', 'codex')]
+    if (agent === 'claude') {
+      return [path.join(home, '.local', 'bin', 'claude'), path.join(home, '.claude', 'local', 'claude')]
+    }
+    if (agent === 'codex') {
+      return [path.join(home, '.local', 'bin', 'codex')]
+    }
+    return [path.join(home, '.local', 'bin', 'agy'), path.join(home, '.gemini', 'antigravity-cli', 'bin', 'agy')]
   }
   const appData = env.APPDATA ?? path.join(home, 'AppData', 'Roaming')
   const localAppData = env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local')
@@ -58,9 +62,16 @@ function candidates(agent: AgentKind, home: string, env: NodeJS.ProcessEnv): str
       path.join(appData, 'npm', 'claude.cmd'),
     ]
   }
+  if (agent === 'codex') {
+    return [
+      path.join(localAppData, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe'),
+      path.join(appData, 'npm', 'codex.cmd'),
+    ]
+  }
   return [
-    path.join(localAppData, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe'),
-    path.join(appData, 'npm', 'codex.cmd'),
+    path.join(localAppData, 'agy', 'bin', 'agy.exe'),
+    path.join(home, '.local', 'bin', 'agy.exe'),
+    path.join(appData, 'npm', 'agy.cmd'),
   ]
 }
 

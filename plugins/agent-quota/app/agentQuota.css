@@ -509,3 +509,13 @@
     transition: none;
   }
 }
+
+/* The inline quota probe's veil: the pane is frozen while /usage or /status is typed into it. */
+.aq-probe-veil {
+  background: color-mix(in srgb, var(--theme-bg) 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.aq-probe-badge {
+  background: color-mix(in srgb, var(--theme-sidebar-bg) 95%, transparent);
+}

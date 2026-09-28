@@ -1,46 +1,28 @@
 import { useSyncExternalStore } from 'react'
 
-import type { AgentKind, DiscoveredProfile, FetchUsageRequest, QuotaSnapshot } from '../src/types'
-import type { ProfileQuota } from './quotaStore'
+import type { ProfileQuota, QuotaState, TerminalAgent } from './quotaStore'
 
-/**
- * State for the Profiles dashboard: every profile the user can start and the last reading the
- * dashboard took of each. Deliberately separate from the engine — nothing here polls, guards or
- * wakes. A reading is taken only when the user presses Fetch; profiles the engine already monitors
- * show whichever reading is newer, the engine's or the dashboard's.
- */
+/** The Profiles dialog is a view of the engine's current terminal/profile state. */
 
 export interface DashboardRow {
   key: string
-  agent: AgentKind
+  agent: ProfileQuota['agent']
   profileName: string
   profileDir: string | null
   launcher: string | null
-  /** The last reading without an error. */
-  reading?: QuotaSnapshot
-  /** Why the last fetch failed; cleared by the next good one. */
+  /** The engine's last successful reading for this active profile. */
+  reading?: ProfileQuota['lastGood']
+  /** The current engine error, if its latest read failed. */
   error?: string
   fetching: boolean
+  activeTerminalCount: number
 }
 
 export interface DashboardState {
   open: boolean
-  listing: boolean
-  fetchingAll: boolean
-  rows: DashboardRow[]
 }
 
-export interface DashboardDeps {
-  listProfiles(): Promise<DiscoveredProfile[]>
-  fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
-}
-
-/** Two `claude -p /usage` runs at a time: each starts a full CLI, so a long list must not fork them all. */
-const FETCH_CONCURRENCY = 2
-/** Profiles are Claude-only for now, whatever the engine monitors. */
-const DASHBOARD_AGENTS: readonly AgentKind[] = ['claude']
-
-const initialState = (): DashboardState => ({ open: false, listing: false, fetchingAll: false, rows: [] })
+const initialState = (): DashboardState => ({ open: false })
 
 let state: DashboardState = initialState()
 const listeners = new Set<() => void>()
@@ -74,94 +56,29 @@ export function setDashboardOpen(open: boolean): void {
   update((current) => (current.open === open ? current : { ...current, open }))
 }
 
-/** Same key the engine gives a detected profile (quotaEngine.profileKeyOf), so readings line up. */
-export function dashboardKey(profile: Pick<DiscoveredProfile, 'agent' | 'launcher' | 'profileDir' | 'profileName'>): string {
-  return profile.launcher
-    ? `${profile.agent}:launcher:${profile.launcher.toLowerCase()}`
-    : `${profile.agent}:${(profile.profileDir ?? profile.profileName).toLowerCase()}`
-}
-
-/** The newer good reading of the dashboard's own and the engine's, for a monitored profile. */
-export function freshestReading(row: DashboardRow, engine: Record<string, ProfileQuota>): QuotaSnapshot | undefined {
-  const monitored = engine[row.key]?.lastGood
-  if (!monitored) return row.reading
-  if (!row.reading) return monitored
-  return monitored.fetchedAt > row.reading.fetchedAt ? monitored : row.reading
-}
-
-/**
- * Refresh the list of profiles: the sidecar's discovery plus any profile the engine monitors that
- * discovery cannot see (a custom `CLAUDE_CONFIG_DIR` set by hand), Claude profiles only. Readings
- * already taken are kept.
- */
-export async function loadDashboardProfiles(deps: DashboardDeps, engine: Record<string, ProfileQuota> = {}): Promise<void> {
-  update((current) => ({ ...current, listing: true }))
-  const discovered = await deps.listProfiles().catch(() => [])
-  update((current) => {
-    const previous = new Map(current.rows.map((row) => [row.key, row]))
-    const rows = new Map<string, DashboardRow>()
-    const add = (profile: DiscoveredProfile) => {
-      const key = dashboardKey(profile)
-      if (rows.has(key) || !DASHBOARD_AGENTS.includes(profile.agent)) return
-      const kept = previous.get(key)
-      rows.set(key, {
-        key,
-        agent: profile.agent,
-        profileName: profile.profileName,
-        profileDir: profile.profileDir,
-        launcher: profile.launcher,
-        reading: kept?.reading,
-        error: kept?.error,
-        fetching: kept?.fetching ?? false,
-      })
-    }
-    discovered.forEach(add)
-    Object.values(engine).forEach(add)
-    return { ...current, listing: false, rows: [...rows.values()] }
-  })
-}
-
-function patchRow(key: string, patch: Partial<DashboardRow>): void {
-  update((current) => ({ ...current, rows: current.rows.map((row) => (row.key === key ? { ...row, ...patch } : row)) }))
-}
-
-async function fetchRow(deps: DashboardDeps, row: DashboardRow): Promise<void> {
-  patchRow(row.key, { fetching: true })
-  const snapshot = await deps.fetchUsage({
-    agent: row.agent,
-    // A launcher sets its own profile directory; passing one as well would override it.
-    profileDir: row.launcher ? null : row.profileDir,
-    launcher: row.launcher,
-  }).catch((error: unknown): QuotaSnapshot => ({ windows: [], fetchedAt: Date.now(), error: 'failed', message: String(error) }))
-  if (snapshot.error || snapshot.windows.length === 0) {
-    patchRow(row.key, { fetching: false, error: snapshot.message ?? 'The reading could not be taken.' })
-  } else {
-    patchRow(row.key, { fetching: false, reading: snapshot, error: undefined })
+function activeTerminalCounts(terminals: Record<string, TerminalAgent>): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const terminal of Object.values(terminals)) {
+    counts.set(terminal.profileKey, (counts.get(terminal.profileKey) ?? 0) + 1)
   }
+  return counts
 }
 
-/** Read the quota of the given profiles (default: all), a few at a time. Manual only. */
-export async function fetchDashboardProfiles(deps: DashboardDeps, keys?: readonly string[]): Promise<void> {
-  const wanted = state.rows.filter((row) => !row.fetching && (!keys || keys.includes(row.key)))
-  if (wanted.length === 0) return
-  const all = !keys
-  if (all) update((current) => ({ ...current, fetchingAll: true }))
-  const queue = [...wanted]
-  const worker = async () => {
-    for (let row = queue.shift(); row; row = queue.shift()) await fetchRow(deps, row)
-  }
-  try {
-    await Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, queue.length) }, worker))
-  } finally {
-    if (all) update((current) => ({ ...current, fetchingAll: false }))
-  }
-}
-
-/** `just now`, `12m ago`, `3h ago`, `2d ago` — how old a reading is. */
-export function formatAgo(at: number, now: number): string {
-  const minutes = Math.floor(Math.max(0, now - at) / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  return hours < 48 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`
+/** Convert the engine snapshot into one stable, de-duplicated row per active profile. */
+export function dashboardRows(state: Pick<QuotaState, 'profiles' | 'terminals'>): DashboardRow[] {
+  const counts = activeTerminalCounts(state.terminals)
+  return Object.values(state.profiles)
+    .filter((profile) => profile.agent === 'claude' && counts.has(profile.key))
+    .map((profile) => ({
+      key: profile.key,
+      agent: profile.agent,
+      profileName: profile.profileName,
+      profileDir: profile.profileDir,
+      launcher: profile.launcher,
+      reading: profile.lastGood,
+      error: profile.snapshot?.error ? profile.snapshot.message ?? 'The quota update failed.' : undefined,
+      fetching: profile.fetching,
+      activeTerminalCount: counts.get(profile.key) ?? 0,
+    }))
+    .sort((left, right) => left.profileName.localeCompare(right.profileName) || left.key.localeCompare(right.key))
 }

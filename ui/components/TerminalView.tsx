@@ -5,6 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { resolveShortcuts, matchesChromeShortcut, FALLBACK_SHORTCUTS } from '../utils/shortcuts'
 import { canPasteAsPowerShellScript, clipboardActionFor } from '../utils/paste'
 import { interceptPaneInput } from '../utils/paneInputHold'
+import { registerPaneScreen } from '../utils/paneScreens'
 import { matchShortcut } from '../utils/keyboard'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
@@ -155,7 +156,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
           onTitleChangeRef.current?.(title)
         })
       : { dispose: () => {} }
-    const cwdDisposables = registerCwdReporting(term, onCwdChangeRef.current)
+    const paneDisposables = [...registerCwdReporting(term, (cwd) => onCwdChangeRef.current?.(cwd)), registerPaneScreen(id, term)]
     const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
@@ -400,7 +401,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
-      for (const disposable of cwdDisposables) disposable.dispose()
+      for (const disposable of paneDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
       termEl.removeEventListener('mousedown', onLinkClick)
       termEl.removeEventListener('mousedown', onAltClickMove)

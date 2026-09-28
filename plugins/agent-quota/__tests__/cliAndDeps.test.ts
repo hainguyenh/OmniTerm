@@ -103,7 +103,7 @@ describe('createNodeDeps', () => {
 
   it('resolves agents and launchers without failing when they are absent', () => {
     const deps = createNodeDeps(() => {})
-    for (const found of [deps.resolve('claude'), deps.resolve('codex'), deps.resolveLauncher('claude-agent-quota-test-absent')]) {
+    for (const found of [deps.resolve('claude'), deps.resolve('codex'), deps.resolve('agy'), deps.resolveLauncher('claude-agent-quota-test-absent')]) {
       expect(found === null || typeof found === 'string').toBe(true)
     }
     expect(deps.resolveLauncher('claude-agent-quota-test-absent')).toBeNull()

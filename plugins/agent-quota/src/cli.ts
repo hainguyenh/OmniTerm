@@ -104,7 +104,7 @@ export function resolveExecutable(
  * the default profile keeps its account file at `~/.claude.json`, outside the directory.
  */
 export function profileEnv(
-  variable: 'CLAUDE_CONFIG_DIR' | 'CODEX_HOME',
+  variable: 'CLAUDE_CONFIG_DIR' | 'CODEX_HOME' | 'AGY_HOME',
   profileDir: string | null | undefined,
   defaultDir: string,
   base: NodeJS.ProcessEnv = process.env,

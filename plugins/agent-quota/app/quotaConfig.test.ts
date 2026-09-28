@@ -41,7 +41,7 @@ describe('parseQuotaConfig', () => {
     expect(parsed.agents.codex.wake).toEqual({ mode: 'off', time: '06:30', delayMinutes: 2, prompt: 'hi' })
     expect(parsed.agents.codex.hardStopAtPct).toBeNull()
     // A key stored by an older version is ignored rather than resurrecting the agent.
-    expect(Object.keys(parseQuotaConfig({ agents: { antigravity: { enabled: true } } }).agents)).toEqual(['claude', 'codex'])
+    expect(Object.keys(parseQuotaConfig({ agents: { antigravity: { enabled: true } } }).agents)).toEqual(['claude', 'codex', 'agy'])
   })
 
   it('drops the retired per-agent header icon', () => {

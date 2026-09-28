@@ -15,10 +15,15 @@ const WAKE_TIMEOUT_MS = 120_000
 export async function wakeAgent(request: WakeRequest, deps: ProviderDeps): Promise<WakeResult> {
   if (!isSafePrompt(request.prompt)) return { ok: false, message: 'The wake prompt may only contain letters, digits and simple punctuation.' }
   const command = agentCommand(request.agent, request, deps)
-  if (!command) return { ok: false, message: `${request.agent === 'claude' ? 'Claude Code' : 'Codex'} CLI not found.` }
+  if (!command) {
+    const name = request.agent === 'claude' ? 'Claude Code' : request.agent === 'agy' ? 'Antigravity' : 'Codex'
+    return { ok: false, message: `${name} CLI not found.` }
+  }
   const args = request.agent === 'claude'
     ? ['-p', request.prompt, '--model', 'haiku']
-    : ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', request.prompt]
+    : request.agent === 'agy'
+      ? ['-p', request.prompt]
+      : ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', request.prompt]
   const result = await deps.run(command.exe, args, { env: command.env, timeoutMs: WAKE_TIMEOUT_MS, cwd: deps.tmp })
   if (result.timedOut) return { ok: false, message: 'The wake prompt timed out.' }
   if (result.code !== 0) {

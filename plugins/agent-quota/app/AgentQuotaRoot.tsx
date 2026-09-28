@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 
 import type { AgentQuotaAPI } from './agentQuotaAPI'
-import type { DashboardDeps } from './profileDashboard'
 import type { QuotaConfig } from './quotaConfig'
 
 import { diag } from '../../../ui/diag'
-import { listAgentProfiles } from './agentQuotaAPI'
 import { setDashboardOpen, useProfileDashboard } from './profileDashboard'
 import { clearOverrides, getQuotaState, registerQuotaCommands, setQuickOpen, updateQuota, useQuota } from './quotaStore'
 import { parseQuotaConfig } from './quotaConfig'
@@ -46,7 +44,6 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
   const available = useQuota((state) => state.available)
   const quickOpen = useQuota((state) => state.quickOpen)
   const dashboardOpen = useProfileDashboard((state) => state.open)
-  const dashboardDeps = useMemo<DashboardDeps>(() => ({ listProfiles: listAgentProfiles, fetchUsage: (request) => api.fetchUsage(request) }), [api])
   const engineRef = useRef<QuotaEngine | null>(null)
   const latest = useRef({ appSettings, setAppSettings, openSettings })
   latest.current = { appSettings, setAppSettings, openSettings }
@@ -150,7 +147,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
   return (
     <>
       {quickOpen && <QuotaQuickPopover />}
-      {dashboardOpen && <QuotaProfilesDashboard deps={dashboardDeps} />}
+      {dashboardOpen && <QuotaProfilesDashboard />}
       <DangerConfirmDialog />
       <QuotaNotices />
     </>

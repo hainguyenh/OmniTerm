@@ -55,7 +55,7 @@ function setup(inlineProbe: (terminal: TerminalAgent) => Promise<QuotaSnapshot |
 
 beforeEach(() => resetQuotaStore())
 
-describe('QuotaEngine inline /usage at first launch', () => {
+describe('QuotaEngine inline quota read at launch and resume', () => {
   it('asks a freshly launched agent inline and skips the -p read when that works', async () => {
     const { api, probe, run } = setup(async () => inlineReading)
     await run()
@@ -78,12 +78,35 @@ describe('QuotaEngine inline /usage at first launch', () => {
     expect(getQuotaState().profiles[KEY].lastGood?.windows[0].usedPct).toBe(10)
   })
 
-  it('probes a profile only on its first launch in this run', async () => {
+  it('asks each agent instance once', async () => {
     const { probe, run } = setup(async () => inlineReading)
     await run()
     await run(T0 + 6_000)
     await run(T0 + 12_000)
     expect(probe).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again when the agent is resumed on a profile that is already monitored (regression)', async () => {
+    const resumed: QuotaSnapshot = { ...inlineReading, windows: [{ kind: 'session', label: 'Current session', usedPct: 52 }] }
+    const { api, probe, run } = setup(async (terminal) => (terminal.pid === 10 ? inlineReading : resumed))
+    await run()
+    api.detect.mockResolvedValue([agent({ pid: 20, startTime: T0 / 1000 + 4 })])
+    await run(T0 + 6_000)
+
+    expect(probe).toHaveBeenCalledTimes(2)
+    expect(probe).toHaveBeenLastCalledWith(expect.objectContaining({ pid: 20, profileKey: KEY }))
+    expect(getQuotaState().profiles[KEY].lastGood).toBe(resumed)
+    expect(api.fetchUsage).not.toHaveBeenCalled()
+  })
+
+  it('leaves the schedule of an existing profile alone when a resumed agent cannot be asked', async () => {
+    const { api, run } = setup(async (terminal) => (terminal.pid === 10 ? inlineReading : null))
+    await run()
+    const scheduled = getQuotaState().profiles[KEY].nextFetchAt
+    api.detect.mockResolvedValue([agent({ pid: 20, startTime: T0 / 1000 + 4 })])
+    await run(T0 + 6_000)
+    expect(getQuotaState().profiles[KEY].nextFetchAt).toBe(scheduled)
+    expect(api.fetchUsage).not.toHaveBeenCalled()
   })
 
   it('holds the -p read while the probe runs', async () => {

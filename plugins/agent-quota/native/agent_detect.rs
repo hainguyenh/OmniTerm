@@ -14,6 +14,7 @@ use std::path::PathBuf;
 pub enum AgentKind {
     Claude,
     Codex,
+    Agy,
 }
 
 impl AgentKind {
@@ -21,6 +22,7 @@ impl AgentKind {
         match self {
             AgentKind::Claude => "claude",
             AgentKind::Codex => "codex",
+            AgentKind::Agy => "agy",
         }
     }
 
@@ -29,6 +31,7 @@ impl AgentKind {
         match self {
             AgentKind::Claude => ("CLAUDE_CONFIG_DIR", ".claude"),
             AgentKind::Codex => ("CODEX_HOME", ".codex"),
+            AgentKind::Agy => ("AGY_HOME", ".gemini"),
         }
     }
 }
@@ -46,7 +49,7 @@ pub struct ProcRow {
 }
 
 /// The only environment variables ever read from an agent process: each names a profile directory.
-pub const PROFILE_ENV: [&str; 2] = ["CLAUDE_CONFIG_DIR", "CODEX_HOME"];
+pub const PROFILE_ENV: [&str; 3] = ["CLAUDE_CONFIG_DIR", "CODEX_HOME", "AGY_HOME"];
 
 /// The terminal's main agent: the agent process nearest the shell.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -100,12 +103,18 @@ pub fn classify(row: &ProcRow) -> Option<AgentKind> {
     if stem == "codex" || stem.starts_with("codex-") {
         return Some(AgentKind::Codex);
     }
+    if stem == "agy" || stem.starts_with("agy-") {
+        return Some(AgentKind::Agy);
+    }
     if is_script_host(&stem) {
         if cmd_mentions(row, &["@anthropic-ai/claude-code", "/claude-code/cli"]) {
             return Some(AgentKind::Claude);
         }
         if cmd_mentions(row, &["@openai/codex"]) {
             return Some(AgentKind::Codex);
+        }
+        if cmd_mentions(row, &["antigravity-cli", "/agy/"]) {
+            return Some(AgentKind::Agy);
         }
     }
     None
