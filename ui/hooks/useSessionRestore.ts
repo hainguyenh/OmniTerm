@@ -72,16 +72,19 @@ function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): stri
   const agentName = parseAgentTitle(tab.name)?.agentName
     ?? parseAgentTitle(savedConn?.name)?.agentName
     ?? (stored ? (AGENT_DISPLAY_NAMES[stored.agent] ?? 'Claude Code') : undefined)
-  const launcher = stored?.launcher ?? (
+  const launcher = stored?.launcher === 'agy-gemini' ? undefined : (stored?.launcher ?? (
     stored?.profileName
-      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-') || stored.profileName.startsWith('opencode-') || stored.profileName.startsWith('agy-')
+      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-') || stored.profileName.startsWith('opencode-') || (stored.profileName.startsWith('agy-') && stored.profileName !== 'agy-gemini')
         ? stored.profileName
-        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy'
+        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy' && stored.profileName !== 'gemini' && !(stored.agent === 'agy' && stored.profileName === 'gemini')
           ? `${stored.agent}-${stored.profileName}`
           : undefined
       : undefined
-  )
-  return formatAgentResumeCommand(agentName, stored?.sessionId, launcher, stored?.profileName)
+  ))
+  const cleanProfile = stored?.profileName === 'agy-gemini' || (stored?.agent === 'agy' && stored?.profileName === 'gemini')
+    ? undefined
+    : stored?.profileName
+  return formatAgentResumeCommand(agentName, stored?.sessionId, launcher, cleanProfile)
 }
 
 export function useSessionRestore(input: SessionRestoreInput): void {

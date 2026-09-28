@@ -48,6 +48,11 @@ export function PaneHeaderTitle({
   // A title that only names the folder is no work item: it would repeat the folder after the bookmark.
   const workItem = titleItem && !namesFolder(titleItem, [folderLabel, formatted.folderName, folderPath]) ? titleItem : undefined
   const primary = workItem ?? folderLabel ?? formatted.displayTitle
+  const showFolderBadge = Boolean(
+    workItem &&
+    folderLabel &&
+    !workItem.toLowerCase().includes(folderLabel.toLowerCase())
+  )
 
   return (
     <>
@@ -61,7 +66,7 @@ export function PaneHeaderTitle({
           {primary}
         </span>
         {sessionId && agent && <PaneBookmarkButton sessionId={sessionId} />}
-        {workItem && folderLabel && (
+        {showFolderBadge && (
           <span className="min-w-0 shrink-[2] truncate text-[10px] font-normal text-theme-dim">
             · {folderLabel}
           </span>

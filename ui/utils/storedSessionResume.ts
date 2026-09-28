@@ -16,7 +16,11 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
  */
 export function resumeCommandFor(session: StoredAgentSession): string | null {
   const displayName = AGENT_DISPLAY_NAMES[session.agent] ?? 'Claude Code'
-  return formatAgentResumeCommand(displayName, session.sessionId, session.launcher, session.profileName)
+  const launcher = session.launcher === 'agy-gemini' ? undefined : session.launcher
+  const profileName = session.profileName === 'agy-gemini' || (session.agent === 'agy' && session.profileName === 'gemini')
+    ? undefined
+    : session.profileName
+  return formatAgentResumeCommand(displayName, session.sessionId, launcher, profileName)
 }
 
 /**

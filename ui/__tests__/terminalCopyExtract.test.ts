@@ -3,6 +3,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  bufferText,
   createLastOutputTracker,
   dispatchTerminalCopy,
   parseTerminalCopyEvent,
@@ -51,6 +52,36 @@ describe('viewportText', () => {
     // Real xterm keeps enough lines to fill the viewport; a shrunk/stale buffer just yields less.
     expect(viewportText(makeBuffer(['only'], 0), 30)).toBe('only')
     expect(viewportText(makeBuffer([], 5), 3)).toBe('')
+  })
+})
+
+describe('bufferText', () => {
+  it('extracts all lines from the active buffer', () => {
+    const lines = ['line-1', 'line-2', 'line-3']
+    expect(bufferText(makeBuffer(lines, 0))).toBe('line-1\nline-2\nline-3')
+  })
+
+  it('trims trailing blank lines from full scrollback', () => {
+    const lines = ['line-1', 'line-2', '', '']
+    expect(bufferText(makeBuffer(lines, 0))).toBe('line-1\nline-2')
+  })
+
+  it('includes normal buffer history when active buffer is alternate', () => {
+    const normalLines = ['cmd1', 'output1', 'cmd2', 'output2']
+    const alternateLines = ['tui-row-1', 'tui-row-2']
+    const altBuffer: TerminalBufferLike = {
+      active: {
+        type: 'alternate',
+        length: alternateLines.length,
+        viewportY: 0,
+        getLine: (i) => i >= 0 && i < alternateLines.length ? { translateToString: () => alternateLines[i] } : undefined,
+      },
+      normal: {
+        length: normalLines.length,
+        getLine: (i) => i >= 0 && i < normalLines.length ? { translateToString: () => normalLines[i] } : undefined,
+      },
+    }
+    expect(bufferText(altBuffer)).toBe('cmd1\noutput1\ncmd2\noutput2\ntui-row-1\ntui-row-2')
   })
 })
 
@@ -230,8 +261,12 @@ describe('event helpers', () => {
     const listener = (e: Event) => seen.push(parseTerminalCopyEvent(e))
     window.addEventListener(TERMINAL_COPY_EVENT, listener)
     dispatchTerminalCopy('session-1', 'last-output')
+    dispatchTerminalCopy('session-1', 'all')
     window.removeEventListener(TERMINAL_COPY_EVENT, listener)
-    expect(seen).toEqual([{ sessionId: 'session-1', action: 'last-output' }])
+    expect(seen).toEqual([
+      { sessionId: 'session-1', action: 'last-output' },
+      { sessionId: 'session-1', action: 'all' },
+    ])
   })
 
   it('rejects malformed payloads instead of trusting them', () => {

@@ -85,6 +85,14 @@ fn a_running_command_is_seen_and_then_released() {
         .process_id()
         .expect("the shell should report a pid");
 
+    // Wait for the prompt, so the shell is fully up before we launch the command.
+    session
+        .writer
+        .write_all(common::echo_command("READY\r").as_bytes())
+        .expect("write");
+    session.writer.flush().expect("flush");
+    common::wait_for(&session, "READY");
+
     // A few seconds of a real child process, spelled for whichever shell the harness picked.
     let sleeper = if cfg!(target_os = "windows") {
         "ping -n 6 127.0.0.1\r"
@@ -94,13 +102,18 @@ fn a_running_command_is_seen_and_then_released() {
     session.writer.write_all(sleeper.as_bytes()).expect("write");
     session.writer.flush().expect("flush");
 
+    let deadline = Instant::now() + SETTLE;
+    let mut descendants = Vec::new();
+    while Instant::now() < deadline {
+        descendants = snapshot().descendants(pid);
+        if !descendants.is_empty() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
     assert!(
-        wait_until_busy(pid, true),
+        !descendants.is_empty(),
         "the running command never appeared as a descendant of {pid}",
-    );
-    assert!(
-        !snapshot().descendants(pid).is_empty(),
-        "descendants() must name the child, not merely count it",
     );
     assert!(
         wait_until_busy(pid, false),

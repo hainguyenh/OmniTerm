@@ -71,6 +71,45 @@ export async function listProfiles(deps: ProviderDeps, platform: NodeJS.Platform
     const key = platform === 'win32' ? base.toLowerCase() : base
     if (!launchers.has(key)) launchers.set(key, { agent, profileName: base, profileDir: null, launcher: base })
   }
+
+  const homeEntries = await safely(() => deps.listDir(deps.home), [])
+  for (const entry of homeEntries) {
+    if (entry.startsWith('.claude-') && entry.length > 8) {
+      const suffix = entry.slice(8)
+      if (/^[A-Za-z0-9_.]{1,40}$/.test(suffix)) {
+        const profileName = `claude-${suffix}`
+        const dir = path.join(deps.home, entry)
+        if ((await safely(() => deps.mtime(dir), null)) !== null) {
+          const key = platform === 'win32' ? profileName.toLowerCase() : profileName
+          if (!launchers.has(key)) {
+            launchers.set(key, { agent: 'claude', profileName, profileDir: dir, launcher: null })
+          } else {
+            const existing = launchers.get(key)
+            if (existing && !existing.profileDir) existing.profileDir = dir
+          }
+        }
+      }
+    }
+  }
+
+  const profilesDir = path.join(deps.home, 'claude-profiles')
+  const profileSubdirs = await safely(() => deps.listDir(profilesDir), [])
+  for (const sub of profileSubdirs) {
+    if (/^[A-Za-z0-9_.]{1,40}$/.test(sub)) {
+      const profileName = sub.startsWith('claude-') ? sub : `claude-${sub}`
+      const dir = path.join(profilesDir, sub)
+      if ((await safely(() => deps.mtime(dir), null)) !== null) {
+        const key = platform === 'win32' ? profileName.toLowerCase() : profileName
+        if (!launchers.has(key)) {
+          launchers.set(key, { agent: 'claude', profileName, profileDir: dir, launcher: null })
+        } else {
+          const existing = launchers.get(key)
+          if (existing && !existing.profileDir) existing.profileDir = dir
+        }
+      }
+    }
+  }
+
   const sorted = [...launchers.values()].sort((left, right) => byName(left.profileName, right.profileName))
   return [...defaults, ...sorted].slice(0, MAX_PROFILES)
 }

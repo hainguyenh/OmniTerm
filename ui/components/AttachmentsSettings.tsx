@@ -49,7 +49,7 @@ export default function AttachmentsSettings() {
     <div className="flex flex-col gap-1.5 border-t border-theme-border pt-3" aria-label="Attachments" role="group">
       <span className={LABEL_CLS}>Attachments</span>
       <p className="text-[11px] text-theme-dim -mt-0.5">
-        Images and files you paste or drop into an AI agent pane are stored here so the agent can read them.
+        Images, files, and large text pasted or dropped into an AI agent pane are stored here so the agent can read them.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-theme-fg flex-1 min-w-0" data-testid="attachments-summary">

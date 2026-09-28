@@ -129,5 +129,15 @@ export function parseAgyUsage(raw: string, now: number = Date.now()): AgyUsagePa
     return { ok: false, error: 'parse_failed', message: 'The /usage output named no valid quota windows.' }
   }
 
+  // When agy has not started yet or has no usage in the session window, agy only returns the weekly
+  // limit. The 5h window is full (100% remaining, 0% used).
+  if (windows.some((w) => w.kind === 'weekly') && !windows.some((w) => w.kind === 'session')) {
+    windows.unshift({
+      kind: 'session',
+      label: 'Session (5h)',
+      usedPct: 0,
+    })
+  }
+
   return { ok: true, windows }
 }

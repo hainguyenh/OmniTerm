@@ -1,9 +1,16 @@
 import React from 'react'
-import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
+import { Plus, Terminal, ChevronDown, LayoutGrid, Compass } from 'lucide-react'
 import { DefaultIdleArt } from '../assets/defaultArt'
 import { Tooltip } from './Tooltip'
 import DashboardPreviousSessions from './DashboardPreviousSessions'
 import type { StoredAgentSession } from '../utils/agentSessionStorage'
+
+export interface FallbackNavigatorTarget {
+  id: string
+  label: string
+  openTabCount: number
+  color?: string
+}
 
 /**
  * The "nothing here yet" page / Dashboard view. Used both for the whole content area (no tabs at all)
@@ -28,6 +35,9 @@ interface WaitingPaneProps {
   customArtUrl?: string | null
   /** Resume a stored or interrupted AI agent session, with its already-validated resume command. */
   onResumeSession?: (session: StoredAgentSession, resumeCommand: string) => void
+  /** Other view groups with active sessions that the user can navigate to. */
+  fallbackTargets?: FallbackNavigatorTarget[]
+  onNavigateTarget?: (id: string) => void
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
@@ -40,14 +50,40 @@ const WaitingPane: React.FC<WaitingPaneProps> = ({
   openSessionCount = 0,
   customArtUrl,
   onResumeSession,
+  fallbackTargets,
+  onNavigateTarget,
 }) => (
   <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
     <div className={`min-h-full w-full flex flex-col items-center justify-center ${
       compact ? 'p-3' : 'p-4'
     }`}>
-      <div className={`w-full max-w-[36rem] flex flex-col items-center ${
-        compact ? 'gap-2' : 'gap-4'
-      }`}>
+      <div className={`w-full ${compact ? 'max-w-[36rem] gap-2' : 'max-w-5xl gap-4'} flex flex-col items-center`}>
+        {/* Fallback navigation when user is in a view with no sessions but other views have open tabs */}
+        {!compact && fallbackTargets && fallbackTargets.length > 0 && (
+          <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-xl border border-theme-accent/30 bg-theme-accent/5 backdrop-blur-sm shadow-sm" data-testid="fallback-navigator">
+            <div className="flex items-center gap-2 text-xs text-theme-fg">
+              <Compass className="w-4 h-4 text-theme-accent flex-shrink-0" />
+              <span>You have open terminals in other views:</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {fallbackTargets.map((target) => (
+                <button
+                  key={target.id}
+                  type="button"
+                  onClick={() => onNavigateTarget?.(target.id)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border border-theme-border bg-theme-sidebar hover:border-theme-accent text-theme-fg hover:text-theme-accent text-xs font-medium transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: target.color ?? 'var(--theme-accent)' }} />
+                  <span>{target.label}</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-theme-accent/20 text-theme-accent font-semibold">
+                    {target.openTabCount}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Previous sessions dashboard cards (when available) */}
         {!compact && onResumeSession && (
           <DashboardPreviousSessions onResume={onResumeSession} />

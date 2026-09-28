@@ -161,4 +161,21 @@ describe('parseAgyUsage', () => {
       expect(resultInvalidIso.windows[0].resetsAt).toBeUndefined()
     }
   })
+
+  it('synthesizes a 100% full 5h window when agy output only reports weekly limit', () => {
+    const weeklyOnly = 'Gemini Models Weekly Limit Remaining 49% 2026-10-02T08:47:03Z'
+    const result = parseAgyUsage(weeklyOnly)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.windows).toHaveLength(2)
+    const session = result.windows.find((w) => w.kind === 'session')
+    expect(session).toEqual({
+      kind: 'session',
+      label: 'Session (5h)',
+      usedPct: 0,
+    })
+    const weekly = result.windows.find((w) => w.kind === 'weekly')
+    expect(weekly?.usedPct).toBe(51)
+  })
 })

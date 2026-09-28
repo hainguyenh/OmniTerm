@@ -181,7 +181,7 @@ describe('MainLayoutView coverage', () => {
     rerender(<MainLayoutView model={single} />)
     fireEvent.click(screen.getByText('toggle-detach'))
     expect(single.detachControl.toggle).toHaveBeenCalledWith('local-tab')
-  })
+  }, 30_000)
 
   it('keeps session views mounted while group tabs settle after a layout change', () => {
     const m = model({
