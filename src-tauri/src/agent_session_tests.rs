@@ -100,11 +100,77 @@ fn ignores_sessions_older_than_the_agent_process() {
 }
 
 #[tokio::test]
-async fn command_rejects_blank_inputs() {
-    let resolved = resolve_claude_session(String::new(), "D:\\work".to_string(), None)
+async fn command_rejects_blank_inputs_and_resolves_valid_session() {
+    let resolved_profile = resolve_claude_session(String::new(), "D:\\work".to_string(), None)
         .await
         .expect("command should not error");
-    assert_eq!(resolved, None);
+    assert_eq!(resolved_profile, None);
+
+    let resolved_cwd = resolve_claude_session("profile".to_string(), "   ".to_string(), None)
+        .await
+        .expect("command should not error");
+    assert_eq!(resolved_cwd, None);
+
+    let temp = tempdir().expect("tempdir");
+    let profile_dir = temp.path();
+    let project_dir = profile_dir.join("projects").join("D--work-proj");
+    fs::create_dir_all(&project_dir).expect("create project dir");
+    touch_at(
+        &project_dir.join("33333333-3333-3333-3333-333333333333.jsonl"),
+        SystemTime::now(),
+    );
+    let resolved = resolve_claude_session(
+        profile_dir.to_string_lossy().to_string(),
+        "D:\\work\\proj".to_string(),
+        None,
+    )
+    .await
+    .expect("resolve valid session");
+    assert_eq!(
+        resolved.as_deref(),
+        Some("33333333-3333-3333-3333-333333333333")
+    );
+}
+
+#[test]
+fn session_lookup_skips_non_jsonl_and_handles_older_files() {
+    let temp = tempdir().expect("tempdir");
+    let profile_dir = temp.path();
+    let project_dir = profile_dir.join("projects").join("D--work-proj");
+    fs::create_dir_all(&project_dir).expect("create project dir");
+
+    let now = SystemTime::now();
+    touch_at(&project_dir.join("not-jsonl.txt"), now);
+    touch_at(&project_dir.join("no-extension"), now);
+
+    touch_at(
+        &project_dir.join("11111111-1111-1111-1111-111111111111.jsonl"),
+        now - Duration::from_secs(60),
+    );
+    touch_at(
+        &project_dir.join("22222222-2222-2222-2222-222222222222.jsonl"),
+        now,
+    );
+    touch_at(
+        &project_dir.join("00000000-0000-0000-0000-000000000000.jsonl"),
+        now - Duration::from_secs(120),
+    );
+
+    let since = now
+        .duration_since(UNIX_EPOCH)
+        .expect("since epoch")
+        .as_secs()
+        - 30;
+    let resolved = resolve_claude_session_file(profile_dir, "D:\\work\\proj", Some(since));
+    assert_eq!(
+        resolved.as_deref(),
+        Some("22222222-2222-2222-2222-222222222222")
+    );
+
+    assert_eq!(
+        resolve_claude_session_file(profile_dir, "D:\\missing\\proj", None),
+        None
+    );
 }
 
 #[test]

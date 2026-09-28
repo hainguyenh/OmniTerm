@@ -13,6 +13,7 @@ fn sanitize_keeps_only_the_last_safe_component() {
     assert_eq!(sanitize_file_name("line\nbreak\u{0}.md"), "linebreak.md");
     assert_eq!(sanitize_file_name(".bashrc"), "bashrc");
     assert_eq!(sanitize_file_name("trailing. . "), "trailing");
+    assert_eq!(sanitize_file_name("trailing."), "trailing");
 }
 
 #[test]
@@ -45,6 +46,9 @@ fn saves_with_a_unique_stamped_name_and_never_overwrites() {
     assert_eq!(first.size, 3);
     assert_eq!(fs::read(&first.path).expect("read first"), b"one");
     assert_eq!(fs::read(&second.path).expect("read second"), b"two");
+
+    let no_ext = save_attachment(temp.path(), "barename", b"bare", 42).expect("save no ext");
+    assert_eq!(no_ext.name, "barename-42");
 }
 
 #[test]
@@ -115,6 +119,7 @@ fn clear_without_a_temp_dir_leaves_legacy_files() {
     let report = clear_attachments(&temp.path().join("none"), None);
     assert_eq!(report, ClearReport::default());
     assert!(temp.path().join("omniterm-paste-1.png").exists());
+    assert!(legacy_pastes(&temp.path().join("nonexistent")).is_empty());
 }
 
 #[test]
@@ -146,6 +151,14 @@ fn imports_a_copied_file_and_refuses_folders_and_empty_files() {
     let empty = temp.path().join("empty.txt");
     fs::write(&empty, b"").expect("write empty");
     assert!(import_attachment(&folder, &empty, 9).is_err());
+
+    let huge = temp.path().join("huge.bin");
+    let huge_file = fs::File::create(&huge).expect("create huge");
+    huge_file
+        .set_len((MAX_ATTACHMENT_BYTES + 1) as u64)
+        .expect("set_len");
+    let oversized = import_attachment(&folder, &huge, 9).expect_err("oversized");
+    assert_eq!(oversized.kind(), io::ErrorKind::InvalidInput);
 }
 
 fn drop_files_block(names: &[&str], wide: bool) -> Vec<u8> {
