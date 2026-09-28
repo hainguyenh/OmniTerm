@@ -51,6 +51,10 @@ fn classifies_native_and_packaged_agents() {
         Some(AgentKind::Codex)
     );
     assert_eq!(classify(&codex_node), Some(AgentKind::Codex));
+    assert_eq!(
+        classify(&row(5, 0, 0, "agy.exe", &[])),
+        Some(AgentKind::Agy)
+    );
 }
 
 #[test]
@@ -61,7 +65,7 @@ fn scripts_shells_tools_and_other_agents_are_not_monitored() {
         "pwsh.exe",
         "cmd.exe",
         "cargo.exe",
-        "agy.exe",
+        "git.exe",
         "language_server_windows_x64.exe",
     ] {
         assert_eq!(

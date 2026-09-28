@@ -21,3 +21,16 @@ export function extractAgentWorkItem(title?: string | null): string | undefined 
   if (/^[a-z]:[\\/]|^[\\/~]|[\\/].*[\\/]/i.test(text) || /\.(exe|cmd|bat|ps1|sh)$/i.test(text)) return undefined
   return text.length > MAX_LENGTH ? `${text.slice(0, MAX_LENGTH - 1)}…` : text
 }
+
+/**
+ * True when a work item only names the pane's folder. Some agents (and shell prompts that outlive
+ * the agent's first title) title the terminal with the folder basename; shown as the work item it
+ * repeated the folder on both sides of the bookmark.
+ */
+export function namesFolder(workItem: string, folders: ReadonlyArray<string | undefined>): boolean {
+  const item = workItem.trim().toLowerCase()
+  return folders.some((folder) => {
+    const name = folder?.replace(/[\\/]+$/, '').split(/[\\/]/).pop()?.trim().toLowerCase()
+    return Boolean(name) && name === item
+  })
+}

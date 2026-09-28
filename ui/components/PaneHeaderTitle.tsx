@@ -4,7 +4,7 @@ import type { Connection, SessionStatus } from '@omniterm/contract'
 import { HeaderBusyArt } from '../../plugins/agent-quota/app/paneHosts'
 import { usePanePresence } from '../utils/agentPresenceStore'
 import { formatTerminalTitle } from '../utils/agentTitle'
-import { extractAgentWorkItem } from '../utils/agentWorkItem'
+import { extractAgentWorkItem, namesFolder } from '../utils/agentWorkItem'
 import { AgentBadge } from './AgentBadge'
 import { PaneBookmarkButton } from './PaneBookmarkButton'
 import SessionStatusIndicator from './SessionStatusIndicator'
@@ -44,7 +44,9 @@ export function PaneHeaderTitle({
   const agent = presence?.agent ?? (formatted.isAgent ? formatted.agentName : undefined)
   // A shell-reported cwd (OSC 7 / 9;9) is the freshest folder signal — it wins over the title's.
   const folderLabel = liveFolder ?? formatted.folderName
-  const workItem = agent ? extractAgentWorkItem(sessionTitle) : undefined
+  const titleItem = agent ? extractAgentWorkItem(sessionTitle) : undefined
+  // A title that only names the folder is no work item: it would repeat the folder after the bookmark.
+  const workItem = titleItem && !namesFolder(titleItem, [folderLabel, formatted.folderName, folderPath]) ? titleItem : undefined
   const primary = workItem ?? folderLabel ?? formatted.displayTitle
 
   return (

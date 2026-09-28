@@ -1,43 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-import type { DiscoveredProfile, QuotaSnapshot } from '../../src/types'
-import type { DashboardDeps } from '../profileDashboard'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { QuotaProfilesDashboard } from '../QuotaProfilesDashboard'
-import { QuotaQuickPopover } from '../QuotaQuickPopover'
 import { getProfileDashboard, resetProfileDashboard, setDashboardOpen } from '../profileDashboard'
 import { getQuotaState, resetQuotaStore } from '../quotaStore'
 
-import { NOW, profile, reading, seed } from './quotaFixtures'
-
-const HOUR = 3_600_000
-const WORK: DiscoveredProfile = { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' }
-const HOME: DiscoveredProfile = { agent: 'claude', profileName: 'claude-home', profileDir: null, launcher: 'claude-home' }
-const SIDE: DiscoveredProfile = { agent: 'claude', profileName: 'claude-side', profileDir: null, launcher: 'claude-side' }
-
-const usage = (session: number, weekly: number, sessionResetIn = 2 * HOUR): QuotaSnapshot => ({
-  windows: [
-    { kind: 'session', label: 'Current session', usedPct: session, resetsAt: NOW + sessionResetIn },
-    { kind: 'weekly', label: 'Current week', usedPct: weekly, resetsAt: NOW + 4 * 24 * HOUR },
-  ],
-  fetchedAt: NOW,
-})
-
-function deps(readings: Record<string, QuotaSnapshot>, listed: DiscoveredProfile[] = [WORK, HOME, SIDE]): DashboardDeps {
-  return {
-    listProfiles: vi.fn(async () => listed),
-    fetchUsage: vi.fn(async (request) => readings[request.launcher ?? ''] ?? { windows: [], fetchedAt: NOW, error: 'timeout' as const, message: 'claude /usage timed out.' }),
-  }
-}
+import { NOW, profile, reading, seed, terminal } from './quotaFixtures'
 
 beforeEach(() => {
   resetQuotaStore()
   resetProfileDashboard()
-  seed({ terminals: [], profiles: [] })
 })
 afterEach(() => {
   resetQuotaStore()
@@ -45,60 +20,58 @@ afterEach(() => {
 })
 
 describe('QuotaProfilesDashboard', () => {
-  it('lists profiles on open but reads quota only when asked', async () => {
-    const live = deps({})
-    render(<QuotaProfilesDashboard deps={live} />)
-    await screen.findByRole('listitem', { name: 'claude-work profile' })
-    expect(screen.getAllByRole('listitem')).toHaveLength(3)
-    expect(live.fetchUsage).not.toHaveBeenCalled()
-    expect(screen.getByRole('status')).toHaveTextContent('Press Fetch all')
+  it('renders the active engine profiles without discovery or recommendation controls', () => {
+    const active = terminal({
+      profileKey: 'claude:launcher:claude-work',
+      profileName: 'claude-work',
+      profileDir: null,
+      launcher: 'claude-work',
+    })
+    seed({
+      terminals: [active],
+      profiles: [profile(reading(20, 30), { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
+
+    render(<QuotaProfilesDashboard />)
+
+    expect(screen.getByRole('listitem', { name: 'claude-work profile' })).toBeInTheDocument()
+    expect(screen.getByText('1 active profile · live engine status')).toBeInTheDocument()
+    expect(screen.queryByText(/Use now/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Fetch/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Fetch all' })).not.toBeInTheDocument()
   })
 
-  it('fetches all, recommends a profile with its command, and marks limited and failed rows', async () => {
-    const writeText = vi.fn(async () => {})
-    window.omnitermAPI = { ...(window.omnitermAPI ?? {}), clipboard: { writeText } } as unknown as typeof window.omnitermAPI
-    const live = deps({ 'claude-work': usage(20, 30), 'claude-home': usage(92, 40, 90 * 60_000) })
-    render(<QuotaProfilesDashboard deps={live} />)
-    await screen.findByRole('listitem', { name: 'claude-work profile' })
-    fireEvent.click(screen.getByRole('button', { name: 'Fetch all' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Use now: claude-work'))
+  it('collapses multiple active terminals for the same profile into one row', () => {
+    const active = terminal({ profileKey: 'claude:launcher:claude-work', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' })
+    const second = { ...active, sessionId: 's2', instanceKey: 's2:10:100' }
+    seed({
+      terminals: [active, second],
+      profiles: [profile(reading(20), { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
 
-    const banner = screen.getByRole('status')
-    expect(banner).toHaveTextContent('70% of 5h left · 65% of weekly left')
-    fireEvent.click(within(banner).getByRole('button', { name: 'Copy claude-work' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('claude-work'))
+    render(<QuotaProfilesDashboard />)
 
-    const rows = screen.getAllByRole('listitem')
-    expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['best', 'limited', 'error'])
-    expect(within(rows[1]).getByText('Limited · 1h 30m')).toBeInTheDocument()
-    expect(within(rows[2]).getByText('Failed: claude /usage timed out.')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('fetched just now')).toBeInTheDocument()
-    expect(within(rows[0]).getByLabelText('5h 20% used')).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.getByRole('listitem', { name: 'claude-work profile' })).toHaveTextContent('2 active terminals')
   })
 
-  it('names the profile that frees up first when none has room', async () => {
-    const live = deps({ 'claude-work': usage(95, 30, 3 * HOUR), 'claude-home': usage(91, 30, HOUR) }, [WORK, HOME])
-    render(<QuotaProfilesDashboard deps={live} />)
-    await screen.findByRole('listitem', { name: 'claude-work profile' })
-    fireEvent.click(screen.getByRole('button', { name: 'Fetch all' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('No profile has room right now.'))
-    expect(screen.getByRole('status')).toHaveTextContent('claude-home frees up first: 5h limit reached — available in 1h 00m')
+  it('shows a stale reading with the current engine error', () => {
+    const current = profile(reading(40), {
+      snapshot: { windows: [], fetchedAt: 2, error: 'timeout', message: 'Quota service timed out.' },
+    })
+    seed({ profiles: [current] })
+
+    render(<QuotaProfilesDashboard />)
+
+    const row = screen.getByRole('listitem', { name: 'work profile' })
+    expect(row).toHaveTextContent('Quota service timed out. · showing last good reading')
+    expect(within(row).getByLabelText('5h 40% used')).toBeInTheDocument()
   })
 
-  it('re-reads one profile and reuses the engine reading of a monitored profile', async () => {
-    seed({ terminals: [], profiles: [profile(reading(50, 20), { key: 'claude:launcher:claude-side', profileName: 'claude-side', launcher: 'claude-side', profileDir: null })] })
-    const live = deps({ 'claude-home': usage(10, 10) })
-    render(<QuotaProfilesDashboard deps={live} />)
-    const side = await screen.findByRole('listitem', { name: 'claude-side profile' })
-    expect(within(side).getByLabelText('5h 50% used')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Fetch claude-home' }))
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Use now: claude-home'))
-    expect(live.fetchUsage).toHaveBeenCalledTimes(1)
-  })
-
-  it('explains an empty list and closes on Escape, the close button or the backdrop', async () => {
-    render(<QuotaProfilesDashboard deps={deps({}, [])} />)
-    await screen.findByText(/No profiles found/)
+  it('explains an empty active state and closes on Escape, the close button or the backdrop', () => {
+    seed({ terminals: [], profiles: [] })
+    render(<QuotaProfilesDashboard />)
+    expect(screen.getByText('No Claude Code profile is active in an open terminal.')).toBeInTheDocument()
     for (const close of [
       () => fireEvent.keyDown(window, { key: 'Escape' }),
       () => fireEvent.click(screen.getByRole('button', { name: 'Close profiles' })),
@@ -113,9 +86,9 @@ describe('QuotaProfilesDashboard', () => {
     expect(getProfileDashboard().open).toBe(true)
   })
 
-  it('moves by its header, while the header buttons stay clicks', async () => {
-    render(<QuotaProfilesDashboard deps={deps({})} />)
-    await screen.findByRole('listitem', { name: 'claude-work profile' })
+  it('moves by its header', () => {
+    seed()
+    render(<QuotaProfilesDashboard />)
     const dialog = screen.getByRole('dialog')
     const handle = screen.getByTestId('aq-pd-handle')
 
@@ -123,16 +96,115 @@ describe('QuotaProfilesDashboard', () => {
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: 160, clientY: 140 })
     fireEvent.pointerUp(handle, { pointerId: 1 })
     expect(dialog.style.transform).toBe('translate(60px, 40px)')
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'Fetch all' }), { button: 0, pointerId: 2, clientX: 0, clientY: 0 })
-    fireEvent.pointerMove(handle, { pointerId: 2, clientX: 300, clientY: 300 })
-    expect(dialog.style.transform).toBe('translate(60px, 40px)')
   })
 
-  it('opens from the quick settings, which close behind it', () => {
-    render(<QuotaQuickPopover />)
-    fireEvent.click(screen.getByRole('button', { name: 'Profiles' }))
+  it('reflects store changes while open', () => {
+    seed()
+    render(<QuotaProfilesDashboard />)
+    expect(screen.getByRole('listitem', { name: 'work profile' })).toBeInTheDocument()
+
+    act(() => seed({ terminals: [], profiles: [] }))
+    expect(screen.getByText('No Claude Code profile is active in an open terminal.')).toBeInTheDocument()
+    expect(getQuotaState().profiles).toEqual({})
+  })
+
+  it('covers window edge cases and formatAgo variants', () => {
+    const active = terminal({
+      profileKey: 'claude:launcher:claude-work',
+      profileName: 'claude-work',
+      profileDir: null,
+      launcher: 'claude-work',
+    })
+    const snap1 = {
+      windows: [
+        { kind: 'session' as const, label: 'Session', usedPct: 80, resetsAt: NOW - 1000 },
+      ],
+      fetchedAt: NOW - 30_000,
+    }
+    seed({
+      terminals: [active],
+      profiles: [profile(snap1, { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
+
+    const { rerender } = render(<QuotaProfilesDashboard />)
+    expect(screen.getByText('5h')).toBeInTheDocument()
+    expect(screen.getByText('Week —')).toBeInTheDocument()
+    expect(screen.getByText(/just now/)).toBeInTheDocument()
+
+    seed({
+      terminals: [active],
+      profiles: [profile({ ...snap1, fetchedAt: NOW - 12 * 60_000 }, { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
+    rerender(<QuotaProfilesDashboard />)
+    expect(screen.getByText(/12m ago/)).toBeInTheDocument()
+
+    seed({
+      terminals: [active],
+      profiles: [profile({ ...snap1, fetchedAt: NOW - 3 * 3600_000 }, { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
+    rerender(<QuotaProfilesDashboard />)
+    expect(screen.getByText(/3h ago/)).toBeInTheDocument()
+
+    seed({
+      terminals: [active],
+      profiles: [profile({ ...snap1, fetchedAt: NOW - 50 * 3600_000 }, { key: active.profileKey, profileName: active.profileName, profileDir: null, launcher: active.launcher })],
+    })
+    rerender(<QuotaProfilesDashboard />)
+    expect(screen.getByText(/2d ago/)).toBeInTheDocument()
+  })
+
+  it('renders limited status, error without reading, fetching status, and waiting for first reading', () => {
+    const limitedProfile = profile(
+      {
+        windows: [{ kind: 'session' as const, label: 'Session', usedPct: 95, resetsAt: NOW + 3600_000 }],
+        fetchedAt: NOW - 10_000,
+      },
+      { key: 'claude:p1', profileName: 'limited-prof', profileDir: 'p1', launcher: null },
+    )
+    const errorProfile = profile(undefined, {
+      key: 'claude:p2',
+      profileName: 'error-prof',
+      profileDir: 'p2',
+      launcher: null,
+      snapshot: { windows: [], fetchedAt: NOW, error: 'failed', message: 'Failed to probe' },
+    })
+    const fetchingProfile = profile(undefined, {
+      key: 'claude:p3',
+      profileName: 'fetching-prof',
+      profileDir: 'p3',
+      launcher: null,
+      fetching: true,
+    })
+    const freshProfile = profile(undefined, {
+      key: 'claude:p4',
+      profileName: 'fresh-prof',
+      profileDir: 'p4',
+      launcher: null,
+    })
+
+    seed({
+      terminals: [
+        terminal({ sessionId: 's1', profileKey: 'claude:p1', profileName: 'limited-prof', profileDir: 'p1', launcher: null }),
+        terminal({ sessionId: 's2', profileKey: 'claude:p2', profileName: 'error-prof', profileDir: 'p2', launcher: null }),
+        terminal({ sessionId: 's3', profileKey: 'claude:p3', profileName: 'fetching-prof', profileDir: 'p3', launcher: null }),
+        terminal({ sessionId: 's4', profileKey: 'claude:p4', profileName: 'fresh-prof', profileDir: 'p4', launcher: null }),
+      ],
+      profiles: [limitedProfile, errorProfile, fetchingProfile, freshProfile],
+    })
+
+    render(<QuotaProfilesDashboard />)
+    expect(screen.getByText(/Limited ·/)).toBeInTheDocument()
+    expect(screen.getByText('Error')).toBeInTheDocument()
+    expect(screen.getByText(/Failed to probe/)).toBeInTheDocument()
+    expect(screen.getByText(/Updating quota…/)).toBeInTheDocument()
+    expect(screen.getByText(/waiting for first quota reading/)).toBeInTheDocument()
+  })
+
+  it('ignores non-Escape keys when open', () => {
+    seed()
+    render(<QuotaProfilesDashboard />)
+    act(() => setDashboardOpen(true))
+    fireEvent.keyDown(window, { key: 'Enter' })
     expect(getProfileDashboard().open).toBe(true)
-    expect(getQuotaState().quickOpen).toBe(false)
   })
 })

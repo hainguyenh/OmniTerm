@@ -7,7 +7,7 @@ import type { AgentKind, WindowKind } from '../src/types'
  * part of it — they live in memory, keyed to one agent process, and die with it.
  */
 
-export const AGENT_KINDS: readonly AgentKind[] = ['claude', 'codex']
+export const AGENT_KINDS: readonly AgentKind[] = ['claude', 'codex', 'agy']
 export const WINDOW_KINDS: readonly WindowKind[] = ['session', 'weekly', 'monthly']
 
 export type WakeMode = 'off' | 'timeOfDay' | 'afterReset'
@@ -132,7 +132,7 @@ export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
     artSpeed: 'normal',
     artSize: 'normal',
   },
-  agents: { claude: defaultAgent(true), codex: defaultAgent(true) },
+  agents: { claude: defaultAgent(true), codex: defaultAgent(true), agy: defaultAgent(true) },
 }
 
 export const MIN_LIMIT = 5
@@ -239,6 +239,7 @@ export function parseQuotaConfig(value: unknown): QuotaConfig {
     agents: {
       claude: parseAgent(agents.claude, base.agents.claude),
       codex: parseAgent(agents.codex, base.agents.codex),
+      agy: parseAgent(agents.agy, base.agents.agy),
     },
   }
 }
@@ -289,6 +290,7 @@ export function pruneOverride(global: AgentConfig, override: AgentOverride): Age
 export const AGENT_LABELS: Record<AgentKind, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
+  agy: 'Antigravity CLI',
 }
 
 export const WINDOW_LABELS: Record<WindowKind, { long: string; short: string }> = {

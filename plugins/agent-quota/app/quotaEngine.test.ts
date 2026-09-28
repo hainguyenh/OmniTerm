@@ -281,11 +281,11 @@ describe('QuotaEngine', () => {
     expect(getQuotaState().profiles['claude:c:\\p\\work'].nextFetchAt).toBe(0)
   })
 
-  it('keys and probes a profile by its launcher, and survives a failed detect', async () => {
+  it('keys a launcher profile by its directory, reads it through the launcher, and survives a failed detect', async () => {
     const { api, run, engine, setRows, advance } = setup()
     setRows([agent({ launcher: 'claude-th', profileName: 'claude-th' })])
     await run()
-    expect(getQuotaState().terminals.s1.profileKey).toBe('claude:launcher:claude-th')
+    expect(getQuotaState().terminals.s1.profileKey).toBe('claude:c:\\p\\work')
     expect(api.fetchUsage).toHaveBeenCalledWith({ agent: 'claude', profileDir: 'C:\\p\\work', launcher: 'claude-th' })
     engine.wake({ sessionId: 's1' })
     await engine.settle()
@@ -293,6 +293,32 @@ describe('QuotaEngine', () => {
     api.detect.mockRejectedValueOnce(new Error('ipc'))
     await run(advance(6000))
     expect(getQuotaState().terminals.s1).toBeDefined()
+  })
+
+  it('lists a launcher terminal and a plain terminal on the same directory as one profile (regression)', async () => {
+    const { api, run, setRows } = setup()
+    setRows([
+      agent({ profileDir: 'C:\\p\\work\\', profileName: 'work' }),
+      agent({ sessionId: 's2', pid: 11, profileDir: 'c:/p/work', launcher: 'claude-th', profileName: 'claude-th' }),
+    ])
+    await run()
+    const state = getQuotaState()
+    expect(Object.keys(state.profiles)).toEqual(['claude:c:\\p\\work'])
+    expect(state.terminals.s2.profileKey).toBe(state.terminals.s1.profileKey)
+    expect(state.profiles['claude:c:\\p\\work']).toMatchObject({ profileName: 'claude-th', launcher: 'claude-th' })
+    expect(api.fetchUsage).toHaveBeenCalledTimes(1)
+    expect(api.fetchUsage).toHaveBeenCalledWith(expect.objectContaining({ launcher: 'claude-th' }))
+  })
+
+  it('keys a launcher by name when only the default directory is known', async () => {
+    const { run, setRows } = setup()
+    setRows([
+      agent({ profileDir: 'C:\\Users\\me\\.claude', launcher: 'claude-th', profileName: 'claude-th' }),
+      agent({ sessionId: 's2', pid: 11, profileDir: 'C:\\Users\\me\\.claude', profileName: 'claude' }),
+    ])
+    await run()
+    expect(getQuotaState().terminals.s1.profileKey).toBe('claude:launcher:claude-th')
+    expect(getQuotaState().terminals.s2.profileKey).toBe('claude:c:\\users\\me\\.claude')
   })
 
   it('runs its own loop until stopped', async () => {

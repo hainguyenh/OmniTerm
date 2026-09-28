@@ -47,6 +47,7 @@ describe('wakeAgent', () => {
     expect(await wakeAgent({ agent: 'claude', prompt: 'hi & del *' }, deps)).toMatchObject({ ok: false, message: expect.stringContaining('letters') })
     expect(await wakeAgent({ agent: 'claude', prompt: 'hi' }, deps)).toMatchObject({ message: 'Claude Code CLI not found.' })
     expect(await wakeAgent({ agent: 'codex', prompt: 'hi' }, deps)).toMatchObject({ message: 'Codex CLI not found.' })
+    expect(await wakeAgent({ agent: 'agy', prompt: 'hi' }, deps)).toMatchObject({ message: 'Antigravity CLI not found.' })
   })
 
   it('reports timeouts and failures', async () => {
@@ -68,6 +69,7 @@ describe('request validation', () => {
   it('accepts well-formed requests and normalises empty directories', () => {
     expect(parseFetchRequest({ agent: 'claude', profileDir: '' })).toEqual({ agent: 'claude', profileDir: null, launcher: null })
     expect(parseFetchRequest({ agent: 'claude', launcher: 'claude-th' })).toEqual({ agent: 'claude', profileDir: null, launcher: 'claude-th' })
+    expect(parseFetchRequest({ agent: 'agy', launcher: 'agy-work' })).toEqual({ agent: 'agy', profileDir: null, launcher: 'agy-work' })
     expect(parseWakeRequest({ agent: 'codex', profileDir: 'D:\\c', prompt: 'hi' })).toEqual({ agent: 'codex', profileDir: 'D:\\c', launcher: null, prompt: 'hi' })
   })
 
@@ -132,7 +134,7 @@ describe('plugin entry', () => {
     activate({ registerInvokeHandler: (registered) => { handler = registered }, services: { log } }, deps)
     expect(name).toBe('@omniterm/agent-quota')
     expect(log).toHaveBeenCalledWith('Agent Quota activated')
-    expect(handler?.('agentQuota.info')).toEqual({ name: 'Agent Quota', agents: ['claude', 'codex'] })
+    expect(handler?.('agentQuota.info')).toEqual({ name: 'Agent Quota', agents: ['claude', 'codex', 'agy'] })
     expect(await handler?.('agentQuota.wake', { agent: 'claude', prompt: 'hi' })).toEqual({ ok: true })
     expect(await handler?.('agentQuota.fetchUsage', { agent: 'codex' })).toMatchObject({ error: 'unsupported' })
     expect(() => handler?.('agentQuota.nope')).toThrow('Unknown Agent Quota method "agentQuota.nope"')

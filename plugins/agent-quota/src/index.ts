@@ -3,6 +3,7 @@ import type { AgentKind, FetchUsageRequest, QuotaSnapshot, WakeRequest, WakeResu
 
 import { createNodeDeps } from './deps'
 import { isLauncherName } from './launcher'
+import { fetchAgyUsage } from './providers/agy'
 import { fetchClaudeUsage } from './providers/claude'
 import { fetchCodexUsage } from './providers/codex'
 import { listProfiles } from './profiles'
@@ -17,7 +18,7 @@ type Host = {
 
 export const name = '@omniterm/agent-quota'
 
-const AGENTS: readonly AgentKind[] = ['claude', 'codex']
+const AGENTS: readonly AgentKind[] = ['claude', 'codex', 'agy']
 
 function isAgent(value: unknown): value is AgentKind {
   return typeof value === 'string' && (AGENTS as readonly string[]).includes(value)
@@ -70,9 +71,12 @@ export function createService(deps: ProviderDeps) {
     const key = profileKey(request)
     const pending = inFlight.get(key)
     if (pending) return pending
-    const run = (async () => (request.agent === 'claude'
-      ? fetchClaudeUsage(request, deps)
-      : fetchCodexUsage(request.profileDir, deps)))()
+    const run = (async () => {
+      if (request.agent === 'claude') return fetchClaudeUsage(request, deps)
+      if (request.agent === 'codex') return fetchCodexUsage(request.profileDir, deps)
+      if (request.agent === 'agy') return fetchAgyUsage(request, deps)
+      throw new Error(`Unsupported agent ${request.agent}`)
+    })()
       .catch((error: unknown): QuotaSnapshot => ({
         windows: [],
         fetchedAt: deps.now(),

@@ -41,36 +41,6 @@
   cursor: pointer;
 }
 
-.aq-pd-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--theme-border);
-  border-radius: 12px;
-  line-height: 1.45;
-}
-
-.aq-pd-banner[data-kind="best"] {
-  border-color: color-mix(in srgb, var(--theme-accent) 60%, var(--theme-border));
-  background: color-mix(in srgb, var(--theme-accent) 8%, transparent);
-}
-
-.aq-pd-banner[data-kind="wait"] {
-  border-color: color-mix(in srgb, var(--aq-warm) 60%, var(--theme-border));
-}
-
-.aq-pd-command {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 2px 0 6px;
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: 11px;
-}
-
 .aq-pd-row {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto;

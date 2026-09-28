@@ -1,6 +1,6 @@
 /** Shared between the Node sidecar and the renderer; type-only, so it costs the bundle nothing. */
 
-export type AgentKind = 'claude' | 'codex'
+export type AgentKind = 'claude' | 'codex' | 'agy'
 
 /** A quota window. `session` is the rolling ~5-hour window every provider has. */
 export type WindowKind = 'session' | 'weekly' | 'monthly'

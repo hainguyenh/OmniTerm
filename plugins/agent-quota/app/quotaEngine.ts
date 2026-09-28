@@ -3,6 +3,7 @@ import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
 import type { ProfileQuota, TerminalAgent } from './quotaStore'
 
 import { releaseUnguarded, resumeByHand, runGuards } from './guardRunner'
+import { instanceKeyOf, profileKeyOf } from './profileKey'
 import { AGENT_LABELS, type AgentConfig } from './quotaConfig'
 import { isHeld } from './quotaGuard'
 import { pressure, windowOf } from './quotaPolicy'
@@ -25,8 +26,8 @@ export interface EngineDeps {
   setTimer(run: () => void, ms: number): unknown
   clearTimer(handle: unknown): void
   /**
-   * Read quota from the agent itself on a profile's first launch (see inlineUsageProbe.ts); null
-   * when it can't, and the `-p /usage` read runs instead. Absent: always the `-p` read.
+   * Read quota from the agent itself when it starts in a terminal (see inlineUsageProbe.ts); null
+   * when it can't, and the background read runs instead. Absent: always the background read.
    */
   inlineProbe?(terminal: TerminalAgent): Promise<QuotaSnapshot | null>
 }
@@ -40,13 +41,8 @@ export interface EngineInputs {
 const TICK_MS = 1000
 const DETECT_MS = 5000
 const AFTER_WAKE_REFRESH_MS = 5000
-/** How long a profile's `-p` read waits for an inline probe before running anyway. */
+/** How long a new profile's background read waits for an inline probe before running anyway. */
 const INLINE_PROBE_HOLD_MS = 20_000
-
-export const instanceKeyOf = (agent: SessionAgent) => `${agent.sessionId}:${agent.pid}:${agent.startTime}`
-/** Profiles are keyed by the launcher the user ran when there is one, else by directory. */
-export const profileKeyOf = (agent: SessionAgent) =>
-  agent.launcher ? `${agent.agent}:launcher:${agent.launcher.toLowerCase()}` : `${agent.agent}:${(agent.profileDir ?? agent.profileName).toLowerCase()}`
 
 export class QuotaEngine {
   private inputs: EngineInputs = { sessionIds: [], busy: {} }
@@ -54,6 +50,8 @@ export class QuotaEngine {
   private stopped = true
   private detectAt = 0
   private detecting = false
+  /** Agent instances already offered to the inline probe: each launch or resume is asked once. */
+  private readonly probed = new Set<string>()
   private readonly pending = new Set<Promise<unknown>>()
 
   constructor(private readonly deps: EngineDeps) {}
@@ -129,11 +127,11 @@ export class QuotaEngine {
       terminals[row.sessionId] = { ...row, instanceKey: instanceKeyOf(row), profileKey: profileKeyOf(row) }
     }
     const live = new Set(Object.values(terminals).map((terminal) => terminal.instanceKey))
-    // A profile seen for the first time in this run: its agent was just launched, so it may be
-    // asked inline instead of through a `-p` read.
-    const firstLaunch = new Map<string, TerminalAgent>()
-    for (const terminal of Object.values(terminals)) {
-      if (!current.profiles[terminal.profileKey] && !firstLaunch.has(terminal.profileKey)) firstLaunch.set(terminal.profileKey, terminal)
+    // Every agent process that appeared since the last detection — a launch or a resume — may be
+    // asked inline. Its reading is the freshest there is, even for a profile already monitored.
+    const started = Object.values(terminals).filter((terminal) => !this.probed.has(terminal.instanceKey))
+    for (const key of this.probed) {
+      if (!live.has(key)) this.probed.delete(key)
     }
     for (const old of Object.values(current.terminals)) {
       if (!live.has(old.instanceKey) && isHeld(current.guards[old.instanceKey])) void this.track(this.deps.api.resume(old.sessionId))
@@ -142,7 +140,7 @@ export class QuotaEngine {
       const keep = <T>(map: Record<string, T>) => Object.fromEntries(Object.entries(map).filter(([key]) => live.has(key)))
       const profiles: Record<string, ProfileQuota> = {}
       for (const terminal of Object.values(terminals)) {
-        profiles[terminal.profileKey] ??= state.profiles[terminal.profileKey] ?? {
+        const profile = profiles[terminal.profileKey] ?? state.profiles[terminal.profileKey] ?? {
           key: terminal.profileKey,
           agent: terminal.agent,
           profileName: terminal.profileName,
@@ -155,6 +153,11 @@ export class QuotaEngine {
           wake: {},
           waking: false,
         }
+        // Terminals sharing a profile directory share its row; the launcher, when any of them ran
+        // one, names the profile and runs its reads.
+        profiles[terminal.profileKey] = profile.launcher || !terminal.launcher
+          ? profile
+          : { ...profile, launcher: terminal.launcher, profileName: terminal.launcher }
       }
       return {
         ...state,
@@ -165,20 +168,23 @@ export class QuotaEngine {
         editing: state.editing && terminals[state.editing] ? state.editing : null,
       }
     })
-    if (this.deps.inlineProbe) {
-      for (const [key, terminal] of firstLaunch) {
-        if (!this.configsForProfile(key).some((config) => config.enabled)) continue
-        this.patchProfile(key, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
-        void this.track(this.probeInline(key, terminal))
-      }
+    if (!this.deps.inlineProbe) return
+    const state = getQuotaState()
+    for (const terminal of started) {
+      this.probed.add(terminal.instanceKey)
+      if (!terminalConfig(state, terminal).enabled) continue
+      // A new profile has no reading yet: its background read waits for the probe.
+      const held = !current.profiles[terminal.profileKey]
+      if (held) this.patchProfile(terminal.profileKey, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
+      void this.track(this.probeInline(terminal.profileKey, terminal, held))
     }
   }
 
-  private async probeInline(key: string, terminal: TerminalAgent): Promise<void> {
+  private async probeInline(key: string, terminal: TerminalAgent, held: boolean): Promise<void> {
     const snapshot = await this.deps.inlineProbe?.(terminal).catch(() => null)
     if (!snapshot || snapshot.error || snapshot.windows.length === 0) {
-      // Fall back to the background read right away.
-      this.patchProfile(key, () => ({ nextFetchAt: 0 }))
+      // Fall back to the background read right away, if the probe was holding it.
+      if (held) this.patchProfile(key, () => ({ nextFetchAt: 0 }))
       return
     }
     this.patchProfile(key, () => ({ fetching: true }))
