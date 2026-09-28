@@ -38,10 +38,20 @@ interface PersistenceDeps {
 
 type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
 
-/** A launcher for a named profile, so resume reopens the same profile. */
 function launcherFor(found: { launcher?: string; profileName?: string; agent: string }): string | undefined {
-  if (found.launcher) return found.launcher
-  if (!found.profileName || found.profileName === found.agent || (found.agent === 'agy' && found.profileName === 'gemini')) return undefined
+  if (found.launcher) {
+    if (found.launcher === 'agy-gemini') return undefined
+    return found.launcher
+  }
+  if (
+    !found.profileName ||
+    found.profileName === found.agent ||
+    found.profileName === 'agy-gemini' ||
+    (found.agent === 'agy' && found.profileName === 'gemini') ||
+    (found.agent === 'gemini' && found.profileName === 'gemini')
+  ) {
+    return undefined
+  }
   return found.profileName.startsWith(`${found.agent}-`) ? found.profileName : `${found.agent}-${found.profileName}`
 }
 
@@ -234,7 +244,7 @@ export function useSessionPersistence({
           if (!found) {
             const parsed = parseAgentTitle(tab.name) || parseAgentTitle(connectionFor(tab.connId)?.name)
             const brand = parsed ? agentBrandFor(parsed.agentName) : null
-            if (brand && (brand === 'agy' || brand === 'opencode' || brand === 'codex')) {
+            if (brand && (brand === 'agy' || brand === 'opencode' || brand === 'codex' || brand === 'gemini')) {
               const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
               const previous = getPanePresence(tab.id)
               const agentSessionId = previous?.agentSessionId ?? 'latest'

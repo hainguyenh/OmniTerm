@@ -11,7 +11,7 @@ import { AgentIcon } from './QuotaLine'
 import { createAgentQuotaAPI, listAgentProfiles } from './agentQuotaAPI'
 import { useDialogDrag } from './dialogDrag'
 import { adviseProfiles } from './profileAdvisor'
-import { dashboardRows, fetchInactiveProfile, setDashboardOpen, setDiscoveredProfiles, useProfileDashboard } from './profileDashboard'
+import { dashboardRows, fetchAllMissingProfiles, fetchInactiveProfile, setDashboardOpen, setDiscoveredProfiles, useProfileDashboard } from './profileDashboard'
 import { AGENT_KINDS, AGENT_LABELS } from './quotaConfig'
 import { formatCountdown, formatReset, windowOf, zoneFor } from './quotaPolicy'
 import { useCoarseNow, useQuota } from './quotaStore'
@@ -137,8 +137,15 @@ export function QuotaProfilesDashboard({ api }: { api?: AgentQuotaAPI } = {}) {
     void fetchInactiveProfile(row, quotaApi)
   }
 
+  const handleFetchAll = () => {
+    void fetchAllMissingProfiles(rows, quotaApi)
+  }
+
   const activeCount = rows.filter((r) => r.activeTerminalCount > 0).length
   const inactiveCount = rows.filter((r) => r.activeTerminalCount === 0).length
+  const missingRows = rows.filter((r) => r.activeTerminalCount === 0 && !r.reading)
+  const isFetchingAll = missingRows.some((r) => r.fetching)
+  const canFetchAll = missingRows.some((r) => !r.fetching)
   const summary = inactiveCount === 0
     ? `${activeCount} active profile${activeCount === 1 ? '' : 's'} · live engine status`
     : `${activeCount} active · ${inactiveCount} inactive`
@@ -153,6 +160,17 @@ export function QuotaProfilesDashboard({ api }: { api?: AgentQuotaAPI } = {}) {
             <div className="font-bold tracking-wide">Profiles</div>
             <div className="text-theme-dim">{summary}</div>
           </div>
+          {inactiveCount > 0 && (
+            <button
+              type="button"
+              aria-label="Fetch all"
+              disabled={!canFetchAll}
+              className="px-2 py-0.5 rounded text-[11px] border border-theme-border hover:border-theme-accent hover:text-theme-accent disabled:opacity-40 transition-colors"
+              onClick={handleFetchAll}
+            >
+              {isFetchingAll ? 'Fetching…' : 'Fetch all'}
+            </button>
+          )}
           <button type="button" aria-label="Close profiles" className="aq-icon-button" onClick={() => setDashboardOpen(false)}>
             <X className="w-3.5 h-3.5" />
           </button>

@@ -16,7 +16,7 @@ export function isValidSessionId(value: unknown): value is string {
 }
 
 export function isValidLauncher(value: unknown): value is string {
-  return typeof value === 'string' && LAUNCHER_RE.test(value)
+  return typeof value === 'string' && value !== 'agy-gemini' && LAUNCHER_RE.test(value)
 }
 
 /** One pane's detected agent, as reported by `agent_quota_detect` (camelCase over IPC). */

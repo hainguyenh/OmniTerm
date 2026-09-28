@@ -91,14 +91,15 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       setTabGroup(id, activeGroupId)
       setPanes(prev => prev.map((p, i) => (i === focusedPane ? id : (p === id ? null : p))));
   };
-  const removeFromPanes = (id: string, remaining: {
-      id: string;
-  }[]) => {
+  const removeFromPanes = (id: string, remaining: { id: string }[]) => {
       setPanes(prev => {
           const wasFocused = prev[focusedPane] === id;
           const next = prev.map(p => (p === id ? null : p));
           if (layoutMode === 1 && wasFocused) {
-              next[focusedPane] = remaining[remaining.length - 1]?.id ?? null;
+              const scoped = remaining.filter(t => (
+                  activeGroupId === DEFAULT_VIEW_GROUP_ID ? !tabGroups[t.id] : tabGroups[t.id] === activeGroupId
+              ));
+              next[focusedPane] = scoped[scoped.length - 1]?.id ?? null;
           }
           return next;
       });

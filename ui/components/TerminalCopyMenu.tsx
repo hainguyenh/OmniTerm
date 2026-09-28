@@ -12,7 +12,8 @@ interface TerminalCopyMenuProps {
 
 const ITEMS: Array<{ action: TerminalCopyAction; label: string; hint?: string }> = [
   { action: 'last-output', label: 'Copy last output' },
-  { action: 'viewport', label: 'Copy all terminal', hint: 'current screen, no scrollback' },
+  { action: 'viewport', label: 'Copy visible screen', hint: 'current screen only' },
+  { action: 'all', label: 'Copy all terminal', hint: 'full scrollback, start to end' },
 ]
 
 /**

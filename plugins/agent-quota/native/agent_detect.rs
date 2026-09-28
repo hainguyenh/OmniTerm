@@ -175,13 +175,18 @@ pub fn profile_dir(kind: AgentKind, row: &ProcRow, home: Option<&str>) -> Option
 
 /// A short, stable label for a profile: the directory name without its leading dot.
 pub fn profile_name(kind: AgentKind, dir: Option<&str>) -> String {
-    dir.and_then(|dir| {
-        let trimmed = dir.trim_end_matches(['/', '\\']);
-        trimmed.rsplit(['/', '\\']).next().map(str::to_string)
-    })
-    .map(|name| name.trim_start_matches('.').to_string())
-    .filter(|name| !name.is_empty())
-    .unwrap_or_else(|| kind.name().to_string())
+    let raw = dir
+        .and_then(|dir| {
+            let trimmed = dir.trim_end_matches(['/', '\\']);
+            trimmed.rsplit(['/', '\\']).next().map(str::to_string)
+        })
+        .map(|name| name.trim_start_matches('.').to_string())
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| kind.name().to_string());
+    if kind == AgentKind::Agy && (raw == "gemini" || raw == "antigravity-cli") {
+        return "agy".to_string();
+    }
+    raw
 }
 
 /// `claude-th` from a command-line token naming `…\claude-th.cmd` (or `.bat`). Only names shaped
@@ -197,6 +202,9 @@ pub fn launcher_name(token: &str, kind: AgentKind) -> Option<String> {
         .or_else(|| lower.strip_suffix(".sh"))
         .or_else(|| (!lower.contains('.')).then_some(lower.as_str()))?;
     let suffix = stem.strip_prefix(kind.name())?.strip_prefix('-')?;
+    if kind == AgentKind::Agy && suffix == "gemini" {
+        return None;
+    }
     let plain = !suffix.is_empty()
         && suffix.len() <= 40
         && suffix

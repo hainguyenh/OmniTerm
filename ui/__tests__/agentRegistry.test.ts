@@ -38,7 +38,11 @@ describe('agentRegistry', () => {
     const aider = getAgentResumeRecipe('AIDER')
     expect(aider?.command).toBe('aider')
 
+    expect(getAgentResumeRecipe('antigravity')?.command).toBe('agy')
     expect(getAgentResumeRecipe('antigravity cli')?.command).toBe('agy')
+    expect(getAgentResumeRecipe('agy')?.command).toBe('agy')
+    expect(getAgentResumeRecipe('gemini')?.command).toBe('gemini')
+    expect(getAgentResumeRecipe('gemini cli')?.command).toBe('gemini')
 
     const unknown = getAgentResumeRecipe('unknown-agent')
     expect(unknown).toBeNull()
@@ -84,6 +88,15 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('Antigravity CLI', undefined, undefined, 'gemini')).toBe('agy --continue')
     expect(formatAgentResumeCommand('Antigravity CLI', 'latest', undefined, 'gemini')).toBe('agy --continue')
     expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, undefined, 'gemini')).toBe(`agy --conversation ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('Antigravity CLI', undefined, 'agy-gemini')).toBe('agy --continue')
+    expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, 'agy-gemini')).toBe(`agy --conversation ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('antigravity')).toBe('agy --continue')
+    expect(formatAgentResumeCommand('antigravity', VALID_UUID)).toBe(`agy --conversation ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('gemini')).toBe('gemini --resume')
+    expect(formatAgentResumeCommand('gemini', VALID_UUID)).toBe(`gemini --resume ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('Gemini CLI', VALID_UUID)).toBe(`gemini --resume ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('Antigravity CLI', undefined, undefined, 'agy-gemini')).toBe('agy --continue')
+    expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, undefined, 'agy-gemini')).toBe(`agy --conversation ${VALID_UUID}`)
   })
 
   it('formats agent profile commands to reopen sessions with the correct profile', () => {
@@ -94,6 +107,10 @@ describe('agentRegistry', () => {
     expect(formatAgentProfileCommand('Claude Code')).toBe('claude')
     expect(formatAgentProfileCommand('Codex', undefined, 'team')).toBe('codex-team')
     expect(formatAgentProfileCommand('Antigravity CLI', undefined, 'gemini')).toBe('agy')
+    expect(formatAgentProfileCommand('Antigravity CLI', 'agy-gemini')).toBe('agy')
+    expect(formatAgentProfileCommand('antigravity')).toBe('agy')
+    expect(formatAgentProfileCommand('gemini')).toBe('gemini')
+    expect(formatAgentProfileCommand('Gemini CLI', undefined, 'gemini')).toBe('gemini')
   })
 
   it('rejects a launcher that is not shaped like a real profile launcher', () => {

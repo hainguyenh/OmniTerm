@@ -8,10 +8,10 @@
  * spawned yet when the first poll runs, and that empty first answer must not end their tracking.
  */
 import { useSyncExternalStore } from 'react'
-import type { DetectedPaneAgent } from './agentSessionDetector'
+import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
 
 export interface PanePresence {
-  agent: DetectedPaneAgent['agent']
+  agent: AgentBrand
   profileName: string
   launcher?: string
   pid: number
