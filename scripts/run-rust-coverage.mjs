@@ -30,7 +30,15 @@ const cargoEnv = process.env.CARGO_TARGET_DIR
 // always-awake native module: shipped as its own plugin artifact. Its uncovered remainder is
 // Wry-runtime generic instantiations of the command/state helpers that can never execute under
 // the mock runtime the coverage job uses; the module's actual logic is fully exercised by its
-// own dedicated test suite, which runs in the normal workspace test job.
+// own dedicated test suite, which runs in the normal workspace test job. The agent-quota native
+// adapter (agent_quota.rs) is excluded for the same reason; its detection, guard and snapshot
+// modules stay in the gate.
+//
+// agent-quota process_suspend.rs: a thin wrapper over Win32 thread calls (CreateToolhelp32Snapshot,
+// OpenThread, SuspendThread, ResumeThread, TerminateProcess). Exercising it means freezing a real
+// process, which the default test run deliberately never does (a test binary that suspends other
+// processes reads as malware to heuristic scanners); its real-process test is opt-in
+// (`cargo test -- --ignored`). The bookkeeping around it is covered through agent_guard.rs fakes.
 //
 // build.rs: a Cargo build script. It runs at compile time, not in the application, so no test can
 // execute it and the coverage instrumentation never sees it run - every line reports as missed. Its
@@ -39,6 +47,7 @@ const cargoEnv = process.env.CARGO_TARGET_DIR
 const IGNORED_FILENAME_REGEX = [
   '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|update_manager|lib|main|test_support)\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]always-awake[/\\\\]native[/\\\\]always_awake\\.rs$',
+  '(?:^|[/\\\\])plugins[/\\\\]agent-quota[/\\\\]native[/\\\\](?:agent_quota|process_suspend)\\.rs$',
   '(?:^|[/\\\\])src-tauri[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]src[/\\\\](?:lib|main)\\.rs$',
   '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]build\\.rs$',

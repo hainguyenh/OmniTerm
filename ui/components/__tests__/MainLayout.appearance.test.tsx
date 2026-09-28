@@ -33,7 +33,8 @@ const settings: AppSettings = {
     newFolder: 'Ctrl+Shift+N', openSettings: 'Ctrl+,', toggleThemeMode: 'Ctrl+/',
     layout1: 'Ctrl+1', layout2: 'Ctrl+2', layout3: 'Ctrl+3', layout4: 'Ctrl+4',
     layout5: 'Ctrl+5', layout6: 'Ctrl+6', layout7: 'Ctrl+7', layout8: 'Ctrl+8', toggleSidebar: 'Ctrl+B',
-    commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W', toggleAppFullscreen: 'F11',
+    commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W', toggleAppFullscreen: 'F11', agentQuota: 'Ctrl+Alt+Q',
+    pasteScript: 'Ctrl+Alt+V',
   },
 }
 
@@ -78,7 +79,6 @@ describe('MainLayout terminal appearance integration', () => {
     const onActiveTerminalChange = vi.fn()
     const onFontSizeChange = vi.fn()
     const onSettingsReload = vi.fn()
-    const onZoomReset = vi.fn()
 
     mockOmnitermAPI({
       shells: {
@@ -109,7 +109,6 @@ describe('MainLayout terminal appearance integration', () => {
         updateState={null}
         setUpdateState={vi.fn()}
         zoomFactor={1.25}
-        onZoomReset={onZoomReset}
         resolveAppearance={() => ({ themeId: ALT_THEME.id, fontSize: 18 })}
         onActiveTerminalChange={onActiveTerminalChange}
         onFontSizeChange={onFontSizeChange}
@@ -134,9 +133,7 @@ describe('MainLayout terminal appearance integration', () => {
     terminalFontCallback(20)
     expect(onFontSizeChange).toHaveBeenLastCalledWith(2, { id: SSH.id, connId: SSH.id })
 
-    expect(screen.getByText('125%')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '125%' }))
-    expect(onZoomReset).toHaveBeenCalledOnce()
+    expect(screen.queryByText('125%')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Disconnect'))
     expect(sshDisconnect).toHaveBeenCalledWith(SSH.id)

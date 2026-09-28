@@ -1,0 +1,4 @@
+Your message looks like `/usage` after Git Bash rewrote it. MSYS treats an argument that starts
+with `/` as a POSIX path.
+
+- **Interactive session:** type `/usage` straight into the Claude Code prompt.

@@ -250,6 +250,16 @@ describe('useAppShortcuts', () => {
     cleanup()
   })
 
+  it('dispatches omniterm:agent-quota on Ctrl+Alt+Q, even from a focused terminal', () => {
+    const { cleanup } = setup('xterm')
+    const onQuota = vi.fn()
+    window.addEventListener('omniterm:agent-quota', onQuota)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'q', ctrlKey: true, altKey: true, bubbles: true, cancelable: true }))
+    expect(onQuota).toHaveBeenCalledTimes(1)
+    window.removeEventListener('omniterm:agent-quota', onQuota)
+    cleanup()
+  })
+
   it('dispatches omniterm:command-palette on Ctrl+P', () => {
     const { cleanup } = setup('chrome')
     const onPalette = vi.fn()

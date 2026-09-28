@@ -3,7 +3,6 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  getLastPastedImage,
   getPastedImages,
   MAX_PASTED_IMAGES,
   releasePastedImage,
@@ -12,6 +11,8 @@ import {
   subscribeOpen,
   subscribePastedImage,
 } from '../pastedImageStore'
+
+const getLastPastedImage = (sessionId: string | null) => getPastedImages(sessionId).at(-1) ?? null
 
 const stubObjectUrls = () => {
   let next = 0

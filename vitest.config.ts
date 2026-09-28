@@ -4,6 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    testTimeout: 15000,
+    // Keep Windows fork startup reliable on developer machines and CI runners with many logical
+    // cores. The default creates one worker per core, which can time out before a test starts when
+    // several jsdom workers initialize simultaneously.
+    maxWorkers: 8,
     setupFiles: ["./ui/testSetup.ts"],
     include: [
       "ui/**/*.test.ts",

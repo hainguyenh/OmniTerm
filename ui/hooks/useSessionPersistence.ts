@@ -1,4 +1,4 @@
-/** Persist renderer layout metadata and each terminal's last working directory. */
+/** Persist renderer layout metadata, each terminal's last working directory, and resumable Claude sessions. */
 import { useEffect, useRef } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
@@ -13,6 +13,16 @@ import {
   type SessionSnapshot,
 } from '../utils/sessionStore'
 import { mergePendingSnapshot } from '../utils/sessionCheckpoint'
+import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../utils/agentSessionDetector'
+import { bindActiveSession, clearActiveForTab, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
+import { hydrateAgentSessionStore } from '../utils/agentSessionDurable'
+import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../utils/agentPresenceStore'
+import { extractAgentWorkItem } from '../utils/agentWorkItem'
+import { parseAgentTitle } from '../utils/agentTitle'
+import { agentBrandFor } from '../utils/agentIdentity'
+
+/** How often each open pane's agent is re-detected and its Claude session file re-resolved. */
+const AGENT_POLL_MS = 5_000
 
 interface PersistenceDeps {
   activeTabs?: { id: string; connId: string; name: string }[]
@@ -27,6 +37,30 @@ interface PersistenceDeps {
 }
 
 type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
+
+/** A launcher for a named profile, so resume reopens the same profile. */
+function launcherFor(found: { launcher?: string; profileName?: string; agent: string }): string | undefined {
+  if (found.launcher) return found.launcher
+  if (!found.profileName || found.profileName === found.agent) return undefined
+  return found.profileName.startsWith(`${found.agent}-`) ? found.profileName : `${found.agent}-${found.profileName}`
+}
+
+function presenceOf(found: { agent: DetectedPaneAgent['agent']; profileName: string; launcher?: string; pid: number; startTime: number }, sessionId?: string): PanePresence {
+  return {
+    agent: found.agent,
+    profileName: found.profileName,
+    ...(found.launcher ? { launcher: found.launcher } : {}),
+    pid: found.pid,
+    startTime: found.startTime,
+    ...(sessionId ? { claudeSessionId: sessionId, agentSessionId: sessionId } : {}),
+  }
+}
+
+function folderNameOf(cwd: string | undefined): string | undefined {
+  if (!cwd) return undefined
+  const trimmed = cwd.replace(/[\\/]+$/, '')
+  return trimmed.split(/[\\/]/).filter(Boolean).pop()
+}
 
 function buildSnapshot(
   ptyTabs: PtyTab[],
@@ -113,13 +147,20 @@ export function useSessionPersistence({
   const loadedRef = useRef(false)
   const revisionRef = useRef(0)
   const hadPtyTabsRef = useRef(false)
+  const previousTabIdsRef = useRef<Set<string>>(new Set())
 
   if (!loadedRef.current) {
     loadedRef.current = true
     initialSnapshotRef.current = loadSnapshot()
     revisionRef.current = initialSnapshotRef.current?.revision ?? 0
+    // Any session still `active` belongs to a tab id from the previous run — whether that run ended
+    // cleanly or was killed, this run has no such tab yet, so the session is now resumable.
+    promoteStaleActiveSessions()
+    // Merge the crash-safe copy: after a hard kill, localStorage may be missing the last writes.
+    void hydrateAgentSessionStore()
   }
 
+  // Layout/recovery snapshot: unrelated to which agent runs where, so it saves on its own schedule.
   useEffect(() => {
     const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
     const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
@@ -155,6 +196,117 @@ export function useSessionPersistence({
       window.removeEventListener('beforeunload', saveCheckpoint)
     }
   }, [activeTabs, ephemeralConns, resolveConnection, viewGroups, tabGroups, activeGroupId, layoutMode, sessionCwds, pendingSnapshot])
+
+  // A closed tab's resumable-session tracking ends immediately — it does not wait for the next poll,
+  // which only ever sees tabs that are still open.
+  useEffect(() => {
+    const currentIds = new Set(activeTabs.map(tab => tab.id))
+    for (const previousId of previousTabIdsRef.current) {
+      if (!currentIds.has(previousId)) clearActiveForTab(previousId)
+    }
+    previousTabIdsRef.current = currentIds
+  }, [activeTabs])
+
+  // Which AI agent (if any) runs under each open pane, from its process tree — never from terminal
+  // output or a title guess. Only Claude resolves to a resumable session id in this pass.
+  // Agents retitle their pane on every spinner frame, so the poll must not restart on a rename:
+  // it keys on which tabs exist and reads their latest names through a ref.
+  const latestTabsRef = useRef(activeTabs)
+  latestTabsRef.current = activeTabs
+  const tabsKey = activeTabs.map(tab => `${tab.id}:${tab.connId}`).join('|')
+  useEffect(() => {
+    const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
+    const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
+    let cancelled = false
+    let inFlight = false
+
+    const poll = async () => {
+      const activeTabs = latestTabsRef.current
+      if (inFlight || activeTabs.length === 0) return
+      inFlight = true
+      try {
+        const detected = await detectPaneAgents()
+        if (cancelled) return
+        const byTabId = new Map(detected.map(entry => [entry.sessionId, entry]))
+        const nextPresence: Record<string, PanePresence> = {}
+        for (const tab of activeTabs) {
+          const found = byTabId.get(tab.id)
+          if (!found) {
+            const parsed = parseAgentTitle(tab.name) || parseAgentTitle(connectionFor(tab.connId)?.name)
+            const brand = parsed ? agentBrandFor(parsed.agentName) : null
+            if (brand && (brand === 'agy' || brand === 'opencode' || brand === 'codex')) {
+              const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+              const previous = getPanePresence(tab.id)
+              const agentSessionId = previous?.agentSessionId ?? 'latest'
+              nextPresence[tab.id] = {
+                agent: brand,
+                profileName: brand,
+                pid: previous?.pid ?? 0,
+                startTime: previous?.startTime ?? 0,
+                agentSessionId,
+              }
+              const title = extractAgentWorkItem(tab.name)
+              bindActiveSession({
+                id: `${brand}:${brand}-${tab.id}`,
+                tabId: tab.id,
+                agent: brand,
+                profileName: brand,
+                sessionId: agentSessionId,
+                cwd,
+                folderName: folderNameOf(cwd),
+                ...(title ? { title } : {}),
+                state: 'active',
+                updatedAt: Date.now(),
+              })
+              continue
+            }
+            // No agent process under this pane anymore (never had one, or it exited) — nothing to
+            // track. A pane just recreated by restore is spared: its `--resume` may not be up yet.
+            if (!isInRestoreGrace(tab.id)) clearActiveForTab(tab.id)
+            continue
+          }
+          const previous = getPanePresence(tab.id)
+          const sameProcess = previous?.pid === found.pid && previous.startTime === found.startTime
+          const priorSessionId = sameProcess ? (previous.agentSessionId ?? previous.claudeSessionId) : undefined
+          nextPresence[tab.id] = presenceOf(found, priorSessionId)
+          const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+          let sessionId = priorSessionId
+          if (found.agent === 'claude') {
+            sessionId = (await resolveClaudeSessionId(found, cwd)) ?? priorSessionId
+            if (cancelled) return
+          } else if (!sessionId) {
+            sessionId = 'latest'
+          }
+          if (!sessionId) continue
+          nextPresence[tab.id] = presenceOf(found, sessionId)
+          const title = extractAgentWorkItem(tab.name)
+          bindActiveSession({
+            id: `${found.agent}:${sessionId === 'latest' ? `${found.agent}-${tab.id}` : sessionId}`,
+            tabId: tab.id,
+            agent: found.agent,
+            launcher: launcherFor(found),
+            profileName: found.profileName,
+            sessionId,
+            cwd,
+            folderName: folderNameOf(cwd),
+            ...(title ? { title } : {}),
+            state: 'active',
+            updatedAt: Date.now(),
+          })
+        }
+        setPanePresence(nextPresence)
+      } finally {
+        inFlight = false
+      }
+    }
+
+    void poll()
+    const interval = window.setInterval(() => void poll(), AGENT_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [tabsKey, ephemeralConns, resolveConnection, sessionCwds])
 
   return { initialSnapshot: initialSnapshotRef.current }
 }

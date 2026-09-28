@@ -96,6 +96,7 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
 
     let source = tools.path().join("connections.json");
     let export = tools.path().join("exported.json");
+    let text_export = tools.path().join("terminal-output.txt");
     let package = tools.path().join("dialog-plugin.zip");
     fs::write(
         &source,
@@ -129,6 +130,22 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
         json!(true)
     );
     assert_eq!(fs::read_to_string(&export).unwrap(), r#"{"saved":true}"#);
+
+    std::env::set_var("OMNITERM_ZENITY_SAVE", &text_export);
+    assert_eq!(
+        fixture.ok(
+            "export_text",
+            json!({
+                "suggestedName": "terminal-output.txt",
+                "content": "line one\nline two\n"
+            }),
+        ),
+        json!(true)
+    );
+    assert_eq!(
+        fs::read_to_string(&text_export).unwrap(),
+        "line one\nline two\n"
+    );
 
     let source_text = fs::read_to_string(&source).unwrap();
     assert_eq!(

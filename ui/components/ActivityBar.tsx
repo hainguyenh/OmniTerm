@@ -1,8 +1,9 @@
 import React from 'react'
-import { Eye, FolderOpen, FolderGit2, MoonStar, Settings } from 'lucide-react'
+import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, MoonStar, Settings } from 'lucide-react'
+import { useQuotaActivityEntry } from '../../plugins/agent-quota/app/activityEntry'
 import { Tooltip } from './Tooltip'
 
-export type ActivityView = 'files' | 'workspace'
+export type ActivityView = 'files' | 'workspace' | 'bookmarks'
 
 interface ActivityBarProps {
   /** Which secondary panel is active, or null when the panel is collapsed. */
@@ -40,6 +41,8 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   blurEnabled = false,
   onBlurClick = () => {},
 }) => {
+  // Pinned by the Agent Quota plugin; null without the plugin or once the user unpins it.
+  const quota = useQuotaActivityEntry()
   const handleIconClick = (view: ActivityView) => {
     if (view === 'files' && !filesEnabled) return
     // Clicking the active icon collapses the panel; clicking another one switches.
@@ -67,6 +70,12 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           disabled={!filesEnabled}
           onClick={() => handleIconClick('files')}
         />
+        <ActivityIcon
+          icon={<Bookmark className="w-5 h-5" />}
+          label="Bookmarks"
+          active={activeView === 'bookmarks'}
+          onClick={() => handleIconClick('bookmarks')}
+        />
       </div>
 
       {/* ── Bottom icons (pinned) ──────────────────────────────────── */}
@@ -79,6 +88,21 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
             label={blurEnabled ? 'Blur inactive windows (on)' : 'Blur inactive windows'}
             active={blurEnabled}
             onClick={onBlurClick}
+          />
+        )}
+        {quota && (
+          <ActivityIcon
+            icon={(
+              <span className="relative">
+                <Gauge className="w-5 h-5" />
+                {quota.alert && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--theme-error)]" />}
+              </span>
+            )}
+            label={quota.label}
+            shortcut="Ctrl+Alt+Q"
+            active={quota.active}
+            pressed={quota.open}
+            onClick={quota.onClick}
           />
         )}
         {alwaysAwakeAvailable && (
@@ -108,13 +132,16 @@ const ActivityIcon: React.FC<{
   label: string
   shortcut?: string
   active: boolean
+  /** A transient "currently open" state (e.g. its popover), distinct from `active`'s on/off state. */
+  pressed?: boolean
   disabled?: boolean
   onClick: () => void
-}> = ({ icon, label, shortcut, active, disabled, onClick }) => (
+}> = ({ icon, label, shortcut, active, pressed, disabled, onClick }) => (
   <Tooltip content={label} shortcut={shortcut} placement="right">
     <button
       type="button"
       aria-label={label}
+      aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
       className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors
@@ -123,7 +150,8 @@ const ActivityIcon: React.FC<{
           : active
             ? 'text-[var(--theme-accent)] bg-[var(--theme-hover-bg)]'
             : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-hover-bg)]'
-        }`}
+        }
+        ${pressed ? 'ring-1 ring-inset ring-[var(--theme-accent)]' : ''}`}
     >
       {/* Active indicator bar — 2 px accent stripe on the left edge */}
       {active && (

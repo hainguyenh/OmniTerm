@@ -1,0 +1,521 @@
+/*
+ * Agent Quota: per-terminal quota lines, zone colours and the escalating animations.
+ *
+ * Zones are fractions of the user's limit (see quotaPolicy.ts), so the same colour always means the
+ * same distance from "where I said stop". Colours derive from the theme tokens where one exists and
+ * fall back to fixed hues otherwise.
+ */
+
+:root {
+  --aq-calm: var(--theme-success, #9ece6a);
+  --aq-watch: #7dcfff;
+  --aq-warm: var(--theme-warning, #e0af68);
+  --aq-hot: #ff9e64;
+  --aq-critical: #f7768e;
+  --aq-over: var(--theme-error, #db4b4b);
+  /*
+   * The unused part of a quota track: the pane background a shade darker, so a dark theme keeps its
+   * near-black groove and a light theme gets a very light grey instead of black.
+   */
+  --aq-track-bg: color-mix(in srgb, var(--theme-bg) 92%, #000);
+}
+
+.aq-strip {
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--theme-border);
+  background: color-mix(in srgb, var(--theme-bg) 88%, transparent);
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--theme-dim);
+  position: relative;
+  user-select: none;
+}
+
+.aq-monitor-off-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--theme-border);
+  color: var(--theme-warning);
+  background: color-mix(in srgb, var(--theme-warning) 8%, var(--theme-bg));
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.aq-monitor-enable {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--theme-warning) 55%, var(--theme-border));
+  border-radius: 5px;
+  color: var(--theme-warning);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.aq-monitor-enable:hover,
+.aq-monitor-enable:focus-visible {
+  color: var(--theme-fg);
+  border-color: var(--theme-warning);
+  outline: none;
+}
+
+.aq-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 34%;
+  color: var(--theme-fg);
+}
+
+.aq-meta-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Every line of a strip shares one grid (each line is a subgrid row), so the label, track and
+ * reset columns line up and the 5h, weekly and monthly tracks are always the same width, whatever
+ * each line's reset text measures.
+ */
+.aq-lines {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 2.6rem minmax(96px, 1fr) auto;
+  align-content: center;
+  column-gap: 5px;
+  row-gap: 2px;
+}
+
+.aq-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-width: 0;
+}
+
+/* "Reading quota…" and other one-off messages span the whole grid. */
+.aq-lines-message {
+  grid-column: 1 / -1;
+}
+
+.aq-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * Numbers inside the track: the used % sits in the middle of the used fill and the danger-zone
+ * size in the middle of the danger zone. The component sets `left` (the centre of each area).
+ */
+.aq-track-value {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+.aq-size-thin .aq-track-value {
+  font-size: 10.5px;
+}
+
+.aq-size-thick .aq-track-value {
+  font-size: 14.5px;
+}
+
+/*
+ * A fill too short to hold its number: the number sits just after the fill instead, on the track
+ * background, so it takes the theme's text colour to stay readable in light themes too.
+ */
+.aq-used-value-outside {
+  transform: translate(4px, -50%);
+  color: var(--theme-fg);
+  text-shadow: none;
+}
+
+.aq-danger-value {
+  color: color-mix(in srgb, var(--aq-over) 65%, var(--theme-fg));
+  text-shadow: none;
+}
+
+.aq-reset {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aq-track {
+  position: relative;
+  min-width: 0;
+  height: 20px;
+  border-radius: 999px;
+  overflow: visible;
+  background: var(--aq-track-bg);
+  border: 1px solid color-mix(in srgb, var(--theme-border) 70%, var(--aq-track-bg));
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: default;
+}
+
+.aq-size-thin .aq-track {
+  height: 15px;
+}
+
+.aq-size-thick .aq-track {
+  height: 24px;
+}
+
+.aq-used-container {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* One colour for the whole fill: the zone of used ÷ limit (see quotaPolicy.zoneFor). */
+.aq-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: var(--aq-zone, var(--aq-calm));
+  pointer-events: none;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.aq-marker {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--theme-fg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-bg) 70%, transparent);
+}
+
+.aq-marker-handle {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 12px;
+  margin-left: -6px;
+  cursor: ew-resize;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.aq-marker-handle:focus-visible {
+  outline: 1px solid var(--theme-accent);
+  border-radius: 2px;
+}
+
+.aq-zone-calm {
+  --aq-zone: var(--aq-calm);
+}
+
+.aq-zone-watch {
+  --aq-zone: var(--aq-watch);
+}
+
+.aq-zone-warm {
+  --aq-zone: var(--aq-warm);
+}
+
+.aq-zone-hot {
+  --aq-zone: var(--aq-hot);
+}
+
+.aq-zone-critical {
+  --aq-zone: var(--aq-critical);
+}
+
+.aq-zone-over {
+  --aq-zone: var(--aq-over);
+}
+
+/* Lightning: a fast sheen racing along the fill. */
+.aq-anim-lightning .aq-fill {
+  background-image: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.55) 45%, transparent 70%);
+  background-size: 220% 100%;
+  animation: aq-lightning 0.9s linear infinite;
+}
+
+/* Fire: warm gradient that flickers and glows. */
+.aq-anim-fire .aq-fill {
+  background-image: linear-gradient(90deg, var(--aq-warm), var(--aq-hot), var(--aq-critical));
+  background-size: 200% 100%;
+  animation: aq-flame 1.4s ease-in-out infinite, aq-flicker 0.45s steps(2, jump-none) infinite alternate;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--aq-hot) 70%, transparent);
+}
+
+/* Burning: a slow ember pulse with a hotter glow. */
+.aq-anim-burning .aq-fill {
+  background-image: linear-gradient(90deg, var(--aq-hot), var(--aq-critical), var(--aq-over), var(--aq-critical));
+  background-size: 300% 100%;
+  animation: aq-flame 1s linear infinite, aq-ember 1.1s ease-in-out infinite;
+}
+
+/* Danger: a red strobe and a shaking limit line. */
+.aq-anim-danger .aq-fill {
+  animation: aq-strobe 0.5s steps(2, jump-none) infinite;
+  box-shadow: 0 0 10px var(--aq-over);
+}
+
+.aq-anim-danger .aq-marker {
+  background: var(--aq-over);
+  animation: aq-shake 0.35s ease-in-out infinite;
+}
+
+@keyframes aq-lightning {
+  from {
+    background-position: 120% 0;
+  }
+
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes aq-flame {
+  from {
+    background-position: 0% 0;
+  }
+
+  to {
+    background-position: 100% 0;
+  }
+}
+
+@keyframes aq-flicker {
+  from {
+    filter: brightness(1);
+  }
+
+  to {
+    filter: brightness(1.25);
+  }
+}
+
+@keyframes aq-ember {
+  0%,
+  100% {
+    box-shadow: 0 0 4px color-mix(in srgb, var(--aq-critical) 60%, transparent);
+  }
+
+  50% {
+    box-shadow: 0 0 12px var(--aq-over);
+  }
+}
+
+@keyframes aq-strobe {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.45;
+  }
+}
+
+@keyframes aq-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-1.5px);
+  }
+
+  75% {
+    transform: translateX(1.5px);
+  }
+}
+
+/* Pace glyph: how fast the 5h window is being burned through, projected to its reset. */
+.aq-pace {
+  display: inline-flex;
+  font-size: 1em;
+  line-height: 1;
+}
+
+.aq-pace-animated.aq-pace-slow {
+  animation: aq-pace-crawl 3s ease-in-out infinite;
+}
+
+.aq-pace-animated.aq-pace-onTrack {
+  animation: aq-pace-hop 1s ease-in-out infinite;
+}
+
+.aq-pace-animated.aq-pace-fast {
+  animation: aq-pace-fly 1.2s ease-in-out infinite;
+}
+
+.aq-pace-animated.aq-pace-overshooting {
+  animation: aq-pace-dash 0.5s ease-in-out infinite;
+}
+
+@keyframes aq-pace-crawl {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  50% {
+    transform: translateX(1px);
+  }
+}
+
+@keyframes aq-pace-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes aq-pace-fly {
+  0%,
+  100% {
+    transform: translateX(0) translateY(0);
+  }
+
+  50% {
+    transform: translateX(2px) translateY(-1px);
+  }
+}
+
+@keyframes aq-pace-dash {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+
+  50% {
+    transform: translateX(-1.5px) scale(1.15);
+  }
+}
+
+.aq-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  color: var(--theme-dim);
+}
+
+.aq-icon-button:hover {
+  color: var(--theme-fg);
+  background: var(--theme-hover-bg);
+}
+
+.aq-monitor-off-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--theme-warning);
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--theme-warning) 55%, transparent));
+}
+
+.aq-monitor-off-icon svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.aq-override {
+  color: var(--theme-accent);
+}
+
+.aq-stale {
+  opacity: 0.55;
+}
+
+/* Medium panes: short labels, no reset countdown. */
+@container (max-width: 440px) {
+  .aq-lines {
+    grid-template-columns: 2.2rem minmax(72px, 1fr) auto;
+    column-gap: 4px;
+  }
+
+  .aq-reset,
+  .aq-meta-name {
+    display: none;
+  }
+}
+
+/* Narrow panes: preserve the label and both percentages; hide only secondary controls. */
+@container (max-width: 240px) {
+  .aq-lines {
+    grid-template-columns: 2rem minmax(56px, 1fr);
+    column-gap: 3px;
+  }
+
+  .aq-danger-value,
+  .aq-actions {
+    display: none;
+  }
+
+  .aq-meta {
+    display: none;
+  }
+
+  .aq-track-value {
+    font-size: 10px;
+  }
+}
+
+/* `!important` beats the more specific `.aq-anim-* .aq-fill` rules, so one block covers every zone. */
+@media (prefers-reduced-motion: reduce) {
+  .aq-fill,
+  .aq-marker,
+  .aq-pace {
+    animation: none !important;
+    transition: none;
+  }
+}
+
+/* The inline quota probe's veil: the pane is frozen while /usage or /status is typed into it. */
+.aq-probe-veil {
+  background: color-mix(in srgb, var(--theme-bg) 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.aq-probe-badge {
+  background: color-mix(in srgb, var(--theme-sidebar-bg) 95%, transparent);
+}

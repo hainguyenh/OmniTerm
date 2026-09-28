@@ -5,6 +5,7 @@ Routing for this product feature.
 ## Navigation
 
 - [Lifecycle/runtime](lifecycle-runtime.md) — management, host, RPC
+- [Agent Quota](agent-quota.md) — AI agent quota lines, limits, suspend and wake-up
 
 ## Spec conventions
 

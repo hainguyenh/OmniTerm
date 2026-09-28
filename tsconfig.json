@@ -20,6 +20,6 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["ui", "plugins/always-awake/app"],
+  "include": ["ui", "plugins/always-awake/app", "plugins/agent-quota/app"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

@@ -50,3 +50,7 @@ pub(crate) fn send_initial_status(
         _ => {}
     }
 }
+
+#[cfg(test)]
+#[path = "pty_status_tests.rs"]
+mod tests;

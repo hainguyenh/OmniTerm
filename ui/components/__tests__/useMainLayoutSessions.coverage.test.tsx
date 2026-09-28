@@ -479,7 +479,8 @@ describe('useMainLayoutSessions complete behavior', () => {
     expect(result.current.base.panePicker).toBeNull()
     expect(focusTerminal).toHaveBeenCalledWith('s1')
     act(() => window.dispatchEvent(new Event('omniterm:close-tab')))
-    act(() => vi.runAllTimers())
+    // Not runAllTimers: session persistence keeps a recurring poll alive, which that would spin on forever.
+    await act(() => vi.advanceTimersByTimeAsync(0))
     expect(result.current.base.activeTabs).toHaveLength(0)
     vi.useRealTimers()
   })

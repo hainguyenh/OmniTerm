@@ -1,0 +1,11 @@
+[1mCurrent session[0m
+[38;5;75m█████████▌[0m                                         19% used
+Resets 3pm (America/Los_Angeles)
+
+[1mCurrent week (all models)[0m
+████                                               8% used
+Resets Oct 1, 9am (America/Los_Angeles)
+
+[1mCurrent week (Opus 4)[0m
+██████                                             33.5% used
+Resets Oct 1, 9am (America/Los_Angeles)

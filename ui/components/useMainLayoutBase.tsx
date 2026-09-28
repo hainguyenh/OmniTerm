@@ -19,23 +19,23 @@ import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
   setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
-  onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
+  onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onToolbarActionsChange,
   onSettingsReload, chromeHidden = false,
 }: MainLayoutProps) {
   const handleConnectRef = useRef<(connection: Connection) => void>(() => undefined)
   const appSettingsRef = useRef(appSettings)
   appSettingsRef.current = appSettings
   const shellOptionsRef = useRef<ShellOption[]>([])
-  const workspaceCatalog = useWorkspaceCatalog()
+  const workspaceCatalog = Object.assign(useWorkspaceCatalog(), { onToolbarActionsChange })
   const { selectedWorkspaceId } = workspaceCatalog
-  const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null, requestedCwd?: string | null) => {
+  const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null, requestedCwd?: string | null, requestedCommand?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
       // An explicit cwd comes from a live pane and is already the exact launch target. Do not
       // reinterpret it through workspace/default history or mutate the user's last workspace.
-      if (requestedCwd) {
+      if (requestedCwd || requestedCommand) {
           void openNewSession(shell, (conn) => {
               handleConnectRef.current(conn as Connection)
-          }, null, null, requestedCwd).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
+          }, null, null, requestedCwd ?? null, requestedCommand ?? null).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
           return
       }
       const lastUsed = (() => { try { return localStorage.getItem('omniterm:last-workspace') } catch { return null } })();
@@ -337,7 +337,7 @@ export function useMainLayoutBase({
           sidebarWidthRef.current = w;
       }
       const savedView = localStorage.getItem('cc.activeView');
-      if (savedView === 'workspace' || savedView === 'files') {
+      if (savedView === 'workspace' || savedView === 'files' || savedView === 'bookmarks') {
           setActiveView(savedView);
           lastViewRef.current = savedView;
       }

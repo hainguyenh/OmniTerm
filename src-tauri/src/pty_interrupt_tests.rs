@@ -54,6 +54,12 @@ fn terminate_descendants_ignores_unknown_pids() {
 }
 
 #[test]
+fn descendants_snapshot_excludes_the_root_process() {
+    let (_, descendants) = session_descendants_snapshot(std::process::id());
+    assert!(!descendants.contains(&std::process::id()));
+}
+
+#[test]
 fn terminate_descendants_kills_known_process_and_skips_unknown_pid() {
     use std::process::{Child, Command};
     use sysinfo::ProcessesToUpdate;
@@ -72,7 +78,7 @@ fn terminate_descendants_kills_known_process_and_skips_unknown_pid() {
         .spawn()
         .expect("spawn disposable child process");
     #[cfg(not(windows))]
-    let child = Command::new("sh")
+    let child = Command::new("/bin/sh")
         .args(["-c", "sleep 30"])
         .spawn()
         .expect("spawn disposable child process");

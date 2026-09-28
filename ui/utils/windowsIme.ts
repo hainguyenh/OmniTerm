@@ -1,10 +1,21 @@
 /**
- * Keeps Windows TSF composition on a single input path.
+ * Windows IME input for a terminal pane: one bridge for compositions and for the edits an IME makes
+ * outside one.
  *
- * xterm 5.5 treats its hidden textarea as both the IME document and the pending keyboard buffer.
- * Windows Telex can update that textarea as a whole value, while xterm also handles the same
- * keydown/input sequence. The two paths then replay already-sent text when a delimiter ends the
- * composition. Own the composition events here, like a normal text field, and commit them once.
+ * xterm 5.5 treats its hidden textarea as both the IME's document and a keystroke buffer, and three
+ * of its paths can forward the same text: the keydown textarea diff, the composition helper and the
+ * `input` handler. Windows 10/11 Vietnamese Telex types into that textarea, corrects letters in place
+ * (`tie` + `e` → `tiê`), may compose a whole word and ends it on a space or a hyphen. Whenever two
+ * paths answered one of those edits — or an edit was committed early and the IME re-inserted it —
+ * characters were duplicated or lost.
+ *
+ * Here the textarea mirrors what the PTY has received since the last key xterm sent itself, and each
+ * IME edit is forwarded as the difference: one Backspace per changed character, then the new text.
+ * The difference sent is recorded, so an edit reported twice (an `input` and a `compositionend`, a
+ * repeated commit) finds nothing left to send. A composition is previewed while it is built and sent
+ * when the IME ends it; the textarea is never touched while the IME is composing in it. Keys the IME
+ * does not claim (Enter, arrows, Ctrl+…) stay xterm's, and the mirror restarts after one because the
+ * PTY's line moved on without it.
  */
 interface ImeTerminal {
   readonly element: HTMLElement | undefined
@@ -12,60 +23,63 @@ interface ImeTerminal {
   input(data: string): void
 }
 
-export interface WindowsImeWorkaround {
+export interface WindowsImeInput {
   dispose(): void
-  shouldForwardData(data: string): boolean
 }
 
-const getCompositionBoundaryInput = (event: KeyboardEvent): string | undefined => {
-  if (event.key === 'Enter') return '\r'
-  if (event.key === 'Tab') return '\t'
-  if (event.key === 'Backspace') return '\x7f'
-  if (event.key === 'Escape') return '\x1b'
-  if (event.key.length === 1 && !/[A-Za-z0-9]/.test(event.key)) return event.key
-  if (event.keyCode === 32) return ' '
-  if (event.keyCode === 189 || event.code === 'Minus') return '-'
-  return undefined
+/** The keyCode Chromium reports for a keydown the IME claimed. */
+const IME_KEY_CODE = 229
+const DEL = '\x7f'
+const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'AltGraph', 'NumLock', 'ScrollLock'])
+/** Edits an IME makes. Anything else landing in the textarea (a paste, a drop) is not typing. */
+const IME_INPUT_TYPES = new Set([
+  'insertText',
+  'insertReplacementText',
+  'insertCompositionText',
+  'insertFromComposition',
+  'deleteContentBackward',
+  'deleteContentForward',
+  'deleteCompositionText',
+  'deleteByComposition',
+])
+
+const commonPrefixLength = (left: readonly string[], right: readonly string[]): number => {
+  let length = 0
+  while (length < left.length && length < right.length && left[length] === right[length]) length += 1
+  return length
 }
 
-const pendingCompositionText = (base: string, composition: string): string => {
-  if (base.length === 0 || composition.length === 0) return composition
-  if (composition.startsWith(base)) return composition.slice(base.length)
-  if (base.startsWith(composition) || base.endsWith(composition)) return ''
-
-  let commonLength = 0
-  while (commonLength < base.length && commonLength < composition.length
-    && base[commonLength] === composition[commonLength]) {
-    commonLength += 1
-  }
-  return commonLength > 0 ? composition.slice(commonLength) : composition
+/**
+ * What the PTY must receive to turn `from` into `to`: a Backspace per code point after their common
+ * prefix (the PTY deletes one character per Backspace), then the rest of `to`.
+ */
+export const editBetween = (from: string, to: string): string => {
+  const before = Array.from(from)
+  const after = Array.from(to)
+  const common = commonPrefixLength(before, after)
+  return DEL.repeat(before.length - common) + after.slice(common).join('')
 }
 
-export const installWindowsImeCompositionWorkaround = (
-  terminal: ImeTerminal,
-  enabled: boolean,
-): WindowsImeWorkaround => {
+export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput => {
   const element = terminal.element
   const textarea = terminal.textarea
-  if (!enabled || !element || !textarea) {
-    return {
-      dispose: () => {},
-      shouldForwardData: () => true,
-    }
-  }
+  if (!element || !textarea) return { dispose: () => {} }
+
+  /** The textarea text the PTY has already received. */
+  let sent = ''
+  let composing = false
+  /** xterm sent a key mid-composition: the mirror restarts once the IME lets go of the textarea. */
+  let restartAfterComposition = false
+  /** The printable key xterm is handling: its own `input` is xterm's business, not the IME's. */
+  let xtermKey: string | null = null
 
   const compositionView = element.querySelector<HTMLElement>('.composition-view')
-  const syncCompositionPreviewPosition = (): void => {
+  const setPreview = (text: string): void => {
     if (!compositionView) return
     compositionView.style.left = textarea.style.left
     compositionView.style.top = textarea.style.top
     compositionView.style.height = textarea.style.height
     compositionView.style.lineHeight = textarea.style.lineHeight
-  }
-
-  const setCompositionPreview = (text: string): void => {
-    if (!compositionView) return
-    syncCompositionPreviewPosition()
     compositionView.textContent = text
     compositionView.classList.toggle('active', text.length > 0)
     compositionView.style.display = text.length > 0 ? 'block' : 'none'
@@ -73,212 +87,142 @@ export const installWindowsImeCompositionWorkaround = (
     compositionView.style.textDecoration = 'none'
     compositionView.style.pointerEvents = 'none'
   }
-
-  const updateCompositionPreview = (data: string): void => {
-    compositionText = data
-    setCompositionPreview(pendingCompositionText(compositionBase, data))
+  /** The part of the textarea the PTY has not received yet: the composition being built. */
+  const unsentText = (): string => {
+    const value = Array.from(textarea.value)
+    return value.slice(commonPrefixLength(Array.from(sent), value)).join('')
   }
 
-  const liveCompositionData = (fallback: string): string =>
-    textarea.value.length > 0 && textarea.value !== compositionBase
-      ? textarea.value
-      : fallback
-
-  let compositionActive = false
-  let compositionBase = ''
-  let compositionText = ''
-  let suppressNextCompositionEnd = false
-  let suppressNextInput = false
-  let suppressInputResetTimer: number | undefined
-  let expectedDuplicates: string[] = []
-  let expectedDuplicateResetTimer: number | undefined
-  let sendingOwnCommit = false
-
-  const clearCompositionBuffer = (): void => {
-    textarea.value = ''
-    textarea.setSelectionRange(0, 0)
+  const setMirror = (value: string): void => {
+    textarea.value = value
+    textarea.setSelectionRange(value.length, value.length)
+    sent = value
   }
 
-  const armInputSuppression = (): void => {
-    suppressNextInput = true
-    if (suppressInputResetTimer !== undefined) window.clearTimeout(suppressInputResetTimer)
-    suppressInputResetTimer = window.setTimeout(() => {
-      suppressNextInput = false
-      suppressInputResetTimer = undefined
-    }, 0)
+  const sync = (): void => {
+    const data = editBetween(sent, textarea.value)
+    sent = textarea.value
+    if (data.length > 0) terminal.input(data)
   }
 
-  const rememberExpectedDuplicates = (data: string, pendingText: string, suffix: string): void => {
-    expectedDuplicates = [...new Set([data, pendingText, suffix].filter(value => value.length > 0))]
-    if (expectedDuplicateResetTimer !== undefined) window.clearTimeout(expectedDuplicateResetTimer)
-    expectedDuplicateResetTimer = expectedDuplicates.length > 0
-      ? window.setTimeout(() => {
-          expectedDuplicates = []
-          expectedDuplicateResetTimer = undefined
-        }, 100)
-      : undefined
+  /**
+   * Every IME edit is synced as it happens, so a textarea that differs from `sent` before the next
+   * one was changed by xterm: emptied by a paste, or filled with the selection for a copy menu. None
+   * of that is typing to forward.
+   */
+  const dropForeignText = (): void => {
+    if (textarea.value === sent) return
+    if (textarea.value.length === 0) sent = ''
+    else setMirror('')
   }
 
-  const clearExpectedDuplicates = (): void => {
-    expectedDuplicates = []
-    if (expectedDuplicateResetTimer !== undefined) {
-      window.clearTimeout(expectedDuplicateResetTimer)
-      expectedDuplicateResetTimer = undefined
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (event.target !== textarea) return
+    if (event.keyCode === IME_KEY_CODE) {
+      // The IME's key. xterm would diff the textarea on a timer and resend what it finds.
+      event.stopPropagation()
+      xtermKey = null
+      if (!composing) dropForeignText()
+      return
     }
+    if (MODIFIER_KEYS.has(event.key)) return
+    xtermKey = Array.from(event.key).length === 1 ? event.key : null
+    if (composing) {
+      // The IME let this key through without ending its composition. Send the composition so far
+      // first, so the PTY receives the two in the order they were typed.
+      sync()
+      restartAfterComposition = true
+      return
+    }
+    const plainBackspace = event.key === 'Backspace' && !event.ctrlKey && !event.altKey && !event.metaKey
+    // xterm sends a Backspace itself; the IME must see the character gone too, or its next
+    // correction would reach for text the PTY no longer has.
+    setMirror(plainBackspace && textarea.value === sent ? Array.from(sent).slice(0, -1).join('') : '')
   }
 
-  const finishComposition = (data: string, suffix = ''): void => {
-    const pendingText = pendingCompositionText(compositionBase, data)
-    compositionActive = false
-    compositionBase = ''
-    compositionText = ''
-    setCompositionPreview('')
-    clearCompositionBuffer()
-    suppressNextCompositionEnd = suffix.length > 0
-    armInputSuppression()
-    const commit = pendingText + suffix
-    if (commit.length > 0) {
-      rememberExpectedDuplicates(commit, pendingText, suffix)
-      sendingOwnCommit = true
-      try {
-        terminal.input(commit)
-      } finally {
-        sendingOwnCommit = false
-      }
+  const onKeyUp = (): void => {
+    xtermKey = null
+  }
+
+  // A click can move the PTY cursor (Alt+Click) and the copy menu refills the textarea.
+  const onMouseDown = (): void => {
+    if (!composing) setMirror('')
+  }
+
+  const onBeforeInput = (event: InputEvent): void => {
+    if (event.target !== textarea || composing || event.isComposing) return
+    if (event.inputType !== 'deleteContentBackward') return
+    if (textarea.selectionStart !== 0 || textarea.selectionEnd !== 0) return
+    // The IME deletes past the start of what it typed: the textarea has nothing to lose, so no
+    // `input` follows, and the PTY's own character needs a Backspace of its own.
+    terminal.input(DEL)
+  }
+
+  const onInput = (event: Event): void => {
+    if (event.target !== textarea) return
+    // xterm's own `input` handler would forward the edit a second time.
+    event.stopPropagation()
+    if (composing) {
+      setPreview(unsentText())
+      return
     }
+    const inputEvent = event as InputEvent
+    if (!IME_INPUT_TYPES.has(inputEvent.inputType) || (xtermKey !== null && inputEvent.data === xtermKey)) {
+      // A paste or drop, or the default action of a key xterm handled: never the IME's typing.
+      setMirror('')
+      return
+    }
+    sync()
   }
 
   const onCompositionStart = (event: CompositionEvent): void => {
     if (event.target !== textarea) return
-    compositionActive = true
-    compositionBase = textarea.value
-    compositionText = ''
-    suppressNextCompositionEnd = false
-    suppressNextInput = false
-    setCompositionPreview('')
-    // xterm must not initialize its offset-based CompositionHelper for this composition.
+    // xterm's offset-based composition helper must never see this composition.
     event.stopPropagation()
+    dropForeignText()
+    composing = true
+    restartAfterComposition = false
+    setPreview('')
   }
 
   const onCompositionUpdate = (event: CompositionEvent): void => {
     if (event.target !== textarea) return
-    // Chromium sometimes reports the whole composition in the textarea while `data` only carries
-    // the latest edit. Prefer the textarea value so the preview follows the IME document exactly;
-    // the event data remains the fallback for browsers/tests that do not update the value first.
-    updateCompositionPreview(liveCompositionData(event.data))
     event.stopPropagation()
+    setPreview(unsentText())
   }
 
   const onCompositionEnd = (event: CompositionEvent): void => {
     if (event.target !== textarea) return
     event.stopPropagation()
-    if (suppressNextCompositionEnd) {
-      suppressNextCompositionEnd = false
-      armInputSuppression()
-      compositionActive = false
-      compositionBase = ''
-      compositionText = ''
-      setCompositionPreview('')
-      clearCompositionBuffer()
-      return
+    composing = false
+    setPreview('')
+    sync()
+    if (restartAfterComposition) {
+      restartAfterComposition = false
+      setMirror('')
     }
-    if (!compositionActive) return
-    finishComposition(compositionText || event.data)
   }
 
-  const onInput = (event: Event): void => {
-    if (event.target !== textarea) return
-    if (compositionActive) {
-      const inputEvent = event as InputEvent
-      // Windows Telex can deliver the live pre-edit text through `input` without a useful
-      // compositionupdate payload. Keep it visible, but never let this intermediate value reach
-      // xterm/PTY until compositionend or a delimiter commits it. This also handles Backspace:
-      // the textarea value is the source of truth after the IME removes a character.
-      updateCompositionPreview(liveCompositionData(inputEvent.data ?? ''))
-      event.stopPropagation()
-      return
-    }
-    if (suppressNextInput) {
-      event.stopPropagation()
-      suppressNextInput = false
-      if (suppressInputResetTimer !== undefined) {
-        window.clearTimeout(suppressInputResetTimer)
-        suppressInputResetTimer = undefined
-      }
-      return
-    }
-    clearExpectedDuplicates()
-  }
-
-  const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.target !== textarea) return
-    if (!compositionActive) {
-      clearExpectedDuplicates()
-      return
-    }
-
-    if (event.key === 'Backspace' && compositionText.length > 0) {
-      // Backspace edits the native IME document. Committing the current composition here would
-      // replay the whole pre-edit string before the IME has applied the deletion.
-      event.stopPropagation()
-      return
-    }
-
-    const suffix = getCompositionBoundaryInput(event)
-    if (suffix !== undefined) {
-      event.preventDefault()
-      event.stopPropagation()
-      finishComposition(compositionText, suffix)
-      return
-    }
-
-    // Keep every other key in the browser IME. xterm's keydown handler must not emit its stale
-    // textarea diff while Telex is still building the composition.
-    event.stopPropagation()
-  }
-
-  const shouldForwardData = (data: string): boolean => {
-    if (data.length === 0) return true
-    if (sendingOwnCommit) return true
-    if (compositionActive) return false
-    if (expectedDuplicates.length === 0) return true
-    const candidateIndex = expectedDuplicates.findIndex(candidate => data === candidate
-      || data === `${candidate}${candidate}`
-      || candidate.startsWith(data))
-    if (candidateIndex < 0) return true
-    const candidate = expectedDuplicates[candidateIndex]
-    if (candidate.startsWith(data) && candidate !== data) {
-      expectedDuplicates[candidateIndex] = candidate.slice(data.length)
-    } else {
-      expectedDuplicates.splice(candidateIndex, 1)
-    }
-    if (expectedDuplicateResetTimer !== undefined) {
-      window.clearTimeout(expectedDuplicateResetTimer)
-      expectedDuplicateResetTimer = undefined
-    }
-    if (expectedDuplicates.length > 0) {
-      expectedDuplicateResetTimer = window.setTimeout(() => {
-        expectedDuplicates = []
-        expectedDuplicateResetTimer = undefined
-      }, 100)
-    }
-    return false
-  }
-
-  element.addEventListener('compositionend', onCompositionEnd, true)
+  // Capture phase on the terminal element: these run before xterm's own listeners on the textarea.
+  element.addEventListener('keydown', onKeyDown, true)
+  element.addEventListener('keyup', onKeyUp, true)
+  element.addEventListener('mousedown', onMouseDown, true)
+  element.addEventListener('beforeinput', onBeforeInput, true)
+  element.addEventListener('input', onInput, true)
   element.addEventListener('compositionstart', onCompositionStart, true)
   element.addEventListener('compositionupdate', onCompositionUpdate, true)
-  element.addEventListener('input', onInput, true)
-  element.addEventListener('keydown', onKeyDown, true)
-  const dispose = (): void => {
-    if (suppressInputResetTimer !== undefined) window.clearTimeout(suppressInputResetTimer)
-    if (expectedDuplicateResetTimer !== undefined) window.clearTimeout(expectedDuplicateResetTimer)
-    setCompositionPreview('')
-    element.removeEventListener('compositionend', onCompositionEnd, true)
-    element.removeEventListener('compositionstart', onCompositionStart, true)
-    element.removeEventListener('compositionupdate', onCompositionUpdate, true)
-    element.removeEventListener('input', onInput, true)
-    element.removeEventListener('keydown', onKeyDown, true)
+  element.addEventListener('compositionend', onCompositionEnd, true)
+  return {
+    dispose: () => {
+      setPreview('')
+      element.removeEventListener('keydown', onKeyDown, true)
+      element.removeEventListener('keyup', onKeyUp, true)
+      element.removeEventListener('mousedown', onMouseDown, true)
+      element.removeEventListener('beforeinput', onBeforeInput, true)
+      element.removeEventListener('input', onInput, true)
+      element.removeEventListener('compositionstart', onCompositionStart, true)
+      element.removeEventListener('compositionupdate', onCompositionUpdate, true)
+      element.removeEventListener('compositionend', onCompositionEnd, true)
+    },
   }
-  return { dispose, shouldForwardData }
 }

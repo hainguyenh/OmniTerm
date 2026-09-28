@@ -12,6 +12,8 @@ export type TerminalCopyAction = 'last-output' | 'viewport'
 
 /** Event name for copy requests dispatched by the pane-header menu. */
 export const TERMINAL_COPY_EVENT = 'omniterm:copy-terminal'
+/** Event name for saving the complete terminal scrollback to a text file. */
+export const TERMINAL_SAVE_OUTPUT_EVENT = 'omniterm:save-terminal-output'
 
 export interface TerminalBufferLineLike {
   /** Mirrors xterm's IBufferLine.translateToString; `true` drops trailing cell padding. */
@@ -78,6 +80,15 @@ export const viewportText = (buffer: TerminalBufferLike, rows: number): string =
   return joinTrimmingTrailingBlanks(lines)
 }
 
+/** Complete terminal scrollback, including the current viewport and all retained history. */
+export const bufferText = (buffer: TerminalBufferLike): string => {
+  const lines: string[] = []
+  for (let index = 0; index < buffer.active.length; index += 1) {
+    lines.push(buffer.active.getLine(index)?.translateToString(true) ?? '')
+  }
+  return joinTrimmingTrailingBlanks(lines)
+}
+
 /**
  * Tracks where the user's last Enter landed so "copy last output" can slice the buffer.
  * The marker points at the line the cursor occupied when Enter fired — the echoed prompt +
@@ -137,6 +148,11 @@ export const dispatchTerminalCopy = (sessionId: string, action: TerminalCopyActi
   window.dispatchEvent(new CustomEvent(TERMINAL_COPY_EVENT, { detail: { sessionId, action } }))
 }
 
+/** Dispatch a save request for one session's complete retained output. */
+export const dispatchTerminalSave = (sessionId: string): void => {
+  window.dispatchEvent(new CustomEvent(TERMINAL_SAVE_OUTPUT_EVENT, { detail: { sessionId } }))
+}
+
 /**
  * Answer this pane's copy-menu requests at their only useful site: the component holding the
  * xterm instance. Returns the unregister cleanup. Requests for other sessions or from a
@@ -161,6 +177,37 @@ export const registerTerminalCopyHandler = (options: {
   window.addEventListener(TERMINAL_COPY_EVENT, onCopyRequest)
   return () => window.removeEventListener(TERMINAL_COPY_EVENT, onCopyRequest)
 }
+
+/** Registers the save request at the xterm owner, keeping buffer access out of toolbar components. */
+export const registerTerminalSaveHandler = (options: {
+  sessionId: string
+  isCurrent: () => boolean
+  extract: () => string
+  save: (text: string) => void
+}): (() => void) => {
+  const { sessionId, isCurrent, extract, save } = options
+  const onSaveRequest = (event: Event) => {
+    if (!(event instanceof CustomEvent)) return
+    const detail = event.detail as { sessionId?: unknown } | undefined
+    if (detail?.sessionId !== sessionId || !isCurrent()) return
+    const text = extract()
+    if (text) save(text)
+  }
+  window.addEventListener(TERMINAL_SAVE_OUTPUT_EVENT, onSaveRequest)
+  return () => window.removeEventListener(TERMINAL_SAVE_OUTPUT_EVENT, onSaveRequest)
+}
+
+/** Connect the save toolbar to the xterm owner and the native save dialog. */
+export const registerTerminalSaveExport = (options: {
+  sessionId: string
+  isCurrent: () => boolean
+  buffer: TerminalBufferLike
+}): (() => void) => registerTerminalSaveHandler({
+  sessionId: options.sessionId,
+  isCurrent: options.isCurrent,
+  extract: () => bufferText(options.buffer),
+  save: (content) => void window.omnitermAPI.files.exportText({ suggestedName: 'terminal-output.txt', content }),
+})
 
 /**
  * Validate an inbound copy request at the boundary: the event comes from arbitrary code, so an

@@ -15,6 +15,15 @@ fn launch(shell: LocalShell, command: Option<&str>, keep_open: bool) -> LocalLau
 
 // ── Merging saved / override params ──────────────────────────────────────────
 
+/// The argv of a bare interactive PowerShell pane: the bootstrap ends with the cwd prompt hook.
+#[allow(dead_code)] // used by the Windows-gated submodules below
+fn interactive_ps_args(command_completion: bool) -> Vec<String> {
+    let bootstrap = powershell_interactive_bootstrap(command_completion);
+    ["-NoLogo", "-NoExit", "-Command", bootstrap.as_str()]
+        .map(str::to_owned)
+        .to_vec()
+}
+
 #[test]
 fn override_shell_wins_over_the_saved_one() {
     let native = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
@@ -106,7 +115,7 @@ mod windows {
         let inv = launch(LocalShell::Powershell, None, true).invocation().unwrap();
         assert_eq!(
             inv.args,
-            vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
+            interactive_ps_args(false)
         );
     }
 
@@ -134,7 +143,7 @@ mod windows {
                 "-NoLogo".to_string(),
                 "-NoExit".to_string(),
                 "-Command".to_string(),
-                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; & './x.ps1'")
+                format!("{}; & './x.ps1'", powershell_interactive_bootstrap(false))
             ]
         );
         let exit = launch(LocalShell::Powershell, Some("& './x.ps1'"), false)
@@ -170,7 +179,7 @@ mod windows {
                 "-NoProfile".to_string(),
                 "-NoExit".to_string(),
                 "-Command".to_string(),
-                format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; x")
+                format!("{}; x", powershell_interactive_bootstrap(false))
             ]
         );
     }
@@ -267,7 +276,7 @@ fn windows_argv_builder_is_tested_on_every_platform() {
             "-NoProfile".to_string(),
             "-NoExit".to_string(),
             "-Command".to_string(),
-            format!("{POWERSHELL_INTERACTIVE_BOOTSTRAP}; echo hi")
+            format!("{}; echo hi", powershell_interactive_bootstrap(false))
         ]
     );
     let ps_exit = launch(LocalShell::Default, None, false)
@@ -275,19 +284,19 @@ fn windows_argv_builder_is_tested_on_every_platform() {
     assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
     assert_eq!(
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, false),
-        vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_INTERACTIVE_BOOTSTRAP]
+        interactive_ps_args(false)
     );
     // `command_completion: true` is only exercised elsewhere by launch_completion_tests.rs, which
     // is Windows-gated — cover the flag's other arm here so it counts on every CI platform too.
     assert_eq!(
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, true),
-        vec!["-NoLogo", "-NoExit", "-Command", POWERSHELL_UTF8_BOOTSTRAP]
+        interactive_ps_args(true)
     );
     let ps_completion_on_with_command = launch(LocalShell::Default, None, true)
         .windows_args(Vec::new(), Some("echo hi".to_string()), true);
     assert_eq!(
         ps_completion_on_with_command.last().unwrap(),
-        &format!("{POWERSHELL_UTF8_BOOTSTRAP}; echo hi")
+        &format!("{}; echo hi", powershell_interactive_bootstrap(true))
     );
 
     let wsl_keep = launch(LocalShell::Wsl, None, true).windows_args(

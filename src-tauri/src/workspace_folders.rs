@@ -96,3 +96,7 @@ pub async fn rename_workspace_folder<R: Runtime>(
     write_workspaces(&app, &list)?;
     Ok(result)
 }
+
+#[cfg(test)]
+#[path = "workspace_folders_tests.rs"]
+mod tests;

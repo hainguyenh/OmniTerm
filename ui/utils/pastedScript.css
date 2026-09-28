@@ -1,0 +1,9 @@
+/*
+ * Ctrl+Alt+V pasted-script markup (see pastedScriptDecoration.ts): an xterm decoration, absolutely
+ * positioned over the terminal rows, so it never shifts or reflows terminal text. Only a thin bar
+ * at the very left edge — nothing may tint or cover the script's own characters.
+ */
+.pasted-script-gutter {
+  pointer-events: none;
+  box-shadow: inset 2px 0 0 var(--theme-accent);
+}

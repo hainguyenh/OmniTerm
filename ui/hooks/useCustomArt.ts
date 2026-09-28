@@ -15,6 +15,7 @@ export function useCustomArt(darkMode: boolean) {
   return {
     idleArtUrl: darkMode ? idleArtUrlDark : idleArtUrlLight,
     loadingArtUrl: darkMode ? loadingArtUrlDark : loadingArtUrlLight,
-    idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, refreshCustomArt,
+    idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark,
+    refreshCustomArt,
   }
 }

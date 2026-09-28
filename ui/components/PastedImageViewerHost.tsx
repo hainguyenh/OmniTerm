@@ -12,7 +12,7 @@ import { writeClipboardText } from '../utils/terminalClipboard'
 /**
  * Full-resolution viewer for the images pasted into one pane. Lives in the pane's webview, so it
  * shows the real bitmap where a TUI agent (OpenCode, Claude Code…) can only draw the same PNG as
- * unreadable cell-block art. Renders nothing until the pane header's image button sends an open
+ * unreadable cell-block art. Renders nothing until the footer attachment list's View button sends an open
  * request AND a pasted image exists; shows the history's current image, so a paste made while open
  * jumps to the newest one and chevrons / Left-Right flip back through earlier pastes.
  *

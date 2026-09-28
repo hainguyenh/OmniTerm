@@ -17,7 +17,7 @@ async function repositoryImageFiles() {
       if (IGNORED_DIR_NAMES.has(entry.name)) continue
       const full = path.join(current, entry.name)
       const relative = path.relative(root, full).replaceAll('\\', '/')
-      if (relative === 'ui/generated' || relative.startsWith('ui/generated/') || relative === 'src-tauri/icons' || relative.startsWith('src-tauri/icons/')) {
+      if (relative === 'ui/generated' || relative.startsWith('ui/generated/') || relative === 'src-tauri/icons' || relative.startsWith('src-tauri/icons/') || relative === 'assets/loading' || relative.startsWith('assets/loading/')) {
         continue
       }
       if (entry.isDirectory()) {

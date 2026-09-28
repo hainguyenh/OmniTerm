@@ -44,3 +44,7 @@ pub(crate) fn ensure(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "pty_lease_tests.rs"]
+mod tests;

@@ -9,10 +9,28 @@ import {
   selectPendingSnapshotTabs,
   updatePendingSnapshot,
 } from '../utils/sessionCheckpoint'
-import type { SessionSnapshot } from '../utils/sessionStore'
+import type { PersistedTab, SessionSnapshot } from '../utils/sessionStore'
 import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
+import { parseAgentTitle } from '../utils/agentTitle'
+import { findSessionByTabId } from '../utils/agentSessionStorage'
 
 type SessionTab = { id: string; connId: string; name: string }
+
+const SHELL_ONLY_TITLES = new Set([
+  'bash', 'cmd', 'command prompt', 'fish', 'powershell', 'pwsh', 'sh', 'zsh', 'windows powershell',
+])
+
+/** Plain shell panes are reconstruction metadata, not resumable work. Bookmarked agents use the explicit resume UI. */
+export function shouldAutoRestoreTab(tab: PersistedTab): boolean {
+  // A process-tree scan may have captured the agent before its terminal title changed back to a
+  // shell title. The persisted session binding is stronger evidence than that transient title.
+  if (findSessionByTabId(tab.id)) return true
+  if (parseAgentTitle(tab.name)) return true
+  const title = tab.name.trim().toLowerCase().replace(/^\/\/\s*/, '')
+  const shellTitle = title.split(/\s+\/\/\s+/).at(-1) ?? title
+  const powershellTitle = /^(?:windows\s+)?(?:power)?shell(?:\s+\d+(?:\.\d+)?)?$|^pwsh(?:\s+\d+(?:\.\d+)?)?$/
+  return !SHELL_ONLY_TITLES.has(shellTitle) && !powershellTitle.test(shellTitle)
+}
 
 interface SessionRecoveryStateInput {
   activeTabs: SessionTab[]
@@ -142,6 +160,7 @@ export function useSessionRecoveryState(input: SessionRecoveryStateInput): {
     existingTabs: input.activeTabs,
     existingEphemeralConns: input.ephemeralConns,
     isRestoreAllowed: sessionId => !closedRestoreIds.has(sessionId),
+    shouldRestoreTab: shouldAutoRestoreTab,
     setActiveTabs: input.setActiveTabs,
     setEphemeralConns: input.setEphemeralConns,
     setTabGroups: input.setTabGroups,

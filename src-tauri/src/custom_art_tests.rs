@@ -9,6 +9,16 @@ fn test_valid_slots() {
     assert!(is_valid_slot("idle-dark"));
     assert!(is_valid_slot("loading-light"));
     assert!(is_valid_slot("loading-dark"));
+    assert!(is_valid_slot("session-light"));
+    assert!(is_valid_slot("session-dark"));
+    assert!(is_valid_slot("pace-slow-light"));
+    assert!(is_valid_slot("pace-slow-dark"));
+    assert!(is_valid_slot("pace-onTrack-light"));
+    assert!(is_valid_slot("pace-onTrack-dark"));
+    assert!(is_valid_slot("pace-fast-light"));
+    assert!(is_valid_slot("pace-fast-dark"));
+    assert!(is_valid_slot("pace-overshooting-light"));
+    assert!(is_valid_slot("pace-overshooting-dark"));
     assert!(!is_valid_slot("idle"));
     assert!(!is_valid_slot("loading"));
     assert!(!is_valid_slot("other"));
@@ -91,6 +101,8 @@ fn test_get_and_remove_custom_art() {
     // Upload and get
     let img_path = create_dummy_file(&src_dir, "test.png", 1024);
     upload_custom_art_impl(&art_dir, "idle-light", &img_path).unwrap();
+    fs::create_dir_all(art_dir.join("subfolder")).unwrap();
+    let _other = create_dummy_file(&art_dir, "other-slot.png", 100);
 
     let res_get2 = get_custom_art_impl(&art_dir, "idle-light");
     assert!(res_get2.is_ok());
@@ -109,6 +121,7 @@ fn test_get_and_remove_custom_art() {
 
     // Ensure actual file is deleted
     assert!(!art_dir.join("idle-light.png").exists());
+    assert!(art_dir.join("other-slot.png").exists());
 }
 
 #[test]

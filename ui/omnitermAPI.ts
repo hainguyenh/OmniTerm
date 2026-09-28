@@ -16,12 +16,16 @@ import { writeText, readText, readImage } from '@tauri-apps/plugin-clipboard-man
 import { open } from '@tauri-apps/plugin-dialog'
 import { homeDir } from '@tauri-apps/api/path'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { attachSession, failSession, onSession, startSession, type ReplayMetadata } from './tauriSessions'
+import { attachSession } from './tauriSessions'
 import { diag } from './diag'
+import { createAgentQuotaAPI } from '../plugins/agent-quota/app/agentQuotaAPI'
 import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
 import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
+import { createConnectAPI } from './omnitermAPIConnect'
+import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport } from './utils/attachmentTypes'
 import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
+import type { DetectedPaneAgent } from './utils/agentSessionDetector'
 
 /**
  * Subscribe to a Tauri event, returning a synchronous unsubscribe.
@@ -121,70 +125,9 @@ function createTauriAPI(): any {
     },
 
     alwaysAwake: createAlwaysAwakeAPI(),
+    agentQuota: createAgentQuotaAPI(),
 
-    connect: {
-      // Streaming lives in tauriSessions.ts: the ready/data/error/closed callbacks are held in a
-      // local map and handed to the backend as IPC channels when the session starts.
-      local: (sessionId: string, connId: string, overrideShell?: string, darkMode?: boolean) =>
-        startSession(sessionId, connId, overrideShell, darkMode),
-      localDisconnect: (id: string) =>
-        invoke('disconnect_session', { id }).catch(() => {}),
-      interruptSession: (id: string) => invoke<void>('interrupt_session', { id }),
-      localInput: (id: string, data: string) =>
-        invoke('send_session_input', { id, data }).catch(() => {}),
-      localResize: (id: string, size: { cols: number; rows: number }) =>
-        invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
-      onLocalReady: (id: string, cb: (label?: string, replay?: ReplayMetadata) => void) => onSession(id, 'ready', cb),
-      onLocalData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
-      onLocalError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
-      onLocalClosed: (id: string, cb: (code: number) => void) => onSession(id, 'closed', cb),
-      // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
-      onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
-
-      // Windows OpenSSH runs through the same ConPTY transport as local shells. Its password prompt
-      // is therefore native to ssh.exe and no credential crosses the frontend API.
-      ssh: async (id: string, darkMode?: boolean) => {
-        try {
-          await invoke('prepare_ssh_session', { connId: id })
-          if (darkMode === undefined) await startSession(id, id, 'cmd')
-          else await startSession(id, id, 'cmd', darkMode)
-        } catch (error) {
-          failSession(id, error instanceof Error ? error.message : String(error))
-        }
-      },
-      sshDisconnect: (id: string) => { void invoke('disconnect_session', { id }).catch(() => {}) },
-      sshInput: (id: string, data: string) => { void invoke('send_session_input', { id, data }).catch(() => {}) },
-      sshResize: (id: string, size: { cols: number; rows: number }) => invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
-      onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
-      onSSHData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
-      onSSHError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
-      onSSHClosed: (id: string, cb: () => void) => onSession(id, 'closed', () => cb()),
-      onSessionMetrics: (id: string, cb: (m: any) => void) =>
-        onEvent<any>(`session-metrics-${id}`, cb),
-
-      // The RDP client runs in its own window; `rdp-ready` / `rdp-error` / `rdp-closed` below report
-      // its lifecycle. `{ ok: false }` on failure is what the renderer already handles.
-      rdp: (id: string) =>
-        invoke<{ ok: boolean }>('connect_rdp', { id })
-          .catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) })),
-      rdpDisconnect: (id: string) => { void invoke('rdp_disconnect', { id }).catch((e) => diag.error('[omnitermAPI] rdpDisconnect failed', e)) },
-      rdpInput: (_id: string, _d: string) => {},
-      rdpResize: (_id: string, _s: { cols: number; rows: number }) => {},
-      // No-ops, and honestly so: the client is a separate top-level window, not embedded in a pane.
-      // The backend commands these used to call had empty bodies, so the renderer believed it was
-      // positioning something. Docking belongs to a plugin — see the note in src-tauri/src/rdp_embed.rs.
-      rdpSetBounds: (..._args: unknown[]) => {},
-      rdpSetVisible: (..._args: unknown[]) => {},
-      rdpSetOverlay: (..._args: unknown[]) => {},
-      rdpSetDetached: (..._args: unknown[]) => {},
-      rdpResetTrust: (_h: string, _p?: string) => Promise.resolve(),
-      onRDPDetachState: (_cb: (id: string, detached: boolean) => void) => () => {},
-      overlayInit: () => Promise.resolve(null),
-      onRDPLatency: (_id: string, _cb: (ms: number | null) => void) => () => {},
-      onRDPReady: (id: string, cb: () => void) => onEvent<null>(`rdp-ready-${id}`, cb),
-      onRDPError: (id: string, cb: (err: string) => void) => onEvent<string>(`rdp-error-${id}`, cb),
-      onRDPClosed: (id: string, cb: () => void) => onEvent<null>(`rdp-closed-${id}`, cb),
-    },
+    connect: createConnectAPI(),
 
     // Detached terminal windows are disposable daemon clients; PTYs stay owned by sessiond.
     terminalWindow: {
@@ -245,6 +188,17 @@ function createTauriAPI(): any {
       saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
     },
 
+    // Raw-body upload so a large file is not serialized as a JSON number array; the name is a hint.
+    attachments: {
+      save: (name: string, bytes: Uint8Array) =>
+        invoke<unknown>('save_attachment', bytes, {
+          headers: { 'x-omniterm-attachment-name': encodeURIComponent(name) },
+        }).then(parseAttachmentInfo),
+      importClipboardFiles: () => invoke<unknown>('import_clipboard_files').then(parseAttachmentList, () => []),
+      list: () => invoke<unknown>('list_attachments').then(parseAttachmentListing),
+      clear: () => invoke<unknown>('clear_attachments').then(parseClearReport),
+    },
+
     // SFTP rides on SSH, so it arrives with it.
     sftp: {
       home: (_id: string) => Promise.resolve(''),
@@ -284,6 +238,7 @@ function createTauriAPI(): any {
       // filesystem path is never handed back into the webview.
       exportJson: ({ suggestedName, content }: { suggestedName: string; content: string }) =>
         invoke<boolean>('export_json', { suggestedName, content }),
+      exportText: (opts: { suggestedName: string; content: string }) => invoke<boolean>('export_text', opts),
       // Returns the chosen file's *contents*, never a filesystem path.
       importJson: () => invoke<string | null>('import_json'),
       // There is no encrypted-backup counterpart: the app stores no credential, so a backup has
@@ -300,7 +255,7 @@ function createTauriAPI(): any {
       // The backend opens a file picker, validates the image, and stores it in custom-art/.
       // A cache-busting query param is appended so the webview always fetches the latest file
       // when the user replaces art for the same slot (the path stays the same).
-      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') =>
+      upload: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) =>
         open({
           multiple: false,
           filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }],
@@ -309,8 +264,8 @@ function createTauriAPI(): any {
             ? invoke<string>('upload_custom_art', { slot, path }).then(p => `${convertFileSrc(p)}?t=${Date.now()}`)
             : Promise.reject(new Error('cancelled')),
         ),
-      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<string | null>('get_custom_art', { slot }).then(p => p ? `${convertFileSrc(p)}?t=${Date.now()}` : null),
-      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark') => invoke<void>('remove_custom_art', { slot }),
+      get: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) => invoke<string | null>('get_custom_art', { slot }).then(p => p ? `${convertFileSrc(p)}?t=${Date.now()}` : null),
+      remove: (slot: 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark' | 'session-light' | 'session-dark' | `pace-${'slow' | 'onTrack' | 'fast' | 'overshooting'}-${'light' | 'dark'}`) => invoke<void>('remove_custom_art', { slot }),
     },
 
     settings: {
@@ -354,12 +309,8 @@ function createTauriAPI(): any {
       // Tells the backend the renderer can receive `shell-open`, flushing anything queued while the
       // app was locked or cold-starting. Also writes the launcher shims.
       ready: () => {
-        void invoke('setup_launcher').catch((e) =>
-          diag.warn('[omnitermAPI] could not write launcher shims', e),
-        )
-        void invoke('shells_ready').catch((e) =>
-          diag.error('[omnitermAPI] shells_ready failed', e),
-        )
+        void invoke('setup_launcher').catch((e) => diag.warn('[omnitermAPI] could not write launcher shims', e))
+        void invoke('shells_ready').catch((e) => diag.error('[omnitermAPI] shells_ready failed', e))
       },
       release: (connId: string) => {
         void invoke('shells_release', { connId }).catch(() => {})
@@ -378,6 +329,17 @@ function createTauriAPI(): any {
       // resolves each one to an executable — the renderer has no way to know what is installed.
       list: () => invoke<Array<{ id: string; label: string }>>('list_available_shells'),
       onOpen: (cb: (conn: any) => void) => onEvent<any>('shell-open', cb),
+    },
+    // Which AI agent (if any) runs under each local pane's shell, from the process tree — not from
+    // terminal output or a renderer-supplied guess. Shared with the Agent Quota plugin, which is why
+    // this command is always registered, whether or not that plugin is enabled.
+    agentSessions: {
+      detect: () => invoke<DetectedPaneAgent[]>('agent_quota_detect').catch(() => []),
+      resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) =>
+        invoke<string | null>('resolve_claude_session', { profileDir, cwd, sinceEpochSecs }).catch(() => null),
+      // Crash-safe copy of stored sessions/bookmarks in app data (see ui/utils/agentSessionDurable.ts).
+      loadStore: () => invoke<unknown>('agent_sessions_load'),
+      saveStore: (document: Record<string, unknown>) => invoke<void>('agent_sessions_save', { document }),
     },
   } as any
 }

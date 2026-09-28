@@ -45,7 +45,9 @@ const defaultSettings: AppSettings = {
     toggleSidebar: "Ctrl+B",
     commandPalette: "CommandOrControl+P",
     closeTab: "Ctrl+W",
-    toggleAppFullscreen: "F11"
+    toggleAppFullscreen: "F11",
+    agentQuota: "Ctrl+Alt+Q",
+    pasteScript: "Ctrl+Alt+V"
   },
 };
 
@@ -95,6 +97,17 @@ const defaults: Api = {
     installPackage: async () => null,
     remove: async () => true,
     restartApp: async () => {},
+  },
+  // Absent plugin by default: `info` answers false, so no quota UI mounts in unrelated tests.
+  agentQuota: {
+    info: async () => false,
+    detect: async () => [],
+    suspend: async () => ({ frozen: [], newlyFrozen: 0, errors: [] }),
+    resume: async () => 0,
+    resumeAll: async () => 0,
+    terminate: async () => 0,
+    fetchUsage: async () => ({ windows: [], fetchedAt: 0 }),
+    wake: async () => ({ ok: true }),
   },
   alwaysAwake: {
     getState: async () => ({
@@ -213,6 +226,12 @@ const defaults: Api = {
     readImage: async () => null,
     saveImageTemp: async () => "C:/temp/omniterm-paste-mock.png",
   },
+  attachments: {
+    save: async () => null,
+    importClipboardFiles: async () => [],
+    list: async () => ({ dir: "C:/data/attachments", files: [] }),
+    clear: async () => ({ removed: 0, bytes: 0, failed: 0 }),
+  },
   sftp: {
     home: async () => "/home",
     list: async () => [],
@@ -235,6 +254,7 @@ const defaults: Api = {
   },
   files: {
     exportJson: async () => false,
+    exportText: async () => false,
     importJson: async () => null,
     importFile: async () => null,
     getHomeDir: async () => "",
