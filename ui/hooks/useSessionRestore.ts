@@ -76,7 +76,7 @@ function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): stri
     stored?.profileName
       ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-') || stored.profileName.startsWith('opencode-') || stored.profileName.startsWith('agy-')
         ? stored.profileName
-        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy'
+        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy' && !(stored.agent === 'agy' && stored.profileName === 'gemini')
           ? `${stored.agent}-${stored.profileName}`
           : undefined
       : undefined

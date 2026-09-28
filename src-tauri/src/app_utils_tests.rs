@@ -110,6 +110,7 @@ fn clear_log_is_vacuously_true_when_logging_is_disabled() {
 
 #[test]
 fn reveal_log_errors_when_logging_is_disabled() {
+    let _guard = crate::test_support::lock();
     #[cfg(not(debug_assertions))]
     {
         let app = crate::test_support::mock_app();

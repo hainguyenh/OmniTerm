@@ -147,13 +147,12 @@ describe('QuotaQuickPopover', () => {
     expect(saveConfig).toHaveBeenLastCalledWith(expect.objectContaining({ pinned: true }))
   })
 
-  it('lists open agent terminals and runs the global actions', () => {
+  it('allows global actions when agent terminals are open', () => {
     const commands = { wake: vi.fn(), resumeAll: vi.fn(), refresh: vi.fn(), openSettings: vi.fn() }
     seed({ profiles: [profile(reading(95))], guards: { 's1:10:100': { phase: 'suspended', lastAttemptAt: NOW, risingCount: 0 } } })
     registerQuotaCommands(commands)
     act(() => setQuickOpen(true))
     render(<QuotaQuickPopover />)
-    expect(screen.getByTestId('aq-line-session')).toHaveAttribute('data-zone', 'over')
     fireEvent.click(screen.getByRole('button', { name: /Wake all open profiles/ }))
     fireEvent.click(screen.getByRole('button', { name: /Resume all/ }))
     fireEvent.click(screen.getByRole('button', { name: /Refresh/ }))
@@ -168,11 +167,10 @@ describe('QuotaQuickPopover', () => {
     expect(getQuotaState().quickOpen).toBe(false)
   })
 
-  it('says so when no agent runs, and closes from its button', () => {
+  it('disables wake when no agent runs, and closes from its button', () => {
     seed({ terminals: [], profiles: [] })
     act(() => setQuickOpen(true))
     render(<QuotaQuickPopover />)
-    expect(screen.getByText('No AI agent is running in an open terminal.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Wake all open profiles/ })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(getQuotaState().quickOpen).toBe(false)

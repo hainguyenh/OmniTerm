@@ -81,6 +81,9 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, undefined, 'work')).toBe(`claude-work --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, undefined, 'claude-th')).toBe(`claude-th --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Claude Code', VALID_UUID, undefined, 'claude')).toBe(`claude --resume ${VALID_UUID}`)
+    expect(formatAgentResumeCommand('Antigravity CLI', undefined, undefined, 'gemini')).toBe('agy --continue')
+    expect(formatAgentResumeCommand('Antigravity CLI', 'latest', undefined, 'gemini')).toBe('agy --continue')
+    expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, undefined, 'gemini')).toBe(`agy --conversation ${VALID_UUID}`)
   })
 
   it('formats agent profile commands to reopen sessions with the correct profile', () => {
@@ -90,6 +93,7 @@ describe('agentRegistry', () => {
     expect(formatAgentProfileCommand('Claude Code', undefined, 'claude')).toBe('claude')
     expect(formatAgentProfileCommand('Claude Code')).toBe('claude')
     expect(formatAgentProfileCommand('Codex', undefined, 'team')).toBe('codex-team')
+    expect(formatAgentProfileCommand('Antigravity CLI', undefined, 'gemini')).toBe('agy')
   })
 
   it('rejects a launcher that is not shaped like a real profile launcher', () => {

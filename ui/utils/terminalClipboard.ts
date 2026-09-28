@@ -1,6 +1,7 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
 import { formatAttachmentPaths, installAttachmentDrop, saveAttachmentFiles, type SavedAttachment } from './attachmentInput'
+import { handleLargeTextPaste, LARGE_TEXT_PROMPT_THRESHOLD } from './largeTextPaste'
 import { formatPowerShellScriptForPaste } from './paste'
 import { markPastedScript, type PastedScriptMarkup } from './pastedScriptDecoration'
 
@@ -25,6 +26,7 @@ export const createNativePasteGate = ({
   canInsertImagePaths = () => true,
   onImageSaved,
   onFilesSaved,
+  sessionId,
 }: {
   term: Terminal
   noteLocalEcho: () => void
@@ -35,6 +37,7 @@ export const createNativePasteGate = ({
   onImageSaved?: (saved: SavedPastedImage) => void
   /** Receives the stored copies of non-image files on the clipboard, for the pane's attachment list. */
   onFilesSaved?: (saved: SavedAttachment[]) => void
+  sessionId?: string
 }): ((event: ClipboardEvent) => void) => {
   return (event: ClipboardEvent) => {
     const cancelNativePaste = () => {
@@ -76,6 +79,16 @@ export const createNativePasteGate = ({
     const text = event.clipboardData?.getData('text/plain') ?? ''
     cancelNativePaste()
     if (text) {
+      if (canInsertImagePaths() && text.length >= LARGE_TEXT_PROMPT_THRESHOLD) {
+        void handleLargeTextPaste({
+          text,
+          term,
+          sessionId,
+          noteLocalEcho,
+          onFilesSaved,
+        })
+        return
+      }
       noteLocalEcho()
       term.paste(text)
     }
@@ -198,6 +211,7 @@ export const createTerminalClipboard = (
   onImageSaved?: (saved: SavedPastedImage) => void,
   /** Receives every stored non-image file (paste or drop), for the pane's attachment list. */
   onFilesSaved?: (saved: SavedAttachment[]) => void,
+  sessionId?: string,
 ): TerminalClipboard => {
   let pasteInFlight = false
   let copyTimer = 0
@@ -255,6 +269,16 @@ export const createTerminalClipboard = (
           text = ''
         }
         if (text) {
+          if (canInsertImagePaths() && text.length >= LARGE_TEXT_PROMPT_THRESHOLD) {
+            await handleLargeTextPaste({
+              text,
+              term,
+              sessionId,
+              noteLocalEcho: () => onBeforePaste?.(),
+              onFilesSaved,
+            })
+            return
+          }
           onBeforePaste?.()
           term.paste(text)
           return

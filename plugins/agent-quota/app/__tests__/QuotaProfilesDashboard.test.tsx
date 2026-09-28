@@ -2,10 +2,12 @@
  * @vitest-environment jsdom
  */
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { QuotaSnapshot } from '../../src/types'
 
 import { QuotaProfilesDashboard } from '../QuotaProfilesDashboard'
-import { getProfileDashboard, resetProfileDashboard, setDashboardOpen } from '../profileDashboard'
+import { getProfileDashboard, resetProfileDashboard, setDashboardOpen, setDiscoveredProfiles } from '../profileDashboard'
 import { getQuotaState, resetQuotaStore } from '../quotaStore'
 
 import { NOW, profile, reading, seed, terminal } from './quotaFixtures'
@@ -206,5 +208,54 @@ describe('QuotaProfilesDashboard', () => {
     act(() => setDashboardOpen(true))
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(getProfileDashboard().open).toBe(true)
+  })
+
+  it('renders a Fetch button for inactive profiles and fetches on demand', async () => {
+    const readingNow: QuotaSnapshot = {
+      windows: [
+        { kind: 'session', label: 'Current session', usedPct: 15, resetsAt: Date.now() + 3_600_000 },
+        { kind: 'weekly', label: 'Current week', usedPct: 25, resetsAt: Date.now() + 3 * 86_400_000 },
+      ],
+      fetchedAt: Date.now(),
+      source: 'cli',
+    }
+    const fetchUsage = vi.fn().mockResolvedValue(readingNow)
+    const listProfiles = vi.fn().mockResolvedValue([
+      { agent: 'claude', profileName: 'claude-alt', profileDir: null, launcher: 'claude-alt' },
+    ])
+    const mockApi = {
+      info: vi.fn(),
+      detect: vi.fn(),
+      suspend: vi.fn(),
+      resume: vi.fn(),
+      resumeAll: vi.fn(),
+      terminate: vi.fn(),
+      fetchUsage,
+      listProfiles,
+      wake: vi.fn(),
+    }
+    act(() => {
+      resetQuotaStore()
+      setDiscoveredProfiles([{ agent: 'claude', profileName: 'claude-alt', profileDir: null, launcher: 'claude-alt' }])
+    })
+
+    await act(async () => {
+      render(<QuotaProfilesDashboard api={mockApi} />)
+    })
+
+    const row = screen.getByRole('listitem', { name: 'claude-alt profile' })
+    expect(row).toBeInTheDocument()
+    expect(within(row).getByText(/inactive/)).toBeInTheDocument()
+
+    const fetchBtn = screen.getByRole('button', { name: 'Fetch quota for claude-alt' })
+    expect(fetchBtn).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(fetchBtn)
+    })
+
+    expect(fetchUsage).toHaveBeenCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-alt' })
+    expect(screen.getByLabelText('5h 15% used')).toBeInTheDocument()
+    expect(screen.getByLabelText('Week 25% used')).toBeInTheDocument()
   })
 })

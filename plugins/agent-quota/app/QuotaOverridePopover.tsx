@@ -1,5 +1,6 @@
 import { AlarmClock, Check, Globe, Play, RotateCcw, SlidersHorizontal, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import type { WindowKind } from '../src/types'
 import type { AgentOverride, WakeMode } from './quotaConfig'
@@ -24,7 +25,13 @@ const FIELD = 'bg-theme-bg border border-theme-border rounded-lg text-xs text-th
  * This terminal's own limits. Changes create a sparse, in-memory override tied to the running
  * agent process; it is never written to settings and disappears when the agent exits.
  */
-export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) {
+export function QuotaOverridePopover({
+  terminal,
+  anchorRef,
+}: {
+  terminal: TerminalAgent
+  anchorRef?: React.RefObject<HTMLElement | null>
+}) {
   const global = useQuota((state) => state.config.agents[terminal.agent])
   const committed = useQuota((state) => state.overrides[terminal.instanceKey])
   const guard = useQuota((state) => state.guards[terminal.instanceKey])
@@ -34,12 +41,45 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
   // dragging a slider can't misfire a suspend/resume decision on a half-typed prompt.
   const [draft, setDraft] = useState<AgentOverride | undefined>(committed)
   const [applied, setApplied] = useState(false)
+  const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number; maxHeight?: string } | null>(null)
   const appliedTimerRef = useRef<number | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => () => { if (appliedTimerRef.current !== null) window.clearTimeout(appliedTimerRef.current) }, [])
   useEffect(() => {
+    const updatePosition = () => {
+      if (!anchorRef?.current) return
+      const rect = anchorRef.current.getBoundingClientRect()
+      const popoverWidth = 288
+      const right = Math.max(8, Math.min(window.innerWidth - rect.right, window.innerWidth - popoverWidth - 8))
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      if (spaceBelow < 280 && spaceAbove > spaceBelow) {
+        setPosition({
+          bottom: Math.max(8, window.innerHeight - rect.top + 4),
+          right,
+          maxHeight: `${Math.max(160, spaceAbove - 16)}px`,
+        })
+      } else {
+        setPosition({
+          top: Math.max(8, rect.bottom + 4),
+          right,
+          maxHeight: `${Math.max(160, spaceBelow - 16)}px`,
+        })
+      }
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [anchorRef])
+  useEffect(() => {
     const closeOnOutside = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setEditing(null)
+      const target = event.target as Node
+      if (anchorRef?.current?.contains(target)) return
+      if (!rootRef.current?.contains(target)) setEditing(null)
     }
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setEditing(null)
@@ -50,7 +90,7 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
       document.removeEventListener('mousedown', closeOnOutside)
       document.removeEventListener('keydown', closeOnEscape)
     }
-  }, [])
+  }, [anchorRef])
 
   const config = effectiveConfig(global, draft)
   const committedConfig = effectiveConfig(global, committed)
@@ -81,12 +121,13 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
   const handleReset = () => setDraft(committed)
   const handleCancel = () => { setDraft(committed); setEditing(null) }
 
-  return (
+  const content = (
     <div
       ref={rootRef}
       role="dialog"
       aria-label="Quota limits for this terminal"
-      className="absolute right-2 top-full mt-1 z-30 w-72 p-3 rounded-xl border border-theme-border bg-theme-popup shadow-2xl text-xs text-theme-fg flex flex-col gap-2.5"
+      className="fixed z-50 w-72 p-3 rounded-xl border border-theme-border bg-theme-popup shadow-2xl text-xs text-theme-fg flex flex-col gap-2.5 overflow-y-auto custom-scrollbar"
+      style={position ?? { top: 40, right: 8 }}
     >
       <div className="flex items-center gap-2">
         {pruned ? <SlidersHorizontal className="w-3.5 h-3.5 aq-override" /> : <Globe className="w-3.5 h-3.5 text-theme-dim" />}
@@ -269,4 +310,9 @@ export function QuotaOverridePopover({ terminal }: { terminal: TerminalAgent }) 
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(content, document.body)
+  }
+  return content
 }

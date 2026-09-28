@@ -1,4 +1,5 @@
 import { AlarmClock, ShieldOff, SlidersHorizontal, Snowflake } from 'lucide-react'
+import { useRef } from 'react'
 
 import type { WindowKind } from '../src/types'
 
@@ -24,6 +25,8 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
   const override = useQuota((state) => (terminal ? state.overrides[terminal.instanceKey] : undefined))
   const guard = useQuota((state) => (terminal ? state.guards[terminal.instanceKey] : undefined))
   const editing = useQuota((state) => state.editing === sessionId)
+  const pausedBtnRef = useRef<HTMLButtonElement | null>(null)
+  const activeBtnRef = useRef<HTMLButtonElement | null>(null)
   const rawWindows = profile?.lastGood?.windows ?? []
   // Second-level precision only once something this strip shows is about to reset; otherwise this
   // pane re-renders on a 30s cadence instead of every tick of the shared clock.
@@ -54,11 +57,11 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
           <span className="aq-monitor-off-icon" aria-hidden="true"><ShieldOff /></span>
           <span className="flex-1 min-w-0 truncate">Monitoring paused for this terminal</span>
           <button type="button" className="aq-monitor-enable" onClick={enableMonitoring}>Enable monitoring</button>
-          <button type="button" className="aq-icon-button" aria-label="Quota settings for this terminal" onClick={() => setEditing(sessionId)}>
+          <button ref={pausedBtnRef} type="button" className="aq-icon-button" aria-label="Quota settings for this terminal" onClick={() => setEditing(editing ? null : sessionId)}>
             <SlidersHorizontal className="w-3 h-3" />
           </button>
         </div>
-        {editing && <QuotaOverridePopover terminal={terminal} />}
+        {editing && <QuotaOverridePopover terminal={terminal} anchorRef={pausedBtnRef} />}
       </div>
     )
   }
@@ -90,7 +93,7 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
       </div>
       <div className={`aq-lines ${stale ? 'aq-stale' : ''}`} title={stale ? profile?.snapshot?.message : undefined}>
         {windows.length === 0 && (
-          <span className="aq-lines-message">{profile?.snapshot?.error ? profile.snapshot.message ?? 'Quota unavailable' : 'Reading quota…'}</span>
+          <span className="aq-lines-message">{profile?.snapshot?.error ? profile.snapshot.message ?? 'Quota unavailable' : rawWindows.length > 0 ? 'Quota within limits' : 'Reading quota…'}</span>
         )}
         {windows.map((window) => (
           <QuotaLine
@@ -122,6 +125,7 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
           </button>
         )}
         <button
+          ref={activeBtnRef}
           type="button"
           className="aq-icon-button"
           aria-label="Quota limits for this terminal"
@@ -131,7 +135,7 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
           <SlidersHorizontal className="w-3 h-3" />
         </button>
       </div>
-      {editing && <QuotaOverridePopover terminal={terminal} />}
+      {editing && <QuotaOverridePopover terminal={terminal} anchorRef={activeBtnRef} />}
     </div>
   )
 }
