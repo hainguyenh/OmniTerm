@@ -136,6 +136,17 @@ mod posix {
     }
 
     #[test]
+    fn default_returns_err_when_no_candidate_is_executable() {
+        let _guard = crate::test_support::lock();
+        let previous = std::env::var_os("SHELL");
+        std::env::remove_var("SHELL");
+        assert!(resolve_posix_shell(LocalShell::Default, |_| false).is_err());
+        if let Some(val) = previous {
+            std::env::set_var("SHELL", val);
+        }
+    }
+
+    #[test]
     fn default_honors_an_executable_shell_env_var() {
         let _guard = crate::test_support::lock();
         let previous = std::env::var_os("SHELL");
@@ -284,7 +295,10 @@ fn default_name_returns_expected_string_for_all_variants() {
     assert_eq!(LocalShell::Cmd.default_name(), "Command Prompt");
     assert_eq!(LocalShell::Wsl.default_name(), "WSL");
     // Non-Windows-specific shells delegate to label()
-    assert_eq!(LocalShell::Default.default_name(), LocalShell::Default.label());
+    assert_eq!(
+        LocalShell::Default.default_name(),
+        LocalShell::Default.label()
+    );
     assert_eq!(LocalShell::Zsh.default_name(), LocalShell::Zsh.label());
     assert_eq!(LocalShell::Bash.default_name(), LocalShell::Bash.label());
     assert_eq!(LocalShell::Sh.default_name(), LocalShell::Sh.label());
@@ -309,9 +323,13 @@ fn executable_and_path_probes_cover_positive_empty_and_missing_environment_cases
     std::fs::write(&ordinary, b"not executable").unwrap();
     assert!(!is_executable(&ordinary));
     assert!(!is_executable(&dir.path().join("missing")));
+    assert!(!is_executable(dir.path()));
 
     let previous = std::env::var_os("PATH");
-    std::env::set_var("PATH", std::env::join_paths([Path::new(""), dir.path()]).unwrap());
+    std::env::set_var(
+        "PATH",
+        std::env::join_paths([Path::new(""), dir.path()]).unwrap(),
+    );
     assert!(is_on_path("omniterm-probe"));
     std::env::remove_var("PATH");
     assert!(!is_on_path("omniterm-probe"));
@@ -340,4 +358,3 @@ fn is_on_path_handles_empty_segments_and_missing_path() {
         std::env::set_var("PATH", prev);
     }
 }
-

@@ -1,5 +1,5 @@
-import React, { useState } from 'react'
-import { Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
+import React, { useEffect, useState } from 'react'
+import { Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
 import type { ConnectionProviderCapabilities, Workspace } from '@omniterm/contract'
 import type { UseDialogReturn } from '../hooks/useDialog'
 import GeneralSettings from './GeneralSettings'
@@ -11,9 +11,13 @@ import { KeycapCombo } from './Keycap'
 import { appLogo } from '../assets/appLogo'
 import { diag } from '../diag'
 import { DEFAULT_SHORTCUTS, shortcutLabels } from './mainLayoutShared'
+import { SHORTCUT_DESCRIPTIONS } from '../shortcutHelp'
 import type { ShellOption } from '../shellOptions'
+import AgentQuotaSettings from '../../plugins/agent-quota/app/AgentQuotaSettings'
+import { SETTINGS_TAB_EVENT } from '../../plugins/agent-quota/app/AgentQuotaRoot'
+import { useQuota } from '../../plugins/agent-quota/app/quotaStore'
 
-export type SettingsTabId = 'general' | 'shortcuts' | 'plugins' | 'artwork' | 'about'
+export type SettingsTabId = 'general' | 'shortcuts' | 'plugins' | 'quota' | 'artwork' | 'about'
 
 export interface SettingsModalProps {
   isOpen: boolean
@@ -51,6 +55,7 @@ const TABS: Array<{ id: SettingsTabId; label: string; icon: React.ComponentType<
   { id: 'general', label: 'General', icon: Sliders },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
   { id: 'plugins', label: 'Plugins', icon: Package },
+  { id: 'quota', label: 'Agent Quota', icon: Gauge },
   { id: 'artwork', label: 'Artwork', icon: Palette },
   { id: 'about', label: 'About & Updates', icon: Info },
 ]
@@ -86,6 +91,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   refreshCustomArt,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTabId>('general')
+  // The Agent Quota tab exists only while its plugin answers; other surfaces ask for it by event.
+  const quotaAvailable = useQuota((state) => state.available)
+  const tabs = quotaAvailable ? TABS : TABS.filter((tab) => tab.id !== 'quota')
+  useEffect(() => {
+    const onTab = (event: Event) => {
+      const tab = (event as CustomEvent<{ tab?: SettingsTabId }>).detail?.tab
+      if (tab && TABS.some((entry) => entry.id === tab)) setActiveTab(tab)
+    }
+    window.addEventListener(SETTINGS_TAB_EVENT, onTab)
+    return () => window.removeEventListener(SETTINGS_TAB_EVENT, onTab)
+  }, [])
 
   if (!isOpen) return null
 
@@ -126,7 +142,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex flex-1 min-h-0 divide-x divide-theme-border">
           {/* Navigation Sidebar */}
           <nav className="w-44 flex-shrink-0 p-2.5 flex flex-col gap-1 bg-theme-bg/20 overflow-y-auto">
-            {TABS.map((tab) => {
+            {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
               return (
@@ -188,9 +204,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     const isRecording = recordingAction === key
 
                     return (
-                      <div key={key} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20">
-                        <span className="text-xs text-theme-fg font-medium">{label}</span>
-                        <div className="flex items-center gap-2">
+                      <div key={key} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20">
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <span className="text-xs text-theme-fg font-medium">{label}</span>
+                          {SHORTCUT_DESCRIPTIONS[key] && (
+                            <span className="text-[10.5px] leading-snug text-theme-dim" data-testid={`shortcut-description-${key}`}>
+                              {SHORTCUT_DESCRIPTIONS[key]}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           {!isRecording && currentBinding !== 'None' && (
                             <KeycapCombo shortcut={currentBinding} />
                           )}
@@ -232,6 +255,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
+            {activeTab === 'quota' && quotaAvailable && (
+              <AgentQuotaSettings
+                refreshCustomArt={refreshCustomArt}
+              />
+            )}
             {activeTab === 'artwork' && (
               <div className="p-2">
                 <CustomArtSettings

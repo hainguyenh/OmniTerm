@@ -1,0 +1,115 @@
+/*
+ * Busy artwork in a pane header's activity zone (HeaderBusyArt.tsx). The zone is sized by the
+ * header — it runs from the title to the header's centre — so the art fills whatever width it is
+ * given and travels across it; nothing here may change the zone's own width or height.
+ */
+.aq-busy-art {
+  --aq-art-speed: 1;
+  --aq-art-icon-size: 1.5rem;
+  --aq-art-tier-scale: 1;
+  --aq-art-travel: 7.6s;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Clip sideways only: the large size may stand a little taller than the 24px header row. */
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.aq-busy-art > img {
+  /* The drawn box: the size setting times the tier's own scale. */
+  --aq-art-box: calc(var(--aq-art-icon-size) * var(--aq-art-tier-scale));
+  position: absolute;
+  z-index: 10;
+  top: 50%;
+  left: 0;
+  width: var(--aq-art-box);
+  height: var(--aq-art-box);
+  object-fit: contain;
+  /* A larger tier stands over the terminal's first row; clicks must still reach it. */
+  pointer-events: none;
+  animation: aq-busy-art-travel calc(var(--aq-art-travel) / var(--aq-art-speed)) ease-in-out infinite;
+  will-change: left, transform;
+}
+
+/*
+ * One trip across the zone and back, per tier: the cat ambles, the horse is barely faster, the
+ * airplane is slow for a plane, and sonic is the quickest — all at a calm, readable pace.
+ */
+.aq-busy-art-slow {
+  --aq-art-travel: 28s;
+}
+
+/* The horse and the airplane are wide, short drawings that read too small at the base size. */
+.aq-busy-art-onTrack {
+  --aq-art-travel: 18s;
+  --aq-art-tier-scale: 2;
+}
+
+.aq-busy-art-fast {
+  --aq-art-travel: 12s;
+  --aq-art-tier-scale: 2;
+}
+
+.aq-busy-art-overshooting {
+  --aq-art-travel: 7.6s;
+}
+
+.aq-busy-art.aq-art-size-compact {
+  --aq-art-icon-size: 1.25rem;
+}
+
+.aq-busy-art.aq-art-size-normal {
+  --aq-art-icon-size: 1.5rem;
+}
+
+.aq-busy-art.aq-art-size-large {
+  --aq-art-icon-size: 1.75rem;
+}
+
+.aq-busy-art.aq-art-speed-slow {
+  --aq-art-speed: 0.65;
+}
+
+.aq-busy-art.aq-art-speed-fast {
+  --aq-art-speed: 1.6;
+}
+
+/* `left` is a percentage of the zone, so the path adapts to any zone width. */
+@keyframes aq-busy-art-travel {
+  0%,
+  8% {
+    left: 0;
+    transform: translateY(-50%) scaleX(1);
+  }
+
+  45%,
+  50% {
+    left: calc(100% - var(--aq-art-box));
+    transform: translateY(-50%) scaleX(1);
+  }
+
+  50.1% {
+    left: calc(100% - var(--aq-art-box));
+    transform: translateY(-50%) scaleX(-1);
+  }
+
+  92% {
+    left: 0;
+    transform: translateY(-50%) scaleX(-1);
+  }
+
+  92.1%,
+  100% {
+    left: 0;
+    transform: translateY(-50%) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aq-busy-art > img {
+    animation: none;
+    transform: translateY(-50%);
+  }
+}

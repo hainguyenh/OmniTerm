@@ -6,6 +6,7 @@ import { renderHook } from '@testing-library/react'
 import type { Connection } from '@omniterm/contract'
 import { useSessionRestore } from '../useSessionRestore'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
+import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
 
 const registeredConn = (over: Partial<Connection> = {}): Connection => ({
   id: 'adhoc-fresh-99',
@@ -71,6 +72,7 @@ describe('useSessionRestore', () => {
   const localDisconnect = vi.fn()
 
   beforeEach(() => {
+    clearStoredSessions()
     mockOpen.mockReset()
     mockRelease.mockReset()
     localDisconnect.mockReset().mockResolvedValue(undefined)
@@ -89,6 +91,14 @@ describe('useSessionRestore', () => {
     const s = setters()
     renderHook(() => useSessionRestore({ initialSnapshot: null, ...s }))
     renderHook(() => useSessionRestore({ initialSnapshot: { ...snapshot(), activeTabs: [] }, ...s }))
+    expect(localDisconnect).not.toHaveBeenCalled()
+    expect(mockOpen).not.toHaveBeenCalled()
+  })
+
+  it('does not recreate a pane rejected by the auto-restore policy', async () => {
+    const s = setters()
+    renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), shouldRestoreTab: () => false, ...s }))
+    await Promise.resolve()
     expect(localDisconnect).not.toHaveBeenCalled()
     expect(mockOpen).not.toHaveBeenCalled()
   })
@@ -116,6 +126,47 @@ describe('useSessionRestore', () => {
       phase: 'recovering',
       retryable: false,
     })
+  })
+
+  it('relaunches a known agent instead of leaving only a fresh shell', async () => {
+    mockOpen.mockResolvedValue(registeredConn({ name: 'Claude Code', shell: 'powershell' }))
+    const s = setters()
+    const saved = snapshot()
+    saved.activeTabs[0] = {
+      ...saved.activeTabs[0],
+      name: 'Claude Code - repo',
+    }
+
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', 'claude --continue')
+  })
+
+  it('resumes the exact interrupted agent session even when the saved title is only a shell title', async () => {
+    mockOpen.mockResolvedValue(registeredConn())
+    upsertSession({
+      id: 'claude:11111111-1111-4111-8111-111111111111',
+      tabId: 'old-tab-1',
+      agent: 'claude',
+      launcher: 'claude-th',
+      profileName: 'work',
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      cwd: 'F:/repo',
+      state: 'interrupted',
+      updatedAt: Date.now(),
+    })
+    const s = setters()
+    const saved = snapshot()
+    saved.activeTabs[0] = { ...saved.activeTabs[0], name: 'PowerShell' }
+
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+    expect(mockOpen).toHaveBeenCalledWith(
+      'powershell', null, undefined, 'F:/repo',
+      'claude-th --resume 11111111-1111-4111-8111-111111111111',
+    )
   })
 
   it('does not repeat restore when ordinary connection callbacks change', async () => {

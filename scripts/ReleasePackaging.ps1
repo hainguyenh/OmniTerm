@@ -33,6 +33,7 @@ function Get-DefaultPortablePlugins {
   @(
     @{ Name = 'always-awake'; Path = (Join-Path $RepoRoot 'plugins\always-awake') }
     @{ Name = 'blur'; Path = (Join-Path $RepoRoot 'plugins\blur') }
+    @{ Name = 'agent-quota'; Path = (Join-Path $RepoRoot 'plugins\agent-quota') }
   )
 }
 

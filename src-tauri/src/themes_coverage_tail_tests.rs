@@ -133,3 +133,25 @@ fn open_themes_folder_covers_the_primary_opener_and_missing_fallback() {
 
     std::env::set_var("PATH", original_path);
 }
+
+#[test]
+fn clear_user_themes_handles_missing_dir_and_filters_non_json_files() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let themes_dir = get_themes_dir(app.handle()).unwrap();
+    let _ = fs::remove_dir_all(&themes_dir);
+
+    assert_eq!(clear_user_themes(app.handle()).unwrap(), 0);
+
+    fs::create_dir_all(&themes_dir).unwrap();
+    fs::write(themes_dir.join("theme.json"), b"{}").unwrap();
+    fs::write(themes_dir.join("readme.txt"), b"hello").unwrap();
+    fs::write(themes_dir.join("no_extension"), b"data").unwrap();
+
+    assert_eq!(clear_user_themes(app.handle()).unwrap(), 1);
+    assert!(!themes_dir.join("theme.json").exists());
+    assert!(themes_dir.join("readme.txt").exists());
+    assert!(themes_dir.join("no_extension").exists());
+
+    let _ = fs::remove_dir_all(&themes_dir);
+}

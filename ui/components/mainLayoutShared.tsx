@@ -2,6 +2,7 @@
 import type React from 'react'
 import type { Connection, Folder, LocalShell, SessionStatus } from '@omniterm/contract'
 import type { AppTheme, LayoutMode } from '../themes'
+import type { TerminalToolbarActions } from '../terminalToolbar'
 
 export type { Connection, Folder, LocalShell, SessionStatus }
 
@@ -22,6 +23,7 @@ export interface MainLayoutProps {
   onActiveTerminalChange?: (terminal: { id: string; connId: string } | null) => void
   onFontSizeChange?: (delta: number, terminal?: { id: string; connId: string }) => void
   onThemeApply?: (themeId: string, terminal?: { id: string; connId: string }) => void
+  onToolbarActionsChange?: (actions: TerminalToolbarActions, terminal?: { id: string; connId: string }) => void
   onSettingsReload?: (tabId?: string) => void
   /** Whole-app fullscreen: the main window hides all chrome except panes and the status footer. */
   chromeHidden?: boolean
@@ -47,7 +49,9 @@ export const shortcutLabels = {
   toggleSidebar: 'Toggle Sidebar',
   commandPalette: 'Command Palette',
   closeTab: 'Close Tab',
-  toggleAppFullscreen: 'Toggle Full Screen'
+  toggleAppFullscreen: 'Toggle Full Screen',
+  agentQuota: 'Agent Quota Quick Settings',
+  pasteScript: 'Paste Multi-line PowerShell Script',
 } satisfies Record<keyof ShortcutBindings, string>
 export const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',
@@ -68,7 +72,9 @@ export const DEFAULT_SHORTCUTS = {
   toggleSidebar: 'Ctrl+B',
   commandPalette: 'Ctrl+P',
   closeTab: 'Ctrl+W',
-  toggleAppFullscreen: 'F11'
+  toggleAppFullscreen: 'F11',
+  agentQuota: 'Ctrl+Alt+Q',
+  pasteScript: 'Ctrl+Alt+V',
 } satisfies ShortcutBindings
 
 export const CtxItem: React.FC<{ label: string; icon: React.ReactNode; color: string; onClick: () => void }> =

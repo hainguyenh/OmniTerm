@@ -2,12 +2,13 @@ import React from 'react'
 import { Plus, Terminal, ChevronDown, LayoutGrid } from 'lucide-react'
 import { DefaultIdleArt } from '../assets/defaultArt'
 import { Tooltip } from './Tooltip'
+import DashboardPreviousSessions from './DashboardPreviousSessions'
+import type { StoredAgentSession } from '../utils/agentSessionStorage'
 
 /**
- * The "nothing here yet" page. Used both for the whole content area (no tabs at all) and inside every
- * empty split pane, so an idle pane looks like the app's waiting state instead of a pair of bare
- * buttons. Both actions the pane used to offer are kept: start a new terminal (with the shell picker
- * on the chevron) and adopt an already-open session.
+ * The "nothing here yet" page / Dashboard view. Used both for the whole content area (no tabs at all)
+ * and inside every empty split pane. Displays previous AI agent sessions when available for quick
+ * resumption, alongside new terminal creation.
  */
 interface WaitingPaneProps {
   dark: boolean
@@ -25,24 +26,39 @@ interface WaitingPaneProps {
   paneIndex?: number
   /** User-uploaded custom art URL. When set, this image is shown instead of the default. */
   customArtUrl?: string | null
+  /** Resume a stored or interrupted AI agent session, with its already-validated resume command. */
+  onResumeSession?: (session: StoredAgentSession, resumeCommand: string) => void
 }
 
 const WaitingPane: React.FC<WaitingPaneProps> = ({
-  dark, compact = false, onNewSession, newSessionTitle, onPickShell, onChooseSession, openSessionCount = 0, customArtUrl,
+  dark,
+  compact = false,
+  onNewSession,
+  newSessionTitle,
+  onPickShell,
+  onChooseSession,
+  openSessionCount = 0,
+  customArtUrl,
+  onResumeSession,
 }) => (
   <div className="h-full w-full overflow-auto text-[var(--theme-dim)] select-none">
     <div className={`min-h-full w-full flex flex-col items-center justify-center ${
       compact ? 'p-3' : 'p-4'
     }`}>
-      <div className={`w-full max-w-[32rem] flex flex-col items-center ${
-        compact ? 'gap-2' : 'gap-5'
+      <div className={`w-full max-w-[36rem] flex flex-col items-center ${
+        compact ? 'gap-2' : 'gap-4'
       }`}>
+        {/* Previous sessions dashboard cards (when available) */}
+        {!compact && onResumeSession && (
+          <DashboardPreviousSessions onResume={onResumeSession} />
+        )}
+
         {/* Art follows both pane dimensions so narrow and shallow split panes stay usable. */}
         <div
           className="relative flex-shrink-0 max-w-full max-h-full flex items-center justify-center pointer-events-none"
           style={{
-            width: compact ? 'min(44%, 10rem)' : 'min(62%, 22rem)',
-            height: compact ? 'min(34%, 10rem)' : 'min(48%, 22rem)',
+            width: compact ? 'min(44%, 8rem)' : 'min(50%, 14rem)',
+            height: compact ? 'min(34%, 8rem)' : 'min(38%, 14rem)',
           }}
         >
           {customArtUrl ? (

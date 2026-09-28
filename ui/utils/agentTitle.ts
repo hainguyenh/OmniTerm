@@ -83,6 +83,18 @@ const AGENTS: ReadonlyArray<{ displayName: string; aliases: string[] }> = [
   { displayName: 'Gemini CLI', aliases: ['gemini cli', 'gemini'] },
 ]
 
+/** True when `text` opens with a known agent's name, e.g. "Claude Code - app" or "codex". */
+export function startsWithAgentName(text: string): boolean {
+  const lower = text.trim().toLowerCase()
+  return AGENTS.some(agent => agent.aliases.some(alias =>
+    lower.startsWith(alias) && !/[a-z0-9]/.test(lower.charAt(alias.length))))
+}
+
+/** True when `text` is only a shell executable name, e.g. "pwsh" or "cmd.exe". */
+export function isShellBinaryName(text: string): boolean {
+  return SHELL_BINARIES.has(text.trim().toLowerCase())
+}
+
 /**
  * Attempt to extract the last meaningful folder/directory segment from a path or title string.
  *
@@ -212,9 +224,12 @@ export function formatTerminalTitle(
   fallbackCwd?: string,
 ): FormattedTerminalTitle {
   const title = rawTitle?.trim() || ''
-  const fallbackFolder = extractFolder(fallbackCwd) || extractFolder(fallbackName)
+  const fallbackFolder = extractFolder(fallbackCwd) || parseAgentTitle(fallbackName)?.folderName || extractFolder(fallbackName)
 
-  const agentCtx = parseAgentTitle(title) || parseAgentTitle(fallbackName)
+  // A fresh non-agent OSC title is authoritative. Falling back to the connection name in that
+  // case keeps a stale "Claude Code" label after `/exit` returns to pwsh.
+  const isShellTitle = SHELL_BINARIES.has(title.toLowerCase())
+  const agentCtx = isShellTitle ? null : parseAgentTitle(title) || (!title ? parseAgentTitle(fallbackName) : null)
   if (agentCtx) {
     const folder = agentCtx.folderName || fallbackFolder || 'workspace'
     const agentPart = `${agentCtx.agentName} - ${folder}`

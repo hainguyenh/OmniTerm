@@ -2,8 +2,11 @@ import React, { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
-import { resolveShortcuts, matchesChromeShortcut } from '../utils/shortcuts'
-import { clipboardActionFor } from '../utils/paste'
+import { resolveShortcuts, matchesChromeShortcut, FALLBACK_SHORTCUTS } from '../utils/shortcuts'
+import { canPasteAsPowerShellScript, clipboardActionFor } from '../utils/paste'
+import { interceptPaneInput } from '../utils/paneInputHold'
+import { registerPaneScreen } from '../utils/paneScreens'
+import { matchShortcut } from '../utils/keyboard'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { enterSequenceFor, DEFAULT_ENTER_MODES } from '../utils/enterKeys'
@@ -13,7 +16,7 @@ import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
 import { createTerminalOptions, DEFAULT_MONO_STACK, resolveTerminalFontFamily } from '../utils/terminalOptions'
 import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
-import { releasePastedImage, setLastPastedImage } from '../utils/pastedImageStore'
+import { recordPastedImage, recordSavedAttachments, releaseSessionMedia } from '../utils/sessionAttachmentStore'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
 import '@xterm/xterm/css/xterm.css'
@@ -22,7 +25,7 @@ import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
-import { createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
+import { createLastOutputTracker, registerTerminalCopyHandler, registerTerminalSaveExport, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
@@ -63,31 +66,24 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // The OSC-title-detected agent currently running in this pane (see utils/agentTitle.ts).
   // Decides the image-paste strategy per agent — read at paste time so a title change (agent
   // launched inside an existing shell) applies without a remount.
-  const agentNameRef = useRef<string | null>(null)
+  const agentNameRef = useRef<string | null>(parseAgentTitle(connection.name)?.agentName ?? parseAgentTitle(connection.shell)?.agentName ?? null)
   const canInsertImagePaths = () => imagePasteModeFor(agentNameRef.current) === 'insert-path'
 
   // Stable refs so callbacks don't re-trigger the main effect.
   const onStatusRef = useRef(onStatus)
   onStatusRef.current = onStatus
-
   const onRestartRef = useRef(onRestart)
   onRestartRef.current = onRestart
-
   const onMetricsRef = useRef(onMetrics)
   onMetricsRef.current = onMetrics
-
   const onActivityRef = useRef(onActivity)
   onActivityRef.current = onActivity
-
   const onTitleChangeRef = useRef(onTitleChange)
   onTitleChangeRef.current = onTitleChange
-
   const onCwdChangeRef = useRef(onCwdChange)
   onCwdChangeRef.current = onCwdChange
-
   const onExitRef = useRef(onExit)
   onExitRef.current = onExit
-
   const onFontSizeChangeRef = useRef(onFontSizeChange)
   onFontSizeChangeRef.current = onFontSizeChange
 
@@ -160,7 +156,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
           onTitleChangeRef.current?.(title)
         })
       : { dispose: () => {} }
-    const cwdDisposables = registerCwdReporting(term, onCwdChangeRef.current)
+    const paneDisposables = [...registerCwdReporting(term, (cwd) => onCwdChangeRef.current?.(cwd)), registerPaneScreen(id, term)]
     const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
@@ -231,7 +227,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
-      if (!imeInput.shouldForwardData(data)) return
+      if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       copyTracker.noteInput(data)
       api.input(data)
     })
@@ -244,7 +240,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
     let noteLocalEcho = () => {}
-    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths, (saved) => setLastPastedImage(id, saved))
+    const clipboard = createTerminalClipboard(term, () => noteLocalEcho(), canInsertImagePaths, (saved) => recordPastedImage(id, saved), (files) => recordSavedAttachments(id, files))
     // Powers the pane-header copy menu's "last output" slice; fed from term.onData below.
     // The wrapper (not `.active`) is handed over so every read resolves the current buffer —
     // xterm's active view can be swapped underneath by resets/replays. The live marker keeps
@@ -268,7 +264,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       noteLocalEcho: () => noteLocalEcho(),
       isSuppressed: () => performance.now() <= suppressNativePasteUntil,
       canInsertImagePaths,
-      onImageSaved: (saved) => setLastPastedImage(id, saved),
+      onImageSaved: (saved) => recordPastedImage(id, saved),
+      onFilesSaved: (files) => recordSavedAttachments(id, files),
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
@@ -279,6 +276,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const onAltClickMove = createAltClickMoveHandler(term, api)
     termEl.addEventListener('mousedown', onAltClickMove)
     termEl.addEventListener('paste', onNativePaste, true)
+    clipboard.installDrop(termEl) // files dropped on an agent pane become attachments (attachmentInput.ts)
     const onMouseUp = () => { window.setTimeout(() => { if (term.hasSelection?.()) void clipboard.copySelection() }, 0) }
     termEl.addEventListener('mouseup', onMouseUp)
 
@@ -303,6 +301,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
           : viewportText(term.buffer, term.rows),
       write: (text) => void writeClipboardText(text),
     })
+    const disposeSaveRequests = registerTerminalSaveExport({ sessionId: id, isCurrent: () => termRef.current === term, buffer: term.buffer })
 
     // WebView zoom and late-loading fonts both invalidate xterm's cached character metrics with
     // no DOM resize event — see utils/terminalFontRemeasure.ts.
@@ -332,15 +331,17 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
       // Claimed FIRST so no user binding can shadow it, always with preventDefault() — otherwise
       // Chromium's native paste fires on top of ours and the PTY gets the clipboard twice (paste.ts).
-      // Alt+V belongs to the running agent when it binds its own clipboard reader (Antigravity
-      // CLI): forward the raw keystroke instead of claiming it for path insertion. Read at
-      // keydown time, so an agent launched mid-session flips the behavior immediately.
-      const clip = clipboardActionFor(e, isMac, imagePasteModeFor(agentNameRef.current) === 'forward')
+      const scriptShortcut = shortcutsRef.current?.pasteScript ?? FALLBACK_SHORTCUTS.pasteScript
+      const isScript = matchShortcut(e, scriptShortcut)
+      const clip = clipboardActionFor(e, isMac, imagePasteModeFor(agentNameRef.current) === 'forward', isScript)
       if (clip) {
         e.preventDefault()
         e.stopPropagation()
-        if (clip === 'paste') void clipboard.paste()
-        else void clipboard.copySelection()
+        if (clip === 'paste-script') void clipboard.pasteScript(canPasteAsPowerShellScript({ platform: window.omnitermAPI.app.platform, connectionType: connection.type, shell: connection.shell, agentName: agentNameRef.current }))
+        else if (clip === 'paste') {
+          if (e.altKey) void clipboard.pasteImage()
+          else void clipboard.paste()
+        } else void clipboard.copySelection()
         return false
       }
 
@@ -400,7 +401,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
-      for (const disposable of cwdDisposables) disposable.dispose()
+      for (const disposable of paneDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
       termEl.removeEventListener('mousedown', onLinkClick)
       termEl.removeEventListener('mousedown', onAltClickMove)
@@ -411,9 +412,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       window.removeEventListener('omniterm:focus-terminal', onFocusEvent)
       interruptReset.dispose()
       disposeCopyRequests()
+      disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
-      releasePastedImage(id)
+      releaseSessionMedia(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
       termRef.current = null
@@ -461,7 +463,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     return () => { if (settleFrame) cancelAnimationFrame(settleFrame) }
   }, [active, layoutEpoch])
-
   return (
     <div
       className="terminal-pane relative h-full w-full"
@@ -496,5 +497,4 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     </div>
   )
 }
-
 export default TerminalView

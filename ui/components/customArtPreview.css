@@ -1,0 +1,98 @@
+/*
+ * Art previews intentionally do not consume the application's theme variables. The mode label and
+ * fixed canvas let users compare Light and Dark assets even while the settings window uses one
+ * system theme.
+ */
+.art-preview-panel {
+  position: relative;
+  display: flex;
+  min-height: 5rem;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 1.5rem 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--art-preview-border);
+  background-color: var(--art-preview-bg) !important;
+  color: var(--art-preview-fg) !important;
+}
+
+.art-preview-panel[data-art-mode='light'] {
+  --art-preview-bg: #ffffff;
+  --art-preview-fg: #0f172a;
+  --art-preview-border: #e2e8f0;
+  --art-preview-badge-bg: #f1f5f9;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.art-preview-panel[data-art-mode='dark'] {
+  --art-preview-bg: #12131a;
+  --art-preview-fg: #e2e8f0;
+  --art-preview-border: #2e3240;
+  --art-preview-badge-bg: #1a1c26;
+  background-color: #12131a !important;
+  color: #e2e8f0 !important;
+}
+
+.art-preview-panel__mode,
+.art-preview-panel__source,
+.art-preview-panel__status {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid var(--art-preview-border);
+  border-radius: 999px;
+  background: var(--art-preview-badge-bg);
+  color: var(--art-preview-fg);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.art-preview-panel__mode {
+  top: 0.4rem;
+  left: 0.5rem;
+  padding: 0.15rem 0.4rem;
+}
+
+.art-preview-panel__source {
+  right: 0.5rem;
+  bottom: 0.4rem;
+  padding: 0.15rem 0.4rem;
+  opacity: 0.8;
+}
+
+.art-preview-panel__status {
+  top: 0.4rem;
+  right: 0.5rem;
+  padding: 0.15rem 0.4rem;
+  opacity: 0.9;
+}
+
+.art-preview-panel__status[data-art-state='pending'] {
+  border-color: #818cf8;
+  background: #312e81;
+  color: #e0e7ff;
+}
+
+.art-preview-panel__status[data-art-state='custom'] {
+  border-color: #34d399;
+  background: #064e3b;
+  color: #d1fae5;
+}
+
+.art-preview-panel__canvas {
+  display: flex;
+  width: 100%;
+  height: 3.25rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.art-preview-panel__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}

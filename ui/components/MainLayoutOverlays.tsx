@@ -1,21 +1,32 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useMemo } from 'react'
 import { ArrowLeft, ArrowRight, Trash2, X, XCircle } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { CommandPalette } from './CommandPalette'
 import DialogHost from './DialogHost'
 import NewTerminalMenu from './NewTerminalMenu'
 import SettingsModal from './SettingsModal'
+import RenewSessionModal from './RenewSessionModal'
 // Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
 // parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
 const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
+import { AgentQuotaRoot } from '../../plugins/agent-quota/app/AgentQuotaRoot'
 import { CtxItem } from './mainLayoutShared'
 import { pickShell } from '../shellOptions'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen } = model
+  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, activity = {} } = model
+  const sessionIds = useMemo(() => activeTabs.map((tab) => tab.id), [activeTabs])
   return (
     <>
+          <AgentQuotaRoot
+            api={window.omnitermAPI.agentQuota}
+            appSettings={appSettings}
+            setAppSettings={setAppSettings}
+            sessionIds={sessionIds}
+            busy={activity}
+            openSettings={() => setAboutOpen(true)}
+          />
           {alwaysAwakeOpen && (
             <Suspense fallback={null}>
               <AlwaysAwakeModal
@@ -127,6 +138,15 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
                 closeTabs(pendingCloseTabIds, true)
                 setPendingCloseTabIds(null)
               }}
+            />
+          )}
+
+          {model.renewModalOpen && (
+            <RenewSessionModal
+              strategy={model.appSettings.agentRenewStrategy ?? 'reopen'}
+              sessionName={model.pendingRenewSessionName}
+              onConfirm={model.confirmRenew}
+              onCancel={model.cancelRenew}
             />
           )}
     

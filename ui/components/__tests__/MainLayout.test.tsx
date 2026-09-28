@@ -34,6 +34,8 @@ const baseSettings: AppSettings = {
     commandPalette: "CommandOrControl+P",
     closeTab: "Ctrl+W",
     toggleAppFullscreen: "F11",
+    agentQuota: "Ctrl+Alt+Q",
+    pasteScript: "Ctrl+Alt+V",
   },
 };
 

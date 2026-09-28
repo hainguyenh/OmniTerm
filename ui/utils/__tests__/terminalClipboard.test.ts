@@ -332,4 +332,41 @@ describe('terminal clipboard', () => {
     expect(onBeforePaste).toHaveBeenCalled()
     clipboard.dispose()
   })
+
+  it('pasteImage prioritizes image even when clipboard contains text', async () => {
+    const pngItem = {
+      types: ['image/png'],
+      getType: async () => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }),
+    }
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { read: async () => [pngItem] },
+    })
+    const saveImageTemp = vi.fn().mockResolvedValue('C:/temp/omniterm-paste-img.png')
+    const onBeforePaste = vi.fn()
+    const onImageSaved = vi.fn()
+    const term = {
+      onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      paste: vi.fn(),
+    } as unknown as Terminal
+    window.omnitermAPI = {
+      ...window.omnitermAPI,
+      clipboard: {
+        writeText: vi.fn(),
+        readText: async () => 'some text',
+        readImage: async () => null,
+        saveImageTemp,
+      },
+    }
+
+    const clipboard = createTerminalClipboard(term, onBeforePaste, () => true, onImageSaved)
+    await clipboard.pasteImage()
+
+    expect(saveImageTemp).toHaveBeenCalledOnce()
+    expect(onImageSaved).toHaveBeenCalledWith({ bytes: expect.any(Uint8Array), path: 'C:/temp/omniterm-paste-img.png' })
+    expect(term.paste).toHaveBeenCalledWith('C:/temp/omniterm-paste-img.png')
+    expect(onBeforePaste).toHaveBeenCalled()
+    clipboard.dispose()
+  })
 })
+

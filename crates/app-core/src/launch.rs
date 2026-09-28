@@ -23,6 +23,24 @@ const POWERSHELL_UTF8_BOOTSTRAP: &str = "chcp 65001 >$null";
 /// expose predictive suggestions at all.
 const POWERSHELL_INTERACTIVE_BOOTSTRAP: &str = "chcp 65001 >$null; $psr = Get-Command Set-PSReadLineOption -ErrorAction SilentlyContinue; if ($null -ne $psr -and $psr.Parameters.ContainsKey('PredictionSource')) { Set-PSReadLineOption -PredictionSource None }";
 
+/// Report the working directory to the terminal after every command. PowerShell emits neither
+/// OSC 7 nor the OSC 9;9 notification on its own (Windows Terminal needs the same prompt hook), so
+/// a pane that `cd`-ed kept showing its launch folder. The user's own prompt (profile, oh-my-posh,
+/// starship) runs first and unchanged, so it still sees the previous command's `$?`; only
+/// filesystem locations are reported. `[char]` codes keep double quotes out of the argv entry.
+const POWERSHELL_CWD_HOOK: &str = "if ($function:prompt) { $global:__omnitermPrompt = $function:prompt; function global:prompt { $p = & $global:__omnitermPrompt; $l = $executionContext.SessionState.Path.CurrentLocation; if ($l.Provider.Name -eq 'FileSystem') { [string][char]27 + ']9;9;' + [char]34 + $l.ProviderPath + [char]34 + [char]27 + '\\' + $p } else { $p } } }";
+
+/// The bootstrap for a PowerShell pane that stays interactive: codepage, optional prediction
+/// guard, then the cwd hook.
+fn powershell_interactive_bootstrap(command_completion: bool) -> String {
+    let base = if command_completion {
+        POWERSHELL_UTF8_BOOTSTRAP
+    } else {
+        POWERSHELL_INTERACTIVE_BOOTSTRAP
+    };
+    format!("{base}; {POWERSHELL_CWD_HOOK}")
+}
+
 /// Everything needed to start one local pane, after merging saved and ad-hoc params.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalLaunch {
@@ -143,11 +161,7 @@ impl LocalLaunch {
             }
             // `default` resolves to the PowerShell executable, so it takes the PowerShell flags too.
             LocalShell::Powershell | LocalShell::Default => {
-                let interactive = if command_completion {
-                    POWERSHELL_UTF8_BOOTSTRAP
-                } else {
-                    POWERSHELL_INTERACTIVE_BOOTSTRAP
-                };
+                let interactive = powershell_interactive_bootstrap(command_completion);
                 let mut args = vec!["-NoLogo".to_string()];
                 args.extend(extra);
                 if let Some(cmd) = command {
@@ -159,7 +173,7 @@ impl LocalLaunch {
                     // one script, so a `;`-separated bootstrap is safe to prepend — unlike cmd's
                     // `/k`, PowerShell keeps a quoted path intact after the statement separator.
                     let bootstrap = if self.keep_open {
-                        interactive
+                        interactive.as_str()
                     } else {
                         POWERSHELL_UTF8_BOOTSTRAP
                     };
@@ -169,7 +183,7 @@ impl LocalLaunch {
                     // codepage is in place before the first prompt paints its window title.
                     args.push("-NoExit".to_string());
                     args.push("-Command".to_string());
-                    args.push(interactive.to_string());
+                    args.push(interactive);
                 }
                 args
             }

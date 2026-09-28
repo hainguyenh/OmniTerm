@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { ImagePlus, RotateCcw, Info, Save } from 'lucide-react'
 import { DefaultIdleArt, DefaultLoadingArt } from '../assets/defaultArt'
 import { Tooltip } from './Tooltip'
+import './customArtPreview.css'
 
 /**
  * Settings section for uploading custom pane art (idle + loading).
@@ -75,7 +76,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         <div>
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Custom Pane Art</h3>
           <p className="text-[11px] text-theme-dim leading-relaxed mt-0.5">
-            Upload custom images or GIFs for idle and loading panes in Light and Dark modes (max 2 MB).
+            Upload custom images or GIFs for idle and connecting panes in Light and Dark modes (max 2 MB). Busy agent session art is configured in Agent Quota.
           </p>
         </div>
 
@@ -105,6 +106,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         <ArtCard
           label="Idle (Light)"
           description="Empty panes in Light theme"
+          mode="light"
           customUrl={idleArtUrlLight}
           defaultPreview={<DefaultIdleArt dark={false} />}
           uploading={uploading === 'idle-light'}
@@ -116,6 +118,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         <ArtCard
           label="Idle (Dark)"
           description="Empty panes in Dark theme"
+          mode="dark"
           customUrl={idleArtUrlDark}
           defaultPreview={<DefaultIdleArt dark={true} />}
           uploading={uploading === 'idle-dark'}
@@ -127,6 +130,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         <ArtCard
           label="Loading (Light)"
           description="Connecting in Light theme"
+          mode="light"
           customUrl={loadingArtUrlLight}
           defaultPreview={<DefaultLoadingArt dark={false} />}
           uploading={uploading === 'loading-light'}
@@ -138,6 +142,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         <ArtCard
           label="Loading (Dark)"
           description="Connecting in Dark theme"
+          mode="dark"
           customUrl={loadingArtUrlDark}
           defaultPreview={<DefaultLoadingArt dark={true} />}
           uploading={uploading === 'loading-dark'}
@@ -174,6 +179,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
 interface ArtCardProps {
   label: string
   description: string
+  mode: 'light' | 'dark'
   customUrl: string | null
   defaultPreview: React.ReactNode
   uploading: boolean
@@ -183,7 +189,7 @@ interface ArtCardProps {
 }
 
 const ArtCard: React.FC<ArtCardProps> = ({
-  label, description, customUrl, defaultPreview, uploading, isPending, onUpload, onRemove,
+  label, description, mode, customUrl, defaultPreview, uploading, isPending, onUpload, onRemove,
 }) => (
   <div className={`rounded-lg border overflow-hidden transition-colors ${
     isPending
@@ -191,26 +197,21 @@ const ArtCard: React.FC<ArtCardProps> = ({
       : 'border-theme-border bg-[var(--theme-popup-bg)]'
   }`}>
     {/* Preview area */}
-    <div className="relative w-full aspect-square flex items-center justify-center bg-[var(--theme-bg)] overflow-hidden p-3">
+    <div className="art-preview-panel aspect-square" data-art-mode={mode}>
+      <span className="art-preview-panel__mode">{mode} mode</span>
       {customUrl ? (
         <img
           src={customUrl}
           alt={label}
-          className="max-w-full max-h-full object-contain rounded"
+          className="art-preview-panel__image rounded"
         />
       ) : (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="art-preview-panel__canvas">
           {defaultPreview}
         </div>
       )}
       {/* Badge */}
-      <span className={`absolute top-1.5 right-1.5 text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
-        isPending
-          ? 'text-[var(--theme-accent)] border-[var(--theme-accent)]/30 bg-[var(--theme-accent)]/10'
-          : customUrl
-            ? 'text-emerald-400 border-emerald-400/30 bg-emerald-400/10'
-            : 'text-theme-dim border-theme-border bg-[var(--theme-popup-bg)]'
-      }`}>
+      <span className="art-preview-panel__status" data-art-state={isPending ? 'pending' : customUrl ? 'custom' : 'default'}>
         {isPending ? 'Pending' : customUrl ? 'Custom' : 'Default'}
       </span>
     </div>

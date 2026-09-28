@@ -173,6 +173,10 @@ describe("release configuration", () => {
     expect(readRepoFile("vitest.config.ts")).not.toContain("electron/**");
   });
 
+  it("caps Vitest fork workers so Windows startup does not time out under load", () => {
+    expect(readRepoFile("vitest.config.ts")).toMatch(/maxWorkers:\s*8/);
+  });
+
   it("bundles renderer logo instead of resolving it from filesystem root", () => {
     const appLogo = readRepoFile("ui", "assets", "appLogo.ts");
     const buildRs = readRepoFile("src-tauri", "build.rs");

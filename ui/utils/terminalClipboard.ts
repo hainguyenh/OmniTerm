@@ -1,5 +1,8 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
+import { formatAttachmentPaths, installAttachmentDrop, saveAttachmentFiles, type SavedAttachment } from './attachmentInput'
+import { formatPowerShellScriptForPaste } from './paste'
+import { markPastedScript, type PastedScriptMarkup } from './pastedScriptDecoration'
 
 /**
  * Native `paste` event gate for one pane.
@@ -7,7 +10,8 @@ import type { SavedPastedImage } from './pastedImageStore'
  * Runs capture-phase before xterm's own listener and owns every native paste
  * so exactly one writer reaches the PTY (see utils/paste.ts). Text is inserted
  * directly, including Windows clipboard-history selections that have no Ctrl+V
- * keydown. Images are persisted to temp PNGs and inserted by absolute path.
+ * keydown. Images are persisted as PNG attachments and inserted by absolute
+ * path; other files on the clipboard are stored the same way (attachmentInput.ts).
  *
  * `canInsertImagePaths` false opts the pane out of that contract: the event is
  * left untouched so the WebView's default paste runs (text pastes normally, an
@@ -20,6 +24,7 @@ export const createNativePasteGate = ({
   isSuppressed,
   canInsertImagePaths = () => true,
   onImageSaved,
+  onFilesSaved,
 }: {
   term: Terminal
   noteLocalEcho: () => void
@@ -28,6 +33,8 @@ export const createNativePasteGate = ({
   canInsertImagePaths?: () => boolean
   /** Receives the bytes + temp path of every persisted image, for the pane's pasted-image viewer. */
   onImageSaved?: (saved: SavedPastedImage) => void
+  /** Receives the stored copies of non-image files on the clipboard, for the pane's attachment list. */
+  onFilesSaved?: (saved: SavedAttachment[]) => void
 }): ((event: ClipboardEvent) => void) => {
   return (event: ClipboardEvent) => {
     const cancelNativePaste = () => {
@@ -43,6 +50,17 @@ export const createNativePasteGate = ({
       item.type.startsWith('image/'),
     )
     if (imageItem && !canInsertImagePaths()) return
+    const files = Array.from(event.clipboardData?.files ?? [])
+    if (!imageItem && files.length > 0 && canInsertImagePaths()) {
+      cancelNativePaste()
+      void saveAttachmentFiles(files).then(saved => {
+        if (saved.length === 0) return
+        onFilesSaved?.(saved)
+        noteLocalEcho()
+        term.paste(formatAttachmentPaths(saved.map(({ info }) => info.path)))
+      })
+      return
+    }
     if (imageItem) {
       cancelNativePaste()
       void imageItem.getAsFile()?.arrayBuffer().then(async bytes => {
@@ -139,6 +157,16 @@ const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
 
 export interface TerminalClipboard {
   paste: () => Promise<void>
+  pasteImage: () => Promise<void>
+  /** Store dropped or pasted files as attachments and type their paths (agent panes only). */
+  pasteFiles: (files: File[]) => Promise<void>
+  /** Accept files dragged onto `element` while image paths may be inserted; undone by `dispose`. */
+  installDrop: (element: HTMLElement) => void
+  /**
+   * Ctrl+Alt+V. With `asPowerShell` the clipboard is wrapped as one PowerShell block and its rows
+   * are marked in the terminal; without it (not a PowerShell prompt) it is an ordinary paste.
+   */
+  pasteScript: (asPowerShell: boolean) => Promise<void>
   copySelection: () => Promise<void>
   /** Detach the selection listener. */
   dispose: () => void
@@ -168,9 +196,25 @@ export const createTerminalClipboard = (
   canInsertImagePaths: () => boolean = () => true,
   /** Receives every persisted image for the pane's pasted-image viewer; omit for the old behavior. */
   onImageSaved?: (saved: SavedPastedImage) => void,
+  /** Receives every stored non-image file (paste or drop), for the pane's attachment list. */
+  onFilesSaved?: (saved: SavedAttachment[]) => void,
 ): TerminalClipboard => {
   let pasteInFlight = false
   let copyTimer = 0
+  let scriptMarkup: PastedScriptMarkup | null = null
+  let disposeDrop = () => {}
+
+  const typeAttachments = (saved: SavedAttachment[]) => {
+    if (saved.length === 0) return
+    onFilesSaved?.(saved)
+    onBeforePaste?.()
+    term.paste(formatAttachmentPaths(saved.map(({ info }) => info.path)))
+  }
+
+  const pasteFiles = async (files: File[]) => {
+    if (!canInsertImagePaths()) return
+    typeAttachments(await saveAttachmentFiles(files))
+  }
 
   const copySelection = async () => {
     const sel = term.getSelection()
@@ -225,14 +269,85 @@ export const createTerminalClipboard = (
           onImageSaved?.(saved)
           onBeforePaste?.()
           term.paste(saved.path)
+          return
+        }
+        // Files copied in Explorer carry neither text nor an image; the backend reads and stores them.
+        const imported = await window.omnitermAPI.attachments?.importClipboardFiles().catch(() => [])
+        typeAttachments((imported ?? []).map(info => ({ info })))
+      } finally {
+        pasteInFlight = false
+      }
+    },
+    pasteImage: async () => {
+      if (pasteInFlight) return
+      pasteInFlight = true
+      try {
+        const saved = await readImageFromClipboard()
+        if (saved) {
+          onImageSaved?.(saved)
+          onBeforePaste?.()
+          term.paste(saved.path)
+          return
+        }
+        let text = ''
+        try {
+          text = await window.omnitermAPI.clipboard.readText()
+        } catch {
+          text = ''
+        }
+        if (text) {
+          onBeforePaste?.()
+          term.paste(text)
         }
       } finally {
         pasteInFlight = false
       }
     },
+    pasteScript: async (asPowerShell: boolean) => {
+      if (pasteInFlight) return
+      pasteInFlight = true
+      try {
+        let text = ''
+        try {
+          text = await window.omnitermAPI.clipboard.readText()
+        } catch {
+          text = ''
+        }
+        if (!text) {
+          try {
+            text = (await navigator.clipboard?.readText()) ?? ''
+          } catch {
+            text = ''
+          }
+        }
+        if (!text) return
+        if (!asPowerShell) {
+          onBeforePaste?.()
+          term.paste(text)
+          return
+        }
+        const formatted = formatPowerShellScriptForPaste(text)
+        if (formatted) {
+          onBeforePaste?.()
+          // Only the latest pending block is marked.
+          scriptMarkup?.dispose()
+          scriptMarkup = markPastedScript(term)
+          term.paste(formatted)
+        }
+      } finally {
+        pasteInFlight = false
+      }
+    },
+    pasteFiles,
+    installDrop: (element: HTMLElement) => {
+      disposeDrop()
+      disposeDrop = installAttachmentDrop(element, canInsertImagePaths, files => void pasteFiles(files))
+    },
     copySelection,
     dispose: () => {
+      disposeDrop()
       window.clearTimeout(copyTimer)
+      scriptMarkup?.dispose()
       selectionDisposable.dispose()
     },
   }

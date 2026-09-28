@@ -63,21 +63,15 @@ describe("pane header appearance control", () => {
     expect(screen.queryByRole("button", { name: /Appearance/i })).not.toBeInTheDocument();
   });
 
-  it("shows this pane's own font size, labelled by pane number", () => {
+  it("shows this pane's theme control, labelled by pane number", () => {
     renderHeader();
     expect(screen.getByRole("button", { name: "Appearance — theme & font size (Pane 2)" })).toBeInTheDocument();
-    expect(screen.getByText("16")).toBeInTheDocument();
   });
 
-  it("changes this pane's font size without needing it focused first", () => {
-    const { onFontSizeChange, onFocus } = renderHeader();
-    const button = screen.getByRole("button", { name: "+" });
-    fireEvent.mouseDown(button);
-    fireEvent.click(button);
-    expect(onFontSizeChange).toHaveBeenCalledWith(1);
-    // Interacting with the header's control corner still focuses the pane (consistent chrome), but
-    // must not require it beforehand.
-    expect(onFocus).toHaveBeenCalled();
+  it("does not expose footer font controls in the header", () => {
+    const { onFontSizeChange } = renderHeader();
+    expect(screen.queryByRole("button", { name: "+" })).not.toBeInTheDocument();
+    expect(onFontSizeChange).not.toHaveBeenCalled();
   });
 
   it("applies a theme to just this pane via its own palette", () => {
@@ -89,7 +83,7 @@ describe("pane header appearance control", () => {
 
   it("does not open the session picker when the appearance control is used", () => {
     const { onTogglePicker } = renderHeader();
-    fireEvent.click(screen.getByRole("button", { name: "+" }));
+    fireEvent.click(screen.getByRole("button", { name: "Appearance — theme & font size (Pane 2)" }));
     expect(onTogglePicker).not.toHaveBeenCalled();
   });
 
