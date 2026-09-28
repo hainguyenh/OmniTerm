@@ -134,6 +134,7 @@ export interface AgentQuotaAPI {
   terminate(sessionId: string, pid: number, startTime: number): Promise<number>
   fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
   wake(request: WakeRequest): Promise<WakeResult>
+  listProfiles?(): Promise<DiscoveredProfile[]>
 }
 
 export function createAgentQuotaAPI(): AgentQuotaAPI {
@@ -153,5 +154,6 @@ export function createAgentQuotaAPI(): AgentQuotaAPI {
       (value) => (isRecord(value) ? { ok: value.ok === true, message: typeof value.message === 'string' ? value.message : undefined } : { ok: false, message: 'No answer.' }),
       (error: unknown) => ({ ok: false, message: String(error).slice(0, 300) }),
     ),
+    listProfiles: () => listAgentProfiles(),
   }
 }

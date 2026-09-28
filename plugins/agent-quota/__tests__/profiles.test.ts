@@ -70,4 +70,26 @@ describe('listProfiles', () => {
     const listed = await handler?.('agentQuota.listProfiles') as Array<{ launcher: string | null }>
     expect(listed.map((profile) => profile.launcher)).toContain('claude-x')
   })
+
+  it('discovers custom profiles from ~/.claude-* and ~/claude-profiles subdirectories', async () => {
+    const deps = fakeDeps({
+      [path.join(HOME, '.claude-custom', 'settings.json')]: '{}',
+      [path.join(HOME, 'claude-profiles', 'team', 'settings.json')]: '{}',
+    }, {
+      mtime: async (file) => (file.includes('claude') ? 1 : null),
+    })
+    const profiles = await listProfiles(deps, 'win32')
+    expect(profiles).toContainEqual({
+      agent: 'claude',
+      profileName: 'claude-custom',
+      profileDir: path.join(HOME, '.claude-custom'),
+      launcher: null,
+    })
+    expect(profiles).toContainEqual({
+      agent: 'claude',
+      profileName: 'claude-team',
+      profileDir: path.join(HOME, 'claude-profiles', 'team'),
+      launcher: null,
+    })
+  })
 })

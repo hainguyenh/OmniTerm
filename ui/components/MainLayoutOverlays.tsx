@@ -6,6 +6,7 @@ import DialogHost from './DialogHost'
 import NewTerminalMenu from './NewTerminalMenu'
 import SettingsModal from './SettingsModal'
 import RenewSessionModal from './RenewSessionModal'
+import LargeTextPasteModalHost from './LargeTextPasteModalHost'
 // Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
 // parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
 const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
@@ -19,6 +20,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
   const sessionIds = useMemo(() => activeTabs.map((tab) => tab.id), [activeTabs])
   return (
     <>
+          <LargeTextPasteModalHost />
           <AgentQuotaRoot
             api={window.omnitermAPI.agentQuota}
             appSettings={appSettings}

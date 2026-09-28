@@ -59,4 +59,17 @@ describe('profile dashboard store', () => {
       activeTerminalCount: 1,
     })
   })
+
+  it('includes discovered inactive profiles with 0 active terminals', () => {
+    const discovered = [
+      { agent: 'claude' as const, profileName: 'claude-inactive', profileDir: null, launcher: 'claude-inactive' },
+    ]
+    const rows = dashboardRows({ profiles: {}, terminals: {} }, discovered)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      profileName: 'claude-inactive',
+      activeTerminalCount: 0,
+      reading: undefined,
+    })
+  })
 })

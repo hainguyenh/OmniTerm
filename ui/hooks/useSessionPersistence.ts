@@ -41,7 +41,7 @@ type PtyTab = NonNullable<PersistenceDeps['activeTabs']>[number]
 /** A launcher for a named profile, so resume reopens the same profile. */
 function launcherFor(found: { launcher?: string; profileName?: string; agent: string }): string | undefined {
   if (found.launcher) return found.launcher
-  if (!found.profileName || found.profileName === found.agent) return undefined
+  if (!found.profileName || found.profileName === found.agent || (found.agent === 'agy' && found.profileName === 'gemini')) return undefined
   return found.profileName.startsWith(`${found.agent}-`) ? found.profileName : `${found.agent}-${found.profileName}`
 }
 

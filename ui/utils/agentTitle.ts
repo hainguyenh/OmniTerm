@@ -95,6 +95,32 @@ export function isShellBinaryName(text: string): boolean {
   return SHELL_BINARIES.has(text.trim().toLowerCase())
 }
 
+const AGENT_TOKENS = new Set([
+  'claude',
+  'claude code',
+  'code',
+  'antigravity',
+  'antigravity cli',
+  'agy',
+  'codex',
+  'codex cli',
+  'opencode',
+  'open code',
+  'aider',
+  'cursor',
+  'cursor agent',
+  'copilot',
+  'copilot cli',
+  'continue',
+  'cline',
+  'goose',
+  'devin',
+  'swe-agent',
+  'gemini',
+  'gemini cli',
+  'cli',
+])
+
 /**
  * Attempt to extract the last meaningful folder/directory segment from a path or title string.
  *
@@ -109,7 +135,9 @@ export function extractFolder(title?: string | null): string | null {
   // Remove common prefix like "Administrator: ", "Admin: "
   trimmed = trimmed.replace(/^(?:Administrator|Admin):\s*/i, '')
 
-  if (SHELL_BINARIES.has(trimmed.toLowerCase())) return null
+  const lower = trimmed.toLowerCase()
+  if (SHELL_BINARIES.has(lower) || AGENT_TOKENS.has(lower)) return null
+  if (startsWithAgentName(trimmed) && !trimmed.includes('/') && !trimmed.includes('\\')) return null
 
   const normalized = trimmed.replace(/\\/g, '/')
   const segments = normalized.split('/').filter(Boolean)
@@ -121,6 +149,7 @@ export function extractFolder(title?: string | null): string | null {
       const seg = segments[idx].toLowerCase().trim()
       if (
         SHELL_BINARIES.has(seg) ||
+        AGENT_TOKENS.has(seg) ||
         /\.(exe|cmd|bat|sh|ps1)$/i.test(seg) ||
         SYSTEM_DIR_NAMES.has(seg) ||
         /^[a-z]:$/i.test(seg) ||
@@ -134,7 +163,7 @@ export function extractFolder(title?: string | null): string | null {
 
     if (idx >= 0) {
       const found = segments[idx].replace(/^[–—\-|]+|[–—\-|]+$/g, '').trim()
-      if (found.length > 0 && !SYSTEM_DIR_NAMES.has(found.toLowerCase())) {
+      if (found.length > 0 && !SYSTEM_DIR_NAMES.has(found.toLowerCase()) && !AGENT_TOKENS.has(found.toLowerCase())) {
         return found
       }
     }
@@ -146,14 +175,16 @@ export function extractFolder(title?: string | null): string | null {
 
   if (
     !SYSTEM_DIR_NAMES.has(trimmed.toLowerCase()) &&
-    !SHELL_BINARIES.has(trimmed.toLowerCase())
+    !SHELL_BINARIES.has(trimmed.toLowerCase()) &&
+    !AGENT_TOKENS.has(trimmed.toLowerCase())
   ) {
     const wordMatch = trimmed.match(/(?:^|[\s:–—\-|])([A-Za-z0-9_.+-]{2,60})\s*$/)
     if (wordMatch) {
       const word = wordMatch[1]
       if (
         !SYSTEM_DIR_NAMES.has(word.toLowerCase()) &&
-        !SHELL_BINARIES.has(word.toLowerCase())
+        !SHELL_BINARIES.has(word.toLowerCase()) &&
+        !AGENT_TOKENS.has(word.toLowerCase())
       ) {
         return word
       }
@@ -231,13 +262,13 @@ export function formatTerminalTitle(
   const isShellTitle = SHELL_BINARIES.has(title.toLowerCase())
   const agentCtx = isShellTitle ? null : parseAgentTitle(title) || (!title ? parseAgentTitle(fallbackName) : null)
   if (agentCtx) {
-    const folder = agentCtx.folderName || fallbackFolder || 'workspace'
-    const agentPart = `${agentCtx.agentName} - ${folder}`
+    const folder = agentCtx.folderName || fallbackFolder
+    const agentPart = folder ? `${agentCtx.agentName} - ${folder}` : agentCtx.agentName
     const displayTitle = shellLabel ? `${agentPart} // ${shellLabel}` : agentPart
     return {
       isAgent: true,
       agentName: agentCtx.agentName,
-      folderName: folder,
+      folderName: folder || undefined,
       shellLabel,
       displayTitle,
     }

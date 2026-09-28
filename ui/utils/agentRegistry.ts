@@ -60,7 +60,13 @@ export function resolveAgentLauncher(
   const trimmedProfile = profileName?.trim()
   if (trimmedProfile) {
     if (LAUNCHER_RE.test(trimmedProfile)) return trimmedProfile
-    if (trimmedProfile !== 'claude' && trimmedProfile !== 'codex' && trimmedProfile !== 'opencode' && trimmedProfile !== 'agy') {
+    if (
+      trimmedProfile !== 'claude' &&
+      trimmedProfile !== 'codex' &&
+      trimmedProfile !== 'opencode' &&
+      trimmedProfile !== 'agy' &&
+      !(agentPrefix === 'agy' && trimmedProfile === 'gemini')
+    ) {
       const candidate = `${agentPrefix}-${trimmedProfile}`
       if (LAUNCHER_RE.test(candidate)) return candidate
     }
@@ -101,7 +107,7 @@ export function formatAgentResumeCommand(
     if (norm.includes('codex') || baseCmd.startsWith('codex')) {
       return `${baseCmd} resume ${sid}`
     }
-    if (norm.includes('antigravity') || norm === 'agy' || baseCmd === 'agy') {
+    if (norm.includes('antigravity') || norm === 'agy' || baseCmd === 'agy' || baseCmd.startsWith('agy')) {
       return `${baseCmd} --conversation ${sid}`
     }
     if (norm.includes('opencode') || norm.includes('open code') || baseCmd.startsWith('opencode')) {

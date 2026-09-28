@@ -22,9 +22,8 @@ export type BookmarkState = 'none' | 'pending' | 'bookmarked'
 
 function bookmarkStateFor(tabId: string, agentSessionId: string | undefined, agent: string | undefined): BookmarkState {
   const sessions = loadStoredSessions()
-  const entry = agent && agentSessionId
-    ? sessions.find(item => item.id === `${agent}:${agentSessionId}` || (item.tabId === tabId && isBookmarked(item)))
-    : sessions.find(item => item.tabId === tabId && isBookmarked(item))
+  const entry = sessions.find(item => item.tabId === tabId)
+    ?? (agent && agentSessionId ? sessions.find(item => item.id === `${agent}:${agentSessionId}`) : undefined)
   if (entry && isBookmarked(entry)) return 'bookmarked'
   return isBookmarkPending(tabId) ? 'pending' : 'none'
 }
@@ -46,17 +45,15 @@ export function useBookmarkAgentSession(tabId: string | null | undefined) {
       cancelPendingBookmark(tabId)
       return
     }
-    if (!agentSessionId) {
-      requestPendingBookmark(tabId)
-      return
-    }
-    const id = `${agent}:${agentSessionId}`
-    if (!loadStoredSessions().some(item => item.id === id)) {
+    const sessions = loadStoredSessions()
+    const entry = sessions.find(item => item.tabId === tabId)
+      ?? (agentSessionId ? sessions.find(item => item.id === `${agent}:${agentSessionId}`) : undefined)
+    if (!entry) {
       // Resolved but not yet stored (the poll stores it right after): queue it the same way.
       requestPendingBookmark(tabId)
       return
     }
-    setSessionBookmarked(id, state !== 'bookmarked')
+    setSessionBookmarked(entry.id, state !== 'bookmarked')
   }
 
   return { canBookmark, state, toggle }

@@ -125,6 +125,9 @@ describe('extractFolder', () => {
     expect(extractFolder('/bin/sh')).toBeNull()
     expect(extractFolder('powershell.exe')).toBeNull()
     expect(extractFolder('system32')).toBeNull()
+    expect(extractFolder('Claude Code')).toBeNull()
+    expect(extractFolder('Antigravity CLI')).toBeNull()
+    expect(extractFolder('Codex')).toBeNull()
   })
 
   it('extracts directory from standard user and project paths', () => {
@@ -200,5 +203,13 @@ describe('formatTerminalTitle', () => {
     const formatted = formatTerminalTitle('pwsh', 'PowerShell', 'Claude Code - OmniTerm')
     expect(formatted.isAgent).toBe(false)
     expect(formatted.displayTitle).toBe('OmniTerm // PowerShell')
+  })
+
+  it('does not invent workspace or duplicate agent name when no folder is available', () => {
+    const formatted = formatTerminalTitle('Claude Code', undefined, 'Claude Code')
+    expect(formatted.isAgent).toBe(true)
+    expect(formatted.agentName).toBe('Claude Code')
+    expect(formatted.folderName).toBeUndefined()
+    expect(formatted.displayTitle).toBe('Claude Code')
   })
 })
