@@ -258,4 +258,68 @@ describe('QuotaProfilesDashboard', () => {
     expect(screen.getByLabelText('5h 15% used')).toBeInTheDocument()
     expect(screen.getByLabelText('Week 25% used')).toBeInTheDocument()
   })
+
+  it('renders Fetch all button when inactive profiles exist and fetches only those without readings', async () => {
+    const readingNow: QuotaSnapshot = {
+      windows: [
+        { kind: 'session', label: 'Current session', usedPct: 15, resetsAt: Date.now() + 3_600_000 },
+        { kind: 'weekly', label: 'Current week', usedPct: 25, resetsAt: Date.now() + 3 * 86_400_000 },
+      ],
+      fetchedAt: Date.now(),
+      source: 'cli',
+    }
+    const fetchUsage = vi.fn().mockResolvedValue(readingNow)
+    const listProfiles = vi.fn().mockResolvedValue([
+      { agent: 'claude', profileName: 'claude-has-info', profileDir: null, launcher: 'claude-has-info' },
+      { agent: 'claude', profileName: 'claude-needs-info', profileDir: null, launcher: 'claude-needs-info' },
+    ])
+    const mockApi = {
+      info: vi.fn(),
+      detect: vi.fn(),
+      suspend: vi.fn(),
+      resume: vi.fn(),
+      resumeAll: vi.fn(),
+      terminate: vi.fn(),
+      fetchUsage,
+      listProfiles,
+      wake: vi.fn(),
+    }
+    act(() => {
+      resetQuotaStore()
+      setDiscoveredProfiles([
+        { agent: 'claude', profileName: 'claude-has-info', profileDir: null, launcher: 'claude-has-info' },
+        { agent: 'claude', profileName: 'claude-needs-info', profileDir: null, launcher: 'claude-needs-info' },
+      ])
+    })
+
+    await act(async () => {
+      render(<QuotaProfilesDashboard api={mockApi} />)
+      await Promise.resolve()
+    })
+
+    // claude-has-info fetches its reading first
+    const fetchFirstBtn = screen.getByRole('button', { name: 'Fetch quota for claude-has-info' })
+    await act(async () => {
+      fireEvent.click(fetchFirstBtn)
+      await Promise.resolve()
+    })
+    expect(fetchUsage).toHaveBeenCalledTimes(1)
+    expect(fetchUsage).toHaveBeenCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-has-info' })
+
+    // Now click 'Fetch all' — should only fetch claude-needs-info, NOT claude-has-info again
+    const fetchAllBtn = screen.getByRole('button', { name: 'Fetch all' })
+    expect(fetchAllBtn).toBeInTheDocument()
+    expect(fetchAllBtn).toBeEnabled()
+
+    await act(async () => {
+      fireEvent.click(fetchAllBtn)
+      await Promise.resolve()
+    })
+
+    expect(fetchUsage).toHaveBeenCalledTimes(2)
+    expect(fetchUsage).toHaveBeenLastCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-needs-info' })
+
+    // Now all inactive profiles have readings, so 'Fetch all' button should be disabled
+    expect(fetchAllBtn).toBeDisabled()
+  })
 })

@@ -70,14 +70,7 @@ export function setDiscoveredProfiles(discovered: DiscoveredProfile[]): void {
   update((current) => ({ ...current, discovered }))
 }
 
-export async function fetchInactiveProfile(row: DashboardRow, api: AgentQuotaAPI): Promise<void> {
-  update((current) => ({
-    ...current,
-    manualReadings: {
-      ...current.manualReadings,
-      [row.key]: { ...current.manualReadings[row.key], fetching: true, error: undefined },
-    },
-  }))
+async function executeProfileFetch(row: DashboardRow, api: AgentQuotaAPI): Promise<void> {
   try {
     const snapshot = await api.fetchUsage({ agent: row.agent, profileDir: row.profileDir, launcher: row.launcher })
     if (snapshot.error) {
@@ -114,6 +107,30 @@ export async function fetchInactiveProfile(row: DashboardRow, api: AgentQuotaAPI
       },
     }))
   }
+}
+
+export async function fetchInactiveProfile(row: DashboardRow, api: AgentQuotaAPI): Promise<void> {
+  update((current) => ({
+    ...current,
+    manualReadings: {
+      ...current.manualReadings,
+      [row.key]: { ...current.manualReadings[row.key], fetching: true, error: undefined },
+    },
+  }))
+  await executeProfileFetch(row, api)
+}
+
+export async function fetchAllMissingProfiles(rows: DashboardRow[], api: AgentQuotaAPI): Promise<void> {
+  const missing = rows.filter((row) => row.activeTerminalCount === 0 && !row.reading && !row.fetching)
+  if (missing.length === 0) return
+  update((current) => {
+    const nextManual = { ...current.manualReadings }
+    for (const row of missing) {
+      nextManual[row.key] = { ...nextManual[row.key], fetching: true, error: undefined }
+    }
+    return { ...current, manualReadings: nextManual }
+  })
+  await Promise.all(missing.map((row) => executeProfileFetch(row, api)))
 }
 
 function activeTerminalCounts(terminals: Record<string, TerminalAgent>): Map<string, number> {

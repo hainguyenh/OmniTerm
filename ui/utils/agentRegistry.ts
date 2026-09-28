@@ -20,7 +20,12 @@ export function getAgentResumeRecipe(agentName?: string | null): AgentResumeReci
   const normalized = agentName.trim().toLowerCase()
   if (!normalized) return null
   for (const [name, recipe] of Object.entries(AGENT_REGISTRY)) {
-    if (name.toLowerCase() === normalized || recipe?.command.toLowerCase() === normalized) {
+    if (
+      name.toLowerCase() === normalized ||
+      recipe?.command.toLowerCase() === normalized ||
+      (recipe?.command === 'agy' && (normalized === 'antigravity' || normalized === 'antigravity cli' || normalized === 'agy')) ||
+      (recipe?.command === 'gemini' && (normalized === 'gemini' || normalized === 'gemini cli'))
+    ) {
       return recipe
     }
   }
@@ -47,11 +52,16 @@ export function resolveAgentLauncher(
       ? 'opencode'
       : norm.includes('antigravity') || norm === 'agy'
         ? 'agy'
-        : 'claude'
+        : norm.includes('gemini')
+          ? 'gemini'
+          : 'claude'
 
   const trimmedLauncher = launcher?.trim()
   if (trimmedLauncher) {
-    if (trimmedLauncher === recipe?.command || LAUNCHER_RE.test(trimmedLauncher)) {
+    if (trimmedLauncher === 'agy-gemini') {
+      return recipe?.command ?? 'agy'
+    }
+    if (trimmedLauncher === recipe?.command || (LAUNCHER_RE.test(trimmedLauncher) && trimmedLauncher !== 'agy-gemini')) {
       return trimmedLauncher
     }
     return null
@@ -59,16 +69,18 @@ export function resolveAgentLauncher(
 
   const trimmedProfile = profileName?.trim()
   if (trimmedProfile) {
-    if (LAUNCHER_RE.test(trimmedProfile)) return trimmedProfile
+    if (trimmedProfile === 'agy-gemini') return recipe?.command ?? 'agy'
+    if (LAUNCHER_RE.test(trimmedProfile) && trimmedProfile !== 'agy-gemini') return trimmedProfile
     if (
       trimmedProfile !== 'claude' &&
       trimmedProfile !== 'codex' &&
       trimmedProfile !== 'opencode' &&
       trimmedProfile !== 'agy' &&
+      trimmedProfile !== 'gemini' &&
       !(agentPrefix === 'agy' && trimmedProfile === 'gemini')
     ) {
       const candidate = `${agentPrefix}-${trimmedProfile}`
-      if (LAUNCHER_RE.test(candidate)) return candidate
+      if (LAUNCHER_RE.test(candidate) && candidate !== 'agy-gemini') return candidate
     }
   }
 
@@ -109,6 +121,9 @@ export function formatAgentResumeCommand(
     }
     if (norm.includes('antigravity') || norm === 'agy' || baseCmd === 'agy' || baseCmd.startsWith('agy')) {
       return `${baseCmd} --conversation ${sid}`
+    }
+    if (norm.includes('gemini') || baseCmd === 'gemini' || baseCmd.startsWith('gemini')) {
+      return `${baseCmd} --resume ${sid}`
     }
     if (norm.includes('opencode') || norm.includes('open code') || baseCmd.startsWith('opencode')) {
       return `${baseCmd} --session ${sid}`

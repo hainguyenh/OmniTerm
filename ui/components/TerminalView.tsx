@@ -22,7 +22,7 @@ import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
 import { createTerminalKeyHandler } from '../terminal/terminalKeyHandler'
-import { createLastOutputTracker, registerTerminalCopyHandler, registerTerminalSaveExport, viewportText } from '../utils/terminalCopyExtract'
+import { bufferText, createLastOutputTracker, registerTerminalCopyHandler, registerTerminalSaveExport, viewportText } from '../utils/terminalCopyExtract'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
@@ -296,7 +296,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       extract: (action) =>
         action === 'last-output'
           ? copyTracker.lastOutputText()
-          : viewportText(term.buffer, term.rows),
+          : action === 'all'
+            ? bufferText(term.buffer)
+            : viewportText(term.buffer, term.rows),
       write: (text) => void writeClipboardText(text),
     })
     const disposeSaveRequests = registerTerminalSaveExport({ sessionId: id, isCurrent: () => termRef.current === term, buffer: term.buffer })
