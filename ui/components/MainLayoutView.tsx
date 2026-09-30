@@ -287,7 +287,9 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             ) : (
               <>
                 {/* Keep sessions mounted while the group index catches up after a layout change. */}
-                {(visibleTabs.length === 0 || (layoutMode === 1 && !panes[0])) && <div className="absolute inset-0 z-30">{waitingPane}</div>}
+                {layoutMode === 1 && (visibleTabs.length === 0 || !panes[0]) && (
+                  <div className="absolute inset-0 z-30 bg-theme-bg">{waitingPane}</div>
+                )}
                 {/* Empty-pane frames (split view only). Filled panes draw their own chrome in
                     the session wrapper below (so the header sits above the native RDP window).
                     Each frame is a drop target and hosts a quick-pick to fill the slot. */}

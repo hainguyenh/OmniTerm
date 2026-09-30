@@ -17,7 +17,19 @@ import { formatCountdown, formatReset, windowOf, zoneFor } from './quotaPolicy'
 import { useCoarseNow, useQuota } from './quotaStore'
 
 function WindowCell({ label, window, limit, now }: { label: string; window: QuotaWindow | undefined; limit: number; now: number }) {
-  if (!window) return <span className="aq-pd-cell text-theme-dim">{label} —</span>
+  if (!window) {
+    return (
+      <span className="aq-pd-cell text-theme-dim" aria-label={`${label} —`}>
+        <span className="aq-pd-cell-head">
+          <span>{label} —</span>
+        </span>
+        <span className="aq-pd-bar">
+          <span className="aq-pd-limit" style={{ left: `${limit}%` }} />
+        </span>
+        <span className="aq-pd-reset">&nbsp;</span>
+      </span>
+    )
+  }
   const used = window.resetsAt !== undefined && window.resetsAt <= now ? 0 : window.usedPct
   const reset = formatReset(window.resetsAt, now)
   return (
@@ -30,12 +42,12 @@ function WindowCell({ label, window, limit, now }: { label: string; window: Quot
         <span className="aq-pd-fill" style={{ width: `${Math.min(100, used)}%`, background: `var(--aq-${zoneFor(used, limit)})` }} />
         <span className="aq-pd-limit" style={{ left: `${limit}%` }} />
       </span>
-      <span className="aq-pd-reset">{reset ? `resets ${reset}` : ' '}</span>
+      <span className="aq-pd-reset">{reset ? `resets ${reset}` : '\u00A0'}</span>
     </span>
   )
 }
 
-const STATUS_TEXT: Record<ProfileAdvice['status'], string> = { best: 'Ready', ok: 'Ready', limited: 'Limited', noData: 'No data' }
+const STATUS_TEXT: Record<ProfileAdvice['status'], string> = { best: 'Suggested', ok: 'Ready', limited: 'Limited', noData: 'No data' }
 
 function ProfileRow({ row, reading, advice, limits, now, onFetch }: {
   row: DashboardRow

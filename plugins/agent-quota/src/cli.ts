@@ -49,8 +49,9 @@ export const runCli: CliRunner = (command, args, { env, timeoutMs, cwd }) => new
   let child
   try {
     child = shell
-      ? spawn([command, ...args].map(quoteForCmd).join(' '), { env, cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], shell: true })
-      : spawn(command, args, { env, cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      ? spawn([command, ...args].map(quoteForCmd).join(' '), { env, cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], shell: true })
+      : spawn(command, args, { env, cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    child.stdin?.end()
   } catch (error) {
     resolve({ code: null, stdout: '', stderr: String(error), timedOut: false })
     return

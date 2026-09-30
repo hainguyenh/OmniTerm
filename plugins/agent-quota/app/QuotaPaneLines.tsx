@@ -5,7 +5,7 @@ import type { WindowKind } from '../src/types'
 
 import './agentQuota.css'
 import { QuotaOverridePopover } from './QuotaOverridePopover'
-import { QuotaLine } from './QuotaLine'
+import { AgentIcon, QuotaLine } from './QuotaLine'
 import { effectiveConfig, pruneOverride, wakeConfigWithEnabled } from './quotaConfig'
 import { isHeld } from './quotaGuard'
 import { shouldHideWeekly } from './quotaPolicy'
@@ -81,14 +81,13 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
     pruneOverride(global, { ...override, wake: wakeConfigWithEnabled(global, config, !wakeEnabled) }),
   )
   const held = isHeld(guard)
+  const customBadge = display.icons.overrideBadge && !!override
 
   return (
     <div className={`aq-strip aq-size-${display.size}`} data-testid="aq-strip">
       <div className="aq-meta">
         <span className="aq-meta-name" title={terminal.profileName}>{terminal.profileName}</span>
-        {display.icons.overrideBadge && override && (
-          <SlidersHorizontal className="w-3 h-3 aq-override" aria-label="Custom settings for this terminal" />
-        )}
+        {display.icons.agent && <AgentIcon agent={terminal.agent} className="w-3 h-3 flex-shrink-0 text-theme-accent" />}
         {display.icons.suspendState && held && <Snowflake className="w-3 h-3 text-theme-warning" aria-label="Suspended" />}
       </div>
       <div className={`aq-lines ${stale ? 'aq-stale' : ''}`} title={stale ? profile?.snapshot?.message : undefined}>
@@ -124,11 +123,15 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
             <AlarmClock className="w-3 h-3" />
           </button>
         )}
+        {/* The settings button doubles as the custom-settings badge, so the meta slot after the
+            profile name stays free for the agent icon. */}
         <button
           ref={activeBtnRef}
           type="button"
-          className="aq-icon-button"
+          className={`aq-icon-button ${customBadge ? 'aq-override' : ''}`}
           aria-label="Quota limits for this terminal"
+          aria-description={customBadge ? 'Custom settings for this terminal' : undefined}
+          title={customBadge ? 'Custom settings for this terminal' : undefined}
           aria-expanded={editing}
           onClick={() => setEditing(editing ? null : sessionId)}
         >

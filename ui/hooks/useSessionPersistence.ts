@@ -14,7 +14,7 @@ import {
 } from '../utils/sessionStore'
 import { mergePendingSnapshot } from '../utils/sessionCheckpoint'
 import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../utils/agentSessionDetector'
-import { bindActiveSession, clearActiveForTab, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
+import { bindActiveSession, clearActiveForTab, findSessionByTabId, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
 import { hydrateAgentSessionStore } from '../utils/agentSessionDurable'
 import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../utils/agentPresenceStore'
 import { extractAgentWorkItem } from '../utils/agentWorkItem'
@@ -242,33 +242,39 @@ export function useSessionPersistence({
         for (const tab of activeTabs) {
           const found = byTabId.get(tab.id)
           if (!found) {
-            const parsed = parseAgentTitle(tab.name) || parseAgentTitle(connectionFor(tab.connId)?.name)
+            const conn = connectionFor(tab.connId)
+            const parsed = parseAgentTitle(tab.name) || parseAgentTitle(conn?.name) || parseAgentTitle((conn as { localCommand?: string })?.localCommand)
             const brand = parsed ? agentBrandFor(parsed.agentName) : null
-            if (brand && (brand === 'agy' || brand === 'opencode' || brand === 'codex' || brand === 'gemini')) {
+            if (brand) {
               const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
               const previous = getPanePresence(tab.id)
-              const agentSessionId = previous?.agentSessionId ?? 'latest'
-              nextPresence[tab.id] = {
-                agent: brand,
-                profileName: brand,
-                pid: previous?.pid ?? 0,
-                startTime: previous?.startTime ?? 0,
-                agentSessionId,
+              const stored = findSessionByTabId(tab.id)
+              const agentSessionId = previous?.agentSessionId ?? previous?.claudeSessionId ?? stored?.sessionId ?? (brand === 'claude' ? undefined : 'latest')
+              if (agentSessionId) {
+                nextPresence[tab.id] = {
+                  agent: brand,
+                  profileName: previous?.profileName ?? stored?.profileName ?? brand,
+                  pid: previous?.pid ?? 0,
+                  startTime: previous?.startTime ?? 0,
+                  agentSessionId,
+                  ...(brand === 'claude' ? { claudeSessionId: agentSessionId } : {}),
+                }
+                const title = extractAgentWorkItem(tab.name)
+                bindActiveSession({
+                  id: `${brand}:${agentSessionId === 'latest' ? `${brand}-${tab.id}` : agentSessionId}`,
+                  tabId: tab.id,
+                  agent: brand,
+                  launcher: stored?.launcher,
+                  profileName: previous?.profileName ?? stored?.profileName ?? brand,
+                  sessionId: agentSessionId,
+                  cwd,
+                  folderName: folderNameOf(cwd),
+                  ...(title ? { title } : {}),
+                  state: 'active',
+                  updatedAt: Date.now(),
+                })
+                continue
               }
-              const title = extractAgentWorkItem(tab.name)
-              bindActiveSession({
-                id: `${brand}:${brand}-${tab.id}`,
-                tabId: tab.id,
-                agent: brand,
-                profileName: brand,
-                sessionId: agentSessionId,
-                cwd,
-                folderName: folderNameOf(cwd),
-                ...(title ? { title } : {}),
-                state: 'active',
-                updatedAt: Date.now(),
-              })
-              continue
             }
             // No agent process under this pane anymore (never had one, or it exited) — nothing to
             // track. A pane just recreated by restore is spared: its `--resume` may not be up yet.

@@ -42,7 +42,7 @@ const TICK_MS = 1000
 const DETECT_MS = 5000
 const AFTER_WAKE_REFRESH_MS = 5000
 /** How long a new profile's background read waits for an inline probe before running anyway. */
-const INLINE_PROBE_HOLD_MS = 20_000
+const INLINE_PROBE_HOLD_MS = 8_000
 
 export class QuotaEngine {
   private inputs: EngineInputs = { sessionIds: [], busy: {} }
@@ -272,11 +272,20 @@ export class QuotaEngine {
   private scheduleWakes(now: number): void {
     for (const profile of Object.values(getQuotaState().profiles)) {
       if (profile.waking) continue
+      const isBusy = this.terminalsOf(profile.key).some((terminal) => this.inputs.busy[terminal.sessionId])
       const scheduled = this.configsForProfile(profile.key)
         .filter((config) => config.enabled)
         .map((config) => ({ config, key: dueWake(config, profile.wake, profile.lastGood, now) }))
-        .find((entry) => entry.key !== null)
-      if (scheduled?.key) void this.track(this.wakeProfile(profile.key, scheduled.key, scheduled.config))
+        .find((entry): entry is { config: AgentConfig; key: string } => entry.key !== null)
+      if (scheduled) {
+        if (isBusy) {
+          this.patchProfile(profile.key, (current) => ({
+            wake: { ...current.wake, lastKey: scheduled.key },
+          }))
+          continue
+        }
+        void this.track(this.wakeProfile(profile.key, scheduled.key, scheduled.config))
+      }
     }
   }
 

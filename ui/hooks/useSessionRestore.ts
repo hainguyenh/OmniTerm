@@ -97,23 +97,24 @@ export function useSessionRestore(input: SessionRestoreInput): void {
     if (!initialSnapshot || initialSnapshot.activeTabs.length === 0) return
     let cancelled = false
 
-    const allowedIds = new Set(initialSnapshot.activeTabs
-      .filter(tab => current.shouldRestoreTab?.(tab) !== false)
-      .filter(tab => current.isRestoreAllowed?.(tab.id) !== false)
-      .map(tab => tab.id))
-    const snapshot = selectPendingSnapshotTabs(initialSnapshot, allowedIds)
-    if (!snapshot) return
-
-    current.setRestoreOutcomes?.(Object.fromEntries(snapshot.activeTabs.map(tab => [tab.id, {
-      phase: 'pending',
-      message: 'Restoring pane layout and working directory.',
-      retryable: false,
-    }])))
-
     void (async () => {
       // The resume command comes from stored sessions, whose crash-safe copy may still be loading.
       await whenAgentSessionsHydrated()
       if (cancelled) return
+
+      const allowedIds = new Set(initialSnapshot.activeTabs
+        .filter(tab => latestInput.current.shouldRestoreTab?.(tab) !== false)
+        .filter(tab => latestInput.current.isRestoreAllowed?.(tab.id) !== false)
+        .map(tab => tab.id))
+      const snapshot = selectPendingSnapshotTabs(initialSnapshot, allowedIds)
+      if (!snapshot) return
+
+      latestInput.current.setRestoreOutcomes?.(Object.fromEntries(snapshot.activeTabs.map(tab => [tab.id, {
+        phase: 'pending',
+        message: 'Restoring pane layout and working directory.',
+        retryable: false,
+      }])))
+
       const savedConnById = new Map(snapshot.ephemeralConns.map(conn => [conn.id, conn]))
       const restoredConns = new Map<string, Connection>()
       const restoredTabs: { id: string; connId: string; name: string }[] = []

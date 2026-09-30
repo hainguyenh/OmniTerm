@@ -32,10 +32,14 @@ pub struct AttachmentListing {
 }
 
 fn attachments_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-    app.path()
+    let dir = app
+        .path()
         .app_local_data_dir()
         .map(|dir| dir.join("attachments"))
-        .map_err(|error| format!("Failed to get app data dir: {error}"))
+        .map_err(|error| format!("Failed to get app data dir: {error}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|error| format!("Failed to create attachments dir: {error}"))?;
+    Ok(dir)
 }
 
 fn stamp() -> u128 {
