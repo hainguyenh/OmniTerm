@@ -51,15 +51,17 @@ describe('zones', () => {
   it('centres the used number in the fill and the danger-zone size in the danger zone', () => {
     expect(trackLabels(60, 80)).toEqual({
       used: { text: '60%', at: 30, fill: 60, inside: true },
-      danger: { text: '20%', at: 90 },
+      danger: { text: '20%', at: 90, inside: true },
     })
   })
 
   it('moves the danger zone with the limit and drops it at 100%', () => {
-    expect(trackLabels(60, 70).danger).toEqual({ text: '30%', at: 85 })
+    expect(trackLabels(60, 70).danger).toEqual({ text: '30%', at: 85, inside: true })
     expect(trackLabels(60, 100).danger).toBeNull()
-    // Too narrow for its number: the zone is still drawn, unlabelled.
-    expect(trackLabels(60, 97).danger).toEqual({ text: '', at: 98.5 })
+    // 5% or less has no room inside the zone: the number moves after the track.
+    expect(trackLabels(60, 94).danger).toEqual({ text: '6%', at: 97, inside: true })
+    expect(trackLabels(60, 95).danger).toEqual({ text: '5%', at: 97.5, inside: false })
+    expect(trackLabels(60, 99).danger).toEqual({ text: '1%', at: 99.5, inside: false })
   })
 
   it('puts a short fill\'s number just after it, and clamps over-100 readings', () => {

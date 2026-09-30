@@ -6,6 +6,7 @@ import { interceptPaneInput } from '../utils/paneInputHold'
 import { registerPaneScreen } from '../utils/paneScreens'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
+import { getPanePresence } from '../utils/agentPresenceStore'
 import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
@@ -60,11 +61,20 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const smartColorsRef = useRef(smartColors)
   smartColorsRef.current = smartColors
 
-  // The OSC-title-detected agent currently running in this pane (see utils/agentTitle.ts).
-  // Decides the image-paste strategy per agent — read at paste time so a title change (agent
-  // launched inside an existing shell) applies without a remount.
-  const agentNameRef = useRef<string | null>(parseAgentTitle(connection.name)?.agentName ?? parseAgentTitle(connection.shell)?.agentName ?? null)
-  const canInsertImagePaths = () => imagePasteModeFor(agentNameRef.current) === 'insert-path'
+  // The agent currently running in this pane (from OSC title, connection command, or process presence).
+  // Decides the image-paste strategy per agent — read at paste time so an agent launched inside
+  // an existing shell applies without a remount.
+  const initialAgent = parseAgentTitle(connection.name)?.agentName ??
+    parseAgentTitle(connection.shell)?.agentName ??
+    parseAgentTitle((connection as { localCommand?: string }).localCommand)?.agentName ??
+    null
+  const agentNameRef = useRef<string | null>(initialAgent)
+  const currentAgent = () =>
+    agentNameRef.current ??
+    parseAgentTitle((connection as { localCommand?: string }).localCommand)?.agentName ??
+    getPanePresence(id)?.agent ??
+    null
+  const canInsertImagePaths = () => imagePasteModeFor(currentAgent()) === 'insert-path'
 
   // Stable refs so callbacks don't re-trigger the main effect.
   const onStatusRef = useRef(onStatus)
@@ -332,7 +342,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         clipboard,
         connection,
         isMac,
-        getAgentName: () => agentNameRef.current,
+        getAgentName: currentAgent,
         getShortcuts: () => shortcutsRef.current,
         getEnterModes: () => enterModesRef.current,
       }),

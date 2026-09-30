@@ -34,11 +34,11 @@ export const PROBE_MAX_AGE_S = 30
  */
 const LAUNCH_GRACE_MS = 1_500
 const QUIET_MS = 700
-const MAX_SETTLE_MS = 6_000
+const MAX_SETTLE_MS = 8_000
 /** How long a picker or dialog may stay up before the probe gives up and the background read runs. */
-const MAX_DIALOG_WAIT_MS = 120_000
+const MAX_DIALOG_WAIT_MS = 10_000
 const DIALOG_POLL_MS = 250
-const REPLY_TIMEOUT_MS = 8_000
+const REPLY_TIMEOUT_MS = 6_000
 /**
  * The command arrives as one chunk, which Codex's composer takes for a paste; an Enter right after a
  * paste burst inserts a newline instead of submitting, so the Enter waits well past that window.
@@ -66,6 +66,42 @@ const AGENT_PROBES: Record<AgentKind, AgentProbe> = {
   agy: { command: '/usage', close: '\x1b', stream: true, parse: parseAgyUsage },
 }
 
+const TRUST_SCREEN = [
+  /\bquick safety check\b/i,
+  /\bdo you trust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
+  /\btrust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
+  /\byes, trust (?:this )?(?:folder|directory|project|environment|env|workspace)\b/i,
+  /\btrust this (?:folder|directory|project|environment|env|workspace)\b/i,
+  /\btrust (?:folder|environment|env|workspace)\b/i,
+  /\btrust the authors\b/i,
+  /^\s*[❯›]?\s*1[.)]\s+Yes.*trust/im,
+]
+
+const PROMPT_MARKER = [
+  /^[│┃|]\s*>\s*[│┃|]/,
+  /^[❯›>]\s*$/,
+  /^[❯›>]\s+(?!1[.)]|\(1\)|\[1\])\S/,
+  /^(?:[a-zA-Z]:[\\/]|[\w.-]+@|PS\b|[$#]\s)/,
+]
+
+function hasPromptAfter(lines: readonly string[], matchIdx: number): boolean {
+  for (let i = matchIdx + 1; i < lines.length; i += 1) {
+    const line = lines[i].trim()
+    if (!line) continue
+    if (PROMPT_MARKER.some((re) => re.test(line))) return true
+  }
+  return false
+}
+
+export function isTrustScreen(lines: readonly string[]): boolean {
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (TRUST_SCREEN.some((pattern) => pattern.test(lines[i]))) {
+      return !hasPromptAfter(lines, i)
+    }
+  }
+  return false
+}
+
 /**
  * A screen that is waiting on a choice: a resume picker, a folder-trust or login prompt, or any
  * list with a selected numbered option (`❯ 1. Yes, proceed`). Prose lines quoting a `>` prompt are
@@ -74,13 +110,21 @@ const AGENT_PROBES: Record<AgentKind, AgentProbe> = {
 const BLOCKING_SCREEN = [
   /\bresume (?:a previous )?session\b/i,
   /\btype to search\b/i,
-  /\btrust (?:the files|this (?:folder|directory|project))\b/i,
+  /\btrust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
+  /\bquick safety check\b/i,
+  /\bdo you trust\b/i,
   /\bpress enter to continue\b/i,
   /^[\s│┃|]*[❯›]\s*\d+[.)]\s+\S/,
+  /^[\s│┃|]*\[\d+\]\s+\S/,
 ]
 
 export function isBlockingScreen(lines: readonly string[]): boolean {
-  return lines.some((line) => BLOCKING_SCREEN.some((pattern) => pattern.test(line)))
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (BLOCKING_SCREEN.some((pattern) => pattern.test(lines[i]))) {
+      return !hasPromptAfter(lines, i)
+    }
+  }
+  return false
 }
 
 export interface ProbeIO {
@@ -150,10 +194,41 @@ async function waitForUnblocked(io: ProbeIO, sessionId: string): Promise<number 
  * Parse the reply from what the command added to the screen: lines already there before it was
  * typed (a resumed transcript, an old panel) are left out, so nothing stale is read as the answer.
  */
-function readReply(probe: AgentProbe, screen: string[] | null, before: ReadonlySet<string>, stream: string, now: number): UsageParse | null {
-  const fresh = (screen ?? []).filter((line) => line.trim() !== '' && !before.has(line)).join('\n')
+function readReply(
+  probe: AgentProbe,
+  screen: string[] | null,
+  before: ReadonlySet<string>,
+  beforeText: string,
+  stream: string,
+  now: number,
+): UsageParse | null {
+  const currentLines = screen ?? []
+  const currentText = currentLines.join('\n')
+
+  const fresh = currentLines.filter((line) => line.trim() !== '' && !before.has(line)).join('\n')
   const fromScreen = fresh ? probe.parse(fresh, now) : null
-  if (fromScreen?.ok || !probe.stream || !stream) return fromScreen
+  if (fromScreen?.ok) return fromScreen
+
+  if (currentText !== beforeText && currentLines.length > 0) {
+    const cmdEscaped = probe.command.replace('/', '\\/')
+    const cmdRe = new RegExp(`[❯›>]\\s*${cmdEscaped}`, 'i')
+    let lastCmdIdx = -1
+    for (let i = currentLines.length - 1; i >= 0; i -= 1) {
+      if (cmdRe.test(currentLines[i]) || currentLines[i].includes(probe.command)) {
+        lastCmdIdx = i
+        break
+      }
+    }
+    if (lastCmdIdx !== -1 && lastCmdIdx < currentLines.length - 1) {
+      const afterCmd = currentLines.slice(lastCmdIdx + 1).join('\n')
+      const fromAfterCmd = probe.parse(afterCmd, now)
+      if (fromAfterCmd.ok) return fromAfterCmd
+    }
+    const fromFull = probe.parse(currentText, now)
+    if (fromFull.ok) return fromFull
+  }
+
+  if (!probe.stream || !stream) return fromScreen
   const fromStream = probe.parse(stream, now)
   return fromStream.ok || fromStream.error === 'not_signed_in' ? fromStream : fromScreen
 }
@@ -183,7 +258,16 @@ export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Pr
   try {
     // Let the agent finish drawing its first screen before typing into it.
     await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
-    if (isBlockingScreen(io.screen(sessionId) ?? [])) {
+    let screen = io.screen(sessionId) ?? []
+    // When agent asks about trusting folder or environment, auto-confirm trust (1 + Enter) so it reaches the command prompt.
+    for (let t = 0; t < 3; t += 1) {
+      if (!isTrustScreen(screen)) break
+      io.send(sessionId, '1\r')
+      await io.sleep(SUBMIT_DELAY_MS)
+      await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
+      screen = io.screen(sessionId) ?? []
+    }
+    if (isBlockingScreen(screen)) {
       unfreeze()
       unfreeze = null
       const clearedAt = await waitForUnblocked(io, sessionId)
@@ -194,17 +278,31 @@ export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Pr
       await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
       if (isBlockingScreen(io.screen(sessionId) ?? [])) return null
     }
-    const before = new Set(io.screen(sessionId) ?? [])
+    const beforeScreen = io.screen(sessionId) ?? []
+    const before = new Set(beforeScreen)
+    const beforeText = beforeScreen.join('\n')
     output = ''
     sent = true
     io.send(sessionId, probe.command)
     await io.sleep(SUBMIT_DELAY_MS)
     io.send(sessionId, '\r')
     const started = io.now()
+    let retriedEnter = false
     while (io.now() - started < REPLY_TIMEOUT_MS) {
-      const parsed = readReply(probe, io.screen(sessionId), before, output, io.now())
+      const curScreen = io.screen(sessionId)
+      const parsed = readReply(probe, curScreen, before, beforeText, output, io.now())
       if (parsed?.ok) return { windows: parsed.windows, fetchedAt: io.now(), source: 'cli' }
       if (parsed?.error === 'not_signed_in') return null
+
+      // If no reply after 900ms, retry Enter if command is still waiting on the prompt line
+      if (!retriedEnter && io.now() - started >= 900) {
+        retriedEnter = true
+        const lines = curScreen ?? []
+        const hasUnsubmitted = lines.some((line) => line.includes(probe.command) && /[❯›>]\s*\/usage/i.test(line))
+        if (hasUnsubmitted || !output) {
+          io.send(sessionId, '\r')
+        }
+      }
       await io.sleep(150)
     }
     return null

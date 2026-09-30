@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs'
+import { mkdirSync, promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -86,6 +86,10 @@ function launcherCandidates(name: string, home: string): string[] {
 export function createNodeDeps(log: (message: string) => void): ProviderDeps {
   const home = os.homedir()
   const env = process.env
+  const tmp = path.join(os.tmpdir(), 'omniterm-wake')
+  try {
+    mkdirSync(tmp, { recursive: true })
+  } catch {}
   return {
     run: runCli,
     readTail,
@@ -94,7 +98,7 @@ export function createNodeDeps(log: (message: string) => void): ProviderDeps {
     resolve: (agent) => resolveExecutable(agent, candidates(agent, home, env), env),
     resolveLauncher: (name) => resolveExecutable(name, launcherCandidates(name, home), env),
     home,
-    tmp: os.tmpdir(),
+    tmp,
     env,
     now: () => Date.now(),
     log,

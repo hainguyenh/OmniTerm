@@ -197,6 +197,22 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTestId('waiting')).toBeInTheDocument()
   })
 
+  it('renders split empty-pane frames without full-screen waiting overlay when visibleTabs is empty', () => {
+    const m = model({
+      activeTabs: [{ id: 'other-tab', connId: 'local', name: 'Other tab' }],
+      visibleTabs: [],
+      layoutMode: 2,
+      panes: [null, null],
+      connById: (id?: string) => id === 'local' ? local : undefined,
+    })
+
+    render(<MainLayoutView model={m} />)
+
+    expect(screen.getByTestId('waiting-0')).toBeInTheDocument()
+    expect(screen.getByTestId('waiting-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('waiting')).not.toBeInTheDocument()
+  })
+
   it('renders active footer variants and invokes every footer action', () => {
     const m = model({
       activeTabs: [{ id: 'ssh-tab', connId: 'ssh', name: 'SSH' }], panes: ['ssh-tab', null], layoutMode: 2,

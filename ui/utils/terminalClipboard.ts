@@ -71,7 +71,7 @@ export const createNativePasteGate = ({
         if (path) {
           onImageSaved?.({ bytes: new Uint8Array(bytes), path })
           noteLocalEcho()
-          term.paste(path)
+          term.paste(formatAttachmentPaths([path]))
         }
       })
       return
@@ -292,7 +292,7 @@ export const createTerminalClipboard = (
         if (saved) {
           onImageSaved?.(saved)
           onBeforePaste?.()
-          term.paste(saved.path)
+          term.paste(formatAttachmentPaths([saved.path]))
           return
         }
         // Files copied in Explorer carry neither text nor an image; the backend reads and stores them.
@@ -310,7 +310,7 @@ export const createTerminalClipboard = (
         if (saved) {
           onImageSaved?.(saved)
           onBeforePaste?.()
-          term.paste(saved.path)
+          term.paste(formatAttachmentPaths([saved.path]))
           return
         }
         let text = ''
