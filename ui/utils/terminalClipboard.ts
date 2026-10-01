@@ -1,7 +1,7 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
 import { formatAttachmentPaths, installAttachmentDrop, saveAttachmentFiles, type SavedAttachment } from './attachmentInput'
-import { handleLargeTextPaste, LARGE_TEXT_PROMPT_THRESHOLD } from './largeTextPaste'
+import { handleLargeTextPaste, largePasteThresholds } from './largeTextPaste'
 import { formatPowerShellScriptForPaste } from './paste'
 import { markPastedScript, type PastedScriptMarkup } from './pastedScriptDecoration'
 
@@ -56,7 +56,7 @@ export const createNativePasteGate = ({
     const files = Array.from(event.clipboardData?.files ?? [])
     if (!imageItem && files.length > 0 && canInsertImagePaths()) {
       cancelNativePaste()
-      void saveAttachmentFiles(files).then(saved => {
+      void saveAttachmentFiles(files, sessionId).then(saved => {
         if (saved.length === 0) return
         onFilesSaved?.(saved)
         noteLocalEcho()
@@ -67,7 +67,7 @@ export const createNativePasteGate = ({
     if (imageItem) {
       cancelNativePaste()
       void imageItem.getAsFile()?.arrayBuffer().then(async bytes => {
-        const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes))
+        const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes), sessionId)
         if (path) {
           onImageSaved?.({ bytes: new Uint8Array(bytes), path })
           noteLocalEcho()
@@ -79,7 +79,7 @@ export const createNativePasteGate = ({
     const text = event.clipboardData?.getData('text/plain') ?? ''
     cancelNativePaste()
     if (text) {
-      if (canInsertImagePaths() && text.length >= LARGE_TEXT_PROMPT_THRESHOLD) {
+      if (canInsertImagePaths() && text.length >= largePasteThresholds().promptChars) {
         void handleLargeTextPaste({
           text,
           term,
@@ -134,7 +134,7 @@ const pngBytesFromRgba = async (
  * all. Both paths converge on the same temp-PNG file the agent attaches by
  * path.
  */
-const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
+const readImageFromClipboard = async (sessionId?: string): Promise<SavedPastedImage | null> => {
   try {
     const read = navigator.clipboard?.read?.bind(navigator.clipboard)
     if (read) {
@@ -144,7 +144,7 @@ const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
         if (!type) continue
         const blob = await item.getType(type)
         const bytes = new Uint8Array(await blob.arrayBuffer())
-        const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+        const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, sessionId)
         if (path) return { bytes, path }
       }
     }
@@ -155,7 +155,7 @@ const readImageFromClipboard = async (): Promise<SavedPastedImage | null> => {
   if (!image) return null
   const bytes = await pngBytesFromRgba(image)
   if (!bytes) return null
-  const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes)
+  const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, sessionId)
   return path ? { bytes, path } : null
 }
 
@@ -227,7 +227,7 @@ export const createTerminalClipboard = (
 
   const pasteFiles = async (files: File[]) => {
     if (!canInsertImagePaths()) return
-    typeAttachments(await saveAttachmentFiles(files))
+    typeAttachments(await saveAttachmentFiles(files, sessionId))
   }
 
   const copySelection = async () => {
@@ -269,13 +269,14 @@ export const createTerminalClipboard = (
           text = ''
         }
         if (text) {
-          if (canInsertImagePaths() && text.length >= LARGE_TEXT_PROMPT_THRESHOLD) {
+          if (text.length >= largePasteThresholds().promptChars) {
             await handleLargeTextPaste({
               text,
               term,
               sessionId,
               noteLocalEcho: () => onBeforePaste?.(),
               onFilesSaved,
+              canInsertImagePaths: canInsertImagePaths(),
             })
             return
           }
@@ -288,7 +289,7 @@ export const createTerminalClipboard = (
         // OpenCode / Gemini CLI accept. With the setting off the paste stays inert so agents
         // that read the clipboard themselves never see a stray path.
         if (!canInsertImagePaths()) return
-        const saved = await readImageFromClipboard()
+        const saved = await readImageFromClipboard(sessionId)
         if (saved) {
           onImageSaved?.(saved)
           onBeforePaste?.()
@@ -296,7 +297,7 @@ export const createTerminalClipboard = (
           return
         }
         // Files copied in Explorer carry neither text nor an image; the backend reads and stores them.
-        const imported = await window.omnitermAPI.attachments?.importClipboardFiles().catch(() => [])
+        const imported = await window.omnitermAPI.attachments?.importClipboardFiles(sessionId).catch(() => [])
         typeAttachments((imported ?? []).map(info => ({ info })))
       } finally {
         pasteInFlight = false
@@ -306,7 +307,7 @@ export const createTerminalClipboard = (
       if (pasteInFlight) return
       pasteInFlight = true
       try {
-        const saved = await readImageFromClipboard()
+        const saved = await readImageFromClipboard(sessionId)
         if (saved) {
           onImageSaved?.(saved)
           onBeforePaste?.()

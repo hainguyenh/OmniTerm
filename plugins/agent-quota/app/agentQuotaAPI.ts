@@ -19,6 +19,8 @@ export interface FrozenProcess {
   pid: number
   startTime: number
   image: string
+  threads?: number[]
+  profileName?: string
 }
 
 export interface SuspendReport {
@@ -91,11 +93,27 @@ export function parseSnapshot(value: unknown, now: number = Date.now()): QuotaSn
   return snapshot
 }
 
+export function parseFrozenProcess(entry: unknown): FrozenProcess | null {
+  if (!isRecord(entry) || !isInt(entry.pid) || !isInt(entry.startTime) || typeof entry.image !== 'string') return null
+  const threads = Array.isArray(entry.threads) ? entry.threads.filter(isInt) : undefined
+  const profileName = typeof entry.profileName === 'string' ? entry.profileName : undefined
+  return {
+    pid: entry.pid,
+    startTime: entry.startTime,
+    image: entry.image,
+    ...(threads ? { threads } : {}),
+    ...(profileName ? { profileName } : {}),
+  }
+}
+
+export function parseFrozenList(value: unknown): FrozenProcess[] {
+  if (!Array.isArray(value)) return []
+  return value.map(parseFrozenProcess).filter((p): p is FrozenProcess => p !== null)
+}
+
 function parseReport(value: unknown): SuspendReport {
   const record = isRecord(value) ? value : {}
-  const frozen = Array.isArray(record.frozen)
-    ? record.frozen.filter((entry): entry is FrozenProcess => isRecord(entry) && isInt(entry.pid) && isInt(entry.startTime) && typeof entry.image === 'string')
-    : []
+  const frozen = parseFrozenList(record.frozen)
   const errors = Array.isArray(record.errors) ? record.errors.filter((error): error is string => typeof error === 'string') : []
   return { frozen, newlyFrozen: isInt(record.newlyFrozen) ? record.newlyFrozen : 0, errors }
 }
@@ -131,10 +149,14 @@ export interface AgentQuotaAPI {
   suspend(sessionId: string, pid: number, startTime: number): Promise<SuspendReport>
   resume(sessionId: string): Promise<number>
   resumeAll(): Promise<number>
+  resumePid?(sessionId: string, pid: number): Promise<boolean>
+  getHeld?(sessionId?: string): Promise<FrozenProcess[]>
   terminate(sessionId: string, pid: number, startTime: number): Promise<number>
   fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
   wake(request: WakeRequest): Promise<WakeResult>
   listProfiles?(): Promise<DiscoveredProfile[]>
+  /** The sidecar's scratch folder for the hidden profile probe; null when it cannot say. */
+  probeDir?(): Promise<string | null>
 }
 
 export function createAgentQuotaAPI(): AgentQuotaAPI {
@@ -145,6 +167,8 @@ export function createAgentQuotaAPI(): AgentQuotaAPI {
     suspend: (sessionId, pid, startTime) => invoke<unknown>('agent_quota_suspend', { sessionId, pid, startTime }).then(parseReport),
     resume: (sessionId) => invoke<unknown>('agent_quota_resume', { sessionId }).then(count),
     resumeAll: () => invoke<unknown>('agent_quota_resume_all').then(count),
+    resumePid: (sessionId, pid) => invoke<unknown>('agent_quota_resume_pid', { sessionId, pid }).then((res) => res === true, () => false),
+    getHeld: (sessionId) => invoke<unknown>('agent_quota_get_held', { sessionId: sessionId ?? null }).then(parseFrozenList, () => []),
     terminate: (sessionId, pid, startTime) => invoke<unknown>('agent_quota_terminate', { sessionId, pid, startTime }).then(count),
     fetchUsage: (request) => plugin('agentQuota.fetchUsage', request).then(
       (value) => parseSnapshot(value),
@@ -155,5 +179,9 @@ export function createAgentQuotaAPI(): AgentQuotaAPI {
       (error: unknown) => ({ ok: false, message: String(error).slice(0, 300) }),
     ),
     listProfiles: () => listAgentProfiles(),
+    probeDir: () => plugin('agentQuota.probeDir').then(
+      (value) => (typeof value === 'string' && value.length > 0 && value.length <= 1024 && !value.includes('\0') ? value : null),
+      () => null,
+    ),
   }
 }

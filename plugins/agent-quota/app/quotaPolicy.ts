@@ -211,3 +211,25 @@ export function paceTooltip(window: QuotaWindow, limit: number, now: number): st
   const projected = Math.round(window.usedPct / elapsedFraction)
   return `Pace: ~${projected}% by reset (limit ${limit}%)`
 }
+
+/**
+ * Whether the busy loading art should blaze with fire: when quota is critical at >=90%,
+ * either in absolute percentage of the session/any window or as >=90% of the user limit.
+ */
+export function isBlazingQuota(
+  window: QuotaWindow | undefined,
+  limit: number,
+  allWindows?: readonly QuotaWindow[],
+): boolean {
+  if (window) {
+    if (window.usedPct >= 90) return true
+    if (limit > 0 && (window.usedPct / limit) * 100 >= 90) return true
+  }
+  if (allWindows) {
+    for (const w of allWindows) {
+      if (w.usedPct >= 90) return true
+    }
+  }
+  return false
+}
+

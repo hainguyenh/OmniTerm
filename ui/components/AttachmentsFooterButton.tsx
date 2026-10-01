@@ -11,8 +11,8 @@ import { Tooltip } from './Tooltip'
 
 const ITEM_BTN = 'w-5 h-5 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent'
 
-const openFolder = async () => {
-  const { dir } = await window.omnitermAPI.attachments.list()
+const openFolder = async (sessionId?: string) => {
+  const { dir } = await window.omnitermAPI.attachments.list(sessionId)
   if (dir) await window.omnitermAPI.app.openInSystem(dir)
 }
 
@@ -68,7 +68,7 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
     if (files.length === 0) return
-    const saved = await saveAttachmentFiles(files)
+    const saved = await saveAttachmentFiles(files, sessionId)
     if (saved.length === 0) return
     recordSavedAttachments(sessionId, saved)
     const paths = formatAttachmentPaths(saved.map(({ info }) => info.path))
@@ -140,7 +140,7 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
                 ))}
               </ul>
             )}
-          <button type="button" onClick={() => void openFolder()}
+          <button type="button" onClick={() => void openFolder(sessionId)}
             className="flex items-center gap-1.5 px-3 py-2 border-t border-theme-border text-[11px] text-theme-dim hover:text-theme-accent"
           >
             <FolderOpen className="w-3.5 h-3.5" /> Open attachments folder

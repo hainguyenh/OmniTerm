@@ -159,6 +159,8 @@ describe('plugin entry', () => {
     expect(handler?.('agentQuota.info')).toEqual({ name: 'Agent Quota', agents: ['claude', 'codex', 'agy'] })
     expect(await handler?.('agentQuota.wake', { agent: 'claude', prompt: 'hi' })).toEqual({ ok: true })
     expect(await handler?.('agentQuota.fetchUsage', { agent: 'codex' })).toMatchObject({ error: 'unsupported' })
+    // The hidden profile probe's scratch folder is the sidecar's own temp dir, never a renderer path.
+    expect(handler?.('agentQuota.probeDir', 'C:\\elsewhere')).toBe(deps.tmp)
     expect(() => handler?.('agentQuota.nope')).toThrow('Unknown Agent Quota method "agentQuota.nope"')
     expect(deactivate()).toBeUndefined()
   })

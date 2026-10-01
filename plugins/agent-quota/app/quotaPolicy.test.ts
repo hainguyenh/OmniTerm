@@ -10,6 +10,7 @@ import {
   formatCountdown,
   formatReset,
   headerLoadingTier,
+  isBlazingQuota,
   isFresh,
   paceTier,
   paceTooltip,
@@ -210,6 +211,20 @@ describe('pace', () => {
 
   it('ignores the burn projection: a fast early burn under 40% of the limit is still the cat', () => {
     expect(headerLoadingTier(session(30, resetsAt), limit)).toBe('slow')
+  })
+
+  it('triggers blazing flame effect when quota is >= 90% in session, ratio or any window', () => {
+    const win = (usedPct: number) => ({ kind: 'session' as const, label: 's', usedPct })
+    expect(isBlazingQuota(undefined, 100)).toBe(false)
+    expect(isBlazingQuota(win(89), 100)).toBe(false)
+    expect(isBlazingQuota(win(90), 100)).toBe(true)
+    expect(isBlazingQuota(win(95), 100)).toBe(true)
+    expect(isBlazingQuota(win(72), 80)).toBe(true)
+    expect(isBlazingQuota(win(71), 80)).toBe(false)
+    const weeklyWin = [{ kind: 'weekly' as const, label: 'w', usedPct: 92 }]
+    expect(isBlazingQuota(win(50), 100, weeklyWin)).toBe(true)
+    const calmWindows = [{ kind: 'weekly' as const, label: 'w', usedPct: 80 }]
+    expect(isBlazingQuota(win(50), 100, calmWindows)).toBe(false)
   })
 })
 

@@ -1,14 +1,16 @@
-import type { QuotaSnapshot } from '../src/types'
+import type { AgentKind, QuotaSnapshot } from '../src/types'
 import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
 import type { ProfileQuota, TerminalAgent } from './quotaStore'
 
-import { releaseUnguarded, resumeByHand, runGuards } from './guardRunner'
+import { releaseUnguarded, resumeByHand, runGuards, suspendByHand } from './guardRunner'
+import { cancelUsageRead, pollUsageReads, readUsageNow, type ManualReadDeps } from './manualUsageRead'
+import { intervalForProfile } from './profileInterval'
 import { instanceKeyOf, profileKeyOf } from './profileKey'
 import { AGENT_LABELS, type AgentConfig } from './quotaConfig'
 import { isHeld } from './quotaGuard'
-import { pressure, windowOf } from './quotaPolicy'
-import { getQuotaState, pushNotice, terminalConfig, updateQuota } from './quotaStore'
-import { guardInterval, heldInterval, nextInterval, pushSample } from './smartInterval'
+import { windowOf } from './quotaPolicy'
+import { getQuotaState, patchProfile, pushNotice, terminalConfig, updateQuota } from './quotaStore'
+import { pushSample } from './smartInterval'
 import { dueWake, rememberReset, weekSpent } from './wakePolicy'
 
 /**
@@ -30,6 +32,13 @@ export interface EngineDeps {
    * when it can't, and the background read runs instead. Absent: always the background read.
    */
   inlineProbe?(terminal: TerminalAgent): Promise<QuotaSnapshot | null>
+  /**
+   * Freezes a pane from the moment an agent is started in it until the inline probe takes it over
+   * (see `noteLaunch`); `release` lets go of a hold no probe is going to take.
+   */
+  launchHold?: { hold(sessionId: string): void; release(sessionId: string): void }
+  /** A pane's rendered screen, for the strip's manual read (see manualUsageRead.ts). */
+  readScreen?(sessionId: string): string[] | null
 }
 
 export interface EngineInputs {
@@ -41,6 +50,12 @@ export interface EngineInputs {
 const TICK_MS = 1000
 const DETECT_MS = 5000
 const AFTER_WAKE_REFRESH_MS = 5000
+/** While an agent is being started in a frozen pane, its process is looked for this often. */
+const LAUNCH_DETECT_MS = 1000
+/** A launch hold whose agent never shows up is released after this long… */
+const LAUNCH_WAIT_MS = 20_000
+/** …or once the shell has gone idle again this long after the launch (it printed and exited). */
+const LAUNCH_IDLE_MS = 6_000
 /** How long a new profile's background read waits for an inline probe before running anyway. */
 const INLINE_PROBE_HOLD_MS = 8_000
 
@@ -53,6 +68,8 @@ export class QuotaEngine {
   /** Agent instances already offered to the inline probe: each launch or resume is asked once. */
   private readonly probed = new Set<string>()
   private readonly pending = new Set<Promise<unknown>>()
+  /** Panes held since an agent was started in them, until detection finds it: session → when. */
+  private readonly launching = new Map<string, number>()
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -76,6 +93,34 @@ export class QuotaEngine {
     this.stopped = true
     if (this.timer !== null) this.deps.clearTimer(this.timer)
     this.timer = null
+    for (const sessionId of this.launching.keys()) this.releaseLaunch(sessionId)
+  }
+
+  /**
+   * An agent is being started in this pane (an agent command was submitted, or a restored pane
+   * starts with one): freeze it now and look for the process right away, instead of letting the
+   * user type into its first screen until the next scan. A shell already running something took
+   * the Enter itself, so it is left alone.
+   */
+  noteLaunch(sessionId: string, agent: AgentKind): void {
+    const { config } = getQuotaState()
+    if (!this.deps.launchHold || !this.deps.inlineProbe || this.launching.has(sessionId)) return
+    if (!config.enabled || !config.agents[agent]?.enabled || this.inputs.busy[sessionId]) return
+    this.deps.launchHold.hold(sessionId)
+    this.launching.set(sessionId, this.deps.now())
+    this.detectAt = 0
+  }
+
+  private releaseLaunch(sessionId: string): void {
+    if (!this.launching.delete(sessionId)) return
+    this.deps.launchHold?.release(sessionId)
+  }
+
+  private expireLaunches(now: number): void {
+    for (const [sessionId, at] of this.launching) {
+      const idle = now - at >= LAUNCH_IDLE_MS && this.inputs.busy[sessionId] === false
+      if (now - at >= LAUNCH_WAIT_MS || idle) this.releaseLaunch(sessionId)
+    }
   }
 
   /** Wait for every fetch, wake and guard action started so far (tests and shutdown). */
@@ -93,6 +138,7 @@ export class QuotaEngine {
     const now = this.deps.now()
     updateQuota((current) => ({ ...current, now }))
     await this.track(releaseUnguarded(this.deps.api))
+    this.expireLaunches(now)
     if (!getQuotaState().config.enabled) return
     if (now >= this.detectAt && !this.detecting) await this.detect(now)
     for (const profile of Object.values(getQuotaState().profiles)) {
@@ -100,6 +146,25 @@ export class QuotaEngine {
       if (monitoring && !profile.fetching && now >= profile.nextFetchAt) void this.track(this.fetchProfile(profile.key))
     }
     this.scheduleWakes(now)
+    pollUsageReads(this.manualRead)
+  }
+
+  private readonly manualRead: ManualReadDeps = {
+    readScreen: (sessionId) => this.deps.readScreen?.(sessionId) ?? null,
+    now: () => this.deps.now(),
+    record: (key, snapshot) => {
+      patchProfile(key, () => ({ fetching: true }))
+      void this.track(this.record(key, snapshot))
+    },
+  }
+
+  /** The strip's read button: the usage panel on this pane's screen, now or once the user opens it. */
+  readUsage(sessionId: string): void {
+    readUsageNow(this.manualRead, sessionId)
+  }
+
+  cancelUsageRead(sessionId: string): void {
+    cancelUsageRead(sessionId)
   }
 
   private async detect(now: number): Promise<void> {
@@ -109,7 +174,7 @@ export class QuotaEngine {
       if (rows) this.applyDetection(rows, now)
     } finally {
       this.detecting = false
-      this.detectAt = now + DETECT_MS
+      this.detectAt = now + (this.launching.size > 0 ? LAUNCH_DETECT_MS : DETECT_MS)
     }
   }
 
@@ -132,6 +197,14 @@ export class QuotaEngine {
     const started = Object.values(terminals).filter((terminal) => !this.probed.has(terminal.instanceKey))
     for (const key of this.probed) {
       if (!live.has(key)) this.probed.delete(key)
+    }
+    // A held pane whose agent showed up is the probe's to release; one where an agent was already
+    // running took the Enter itself, so it is let go now.
+    for (const sessionId of [...this.launching.keys()]) {
+      const terminal = terminals[sessionId]
+      if (!terminal) continue
+      if (started.includes(terminal)) this.launching.delete(sessionId)
+      else this.releaseLaunch(sessionId)
     }
     for (const old of Object.values(current.terminals)) {
       if (!live.has(old.instanceKey) && isHeld(current.guards[old.instanceKey])) void this.track(this.deps.api.resume(old.sessionId))
@@ -172,30 +245,27 @@ export class QuotaEngine {
     const state = getQuotaState()
     for (const terminal of started) {
       this.probed.add(terminal.instanceKey)
-      if (!terminalConfig(state, terminal).enabled) continue
+      if (!terminalConfig(state, terminal).enabled) {
+        this.deps.launchHold?.release(terminal.sessionId)
+        continue
+      }
       // A new profile has no reading yet: its background read waits for the probe.
-      const held = !current.profiles[terminal.profileKey]
-      if (held) this.patchProfile(terminal.profileKey, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
-      void this.track(this.probeInline(terminal.profileKey, terminal, held))
+      const previousNextFetchAt = current.profiles[terminal.profileKey]?.nextFetchAt
+      patchProfile(terminal.profileKey, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
+      void this.track(this.probeInline(terminal.profileKey, terminal, previousNextFetchAt))
     }
   }
 
-  private async probeInline(key: string, terminal: TerminalAgent, held: boolean): Promise<void> {
+  private async probeInline(key: string, terminal: TerminalAgent, previousNextFetchAt?: number): Promise<void> {
     const snapshot = await this.deps.inlineProbe?.(terminal).catch(() => null)
     if (!snapshot || snapshot.error || snapshot.windows.length === 0) {
-      // Fall back to the background read right away, if the probe was holding it.
-      if (held) this.patchProfile(key, () => ({ nextFetchAt: 0 }))
+      patchProfile(key, () => ({ nextFetchAt: previousNextFetchAt ?? 0 }))
+      const current = getQuotaState().profiles[key]
+      if (current?.snapshot) await runGuards(this.deps.api, key, current.snapshot, this.deps.now())
       return
     }
-    this.patchProfile(key, () => ({ fetching: true }))
+    patchProfile(key, () => ({ fetching: true }))
     await this.record(key, snapshot)
-  }
-
-  private patchProfile(key: string, patch: (profile: ProfileQuota) => Partial<ProfileQuota>): void {
-    updateQuota((state) => {
-      const profile = state.profiles[key]
-      return profile ? { ...state, profiles: { ...state.profiles, [key]: { ...profile, ...patch(profile) } } } : state
-    })
   }
 
   private terminalsOf(profileKey: string): TerminalAgent[] {
@@ -219,7 +289,7 @@ export class QuotaEngine {
   private async fetchProfile(key: string): Promise<void> {
     const profile = getQuotaState().profiles[key]
     if (!profile || !this.configsForProfile(key).some((config) => config.enabled)) return
-    this.patchProfile(key, () => ({ fetching: true }))
+    patchProfile(key, () => ({ fetching: true }))
     const snapshot = await this.deps.api.fetchUsage({ agent: profile.agent, profileDir: profile.profileDir, launcher: profile.launcher })
     await this.record(key, snapshot)
   }
@@ -233,7 +303,7 @@ export class QuotaEngine {
     const global = getQuotaState().config.agents[profile.agent]
     const wakeDelays = this.configsForProfile(key).map((config) => config.wake.delayMinutes)
     const wakeDelay = wakeDelays.length > 0 ? Math.max(...wakeDelays) : global.wake.delayMinutes
-    this.patchProfile(key, (current) => ({
+    patchProfile(key, (current) => ({
       snapshot,
       lastGood: snapshot.error ? current.lastGood : snapshot,
       history: !snapshot.error && session ? pushSample(current.history, { at: now, usedPct: session.usedPct }) : current.history,
@@ -241,32 +311,7 @@ export class QuotaEngine {
       wake: snapshot.error ? current.wake : rememberReset(current.wake, snapshot, wakeDelay, now),
     }))
     await runGuards(this.deps.api, key, snapshot, now)
-    this.patchProfile(key, (current) => ({ fetching: false, nextFetchAt: now + this.intervalFor(current, now) }))
-  }
-
-  private intervalFor(profile: ProfileQuota, now: number): number {
-    const state = getQuotaState()
-    const terminals = this.terminalsOf(profile.key)
-    const guards = terminals.map((terminal) => state.guards[terminal.instanceKey])
-    if (guards.some((guard) => guard?.phase === 'guarding')) return guardInterval(this.deps.random)
-    const configs = terminals.map((terminal) => terminalConfig(state, terminal))
-    if (terminals.length > 0 && guards.every((guard) => guard?.phase === 'suspended')) {
-      const resumeTimes = guards.flatMap((guard, index) =>
-        guard?.resetsAt === undefined ? [] : [guard.resetsAt + configs[index].resumeDelayMinutes * 60_000])
-      return heldInterval(resumeTimes.length > 0 ? Math.min(...resumeTimes) : undefined, now)
-    }
-    const reading = profile.lastGood
-    const session = windowOf(reading, 'session')
-    const sessionLimit = Math.min(...configs.map((config) => config.limits.session), 100)
-    return nextInterval({
-      history: profile.history,
-      pressure: Math.max(0, ...configs.map((config) => pressure(reading, config))),
-      headroom: sessionLimit - (session?.usedPct ?? 0),
-      busy: terminals.some((terminal) => this.inputs.busy[terminal.sessionId]),
-      errorStreak: profile.errorStreak,
-      now,
-      random: this.deps.random,
-    })
+    patchProfile(key, (current) => ({ fetching: false, nextFetchAt: now + intervalForProfile(current, this.inputs.busy, this.deps.random, now) }))
   }
 
   private scheduleWakes(now: number): void {
@@ -279,7 +324,7 @@ export class QuotaEngine {
         .find((entry): entry is { config: AgentConfig; key: string } => entry.key !== null)
       if (scheduled) {
         if (isBusy) {
-          this.patchProfile(profile.key, (current) => ({
+          patchProfile(profile.key, (current) => ({
             wake: { ...current.wake, lastKey: scheduled.key },
           }))
           continue
@@ -298,10 +343,10 @@ export class QuotaEngine {
       pushNotice('warning', `Wake-up skipped for ${name}: its weekly limit is reached.`)
       return
     }
-    this.patchProfile(key, (current) => ({ waking: true, wake: scheduleKey ? { ...current.wake, lastKey: scheduleKey } : current.wake }))
+    patchProfile(key, (current) => ({ waking: true, wake: scheduleKey ? { ...current.wake, lastKey: scheduleKey } : current.wake }))
     const result = await this.deps.api.wake({ agent: profile.agent, profileDir: profile.profileDir, launcher: profile.launcher, prompt: config.wake.prompt })
     const now = this.deps.now()
-    this.patchProfile(key, () => ({ waking: false, nextFetchAt: now + AFTER_WAKE_REFRESH_MS }))
+    patchProfile(key, () => ({ waking: false, nextFetchAt: now + AFTER_WAKE_REFRESH_MS }))
     pushNotice(result.ok ? 'info' : 'danger', result.ok ? `Woke ${name}: a new session window has started.` : `Wake-up failed for ${name}: ${result.message ?? 'unknown error'}`)
   }
 
@@ -322,8 +367,12 @@ export class QuotaEngine {
 
   refresh(profileKey?: string): void {
     for (const profile of Object.values(getQuotaState().profiles)) {
-      if (!profileKey || profile.key === profileKey) this.patchProfile(profile.key, () => ({ nextFetchAt: 0 }))
+      if (!profileKey || profile.key === profileKey) patchProfile(profile.key, () => ({ nextFetchAt: 0 }))
     }
+  }
+
+  suspend(sessionId: string): void {
+    void this.track(suspendByHand(this.deps.api, sessionId))
   }
 
   resume(sessionId: string): void {

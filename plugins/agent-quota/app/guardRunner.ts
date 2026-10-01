@@ -6,6 +6,7 @@ import type { TerminalAgent } from './quotaStore'
 import { AGENT_LABELS, pruneOverride } from './quotaConfig'
 import { INITIAL_GUARD, isHeld, manualResume, stepGuard, suspendFailed } from './quotaGuard'
 import { getQuotaState, pushNotice, setOverride, terminalConfig, updateQuota } from './quotaStore'
+import { isProbingUsage } from './inlineUsageProbe'
 
 /**
  * Runs the guard for every terminal on a profile after a reading, and carries out what it decides.
@@ -57,6 +58,7 @@ export async function runGuards(api: AgentQuotaAPI, profileKey: string, snapshot
   const current = getQuotaState()
   const terminals = Object.values(current.terminals).filter((terminal) => terminal.profileKey === profileKey)
   for (const terminal of terminals) {
+    if (isProbingUsage(terminal.sessionId)) continue
     const config = terminalConfig(getQuotaState(), terminal)
     if (!config.enabled) continue
     const previous = getQuotaState().guards[terminal.instanceKey] ?? INITIAL_GUARD
@@ -100,4 +102,31 @@ export async function resumeByHand(api: AgentQuotaAPI, sessionId: string, now: n
   writeGuard(terminal.instanceKey, manualResume(guard, now))
   await api.resume(sessionId)
   pushNotice('info', `${subjectOf(terminal)} resumed by hand. Monitoring is paused for this agent until you enable it again.`)
+}
+
+/** Actively freeze all processes and threads for the current profile. */
+export async function suspendByHand(api: AgentQuotaAPI, sessionId: string): Promise<boolean> {
+  const terminal = getQuotaState().terminals[sessionId]
+  if (!terminal) return false
+  const { pid, startTime, instanceKey } = terminal
+  try {
+    const report = await api.suspend(sessionId, pid, startTime)
+    if (report.frozen.length === 0) {
+      pushNotice('danger', `Could not freeze ${subjectOf(terminal)}: ${report.errors[0] ?? 'no active agent process found'}.`)
+      return false
+    }
+    const totalThreads = report.frozen.reduce((acc, p) => acc + (p.threads?.length ?? 0), 0)
+    const prev = getQuotaState().guards[instanceKey] ?? INITIAL_GUARD
+    writeGuard(instanceKey, {
+      ...prev,
+      phase: 'suspended',
+      lastAttemptAt: Date.now(),
+      frozenPct: prev.frozenPct ?? 100,
+    })
+    pushNotice('warning', `Frozen ${report.frozen.length} process${report.frozen.length === 1 ? '' : 'es'} (${totalThreads} thread${totalThreads === 1 ? '' : 's'}) for ${subjectOf(terminal)}.`)
+    return true
+  } catch (error) {
+    pushNotice('danger', `Could not freeze ${subjectOf(terminal)}: ${String(error)}`)
+    return false
+  }
 }

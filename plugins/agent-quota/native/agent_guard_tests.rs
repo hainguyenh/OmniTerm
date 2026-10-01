@@ -72,6 +72,7 @@ fn held(pid: u32, start_time: u64, threads: &[u32]) -> ProcTarget {
         start_time,
         image: "claude.exe".into(),
         threads: threads.to_vec(),
+        profile_name: None,
     }
 }
 
@@ -111,7 +112,7 @@ fn suspends_agents_once_and_catches_late_sub_agents_and_threads() {
     };
     let mut holding = Vec::new();
     let mut rows = tree();
-    let first = suspend_session(&ops, &rows, 100, 101, 2, &mut holding).expect("suspend");
+    let first = suspend_session(&ops, &rows, 100, 101, 2, &mut holding, None).expect("suspend");
     assert_eq!(first.newly_frozen, 2);
     assert_eq!(holding[0].threads, vec![1, 2]);
     assert_eq!(holding[1].threads, vec![3]);
@@ -121,7 +122,7 @@ fn suspends_agents_once_and_catches_late_sub_agents_and_threads() {
         threads: vec![(101, vec![1, 2, 9]), (103, vec![3])],
         ..FakeOps::default()
     };
-    let second = suspend_session(&ops, &rows, 100, 101, 2, &mut holding).expect("re-scan");
+    let second = suspend_session(&ops, &rows, 100, 101, 2, &mut holding, None).expect("re-scan");
     assert_eq!(second.newly_frozen, 1, "only the new sub-agent is new");
     assert_eq!(second.frozen.len(), 3);
     assert_eq!(
@@ -139,7 +140,7 @@ fn a_failed_suspend_is_reported_and_retried_later() {
         ..FakeOps::default()
     };
     let mut holding = Vec::new();
-    let report = suspend_session(&ops, &tree(), 100, 101, 2, &mut holding).expect("partial");
+    let report = suspend_session(&ops, &tree(), 100, 101, 2, &mut holding, None).expect("partial");
     assert_eq!(report.newly_frozen, 1);
     assert_eq!(report.errors.len(), 1);
     assert!(report.errors[0].contains("claude.exe (103)"));
@@ -149,7 +150,7 @@ fn a_failed_suspend_is_reported_and_retried_later() {
         failing: vec![101, 103],
         ..FakeOps::default()
     };
-    let again = suspend_session(&ops, &tree(), 100, 101, 2, &mut holding).expect("re-scan");
+    let again = suspend_session(&ops, &tree(), 100, 101, 2, &mut holding, None).expect("re-scan");
     assert_eq!(again.frozen.len(), 1);
     assert_eq!(holding[0].threads, vec![1010]);
 }
@@ -158,7 +159,7 @@ fn a_failed_suspend_is_reported_and_retried_later() {
 fn suspend_rejects_a_stale_request_without_touching_processes() {
     let ops = FakeOps::default();
     let mut holding = Vec::new();
-    assert!(suspend_session(&ops, &tree(), 100, 101, 7, &mut holding).is_err());
+    assert!(suspend_session(&ops, &tree(), 100, 101, 7, &mut holding, None).is_err());
     assert!(ops.calls().is_empty());
 }
 
@@ -186,7 +187,7 @@ fn resume_only_thaws_processes_that_are_still_the_same() {
 fn terminate_thaws_held_processes_and_stops_deepest_first() {
     let ops = FakeOps::default();
     let stopped =
-        terminate_session(&ops, &tree(), 100, 101, 2, vec![held(103, 4, &[7])]).expect("terminate");
+        terminate_session(&ops, &tree(), 100, 101, 2, vec![held(103, 4, &[7])], None).expect("terminate");
     assert_eq!(stopped, 2);
     assert_eq!(
         ops.calls(),
@@ -196,7 +197,7 @@ fn terminate_thaws_held_processes_and_stops_deepest_first() {
             ("terminate", 101, vec![])
         ]
     );
-    assert!(terminate_session(&ops, &tree(), 100, 1, 1, Vec::new()).is_err());
+    assert!(terminate_session(&ops, &tree(), 100, 1, 1, Vec::new(), None).is_err());
 }
 
 #[test]
@@ -206,9 +207,49 @@ fn terminate_counts_only_processes_that_stopped() {
         ..FakeOps::default()
     };
     assert_eq!(
-        terminate_session(&ops, &tree(), 100, 101, 2, Vec::new()),
+        terminate_session(&ops, &tree(), 100, 101, 2, Vec::new(), None),
         Ok(1)
     );
+}
+
+fn with_env(mut r: ProcRow, key: &str, value: &str) -> ProcRow {
+    r.env.push((key.to_string(), value.to_string()));
+    r
+}
+
+#[test]
+fn suspends_all_processes_sharing_the_same_profile_across_the_system() {
+    let ops = FakeOps::default();
+    let mut holding = Vec::new();
+    let rows = vec![
+        row(100, 1, 1, "pwsh.exe"),
+        with_env(
+            row(101, 100, 2, "claude.exe"),
+            "CLAUDE_CONFIG_DIR",
+            "C:\\profiles\\work",
+        ),
+        // Out-of-tree Claude process sharing the same profile directory
+        with_env(
+            row(200, 1, 10, "claude.exe"),
+            "CLAUDE_CONFIG_DIR",
+            "C:\\profiles\\work",
+        ),
+        // Child of the out-of-tree Claude process
+        row(201, 200, 11, "claude.exe"),
+        // Out-of-tree Claude process using a DIFFERENT profile
+        with_env(
+            row(300, 1, 20, "claude.exe"),
+            "CLAUDE_CONFIG_DIR",
+            "C:\\profiles\\personal",
+        ),
+    ];
+    let report = suspend_session(&ops, &rows, 100, 101, 2, &mut holding, None).expect("suspend");
+    assert_eq!(report.newly_frozen, 3);
+    let frozen_pids: Vec<u32> = report.frozen.iter().map(|t| t.pid).collect();
+    assert!(frozen_pids.contains(&101));
+    assert!(frozen_pids.contains(&200));
+    assert!(frozen_pids.contains(&201));
+    assert!(!frozen_pids.contains(&300), "different profile must not be suspended");
 }
 
 #[test]

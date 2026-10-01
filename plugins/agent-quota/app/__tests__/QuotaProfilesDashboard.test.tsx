@@ -22,7 +22,7 @@ afterEach(() => {
 })
 
 describe('QuotaProfilesDashboard', () => {
-  it('renders the active engine profiles without discovery or recommendation controls', () => {
+  it('renders the active engine profiles and allows fetching quota', () => {
     const active = terminal({
       profileKey: 'claude:launcher:claude-work',
       profileName: 'claude-work',
@@ -39,8 +39,8 @@ describe('QuotaProfilesDashboard', () => {
     expect(screen.getByRole('listitem', { name: 'claude-work profile' })).toBeInTheDocument()
     expect(screen.getByText('1 active profile · live engine status')).toBeInTheDocument()
     expect(screen.queryByText(/Use now/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Fetch/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Fetch all' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fetch quota for claude-work' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fetch all' })).toBeInTheDocument()
   })
 
   it('collapses multiple active terminals for the same profile into one row', () => {
@@ -259,7 +259,7 @@ describe('QuotaProfilesDashboard', () => {
     expect(screen.getByLabelText('Week 25% used')).toBeInTheDocument()
   })
 
-  it('renders Fetch all button when inactive profiles exist and fetches only those without readings', async () => {
+  it('renders Fetch all button when profiles exist and fetches all profiles', async () => {
     const readingNow: QuotaSnapshot = {
       windows: [
         { kind: 'session', label: 'Current session', usedPct: 15, resetsAt: Date.now() + 3_600_000 },
@@ -306,7 +306,7 @@ describe('QuotaProfilesDashboard', () => {
     expect(fetchUsage).toHaveBeenCalledTimes(1)
     expect(fetchUsage).toHaveBeenCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-has-info' })
 
-    // Now click 'Fetch all' — should only fetch claude-needs-info, NOT claude-has-info again
+    // Now click 'Fetch all' — refreshes all profiles
     const fetchAllBtn = screen.getByRole('button', { name: 'Fetch all' })
     expect(fetchAllBtn).toBeInTheDocument()
     expect(fetchAllBtn).toBeEnabled()
@@ -316,10 +316,8 @@ describe('QuotaProfilesDashboard', () => {
       await Promise.resolve()
     })
 
-    expect(fetchUsage).toHaveBeenCalledTimes(2)
+    expect(fetchUsage).toHaveBeenCalledTimes(3)
     expect(fetchUsage).toHaveBeenLastCalledWith({ agent: 'claude', profileDir: null, launcher: 'claude-needs-info' })
-
-    // Now all inactive profiles have readings, so 'Fetch all' button should be disabled
-    expect(fetchAllBtn).toBeDisabled()
+    expect(fetchAllBtn).toBeEnabled()
   })
 })

@@ -88,6 +88,9 @@ function buildSnapshot(
   const activeTabs: PersistedTab[] = ptyTabs.map(tab => {
     const conn = connectionFor(tab.connId)
     const cwd = sessionCwds[tab.id] ?? conn?.localCwd
+    const stored = findSessionByTabId(tab.id)
+    const presence = getPanePresence(tab.id)
+    const agent = stored?.agent ?? presence?.agent ?? parseAgentTitle(tab.name)?.agentName
     return {
       id: tab.id,
       connId: tab.connId,
@@ -96,6 +99,10 @@ function buildSnapshot(
         ...(cwd ? { cwd } : {}),
         cwdSource: sessionCwds[tab.id] ? 'reported' : conn?.localCwd ? 'launch' : 'unknown',
         ...(conn?.shell ? { shell: conn.shell } : {}),
+        ...(agent ? { agent } : {}),
+        ...(stored?.sessionId ? { agentSessionId: stored.sessionId } : {}),
+        ...(stored?.profileName ? { profileName: stored.profileName } : {}),
+        ...(stored?.launcher ? { launcher: stored.launcher } : {}),
       },
     }
   })

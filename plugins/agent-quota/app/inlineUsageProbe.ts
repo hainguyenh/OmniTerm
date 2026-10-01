@@ -9,21 +9,27 @@
  * pane's screen, the panel is closed (Esc), and the pane is released with anything typed meanwhile.
  * If any step fails the engine falls back to the background read.
  *
- * A resume picker or a first-run dialog (folder trust, login) needs the user, and typing into it
- * would pick for them: the probe hands the keyboard back at once, waits for it to close, and asks
- * only if nothing was typed after that.
+ * The freeze starts as soon as an agent command is submitted in the pane (or a restored pane is
+ * started with one), before the process even shows up: a launch hold keeps the keyboard until the
+ * probe takes the pane over, so the user cannot type into the agent's first screen (a folder-trust
+ * dialog the probe answers, or the prompt it is about to type into).
+ *
+ * A resume picker or a first-run login needs the user, and typing into it would pick for them: the
+ * probe hands the keyboard back at once, waits for it to close, and asks only if nothing was typed
+ * after that.
  */
 import { useSyncExternalStore } from 'react'
 
-import type { AgentKind, QuotaError, QuotaSnapshot, QuotaWindow } from '../src/types'
+import type { QuotaSnapshot } from '../src/types'
 import type { TerminalAgent } from './quotaStore'
+import type { DriveIO, OutputWatch } from './usageProbeCore'
 
-import { parseAgyUsage } from '../src/agyUsageParser'
-import { parseClaudeUsage } from '../src/claudeUsageParser'
-import { parseCodexStatus } from '../src/codexStatusParser'
 import { tapSessionOutput } from '../../../ui/tauriSessions'
 import { holdPaneInput, lastUserInputAt } from '../../../ui/utils/paneInputHold'
 import { readPaneScreen } from '../../../ui/utils/paneScreens'
+import { AGENT_PROBES, isBlockingScreen, MAX_SETTLE_MS, QUIET_MS, settleAndTrust, submitAndRead, waitForQuiet } from './usageProbeCore'
+
+export { isBlockingScreen, isTrustScreen } from './usageProbeCore'
 
 /** Only an agent this young is still at its empty prompt (or its resume picker). */
 export const PROBE_MAX_AGE_S = 30
@@ -33,149 +39,103 @@ export const PROBE_MAX_AGE_S = 30
  * the agent. Comparing against the bare start second declined nearly every launch.
  */
 const LAUNCH_GRACE_MS = 1_500
-const QUIET_MS = 700
-const MAX_SETTLE_MS = 8_000
 /** How long a picker or dialog may stay up before the probe gives up and the background read runs. */
 const MAX_DIALOG_WAIT_MS = 10_000
 const DIALOG_POLL_MS = 250
-const REPLY_TIMEOUT_MS = 6_000
-/**
- * The command arrives as one chunk, which Codex's composer takes for a paste; an Enter right after a
- * paste burst inserts a newline instead of submitting, so the Enter waits well past that window.
- */
-const SUBMIT_DELAY_MS = 300
-const CLOSE_DELAY_MS = 150
+/** Safety net: a launch hold nobody took over (the engine stopped) lets go of the pane by itself. */
+const LAUNCH_HOLD_MAX_MS = 25_000
 
-type UsageParse = { ok: true; windows: QuotaWindow[] } | { ok: false; error: QuotaError }
-
-interface AgentProbe {
-  command: string
-  /**
-   * Closes the panel the command opens. Codex prints `/status` into its history instead, and an Esc
-   * there would arm its "edit previous message" shortcut.
-   */
-  close?: string
-  /** Also parse the raw byte stream: Claude's panel is plain lines; Codex paints with cursor moves. */
-  stream: boolean
-  parse(text: string, now: number): UsageParse
-}
-
-const AGENT_PROBES: Record<AgentKind, AgentProbe> = {
-  claude: { command: '/usage', close: '\x1b', stream: true, parse: parseClaudeUsage },
-  codex: { command: '/status', stream: false, parse: parseCodexStatus },
-  agy: { command: '/usage', close: '\x1b', stream: true, parse: parseAgyUsage },
-}
-
-const TRUST_SCREEN = [
-  /\bquick safety check\b/i,
-  /\bdo you trust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
-  /\btrust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
-  /\byes, trust (?:this )?(?:folder|directory|project|environment|env|workspace)\b/i,
-  /\btrust this (?:folder|directory|project|environment|env|workspace)\b/i,
-  /\btrust (?:folder|environment|env|workspace)\b/i,
-  /\btrust the authors\b/i,
-  /^\s*[❯›]?\s*1[.)]\s+Yes.*trust/im,
-]
-
-const PROMPT_MARKER = [
-  /^[│┃|]\s*>\s*[│┃|]/,
-  /^[❯›>]\s*$/,
-  /^[❯›>]\s+(?!1[.)]|\(1\)|\[1\])\S/,
-  /^(?:[a-zA-Z]:[\\/]|[\w.-]+@|PS\b|[$#]\s)/,
-]
-
-function hasPromptAfter(lines: readonly string[], matchIdx: number): boolean {
-  for (let i = matchIdx + 1; i < lines.length; i += 1) {
-    const line = lines[i].trim()
-    if (!line) continue
-    if (PROMPT_MARKER.some((re) => re.test(line))) return true
-  }
-  return false
-}
-
-export function isTrustScreen(lines: readonly string[]): boolean {
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (TRUST_SCREEN.some((pattern) => pattern.test(lines[i]))) {
-      return !hasPromptAfter(lines, i)
-    }
-  }
-  return false
-}
-
-/**
- * A screen that is waiting on a choice: a resume picker, a folder-trust or login prompt, or any
- * list with a selected numbered option (`❯ 1. Yes, proceed`). Prose lines quoting a `>` prompt are
- * not a selection, so only the agents' own selection markers count.
- */
-const BLOCKING_SCREEN = [
-  /\bresume (?:a previous )?session\b/i,
-  /\btype to search\b/i,
-  /\btrust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
-  /\bquick safety check\b/i,
-  /\bdo you trust\b/i,
-  /\bpress enter to continue\b/i,
-  /^[\s│┃|]*[❯›]\s*\d+[.)]\s+\S/,
-  /^[\s│┃|]*\[\d+\]\s+\S/,
-]
-
-export function isBlockingScreen(lines: readonly string[]): boolean {
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (BLOCKING_SCREEN.some((pattern) => pattern.test(lines[i]))) {
-      return !hasPromptAfter(lines, i)
-    }
-  }
-  return false
-}
-
-export interface ProbeIO {
-  send(sessionId: string, data: string): void
+export interface ProbeIO extends DriveIO {
   tap(sessionId: string, onOutput: (text: string) => void): () => void
   hold(sessionId: string): () => string
   lastUserInputAt(sessionId: string): number | undefined
-  /** The pane's rendered bottom page; null when the pane is not in this window. */
-  screen(sessionId: string): string[] | null
-  now(): number
-  sleep(ms: number): Promise<void>
 }
 
-/** Session → the command being typed into it, while the probe owns that pane. */
-const probing = new Map<string, string>()
+/** Why a pane is veiled: an agent is starting under a launch hold, or its quota is being read. */
+export type ProbeVeil = { phase: 'starting' } | { phase: 'reading'; command: string }
+
+const STARTING: ProbeVeil = { phase: 'starting' }
+const veils = new Map<string, ProbeVeil>()
 const listeners = new Set<() => void>()
 
-function setProbing(sessionId: string, command: string | null): void {
-  if (command) probing.set(sessionId, command)
-  else probing.delete(sessionId)
+function setVeil(sessionId: string, veil: ProbeVeil | null): void {
+  if (veil) veils.set(sessionId, veil)
+  else veils.delete(sessionId)
   for (const listener of listeners) listener()
 }
 
-/** The command the probe is typing into this pane, or null — the pane is veiled while it runs. */
-export function useUsageProbe(sessionId: string): string | null {
+/** What veils this pane right now, or null — the pane's input is held while it is set. */
+export function useUsageProbe(sessionId: string): ProbeVeil | null {
   return useSyncExternalStore(
     (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
     },
-    () => probing.get(sessionId) ?? null,
+    () => veils.get(sessionId) ?? null,
     () => null,
   )
 }
 
-/** Whether this terminal's agent is fresh enough, and untouched, for an inline probe. */
-export function canProbeInline(terminal: TerminalAgent, io: Pick<ProbeIO, 'lastUserInputAt' | 'now'>): boolean {
+interface LaunchHold {
+  release: () => string
+  timer: ReturnType<typeof setTimeout>
+}
+
+const launchHolds = new Map<string, LaunchHold>()
+
+/** Hand back the pane: the veil lifts and whatever was typed meanwhile reaches it, in order. */
+function giveBack(io: Pick<ProbeIO, 'send'>, sessionId: string, release: () => string): void {
+  const typed = release()
+  setVeil(sessionId, null)
+  if (typed) io.send(sessionId, typed)
+}
+
+function takeLaunchHold(sessionId: string): (() => string) | null {
+  const hold = launchHolds.get(sessionId)
+  if (!hold) return null
+  clearTimeout(hold.timer)
+  launchHolds.delete(sessionId)
+  return hold.release
+}
+
+/** Freeze a pane an agent is being started in, until the probe takes it over or it is released. */
+export function holdForLaunch(sessionId: string, io: Pick<ProbeIO, 'hold' | 'send'> = LIVE_PROBE_IO): void {
+  if (launchHolds.has(sessionId) || veils.has(sessionId)) return
+  const release = io.hold(sessionId)
+  const timer = setTimeout(() => releaseLaunchHold(sessionId, io), LAUNCH_HOLD_MAX_MS)
+  launchHolds.set(sessionId, { release, timer })
+  setVeil(sessionId, STARTING)
+}
+
+/** Let go of a launch hold no probe is going to take over. */
+export function releaseLaunchHold(sessionId: string, io: Pick<ProbeIO, 'send'> = LIVE_PROBE_IO): void {
+  const release = takeLaunchHold(sessionId)
+  if (release) giveBack(io, sessionId, release)
+}
+
+export function hasLaunchHold(sessionId: string): boolean {
+  return launchHolds.has(sessionId)
+}
+
+export function isProbingUsage(sessionId: string): boolean {
+  return launchHolds.has(sessionId) || veils.has(sessionId)
+}
+
+/**
+ * Whether this terminal's agent is fresh enough, and untouched, for an inline probe. A pane held
+ * since the launch cannot have been typed into, so only the age counts then.
+ */
+export function canProbeInline(
+  terminal: TerminalAgent,
+  io: Pick<ProbeIO, 'lastUserInputAt' | 'now'>,
+  heldSinceLaunch = false,
+): boolean {
   if (!Object.hasOwn(AGENT_PROBES, terminal.agent)) return false
   const startedMs = terminal.startTime * 1000
   if (io.now() - startedMs > PROBE_MAX_AGE_S * 1000) return false
+  if (heldSinceLaunch) return true
   const typed = io.lastUserInputAt(terminal.sessionId)
   return typed === undefined || typed < startedMs + LAUNCH_GRACE_MS
-}
-
-/** Resolves once no output has arrived for `quietMs`, or after `maxMs`. */
-async function waitForQuiet(io: ProbeIO, changedAt: () => number, quietMs: number, maxMs: number): Promise<void> {
-  const start = io.now()
-  while (io.now() - start < maxMs) {
-    if (io.now() - changedAt() >= quietMs) return
-    await io.sleep(100)
-  }
 }
 
 /** When the picker or dialog on screen went away; null if it outlasted the wait or the pane closed. */
@@ -190,83 +150,27 @@ async function waitForUnblocked(io: ProbeIO, sessionId: string): Promise<number 
   return null
 }
 
-/**
- * Parse the reply from what the command added to the screen: lines already there before it was
- * typed (a resumed transcript, an old panel) are left out, so nothing stale is read as the answer.
- */
-function readReply(
-  probe: AgentProbe,
-  screen: string[] | null,
-  before: ReadonlySet<string>,
-  beforeText: string,
-  stream: string,
-  now: number,
-): UsageParse | null {
-  const currentLines = screen ?? []
-  const currentText = currentLines.join('\n')
-
-  const fresh = currentLines.filter((line) => line.trim() !== '' && !before.has(line)).join('\n')
-  const fromScreen = fresh ? probe.parse(fresh, now) : null
-  if (fromScreen?.ok) return fromScreen
-
-  if (currentText !== beforeText && currentLines.length > 0) {
-    const cmdEscaped = probe.command.replace('/', '\\/')
-    const cmdRe = new RegExp(`[❯›>]\\s*${cmdEscaped}`, 'i')
-    let lastCmdIdx = -1
-    for (let i = currentLines.length - 1; i >= 0; i -= 1) {
-      if (cmdRe.test(currentLines[i]) || currentLines[i].includes(probe.command)) {
-        lastCmdIdx = i
-        break
-      }
-    }
-    if (lastCmdIdx !== -1 && lastCmdIdx < currentLines.length - 1) {
-      const afterCmd = currentLines.slice(lastCmdIdx + 1).join('\n')
-      const fromAfterCmd = probe.parse(afterCmd, now)
-      if (fromAfterCmd.ok) return fromAfterCmd
-    }
-    const fromFull = probe.parse(currentText, now)
-    if (fromFull.ok) return fromFull
-  }
-
-  if (!probe.stream || !stream) return fromScreen
-  const fromStream = probe.parse(stream, now)
-  return fromStream.ok || fromStream.error === 'not_signed_in' ? fromStream : fromScreen
-}
-
 export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Promise<QuotaSnapshot | null> {
-  if (!canProbeInline(terminal, io)) return null
   const { sessionId } = terminal
-  const probe = AGENT_PROBES[terminal.agent]
-  if (!io.screen(sessionId)) return null
-  let output = ''
-  let lastOutputAt = io.now()
-  const untap = io.tap(sessionId, (text) => {
-    output += text
-    lastOutputAt = io.now()
-  })
-  const freeze = () => {
-    const release = io.hold(sessionId)
-    setProbing(sessionId, probe.command)
-    return () => {
-      const typed = release()
-      setProbing(sessionId, null)
-      if (typed) io.send(sessionId, typed)
-    }
+  const adopted = takeLaunchHold(sessionId)
+  if (!canProbeInline(terminal, io, adopted !== null) || !io.screen(sessionId)) {
+    if (adopted) giveBack(io, sessionId, adopted)
+    return null
   }
-  let unfreeze: (() => void) | null = freeze()
-  let sent = false
+  const probe = AGENT_PROBES[terminal.agent]
+  const reading: ProbeVeil = { phase: 'reading', command: probe.command }
+  const watch: OutputWatch = { text: '', lastAt: io.now() }
+  const untap = io.tap(sessionId, (text) => {
+    watch.text += text
+    watch.lastAt = io.now()
+  })
+  const freeze = (release: () => string = io.hold(sessionId)) => {
+    setVeil(sessionId, reading)
+    return () => giveBack(io, sessionId, release)
+  }
+  let unfreeze: (() => void) | null = freeze(adopted ?? undefined)
   try {
-    // Let the agent finish drawing its first screen before typing into it.
-    await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
-    let screen = io.screen(sessionId) ?? []
-    // When agent asks about trusting folder or environment, auto-confirm trust (1 + Enter) so it reaches the command prompt.
-    for (let t = 0; t < 3; t += 1) {
-      if (!isTrustScreen(screen)) break
-      io.send(sessionId, '1\r')
-      await io.sleep(SUBMIT_DELAY_MS)
-      await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
-      screen = io.screen(sessionId) ?? []
-    }
+    const screen = await settleAndTrust(io, sessionId, watch)
     if (isBlockingScreen(screen)) {
       unfreeze()
       unfreeze = null
@@ -275,44 +179,13 @@ export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Pr
       // Keys typed after the picker closed went to the agent's prompt: the user has taken over.
       if (clearedAt === null || (typed !== undefined && typed > clearedAt)) return null
       unfreeze = freeze()
-      await waitForQuiet(io, () => lastOutputAt, QUIET_MS, MAX_SETTLE_MS)
+      await waitForQuiet(io, watch, QUIET_MS, MAX_SETTLE_MS)
       if (isBlockingScreen(io.screen(sessionId) ?? [])) return null
     }
-    const beforeScreen = io.screen(sessionId) ?? []
-    const before = new Set(beforeScreen)
-    const beforeText = beforeScreen.join('\n')
-    output = ''
-    sent = true
-    io.send(sessionId, probe.command)
-    await io.sleep(SUBMIT_DELAY_MS)
-    io.send(sessionId, '\r')
-    const started = io.now()
-    let retriedEnter = false
-    while (io.now() - started < REPLY_TIMEOUT_MS) {
-      const curScreen = io.screen(sessionId)
-      const parsed = readReply(probe, curScreen, before, beforeText, output, io.now())
-      if (parsed?.ok) return { windows: parsed.windows, fetchedAt: io.now(), source: 'cli' }
-      if (parsed?.error === 'not_signed_in') return null
-
-      // If no reply after 900ms, retry Enter if command is still waiting on the prompt line
-      if (!retriedEnter && io.now() - started >= 900) {
-        retriedEnter = true
-        const lines = curScreen ?? []
-        const hasUnsubmitted = lines.some((line) => line.includes(probe.command) && /[❯›>]\s*\/usage/i.test(line))
-        if (hasUnsubmitted || !output) {
-          io.send(sessionId, '\r')
-        }
-      }
-      await io.sleep(150)
-    }
-    return null
+    const parsed = await submitAndRead(probe, io, sessionId, watch)
+    return parsed?.ok ? { windows: parsed.windows, fetchedAt: io.now(), source: 'cli' } : null
   } finally {
     untap()
-    // Close the panel whether or not it parsed, then give the agent back its keyboard.
-    if (sent && probe.close) {
-      io.send(sessionId, probe.close)
-      await io.sleep(CLOSE_DELAY_MS)
-    }
     unfreeze?.()
   }
 }

@@ -62,11 +62,27 @@ describe('SessionFooterBar controls', () => {
     expect(screen.getByText('F:/repo')).toBeInTheDocument()
   })
 
+  it('hides the copy output control unless the footer actions opt into it', () => {
+    renderFooter({ appearance: { fontSize: 14, onFontSizeChange: vi.fn(), onToolbarActionsChange: vi.fn() } })
+    expect(screen.queryByRole('button', { name: 'Copy terminal output' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save terminal output to file' })).toBeInTheDocument()
+  })
+
   it('shows the shell in the footer and keeps the main latency icon', () => {
     renderFooter({ latency: 42, shellLabel: 'PowerShell 7' })
     expect(screen.getByText('// PowerShell 7')).toBeInTheDocument()
     // A healthy link shows full signal bars, not a warning-looking bolt.
     expect(screen.getByTitle('TCP latency to host · good').querySelector('[data-latency-level="good"]')).toBeInTheDocument()
+  })
+
+  it('pulses the latency icon while it is measured, and shows only "-" when it is not', () => {
+    const { unmount } = renderFooter({ latency: 42 })
+    expect(screen.getByTitle('TCP latency to host · good').querySelector('[data-latency-level="good"]')).toHaveClass('motion-safe:animate-pulse')
+    unmount()
+    renderFooter({ latency: null })
+    const idle = screen.getByTitle('TCP latency to host · not measured')
+    expect(idle).toHaveTextContent(/^-$/)
+    expect(idle.querySelector('svg')).toBeNull()
   })
 
   it('keeps the main latency icon when no custom art is configured', () => {

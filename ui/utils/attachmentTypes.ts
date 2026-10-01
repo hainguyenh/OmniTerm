@@ -33,16 +33,16 @@ export interface ClipboardAPI {
   /** Native RGBA clipboard read; null when the clipboard holds no image or the read fails. */
   readImage: () => Promise<{ rgba: Uint8Array; width: number; height: number } | null>
   /** Persist clipboard-image bytes as a PNG attachment; resolves to its absolute path. */
-  saveImageTemp: (bytes: Uint8Array) => Promise<string>
+  saveImageTemp: (bytes: Uint8Array, sessionId?: string) => Promise<string>
 }
 
 export interface AttachmentsAPI {
   /** Store one dropped or pasted file; `name` is only a hint the backend sanitizes. */
-  save: (name: string, bytes: Uint8Array) => Promise<AttachmentInfo | null>
+  save: (name: string, bytes: Uint8Array, sessionId?: string) => Promise<AttachmentInfo | null>
   /** Copy the files Explorer put on the clipboard into the folder (Windows); empty otherwise. */
-  importClipboardFiles: () => Promise<AttachmentInfo[]>
-  list: () => Promise<AttachmentListing>
-  clear: () => Promise<AttachmentClearReport>
+  importClipboardFiles: (sessionId?: string) => Promise<AttachmentInfo[]>
+  list: (sessionId?: string) => Promise<AttachmentListing>
+  clear: (sessionId?: string) => Promise<AttachmentClearReport>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

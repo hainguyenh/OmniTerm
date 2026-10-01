@@ -11,7 +11,7 @@ import { AgentIcon } from './QuotaLine'
 import { createAgentQuotaAPI, listAgentProfiles } from './agentQuotaAPI'
 import { useDialogDrag } from './dialogDrag'
 import { adviseProfiles } from './profileAdvisor'
-import { dashboardRows, fetchAllMissingProfiles, fetchInactiveProfile, setDashboardOpen, setDiscoveredProfiles, useProfileDashboard } from './profileDashboard'
+import { dashboardRows, fetchAllProfiles, fetchProfileRow, setDashboardOpen, setDiscoveredProfiles, useProfileDashboard } from './profileDashboard'
 import { AGENT_KINDS, AGENT_LABELS } from './quotaConfig'
 import { formatCountdown, formatReset, windowOf, zoneFor } from './quotaPolicy'
 import { useCoarseNow, useQuota } from './quotaStore'
@@ -82,7 +82,7 @@ function ProfileRow({ row, reading, advice, limits, now, onFetch }: {
       <WindowCell label="Week" window={windowOf(reading, 'weekly')} limit={limits.weekly} now={now} />
       <span className="aq-pd-status-cell flex items-center gap-1.5 justify-end">
         <span className="aq-pd-status" title={advice.reason}>{status}</span>
-        {row.activeTerminalCount === 0 && onFetch && (
+        {onFetch && (
           <button
             type="button"
             aria-label={`Fetch quota for ${row.profileName}`}
@@ -146,18 +146,17 @@ export function QuotaProfilesDashboard({ api }: { api?: AgentQuotaAPI } = {}) {
   }, [])
 
   const handleFetch = (row: DashboardRow) => {
-    void fetchInactiveProfile(row, quotaApi)
+    void fetchProfileRow(row, quotaApi)
   }
 
   const handleFetchAll = () => {
-    void fetchAllMissingProfiles(rows, quotaApi)
+    void fetchAllProfiles(rows, quotaApi)
   }
 
   const activeCount = rows.filter((r) => r.activeTerminalCount > 0).length
   const inactiveCount = rows.filter((r) => r.activeTerminalCount === 0).length
-  const missingRows = rows.filter((r) => r.activeTerminalCount === 0 && !r.reading)
-  const isFetchingAll = missingRows.some((r) => r.fetching)
-  const canFetchAll = missingRows.some((r) => !r.fetching)
+  const isFetchingAll = rows.some((r) => r.fetching)
+  const canFetchAll = !isFetchingAll && rows.length > 0
   const summary = inactiveCount === 0
     ? `${activeCount} active profile${activeCount === 1 ? '' : 's'} · live engine status`
     : `${activeCount} active · ${inactiveCount} inactive`
@@ -172,7 +171,7 @@ export function QuotaProfilesDashboard({ api }: { api?: AgentQuotaAPI } = {}) {
             <div className="font-bold tracking-wide">Profiles</div>
             <div className="text-theme-dim">{summary}</div>
           </div>
-          {inactiveCount > 0 && (
+          {rows.length > 0 && (
             <button
               type="button"
               aria-label="Fetch all"

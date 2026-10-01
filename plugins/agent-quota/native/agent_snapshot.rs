@@ -64,6 +64,54 @@ pub fn tree_rows(system: &mut System, shell_pids: &[u32]) -> Vec<ProcRow> {
         .collect()
 }
 
+/// Rows for acting on one terminal: every process in `shell`'s tree, plus any AI agent candidate
+/// across the entire system (including detached sub-agents and other processes on the same profile).
+pub fn action_rows(system: &mut System, shell: u32) -> Vec<ProcRow> {
+    let table = ProcTable::snapshot(system);
+    let mut wanted: Vec<u32> = vec![shell];
+    wanted.extend(table.descendants(shell));
+
+    for (pid, process) in system.processes() {
+        let pid_u32 = pid.as_u32();
+        if !wanted.contains(&pid_u32) {
+            let stem = super::agent_detect::image_stem(&process.name().to_string_lossy());
+            if stem == "claude"
+                || stem.starts_with("codex")
+                || stem.starts_with("agy")
+                || super::agent_detect::is_script_host(&stem)
+            {
+                wanted.push(pid_u32);
+                wanted.extend(table.descendants(pid_u32));
+            }
+        }
+    }
+
+    let mut rows: Vec<ProcRow> = pids(&wanted)
+        .iter()
+        .filter_map(|pid| system.process(*pid))
+        .map(|process| ProcRow {
+            pid: process.pid().as_u32(),
+            parent: process.parent().map(|parent| parent.as_u32()).unwrap_or(0),
+            start_time: process.start_time(),
+            image: process.name().to_string_lossy().into_owned(),
+            cmd: Vec::new(),
+            env: Vec::new(),
+        })
+        .collect();
+
+    let hosts = super::agent_detect::script_host_pids(&rows);
+    fill_command_lines(system, &mut rows, &hosts);
+
+    let agent_pids: Vec<u32> = rows
+        .iter()
+        .filter(|row| super::agent_detect::classify(row).is_some())
+        .map(|row| row.pid)
+        .collect();
+    fill_profile_env(system, &mut rows, &agent_pids);
+
+    rows
+}
+
 /// Phase 2: fill in the command lines of `targets`, and only those.
 pub fn fill_command_lines(system: &mut System, rows: &mut [ProcRow], targets: &[u32]) {
     if targets.is_empty() {

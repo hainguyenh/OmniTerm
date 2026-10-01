@@ -2,11 +2,13 @@ import React, { useEffect, useRef } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { noteSubmittedInput, onAgentLaunch } from '../utils/agentLaunchSignal'
 import { interceptPaneInput } from '../utils/paneInputHold'
 import { registerPaneScreen } from '../utils/paneScreens'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { getPanePresence } from '../utils/agentPresenceStore'
+import { findSessionByTabId } from '../utils/agentSessionStorage'
 import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
@@ -23,7 +25,8 @@ import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
 import { createTerminalKeyHandler } from '../terminal/terminalKeyHandler'
-import { bufferText, createLastOutputTracker, registerTerminalCopyHandler, registerTerminalSaveExport, viewportText } from '../utils/terminalCopyExtract'
+import { bufferText, createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
+import { registerTerminalSaveExport } from '../utils/terminalSaveExport'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
@@ -64,35 +67,29 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // The agent currently running in this pane (from OSC title, connection command, or process presence).
   // Decides the image-paste strategy per agent — read at paste time so an agent launched inside
   // an existing shell applies without a remount.
-  const initialAgent = parseAgentTitle(connection.name)?.agentName ??
-    parseAgentTitle(connection.shell)?.agentName ??
+  const resolveCurrentAgent = (fallback: string | null) =>
+    fallback ??
+    findSessionByTabId(id)?.agent ??
     parseAgentTitle((connection as { localCommand?: string }).localCommand)?.agentName ??
-    null
-  const agentNameRef = useRef<string | null>(initialAgent)
-  const currentAgent = () =>
-    agentNameRef.current ??
-    parseAgentTitle((connection as { localCommand?: string }).localCommand)?.agentName ??
+    parseAgentTitle((connection as { command?: string }).command)?.agentName ??
     getPanePresence(id)?.agent ??
     null
+  const initialAgent = parseAgentTitle(connection.name)?.agentName ??
+    parseAgentTitle(connection.shell)?.agentName ??
+    resolveCurrentAgent(null)
+  const agentNameRef = useRef<string | null>(initialAgent)
+  const currentAgent = () => resolveCurrentAgent(agentNameRef.current)
   const canInsertImagePaths = () => imagePasteModeFor(currentAgent()) === 'insert-path'
 
+  useEffect(() => {
+    return onAgentLaunch((sessionId, agent) => {
+      if (sessionId === id) agentNameRef.current = latchAgent(agentNameRef.current, agent)
+    })
+  }, [id])
+
   // Stable refs so callbacks don't re-trigger the main effect.
-  const onStatusRef = useRef(onStatus)
-  onStatusRef.current = onStatus
-  const onRestartRef = useRef(onRestart)
-  onRestartRef.current = onRestart
-  const onMetricsRef = useRef(onMetrics)
-  onMetricsRef.current = onMetrics
-  const onActivityRef = useRef(onActivity)
-  onActivityRef.current = onActivity
-  const onTitleChangeRef = useRef(onTitleChange)
-  onTitleChangeRef.current = onTitleChange
-  const onCwdChangeRef = useRef(onCwdChange)
-  onCwdChangeRef.current = onCwdChange
-  const onExitRef = useRef(onExit)
-  onExitRef.current = onExit
-  const onFontSizeChangeRef = useRef(onFontSizeChange)
-  onFontSizeChangeRef.current = onFontSizeChange
+  const cbs = useRef({ onStatus, onRestart, onMetrics, onActivity, onTitleChange, onCwdChange, onExit, onFontSizeChange })
+  cbs.current = { onStatus, onRestart, onMetrics, onActivity, onTitleChange, onCwdChange, onExit, onFontSizeChange }
 
   useEffect(() => {
     setSessionUnavailable(false)
@@ -116,23 +113,24 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
   }, [theme, darkMode])
 
-  // Apply font size changes dynamically. Must re-fit afterwards: xterm keeps
-  // cols/rows when only the font changes, so without fit() the canvas would
-  // overflow its container instead of reflowing to fewer/more cells.
+  // Apply font size and family changes dynamically.
   useEffect(() => {
-    if (termRef.current && fontSize) {
-      termRef.current.options.fontSize = fontSize
-      requestAnimationFrame(() => safeFitRef.current())
+    const term = termRef.current
+    if (!term) return
+    let changed = false
+    if (fontSize && term.options.fontSize !== fontSize) {
+      term.options.fontSize = fontSize
+      changed = true
     }
-  }, [fontSize])
-
-  // Apply font family changes dynamically.
-  useEffect(() => {
-    if (termRef.current && fontFamilyMono) {
-      termRef.current.options.fontFamily = resolveTerminalFontFamily(fontFamilyMono)
-      requestAnimationFrame(() => safeFitRef.current())
+    if (fontFamilyMono) {
+      const family = resolveTerminalFontFamily(fontFamilyMono)
+      if (term.options.fontFamily !== family) {
+        term.options.fontFamily = family
+        changed = true
+      }
     }
-  }, [fontFamilyMono])
+    if (changed) requestAnimationFrame(() => safeFitRef.current())
+  }, [fontSize, fontFamilyMono])
 
   useEffect(() => {
     if (!terminalRef.current) return
@@ -160,10 +158,22 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
           // Track the running agent for per-agent image paste; LATCHED (see latchAgent) because
           // TUIs rewrite their title with a bare cwd mid-session, killing image paste.
           agentNameRef.current = latchAgent(agentNameRef.current, parseAgentTitle(title)?.agentName ?? null)
-          onTitleChangeRef.current?.(title)
+          cbs.current.onTitleChange?.(title)
         })
       : { dispose: () => {} }
-    const paneDisposables = [...registerCwdReporting(term, (cwd) => onCwdChangeRef.current?.(cwd)), registerPaneScreen(id, term)]
+    const onScrollDisposable = typeof term.onScroll === 'function'
+      ? term.onScroll(() => {
+          const buf = term.buffer?.active
+          if (buf) {
+            wasAtBottomRef.current = buf.viewportY == null || buf.baseY == null || buf.viewportY >= buf.baseY - 1
+          }
+        })
+      : { dispose: () => {} }
+    const paneDisposables = [
+      ...registerCwdReporting(term, (cwd) => cbs.current.onCwdChange?.(cwd)),
+      registerPaneScreen(id, term),
+      onScrollDisposable,
+    ]
     const plainLinkDisposable = registerPlainUrlLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
@@ -193,9 +203,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     let lastClientHeight = -1
     const safeFit = (force = false) => {
       const el = terminalRef.current
-      if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
-        return
-      }
+      if (!el || el.clientWidth === 0 || el.clientHeight === 0) return
 
       const pixelSizeChanged = el.clientWidth !== lastClientWidth || el.clientHeight !== lastClientHeight
       lastClientWidth = el.clientWidth
@@ -203,21 +211,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
       try {
         fitAddon.fit()
-        // Load the WebGL renderer AFTER fit(), so its first frame rasterizes at the real
-        // cols/rows. Loading it before fit() committed a first frame at the default 80x24
-        // grid; fit()'s subsequent resize repaint was then deduped against that frame, leaving
-        // a freshly-launched full-screen TUI (claude, codex…) misaligned until a font-size
-        // change forced a non-deduped repaint. Idempotent once held, and the same path
-        // re-acquires after a context loss (drop() re-arms retryLoad).
         if (activeRef.current) webglController.load()
-        // Dedupe ConPTY resizes (expensive); force=true resends even an unchanged grid — required
-        // after a fresh backend session, whose PTY restarted at the daemon's default size.
         if (!force && term.cols === lastCols && term.rows === lastRows) {
-          // Grid unchanged but pixels moved: nothing downstream repaints on its own. A grid change
-          // already repaints via term.resize(), and repainting twice per drag-resize frame — which
-          // is what this did unconditionally, alongside a clearTextureAtlas() that threw away
-          // every cached glyph — is the lag. Never synthesize a keystroke to force a repaint
-          // either: it would corrupt the agent's own input state.
           if (pixelSizeChanged) term.refresh(0, term.rows - 1)
           return
         }
@@ -225,7 +220,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         lastRows = term.rows
         api.resize({ cols: term.cols, rows: term.rows })
       } catch {
-        // Retry after an intermediate WebView2 layout pass.
         fitCoalescer.schedule()
       }
     }
@@ -235,6 +229,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     term.onData(data => {
       if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
+      noteSubmittedInput(id, data, term.buffer) // an agent launch freezes the pane at once (agentLaunchSignal.ts)
       copyTracker.noteInput(data)
       api.input(data)
     })
@@ -331,7 +326,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     })
 
     // Ctrl+wheel resizes only this pane's font; see ctrlWheelFontResize.ts for the zoom/PTY contract.
-    const handleWheel = createCtrlWheelFontResizer(term, safeFit, (size) => onFontSizeChangeRef.current?.(size))
+    const handleWheel = createCtrlWheelFontResizer(term, safeFit, (size) => cbs.current.onFontSizeChange?.(size))
     termEl.addEventListener('wheel', handleWheel, { passive: false })
 
     const isMac = window.omnitermAPI.app.platform === 'darwin'
@@ -351,11 +346,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // Status/output/exit and side channels live in terminalStream, not React.
     const stream = attachTerminalStream({
       term, api, id, isLocal, host: connection.host, mode,
-      onStatus: (s) => onStatusRef.current?.(s),
+      onStatus: (s) => cbs.current.onStatus?.(s),
       onUnavailable: () => setSessionUnavailable(true),
-      onExit: (code) => onExitRef.current?.(code),
-      onMetrics: (m) => onMetricsRef.current?.(m),
-      onActivity: (busy) => onActivityRef.current?.(busy),
+      onExit: (code) => cbs.current.onExit?.(code),
+      onMetrics: (m) => cbs.current.onMetrics?.(m),
+      onActivity: (busy) => cbs.current.onActivity?.(busy),
       smartColors: () => smartColorsRef.current === true,
       // A fresh PTY/replay needs the real grid resent even when its size is unchanged.
       refit: () => safeFit(true),
@@ -419,7 +414,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     wasActiveRef.current = active
     layoutEpochRef.current = layoutEpoch
     if (!active) {
-      if (buffer) wasAtBottomRef.current = buffer.viewportY == null || buffer.baseY == null || buffer.viewportY >= buffer.baseY
+      if (buffer) wasAtBottomRef.current = buffer.viewportY == null || buffer.baseY == null || buffer.viewportY >= buffer.baseY - 1
       return
     }
     term.focus()
@@ -430,7 +425,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       safeFitRef.current()
       // Layout-count changes can move a pane between grid tracks after React commits. Re-fit once
       // more on the next paint so xterm's canvas/text layers cannot remain sized to the old pane.
-      settleFrame = requestAnimationFrame(() => safeFitRef.current())
+      settleFrame = requestAnimationFrame(() => {
+        safeFitRef.current()
+        if (layoutChanged && wasAtBottomRef.current) {
+          term.scrollToBottom?.()
+        }
+      })
     }
     // Belt and braces for the scroll bug the `.pane-offscreen` rule fixes: even if some future
     // change collapses the pane again, a tab the user left at the live tail comes back to it.
@@ -450,23 +450,15 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onMouseLeave={() => setIsHovered(false)}
       style={{
         background: theme?.background ?? '#1a1b26',
-        // Reads the same token the removed `.p-2` class did, but as an inline style: `.p-2` is a
-        // shared utility class used all over the app's chrome, and `fitAddon.fit()` measures this
-        // exact box, so tying its padding to a class meant for unrelated elements is fragile — a
-        // future change to that shared rule would silently resize every terminal pane along with it.
         padding: 'var(--theme-padding-sm)',
-        // index.css scopes `.xterm *`'s font-family to this variable (falling back to the app-wide
-        // one) so xterm always measures cells with the SAME font it renders with. Kept in sync with
-        // the literal handed to `new Terminal({ fontFamily })` above via DEFAULT_MONO_STACK — letting
-        // those two drift is what caused glyphs to be measured at one width and drawn at another.
         '--pane-font-mono': resolveTerminalFontFamily(fontFamilyMono),
         filter: blurStrength > 0 && !isFocused && !isHovered ? `blur(${blurStrength}px)` : 'none',
         transition: 'filter 120ms ease-out',
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />
-      {sessionUnavailable && onRestartRef.current && (
-        <SessionUnavailableOverlay onRestart={() => onRestartRef.current?.()} />
+      {sessionUnavailable && cbs.current.onRestart && (
+        <SessionUnavailableOverlay onRestart={() => cbs.current.onRestart?.()} />
       )}
       <TerminalViewLinkMenuHost
         menu={linkMenu}

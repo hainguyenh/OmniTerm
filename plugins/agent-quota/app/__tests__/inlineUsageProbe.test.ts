@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { TerminalAgent } from '../quotaStore'
 
-import { canProbeInline, isBlockingScreen, isTrustScreen, probeUsageInline, type ProbeIO } from '../inlineUsageProbe'
+import { canProbeInline, hasLaunchHold, holdForLaunch, isBlockingScreen, isTrustScreen, probeUsageInline, releaseLaunchHold, type ProbeIO } from '../inlineUsageProbe'
 
 const T0 = Date.UTC(2026, 8, 25, 3, 0)
 
@@ -248,6 +248,39 @@ describe('inline quota probe', () => {
     const { io, sent } = fakeIO({ reply: PANEL, typedBefore: T0 - 1_000 })
     expect(await probeUsageInline(terminal(), io)).toBeNull()
     expect(sent).toEqual([])
+  })
+})
+
+describe('launch hold', () => {
+  it('is taken over by the probe: one hold from launch to release, even if the user typed meanwhile', async () => {
+    const pane = fakeIO({ reply: PANEL, typedDuringHold: 'hi' })
+    const holds: string[] = []
+    const io: ProbeIO = { ...pane.io, hold: (id) => { holds.push(id); return pane.io.hold(id) } }
+    holdForLaunch('s1', io)
+    expect(hasLaunchHold('s1')).toBe(true)
+    // Typing before the probe began would decline it, but those keys were held back from the agent.
+    const snapshot = await probeUsageInline(terminal(), { ...io, lastUserInputAt: () => T0 })
+
+    expect(snapshot?.windows[0]).toMatchObject({ kind: 'session', usedPct: 19 })
+    expect(holds).toEqual(['s1'])
+    expect(pane.sent).toEqual(['/usage', '\r', '\x1b', 'hi'])
+    expect(hasLaunchHold('s1')).toBe(false)
+    expect(pane.isHeld()).toBe(false)
+  })
+
+  it('is handed back, with what was typed, when the probe declines or it is released', async () => {
+    const stale = fakeIO({ typedDuringHold: 'x' })
+    holdForLaunch('s1', stale.io)
+    expect(await probeUsageInline(terminal({ startTime: T0 / 1000 - 120 }), stale.io)).toBeNull()
+    expect(stale.sent).toEqual(['x'])
+    expect(stale.isHeld()).toBe(false)
+
+    const released = fakeIO({ typedDuringHold: 'y' })
+    holdForLaunch('s2', released.io)
+    releaseLaunchHold('s2', released.io)
+    releaseLaunchHold('s2', released.io)
+    expect(released.sent).toEqual(['y'])
+    expect(hasLaunchHold('s2')).toBe(false)
   })
 })
 

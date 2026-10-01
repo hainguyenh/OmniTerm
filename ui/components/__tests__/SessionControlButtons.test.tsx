@@ -431,5 +431,24 @@ describe('SessionControlButtons', () => {
     expect(onOpenCurrentDirectory).toHaveBeenCalledOnce()
   })
 
-
+  it('renders buttons in the order specified by appearance actions', () => {
+    const appearance = {
+      headerActions: ['fullscreen', 'detach'] as const,
+    }
+    const { container } = render(
+      <SessionControlButtons
+        conn={local}
+        sessionId="s1"
+        detach="detach"
+        onToggleDetach={vi.fn()}
+        fullscreen={false}
+        onToggleFullscreen={vi.fn()}
+        surface="header"
+        appearance={appearance}
+      />,
+    )
+    const buttons = container.querySelectorAll('button[aria-label]')
+    const labels = Array.from(buttons).map(b => b.getAttribute('aria-label'))
+    expect(labels).toEqual(['Focus pane full screen', 'Detach into its own window'])
+  })
 })
