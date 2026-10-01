@@ -68,12 +68,8 @@ describe('LoadingArtSettings', () => {
     expect(screen.getByLabelText('Custom agent session artwork')).toBeInTheDocument()
     expect(screen.getByLabelText('Loading artwork preview')).toBeInTheDocument()
 
-    // Blazing critical preview
-    const criticalPreview = screen.getByTestId('art-preview-overshooting')
-    expect(criticalPreview).toHaveClass('aq-busy-art-blazing')
-    expect(criticalPreview).toHaveAttribute('data-blazing', 'true')
-
     // Trigger distance factor on preview items
+    const criticalPreview = screen.getByTestId('art-preview-overshooting')
     vi.spyOn(criticalPreview, 'getBoundingClientRect').mockReturnValue({ width: 300 } as DOMRect)
     act(() => {
       resizeCb?.()

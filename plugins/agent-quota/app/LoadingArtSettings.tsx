@@ -3,7 +3,6 @@ import type React from 'react'
 import { useRef, useState } from 'react'
 
 import '../../../ui/components/customArtPreview.css'
-import { ArtBlaze } from './ArtBlaze'
 import { useArtDistanceFactor } from './artDistance'
 import './headerBusyArt.css'
 import { HEADER_LOADING_ART, PACE_SLOTS, resolvePaceArt, usePaceCustomArt } from './headerLoadingArt'
@@ -128,18 +127,14 @@ function ArtPreviewItem({
 }) {
   const containerRef = useRef<HTMLSpanElement>(null)
   const distanceFactor = useArtDistanceFactor(containerRef)
-  const isBlazing = tier === 'overshooting'
-  const blazingClass = isBlazing ? ' aq-busy-art-blazing' : ''
   return (
     <span
       ref={containerRef}
-      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${size} aq-art-speed-${speed}${blazingClass}`}
+      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${size} aq-art-speed-${speed}`}
       data-testid={`art-preview-${tier}`}
-      data-blazing={isBlazing ? 'true' : undefined}
       style={distanceFactor !== undefined ? ({ '--aq-art-distance-factor': distanceFactor } as React.CSSProperties) : undefined}
     >
       <img src={resolvePaceArt(tier, previewMode, paceArt)} alt="" aria-hidden="true" draggable="false" />
-      {isBlazing && <ArtBlaze />}
     </span>
   )
 }

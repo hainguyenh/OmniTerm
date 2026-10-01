@@ -3,9 +3,8 @@ import { useRef } from 'react'
 
 import { DEFAULT_QUOTA_CONFIG, effectiveConfig } from './quotaConfig'
 import { resolvePaceArt, usePaceCustomArt } from './headerLoadingArt'
-import { HEADER_TIER_BOUNDS, headerLoadingTier, isBlazingQuota } from './quotaPolicy'
+import { HEADER_TIER_BOUNDS, headerLoadingTier } from './quotaPolicy'
 import { useQuota } from './quotaStore'
-import { ArtBlaze } from './ArtBlaze'
 import { useArtDistanceFactor } from './artDistance'
 
 import './headerBusyArt.css'
@@ -48,21 +47,17 @@ export function HeaderBusyArt({
   const session = profile?.lastGood?.windows.find((window) => window.kind === 'session')
   const limit = config?.limits.session ?? DEFAULT_QUOTA_CONFIG.agents.claude.limits.session
   const tier = headerLoadingTier(session, limit)
-  const isBlazing = isBlazingQuota(session, limit, profile?.lastGood?.windows)
   const label = `Processing · ${TIER_LABELS[tier]}`
-  const blazingClass = isBlazing ? ' aq-busy-art-blazing' : ''
   return (
     <span
       ref={containerRef}
-      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${display.artSize ?? 'normal'} aq-art-speed-${display.artSpeed ?? 'normal'}${blazingClass}`}
+      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${display.artSize ?? 'normal'} aq-art-speed-${display.artSpeed ?? 'normal'}`}
       role="status"
       aria-label={label}
       data-loading-tier={tier}
-      data-blazing={isBlazing ? 'true' : undefined}
       style={distanceFactor !== undefined ? ({ '--aq-art-distance-factor': distanceFactor } as React.CSSProperties) : undefined}
     >
       <img src={resolvePaceArt(tier, darkMode ? 'dark' : 'light', paceArt)} alt="" aria-hidden="true" draggable="false" />
-      {isBlazing && <ArtBlaze />}
     </span>
   )
 }
