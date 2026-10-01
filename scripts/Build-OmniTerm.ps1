@@ -41,7 +41,8 @@ function Select-Plugin {
   Write-Host '    3. Always Awake (Windows sleep prevention)'
   Write-Host '    4. Blur (inactive-window privacy filter)'
   Write-Host '    5. Agent Quota (AI agent quota lines, limits and wake-up)'
-  do { $choice = Read-Host '  Select plugin [1-5]' } until ($choice -in @('1', '2', '3', '4', '5'))
+  Write-Host '    6. Agent Quota + Always Awake (bundle agent + no sleep)'
+  do { $choice = Read-Host '  Select plugin [1-6]' } until ($choice -in @('1', '2', '3', '4', '5', '6'))
   if ($choice -eq '1') {
     return @{ Name = 'full'; Path = $FullPlugin }
   }
@@ -54,7 +55,17 @@ function Select-Plugin {
   if ($choice -eq '4') {
     return @{ Name = 'blur'; Path = $BlurPlugin }
   }
-  return @{ Name = 'agent-quota'; Path = $AgentQuotaPlugin }
+  if ($choice -eq '5') {
+    return @{ Name = 'agent-quota'; Path = $AgentQuotaPlugin }
+  }
+  return @{
+    Name = 'agent-awake'
+    DisplayName = 'Agent Quota + Always Awake'
+    Plugins = @(
+      @{ Name = 'agent-quota'; Path = $AgentQuotaPlugin }
+      @{ Name = 'always-awake'; Path = $AlwaysAwakePlugin }
+    )
+  }
 }
 
 function Copy-BundleArtifacts([string]$Destination, [string]$Profile) {
@@ -79,7 +90,7 @@ function Build-PluginPackage($Plugin, [string]$Destination) {
 
 Set-Location $RepoRoot
 Write-Title 'OmniTerm Build Wizard'
-Write-Host '    1. Build Basic App (no bundled plugin)'
+Write-Host '    1. Build Basic App (bundled default plugins: agent-quota, always-awake, blur)'
 Write-Host '    2. Build Plugin Package'
 Write-Host '    3. Build App with Plugin'
 do { $Mode = Read-Host '  Select build target [1-3]' } until ($Mode -in @('1', '2', '3'))
@@ -103,8 +114,13 @@ if ($Mode -in @('1', '3')) {
 $PortablePlugins = @()
 if ($OutputFormat -in @('portable', 'installer and portable')) {
   $PortablePlugins = @(Get-DefaultPortablePlugins -RepoRoot $RepoRoot)
-  if ($null -ne $Plugin -and @($PortablePlugins | Where-Object { $_.Name -eq $Plugin.Name }).Count -eq 0) {
-    $PortablePlugins += $Plugin
+  if ($null -ne $Plugin) {
+    $extra = if ($Plugin.Plugins) { $Plugin.Plugins } else { @($Plugin) }
+    foreach ($ep in $extra) {
+      if (@($PortablePlugins | Where-Object { $_.Name -eq $ep.Name }).Count -eq 0) {
+        $PortablePlugins += $ep
+      }
+    }
   }
 }
 
@@ -123,9 +139,15 @@ if ($Mode -in @('1', '3')) {
 }
 
 $Summary = switch ($Mode) {
-  '1' { "Basic Tauri app; no plugin will be bundled. Profile: $BuildProfile. Output: $OutputFormat." }
-  '2' { "Plugin package only: $($Plugin.Name)." }
-  '3' { "Tauri app bundled with exactly one plugin: $($Plugin.Name). Profile: $BuildProfile. Output: $OutputFormat." }
+  '1' { "Basic Tauri app; bundled with default plugins (agent-quota, always-awake, blur). Profile: $BuildProfile. Output: $OutputFormat." }
+  '2' {
+    if ($Plugin.Plugins) { "Plugin packages: $($Plugin.DisplayName)." }
+    else { "Plugin package only: $($Plugin.Name)." }
+  }
+  '3' {
+    if ($Plugin.Plugins) { "Tauri app bundled with: $($Plugin.DisplayName). Profile: $BuildProfile. Output: $OutputFormat." }
+    else { "Tauri app bundled with exactly one plugin: $($Plugin.Name). Profile: $BuildProfile. Output: $OutputFormat." }
+  }
 }
 Write-Title 'Build Summary'
 Write-Host "  $Summary"
@@ -158,14 +180,28 @@ Invoke-Step 'Frontend lint' 'pnpm' @('lint')
 Invoke-Step 'Rust tests' 'pnpm' @('test:tauri')
 
 if ($Mode -eq '2') {
-  Build-PluginPackage $Plugin (Join-Path $Artifacts "plugins\$($Plugin.Name)")
+  if ($Plugin.Plugins) {
+    foreach ($p in $Plugin.Plugins) {
+      Build-PluginPackage $p (Join-Path $Artifacts "plugins\$($p.Name)")
+    }
+  } else {
+    Build-PluginPackage $Plugin (Join-Path $Artifacts "plugins\$($Plugin.Name)")
+  }
 } else {
   $configArgs = @('tauri', 'build')
   if ($BuildProfile -eq 'debug') { $configArgs += '--debug' }
   $buildRoot = Join-Path $RepoRoot "target\$BuildProfile"
   Remove-BuildTree (Join-Path $buildRoot 'plugins') $buildRoot
   $pluginsToBuild = @()
-  if ($Mode -eq '3') { $pluginsToBuild += $Plugin }
+  if ($Mode -eq '1') {
+    $pluginsToBuild += @(Get-DefaultPortablePlugins -RepoRoot $RepoRoot)
+  } elseif ($Mode -eq '3') {
+    if ($Plugin.Plugins) {
+      $pluginsToBuild += $Plugin.Plugins
+    } else {
+      $pluginsToBuild += $Plugin
+    }
+  }
   $pluginsToBuild += $PortablePlugins
   $builtPluginNames = @{}
   foreach ($pluginToBuild in $pluginsToBuild) {
@@ -173,22 +209,35 @@ if ($Mode -eq '2') {
     Invoke-Step "Build $($pluginToBuild.Name) plugin" 'pnpm' @('build:plugin', $pluginToBuild.Path)
     $builtPluginNames[$pluginToBuild.Name] = $true
   }
-  if ($Mode -eq '3') {
+  $bundledForInstaller = @()
+  if ($Mode -eq '1') {
+    $bundledForInstaller = @(Get-DefaultPortablePlugins -RepoRoot $RepoRoot)
+  } elseif ($Mode -eq '3') {
+    if ($Plugin.Plugins) {
+      $bundledForInstaller = @($Plugin.Plugins)
+    } else {
+      $bundledForInstaller = @($Plugin)
+    }
+  }
+  if ($bundledForInstaller.Count -gt 0) {
     $pluginsStageRoot = Join-Path $Stage 'plugins'
     Remove-BuildTree $pluginsStageRoot $Stage
-    $pluginStage = Join-Path $Stage "plugins\$($Plugin.Name)"
-    New-Item -ItemType Directory -Force -Path $pluginStage | Out-Null
-    Copy-Item (Join-Path $Plugin.Path 'package.json') $pluginStage
-    Copy-Item (Join-Path $Plugin.Path 'dist') $pluginStage -Recurse
-    $pluginResourceRoot = "../.omniterm-build/plugins/$($Plugin.Name)"
+    $resources = @{
+      'builtinThemes/*' = 'builtinThemes/'
+      'sidecar/*.cjs' = 'sidecar/'
+    }
+    foreach ($p in $bundledForInstaller) {
+      $pStage = Join-Path $Stage "plugins\$($p.Name)"
+      New-Item -ItemType Directory -Force -Path $pStage | Out-Null
+      Copy-Item (Join-Path $p.Path 'package.json') $pStage -Force
+      Copy-Item (Join-Path $p.Path 'dist') $pStage -Recurse -Force
+      $pluginResourceRoot = "../.omniterm-build/plugins/$($p.Name)"
+      $resources["$pluginResourceRoot/package.json"] = "plugins/$($p.Name)/package.json"
+      $resources["$pluginResourceRoot/dist/*"] = "plugins/$($p.Name)/dist/"
+    }
     $config = @{
       bundle = @{
-        resources = @{
-          'builtinThemes/*' = 'builtinThemes/'
-          'sidecar/*.cjs' = 'sidecar/'
-          "$pluginResourceRoot/package.json" = "plugins/$($Plugin.Name)/package.json"
-          "$pluginResourceRoot/dist/*" = "plugins/$($Plugin.Name)/dist/"
-        }
+        resources = $resources
       }
     }
     $configPath = Join-Path $Stage 'tauri.bundle-plugin.json'

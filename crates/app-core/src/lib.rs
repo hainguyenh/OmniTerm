@@ -6,6 +6,7 @@
 
 pub mod agent_sessions;
 pub mod attachments;
+pub mod claude_transcript;
 pub mod launch;
 pub mod proc_activity;
 pub mod rdp_launch;

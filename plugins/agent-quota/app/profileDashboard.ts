@@ -2,7 +2,11 @@ import { useSyncExternalStore } from 'react'
 
 import type { DiscoveredProfile, QuotaSnapshot } from '../src/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
+import type { HiddenProbeDeps } from './hiddenProfileProbe'
 import type { ProfileQuota, QuotaState, TerminalAgent } from './quotaStore'
+
+import { liveHiddenProbeDeps, probeProfilesHidden } from './hiddenProfileProbe'
+import { quotaCommands } from './quotaStore'
 
 /** The Profiles dialog is a view of the engine's current terminal/profile state. */
 
@@ -70,67 +74,81 @@ export function setDiscoveredProfiles(discovered: DiscoveredProfile[]): void {
   update((current) => ({ ...current, discovered }))
 }
 
-async function executeProfileFetch(row: DashboardRow, api: AgentQuotaAPI): Promise<void> {
+function patchReading(key: string, patch: (current: ManualReading | undefined) => ManualReading): void {
+  update((current) => ({ ...current, manualReadings: { ...current.manualReadings, [key]: patch(current.manualReadings[key]) } }))
+}
+
+function markFetching(rows: readonly DashboardRow[]): void {
+  update((current) => {
+    const manualReadings = { ...current.manualReadings }
+    for (const row of rows) manualReadings[row.key] = { ...manualReadings[row.key], fetching: true, error: undefined }
+    return { ...current, manualReadings }
+  })
+}
+
+function applyReading(key: string, snapshot: QuotaSnapshot, errorOverride?: string): void {
+  patchReading(key, (previous) => snapshot.error
+    ? { reading: previous?.reading, error: errorOverride ?? snapshot.message ?? 'The quota update failed.', fetching: false }
+    : { reading: snapshot, error: undefined, fetching: false })
+}
+
+async function backgroundRead(row: DashboardRow, api: AgentQuotaAPI): Promise<QuotaSnapshot> {
   try {
-    const snapshot = await api.fetchUsage({ agent: row.agent, profileDir: row.profileDir, launcher: row.launcher })
-    if (snapshot.error) {
-      update((current) => ({
-        ...current,
-        manualReadings: {
-          ...current.manualReadings,
-          [row.key]: {
-            reading: current.manualReadings[row.key]?.reading,
-            error: snapshot.message ?? 'The quota update failed.',
-            fetching: false,
-          },
-        },
-      }))
-    } else {
-      update((current) => ({
-        ...current,
-        manualReadings: {
-          ...current.manualReadings,
-          [row.key]: { reading: snapshot, error: undefined, fetching: false },
-        },
-      }))
-    }
+    return await api.fetchUsage({ agent: row.agent, profileDir: row.profileDir, launcher: row.launcher })
   } catch (err) {
-    update((current) => ({
-      ...current,
-      manualReadings: {
-        ...current.manualReadings,
-        [row.key]: {
-          reading: current.manualReadings[row.key]?.reading,
-          error: (err as Error).message || 'The quota update failed.',
-          fetching: false,
-        },
-      },
-    }))
+    return { windows: [], fetchedAt: Date.now(), error: 'failed', message: (err as Error).message || 'The quota update failed.' }
   }
 }
 
-export async function fetchInactiveProfile(row: DashboardRow, api: AgentQuotaAPI): Promise<void> {
-  update((current) => ({
-    ...current,
-    manualReadings: {
-      ...current.manualReadings,
-      [row.key]: { ...current.manualReadings[row.key], fetching: true, error: undefined },
-    },
-  }))
-  await executeProfileFetch(row, api)
+/** One hidden run at a time: a second Fetch waits for the first instead of opening another terminal. */
+let hiddenRun: Promise<unknown> = Promise.resolve()
+
+/**
+ * Read inactive profiles in the hidden terminal (hiddenProfileProbe.ts). A profile it could not
+ * start, or whose panel it could not read, falls back to the sidecar's background read; when that
+ * fails too, the hidden run's reason is the one shown.
+ */
+async function readProfiles(rows: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
+  markFetching(rows)
+  const probeDir = api.probeDir?.bind(api)
+  const deps = hidden ?? (probeDir ? liveHiddenProbeDeps(probeDir) : null)
+  const hiddenErrors = new Map<string, string>()
+  let retry = rows
+  if (deps) {
+    const run = hiddenRun.then(() => probeProfilesHidden(rows, deps, (key, snapshot) => {
+      if (snapshot.error) hiddenErrors.set(key, snapshot.message ?? 'The quota update failed.')
+      else applyReading(key, snapshot)
+    }))
+    hiddenRun = run.catch(() => [])
+    const skipped = new Set(await run.catch(() => rows.map((row) => row.key)))
+    retry = rows.filter((row) => skipped.has(row.key) || hiddenErrors.has(row.key))
+  }
+  await Promise.all(retry.map(async (row) => applyReading(row.key, await backgroundRead(row, api), hiddenErrors.get(row.key))))
 }
 
-export async function fetchAllMissingProfiles(rows: DashboardRow[], api: AgentQuotaAPI): Promise<void> {
+export async function fetchProfileRow(row: DashboardRow, api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
+  if (row.activeTerminalCount > 0) {
+    quotaCommands().refresh(row.key)
+  }
+  await readProfiles([row], api, hidden)
+}
+
+export async function fetchAllProfiles(rows: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
+  const notFetching = rows.filter((row) => !row.fetching)
+  if (notFetching.some((row) => row.activeTerminalCount > 0)) {
+    quotaCommands().refresh()
+  }
+  if (notFetching.length > 0) await readProfiles(notFetching, api, hidden)
+}
+
+export async function fetchInactiveProfile(row: DashboardRow, api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
+  await fetchProfileRow(row, api, hidden)
+}
+
+export async function fetchAllMissingProfiles(rows: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
   const missing = rows.filter((row) => row.activeTerminalCount === 0 && !row.reading && !row.fetching)
   if (missing.length === 0) return
-  update((current) => {
-    const nextManual = { ...current.manualReadings }
-    for (const row of missing) {
-      nextManual[row.key] = { ...nextManual[row.key], fetching: true, error: undefined }
-    }
-    return { ...current, manualReadings: nextManual }
-  })
-  await Promise.all(missing.map((row) => executeProfileFetch(row, api)))
+  await readProfiles(missing, api, hidden)
 }
 
 function activeTerminalCounts(terminals: Record<string, TerminalAgent>): Map<string, number> {
@@ -162,17 +180,23 @@ export function dashboardRows(
   const counts = activeTerminalCounts(state.terminals)
   const activeRows: DashboardRow[] = Object.values(state.profiles)
     .filter((profile) => profile.agent === 'claude' && counts.has(profile.key))
-    .map((profile) => ({
-      key: profile.key,
-      agent: profile.agent,
-      profileName: profile.profileName,
-      profileDir: profile.profileDir,
-      launcher: profile.launcher,
-      reading: profile.lastGood,
-      error: profile.snapshot?.error ? profile.snapshot.message ?? 'The quota update failed.' : undefined,
-      fetching: profile.fetching,
-      activeTerminalCount: counts.get(profile.key) ?? 0,
-    }))
+    .map((profile) => {
+      const manual = manualReadings[profile.key]
+      const reading = manual?.reading && (!profile.lastGood || manual.reading.fetchedAt >= profile.lastGood.fetchedAt)
+        ? manual.reading
+        : (profile.lastGood ?? manual?.reading)
+      return {
+        key: profile.key,
+        agent: profile.agent,
+        profileName: profile.profileName,
+        profileDir: profile.profileDir,
+        launcher: profile.launcher,
+        reading,
+        error: manual?.error ?? (profile.snapshot?.error ? profile.snapshot.message ?? 'The quota update failed.' : undefined),
+        fetching: profile.fetching || (manual?.fetching ?? false),
+        activeTerminalCount: counts.get(profile.key) ?? 0,
+      }
+    })
 
   const activeKeys = new Set(activeRows.map((row) => row.key))
   const activeLaunchers = new Set(activeRows.map((row) => row.launcher?.toLowerCase()).filter(Boolean))

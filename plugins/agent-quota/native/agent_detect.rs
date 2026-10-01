@@ -74,9 +74,11 @@ pub struct ProcTarget {
     pub image: String,
     /// Threads this module suspended in the process (Windows); resumed exactly once each.
     pub threads: Vec<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_name: Option<String>,
 }
 
-fn image_stem(image: &str) -> String {
+pub fn image_stem(image: &str) -> String {
     let lower = image.to_ascii_lowercase();
     lower.strip_suffix(".exe").unwrap_or(&lower).to_string()
 }
@@ -89,7 +91,7 @@ fn cmd_mentions(row: &ProcRow, needles: &[&str]) -> bool {
 }
 
 /// Script hosts that run an agent as a package. A plain `node build.js` is not an agent.
-fn is_script_host(stem: &str) -> bool {
+pub fn is_script_host(stem: &str) -> bool {
     matches!(stem, "node" | "bun" | "deno")
 }
 
@@ -132,7 +134,7 @@ fn children_index(rows: &[ProcRow]) -> HashMap<u32, Vec<usize>> {
 
 /// Indices of every transitive descendant of `root`, breadth-first. The visited set guards against
 /// a PID-reuse cycle, as in `ProcTable::descendants`.
-fn descendant_indices(rows: &[ProcRow], root: u32) -> Vec<usize> {
+pub fn descendant_indices(rows: &[ProcRow], root: u32) -> Vec<usize> {
     let children = children_index(rows);
     let mut seen = HashSet::from([root]);
     let mut queue = std::collections::VecDeque::from([root]);
@@ -343,6 +345,7 @@ pub fn needs_profile_env(rows: &[ProcRow], shell_pid: u32) -> Option<u32> {
 /// What to freeze for the main agent `(pid, start_time)`: the main process itself plus every
 /// agent-classified descendant — sub-sessions and sub-agents. Plain scripts and tools the agent
 /// started keep running and are allowed to finish.
+#[cfg(test)]
 pub fn suspend_targets(rows: &[ProcRow], pid: u32, start_time: u64) -> Vec<ProcTarget> {
     let Some(main) = rows
         .iter()
@@ -355,6 +358,7 @@ pub fn suspend_targets(rows: &[ProcRow], pid: u32, start_time: u64) -> Vec<ProcT
         start_time: row.start_time,
         image: row.image.clone(),
         threads: Vec::new(),
+        profile_name: None,
     };
     let mut out = vec![target(main)];
     out.extend(

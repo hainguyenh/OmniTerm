@@ -39,14 +39,14 @@ export function animationFor(zone: Zone, enabled: boolean): Animation {
 
 /** Below this much fill a number does not fit inside it, so it is drawn just after the fill. */
 const MIN_INSIDE_PCT = 12
-/** A danger zone narrower than this has no room for its own number. */
-const MIN_DANGER_LABEL_PCT = 6
+/** A danger zone this narrow has no room for its number, so the number sits after the track instead. */
+const MAX_DANGER_OUTSIDE_PCT = 5
 
 export interface TrackLabels {
   /** The used number: centred in the fill, or just after it when the fill is too short. */
   used: { text: string; at: number; fill: number; inside: boolean }
-  /** The danger zone's size, centred in it; null when the limit leaves no danger zone. */
-  danger: { text: string; at: number } | null
+  /** The danger zone's size: centred in it, or after the track when too narrow; null at 100% limit. */
+  danger: { text: string; at: number; inside: boolean } | null
 }
 
 /**
@@ -57,10 +57,15 @@ export function trackLabels(usedPct: number, limit: number): TrackLabels {
   const fill = Math.min(100, Math.max(0, usedPct))
   const inside = fill >= MIN_INSIDE_PCT
   const dangerWidth = Math.max(0, 100 - limit)
+  const dangerInside = dangerWidth > MAX_DANGER_OUTSIDE_PCT
   return {
     used: { text: `${Math.round(fill)}%`, at: inside ? fill / 2 : fill, fill, inside },
     danger: dangerWidth > 0
-      ? { text: dangerWidth >= MIN_DANGER_LABEL_PCT ? `${Math.round(dangerWidth)}%` : '', at: limit + dangerWidth / 2 }
+      ? {
+        text: `${Math.round(dangerWidth)}%`,
+        at: limit + dangerWidth / 2,
+        inside: dangerInside,
+      }
       : null,
   }
 }
@@ -206,3 +211,4 @@ export function paceTooltip(window: QuotaWindow, limit: number, now: number): st
   const projected = Math.round(window.usedPct / elapsedFraction)
   return `Pace: ~${projected}% by reset (limit ${limit}%)`
 }
+

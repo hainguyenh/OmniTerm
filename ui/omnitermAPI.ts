@@ -185,18 +185,25 @@ function createTauriAPI(): any {
           return null
         }
       },
-      saveImageTemp: (bytes: Uint8Array) => invoke<string>('save_temp_image', { bytes }),
+      saveImageTemp: (bytes: Uint8Array, sessionId?: string) =>
+        invoke<string>('save_temp_image', { bytes, sessionId }),
     },
 
     // Raw-body upload so a large file is not serialized as a JSON number array; the name is a hint.
     attachments: {
-      save: (name: string, bytes: Uint8Array) =>
+      save: (name: string, bytes: Uint8Array, sessionId?: string) =>
         invoke<unknown>('save_attachment', bytes, {
-          headers: { 'x-omniterm-attachment-name': encodeURIComponent(name) },
+          headers: {
+            'x-omniterm-attachment-name': encodeURIComponent(name),
+            ...(sessionId ? { 'x-omniterm-session-id': encodeURIComponent(sessionId) } : {}),
+          },
         }).then(parseAttachmentInfo),
-      importClipboardFiles: () => invoke<unknown>('import_clipboard_files').then(parseAttachmentList, () => []),
-      list: () => invoke<unknown>('list_attachments').then(parseAttachmentListing),
-      clear: () => invoke<unknown>('clear_attachments').then(parseClearReport),
+      importClipboardFiles: (sessionId?: string) =>
+        invoke<unknown>('import_clipboard_files', { sessionId }).then(parseAttachmentList, () => []),
+      list: (sessionId?: string) =>
+        invoke<unknown>('list_attachments', { sessionId }).then(parseAttachmentListing),
+      clear: (sessionId?: string) =>
+        invoke<unknown>('clear_attachments', { sessionId }).then(parseClearReport),
     },
 
     // SFTP rides on SSH, so it arrives with it.
@@ -337,6 +344,9 @@ function createTauriAPI(): any {
       detect: () => invoke<DetectedPaneAgent[]>('agent_quota_detect').catch(() => []),
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) =>
         invoke<string | null>('resolve_claude_session', { profileDir, cwd, sinceEpochSecs }).catch(() => null),
+      // Only on an explicit Save: the rendered conversation goes to the file the user picks.
+      exportClaudeTranscript: (profileDir: string, sessionId: string) =>
+        invoke<string>('export_claude_transcript', { profileDir, sessionId }).catch(() => null),
       // Crash-safe copy of stored sessions/bookmarks in app data (see ui/utils/agentSessionDurable.ts).
       loadStore: () => invoke<unknown>('agent_sessions_load'),
       saveStore: (document: Record<string, unknown>) => invoke<void>('agent_sessions_save', { document }),

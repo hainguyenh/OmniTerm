@@ -8,6 +8,12 @@
 //! restricted to files whose name is a UUID and whose modification time is not older than the
 //! agent process itself — so a file planted before the agent started, or named to look like a
 //! shell command, is never picked up or returned.
+//!
+//! The resolver never reads chat history. `export_claude_transcript` does, but only when the user
+//! explicitly saves a pane's output: the rendered conversation (see
+//! `app_core::claude_transcript`) goes straight back to the save flow, which writes it only to the
+//! file the user picks in the native dialog. It takes the same detected profile directory and a
+//! bare UUID session id, so it can only ever open a `<uuid>.jsonl` inside that profile.
 
 use serde_json::Value;
 use std::fs;
@@ -48,7 +54,8 @@ fn resolve_claude_session_file(
     cwd: &str,
     since_epoch_secs: Option<u64>,
 ) -> Option<String> {
-    let dir = profile_dir.join("projects").join(encode_project_dir(cwd));
+    let clean_cwd = cwd.trim_end_matches(['/', '\\']);
+    let dir = profile_dir.join("projects").join(encode_project_dir(clean_cwd));
     let entries = fs::read_dir(&dir).ok()?;
 
     const CLOCK_SKEW_GRACE_SECS: u64 = 5;
@@ -107,6 +114,24 @@ pub async fn resolve_claude_session(
     })
     .await
     .map_err(|error| format!("Session lookup failed: {error}"))
+}
+
+/// The whole conversation of one Claude session as plain text, for the pane's "Save output".
+/// `profile_dir` must come from `agent_quota_detect`; `session_id` must be a bare UUID.
+#[tauri::command]
+pub async fn export_claude_transcript(
+    profile_dir: String,
+    session_id: String,
+) -> Result<String, String> {
+    if profile_dir.trim().is_empty() || !is_uuid(&session_id) {
+        return Err("Invalid Claude session.".to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        app_core::claude_transcript::export_transcript(Path::new(&profile_dir), &session_id)
+    })
+    .await
+    .map_err(|error| format!("Transcript export failed: {error}"))?
+    .map_err(|error| format!("Transcript export failed: {error}"))
 }
 
 fn store_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {

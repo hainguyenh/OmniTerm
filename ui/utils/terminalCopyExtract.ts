@@ -188,37 +188,6 @@ export const registerTerminalCopyHandler = (options: {
   return () => window.removeEventListener(TERMINAL_COPY_EVENT, onCopyRequest)
 }
 
-/** Registers the save request at the xterm owner, keeping buffer access out of toolbar components. */
-export const registerTerminalSaveHandler = (options: {
-  sessionId: string
-  isCurrent: () => boolean
-  extract: () => string
-  save: (text: string) => void
-}): (() => void) => {
-  const { sessionId, isCurrent, extract, save } = options
-  const onSaveRequest = (event: Event) => {
-    if (!(event instanceof CustomEvent)) return
-    const detail = event.detail as { sessionId?: unknown } | undefined
-    if (detail?.sessionId !== sessionId || !isCurrent()) return
-    const text = extract()
-    if (text) save(text)
-  }
-  window.addEventListener(TERMINAL_SAVE_OUTPUT_EVENT, onSaveRequest)
-  return () => window.removeEventListener(TERMINAL_SAVE_OUTPUT_EVENT, onSaveRequest)
-}
-
-/** Connect the save toolbar to the xterm owner and the native save dialog. */
-export const registerTerminalSaveExport = (options: {
-  sessionId: string
-  isCurrent: () => boolean
-  buffer: TerminalBufferLike
-}): (() => void) => registerTerminalSaveHandler({
-  sessionId: options.sessionId,
-  isCurrent: options.isCurrent,
-  extract: () => bufferText(options.buffer),
-  save: (content) => void window.omnitermAPI.files.exportText({ suggestedName: 'terminal-output.txt', content }),
-})
-
 /**
  * Validate an inbound copy request at the boundary: the event comes from arbitrary code, so an
  * unexpected shape yields null instead of reaching the clipboard path.

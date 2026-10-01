@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
 import type { ConnectionProviderCapabilities, Workspace } from '@omniterm/contract'
 import type { UseDialogReturn } from '../hooks/useDialog'
+import { useDialogDrag } from '../utils/dialogDrag'
 import GeneralSettings from './GeneralSettings'
 import PluginManager from './PluginManager'
 import CustomArtSettings from './CustomArtSettings'
@@ -103,6 +104,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return () => window.removeEventListener(SETTINGS_TAB_EVENT, onTab)
   }, [])
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const drag = useDialogDrag(dialogRef)
+
   if (!isOpen) return null
 
   const handleResetShortcuts = () => {
@@ -117,9 +121,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="w-full max-w-3xl bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden flex flex-col h-[580px] max-h-[85vh]">
+      <div
+        ref={dialogRef}
+        style={drag.style}
+        className="w-full max-w-3xl bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden flex flex-col h-[580px] max-h-[85vh]"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-theme-border bg-theme-bg/40">
+        <div
+          className="flex items-center justify-between px-5 py-3.5 border-b border-theme-border bg-theme-bg/40 cursor-move select-none"
+          {...drag.handleProps}
+        >
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-theme-fg tracking-widest uppercase">Settings</span>
             <span className="text-[10px] text-theme-dim uppercase font-semibold px-2 py-0.5 rounded-full bg-black/10 border border-theme-border">

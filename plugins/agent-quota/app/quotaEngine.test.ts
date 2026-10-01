@@ -257,6 +257,17 @@ describe('QuotaEngine', () => {
     expect(api.wake).toHaveBeenCalledWith({ agent: 'claude', profileDir: 'C:\\p\\work', launcher: null, prompt: 'hello' })
   })
 
+  it('skips scheduled wake and retires it when the terminal is busy running', async () => {
+    const { api, run, setUsage, engine } = setup(withAgent({ wake: { mode: 'afterReset', time: '06:00', delayMinutes: 2, prompt: 'hello' } }))
+    setUsage(reading(95))
+    await run()
+    engine.setInputs({ sessionIds: ['s1'], busy: { s1: true } })
+    setUsage({ ...reading(95, 20, RESET + 3 * 60_000), windows: [{ kind: 'session', label: 's', usedPct: 95, resetsAt: RESET + 5 * 3_600_000 }] })
+    await run(RESET + 3 * 60_000)
+    expect(api.wake).not.toHaveBeenCalled()
+    expect(getQuotaState().profiles['claude:c:\\p\\work'].wake.lastKey).toBe(`reset:${RESET}`)
+  })
+
   it('uses a terminal wake override for scheduled wake-up', async () => {
     const { api, run, setUsage } = setup()
     setOverride('s1:10:100', { wake: { mode: 'afterReset', time: '06:00', delayMinutes: 2, prompt: 'terminal hello' } })

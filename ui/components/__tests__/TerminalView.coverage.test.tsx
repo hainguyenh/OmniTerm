@@ -28,8 +28,9 @@ const xterm = vi.hoisted(() => {
     unicode = { activeVersion: '6' }
     // Enough of the buffer API for the visibility effect to decide whether the pane was pinned to
     // the live tail (viewportY === baseY means "at the bottom") and for the interrupt handler to
-    // tell whether an alternate-screen exit is safe to send.
-    buffer = { active: { viewportY: 0, baseY: 0, type: 'normal' as 'normal' | 'alternate' } }
+    // tell whether an alternate-screen exit is safe to send. The cursor line is read on Enter to
+    // spot an agent launch (agentLaunchSignal.ts).
+    buffer = { active: { viewportY: 0, baseY: 0, cursorY: 0, type: 'normal' as 'normal' | 'alternate', getLine: (_line: number): { translateToString: () => string } | undefined => undefined } }
     dataHandler: ((data: string) => void) | null = null
     selectionHandler: (() => void) | null = null
     keyHandler: ((event: KeyboardEvent) => boolean) | null = null
@@ -423,5 +424,7 @@ describe('TerminalView full lifecycle', () => {
     rerender(<TerminalView id="layout-epoch" connection={localConnection} active layoutEpoch="2:0" />)
 
     expect(fit).toHaveBeenCalled()
+    const term = xterm.terminals.at(-1)!
+    expect(term.scrollToBottom).toHaveBeenCalled()
   })
 })

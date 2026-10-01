@@ -12,7 +12,10 @@ import {
   handleLargeTextPaste,
   LARGE_TEXT_FORCE_THRESHOLD,
   LARGE_TEXT_PROMPT_THRESHOLD,
+  largePasteThresholds,
+  resolveLargePaste,
   saveTextAsAttachment,
+  setLargePasteThresholds,
 } from '../largeTextPaste'
 
 const mockInfo = (name: string): AttachmentInfo => ({
@@ -66,12 +69,13 @@ describe('saveTextAsAttachment', () => {
   })
 
   it('encodes and saves text using the attachments API', async () => {
-    const saved = await saveTextAsAttachment('# Heading\nText')
+    const saved = await saveTextAsAttachment('# Heading\nText', 's1')
     expect(saved).not.toBeNull()
     expect(saved?.info.name).toBe('pasted-document.md')
     expect(window.omnitermAPI.attachments.save).toHaveBeenCalledWith(
       'pasted-document.md',
       expect.anything(),
+      's1',
     )
   })
 
@@ -85,7 +89,8 @@ describe('saveTextAsAttachment', () => {
 describe('handleLargeTextPaste', () => {
   const term = () => ({
     paste: vi.fn(),
-  }) as unknown as Terminal & { paste: ReturnType<typeof vi.fn> }
+    focus: vi.fn(),
+  }) as unknown as Terminal & { paste: ReturnType<typeof vi.fn>; focus: ReturnType<typeof vi.fn> }
 
   beforeEach(() => {
     window.omnitermAPI = {
@@ -186,7 +191,7 @@ describe('handleLargeTextPaste', () => {
 
     expect(handled).toBe(true)
     expect(promptDecision).toHaveBeenCalledWith('s1', mediumText, mediumText.length, 2, expect.any(String))
-    expect(window.omnitermAPI.attachments.save).toHaveBeenCalledWith('pasted-document.md', expect.anything())
+    expect(window.omnitermAPI.attachments.save).toHaveBeenCalledWith('pasted-document.md', expect.anything(), 's1')
     expect(target.paste).toHaveBeenCalledWith('C:/attachments/pasted-document.md')
     expect(onFilesSaved).toHaveBeenCalledOnce()
   })
@@ -234,5 +239,54 @@ describe('handleLargeTextPaste', () => {
     expect(target.paste).not.toHaveBeenCalled()
     expect(noteLocalEcho).not.toHaveBeenCalled()
     expect(onFilesSaved).not.toHaveBeenCalled()
+  })
+
+  it('gives the keyboard back to the pane after the dialog, whatever was chosen', async () => {
+    vi.useFakeTimers()
+    try {
+      for (const decision of ['attach', 'paste', 'cancel'] as const) {
+        const target = term()
+        await handleLargeTextPaste({
+          text: 'g'.repeat(1500),
+          term: target,
+          sessionId: 's1',
+          noteLocalEcho: vi.fn(),
+          promptDecision: vi.fn().mockResolvedValue(decision),
+        })
+        expect(target.focus).toHaveBeenCalledTimes(1)
+        // Again once the dialog has unmounted and dropped the focus on the page body.
+        vi.runAllTimers()
+        expect(target.focus).toHaveBeenCalledTimes(2)
+      }
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('follows the thresholds from the settings', async () => {
+    setLargePasteThresholds({ promptChars: 200, attachChars: 500 })
+    try {
+      const promptDecision = vi.fn().mockResolvedValue('paste')
+      const asked = term()
+      await handleLargeTextPaste({ text: 'h'.repeat(300), term: asked, noteLocalEcho: vi.fn(), promptDecision })
+      expect(promptDecision).toHaveBeenCalledOnce()
+
+      const attached = term()
+      await handleLargeTextPaste({ text: 'i'.repeat(501), term: attached, noteLocalEcho: vi.fn(), promptDecision })
+      expect(promptDecision).toHaveBeenCalledOnce()
+      expect(attached.paste).toHaveBeenCalledWith('C:/attachments/pasted-text.txt')
+    } finally {
+      setLargePasteThresholds(undefined)
+    }
+  })
+})
+
+describe('resolveLargePaste', () => {
+  it('falls back to the defaults, clamps to the allowed range, and never attaches below the prompt', () => {
+    expect(resolveLargePaste(undefined)).toEqual({ promptChars: LARGE_TEXT_PROMPT_THRESHOLD, attachChars: LARGE_TEXT_FORCE_THRESHOLD })
+    expect(resolveLargePaste({ promptChars: 'x', attachChars: null })).toEqual({ promptChars: 1000, attachChars: 3000 })
+    expect(resolveLargePaste({ promptChars: 5, attachChars: 9e9 })).toEqual({ promptChars: 100, attachChars: 1_000_000 })
+    expect(resolveLargePaste({ promptChars: 4000, attachChars: 2000 })).toEqual({ promptChars: 4000, attachChars: 4000 })
+    expect(largePasteThresholds()).toEqual({ promptChars: 1000, attachChars: 3000 })
   })
 })

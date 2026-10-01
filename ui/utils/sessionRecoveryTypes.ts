@@ -2,6 +2,10 @@ export interface PaneRecoveryContext {
   cwd?: string
   cwdSource: 'reported' | 'launch' | 'unknown'
   shell?: string
+  agent?: string
+  agentSessionId?: string
+  profileName?: string
+  launcher?: string
 }
 
 export type DetachedContextUpdate = {

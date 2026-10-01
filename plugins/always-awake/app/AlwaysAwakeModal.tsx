@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MoonStar, X } from 'lucide-react'
 import { useEscToClose } from '../../../ui/hooks/useEscToClose'
-import { DURATIONS, durationFromExpiry, expiryFor, formatDeadline, type Duration } from './awakeSchedule'
+import { DURATIONS, expiryFor, formatDeadline, fromLocalInput, scheduleFromStatus, toLocalInput, type Schedule } from './awakeSchedule'
 
 export default function AlwaysAwakeModal({
   status,
@@ -13,20 +13,22 @@ export default function AlwaysAwakeModal({
   onSaved: (next: AlwaysAwakeStatus) => void
 }) {
   const [mode, setMode] = useState<AlwaysAwakeMode>(status.mode)
-  const [duration, setDuration] = useState<Duration>(() => durationFromExpiry(status))
+  const [schedule, setSchedule] = useState<Schedule>(() => scheduleFromStatus(status))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const expiresAtMs = expiryFor(schedule)
 
   useEscToClose(false, onClose, onClose)
 
   const save = async () => {
+    if (expiresAtMs === null) return
     setBusy(true)
     setError(null)
     try {
       const next = await window.omnitermAPI.alwaysAwake.setState({
         enabled: true,
         mode,
-        expiresAtMs: expiryFor(duration),
+        expiresAtMs,
       })
       onSaved(next)
       onClose()
@@ -118,15 +120,15 @@ export default function AlwaysAwakeModal({
           </fieldset>
           <div>
             <p className="text-xs font-semibold text-theme-fg mb-2">Keep awake for</p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {DURATIONS.map(([value, label]) => {
-                const selected = duration === value
+                const selected = schedule.duration === value
                 return (
                   <button
                     key={value}
                     type="button"
                     aria-pressed={selected}
-                    onClick={() => setDuration(value)}
+                    onClick={() => setSchedule((current) => ({ ...current, duration: value }))}
                     className="rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors"
                     // Inline, for the same purge reason as the panel width, and because the selected
                     // state used to be a bare accent-coloured border and label — invisible against a
@@ -144,7 +146,22 @@ export default function AlwaysAwakeModal({
             </div>
             {/* The buttons alone never showed which instant was chosen, so a changed schedule looked
                 identical to the default. */}
-            <p className="mt-2 text-[11px] text-theme-dim">Until {formatDeadline(expiryFor(duration))}</p>
+            {schedule.duration === 'custom' && (
+              <input
+                type="datetime-local"
+                aria-label="Keep awake until"
+                value={Number.isFinite(schedule.customAt) ? toLocalInput(schedule.customAt) : ''}
+                min={toLocalInput(Date.now())}
+                onChange={(event) => {
+                  const customAt = fromLocalInput(event.target.value)
+                  setSchedule((current) => ({ ...current, customAt }))
+                }}
+                className="mt-2 w-full rounded-lg border border-theme-border bg-theme-bg px-2 py-1.5 text-xs text-theme-fg focus:border-theme-accent focus:outline-none"
+              />
+            )}
+            {expiresAtMs === null
+              ? <p className="mt-2 text-[11px] text-theme-error">Pick a time in the future.</p>
+              : <p className="mt-2 text-[11px] text-theme-dim">Until {formatDeadline(expiresAtMs)}</p>}
           </div>
           <div
             role="status"
@@ -162,7 +179,7 @@ export default function AlwaysAwakeModal({
               role="switch"
               aria-checked={status.enabled}
               aria-label="Always Awake"
-              disabled={busy || !status.supported}
+              disabled={busy || !status.supported || (!status.enabled && expiresAtMs === null)}
               onClick={() => (status.enabled ? void disable() : void save())}
               className="relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50"
               style={{ backgroundColor: status.enabled ? 'var(--theme-accent)' : 'var(--theme-border)' }}
@@ -191,7 +208,7 @@ export default function AlwaysAwakeModal({
         </div>
         <div className="flex justify-end gap-2 border-t border-theme-border px-5 py-3">
           <button type="button" disabled={busy} onClick={() => void disable()} className="px-3 py-1.5 rounded-lg border border-theme-border text-xs text-theme-error hover:bg-theme-hover disabled:opacity-50">Off</button>
-          <button type="button" disabled={busy || !status.supported} onClick={() => void save()} className="px-4 py-1.5 rounded-lg bg-[var(--theme-accent)] text-theme-accent-fg text-xs font-semibold disabled:opacity-50">Save</button>
+          <button type="button" disabled={busy || !status.supported || expiresAtMs === null} onClick={() => void save()} className="px-4 py-1.5 rounded-lg bg-[var(--theme-accent)] text-theme-accent-fg text-xs font-semibold disabled:opacity-50">Save</button>
         </div>
       </div>
     </div>

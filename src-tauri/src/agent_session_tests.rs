@@ -57,6 +57,11 @@ fn resolves_newest_uuid_named_session() {
         resolved.as_deref(),
         Some("22222222-2222-2222-2222-222222222222")
     );
+    let resolved_trailing = resolve_claude_session_file(profile_dir, "D:\\work\\proj\\", None);
+    assert_eq!(
+        resolved_trailing.as_deref(),
+        Some("22222222-2222-2222-2222-222222222222")
+    );
 }
 
 #[test]
@@ -192,4 +197,31 @@ fn durable_session_commands_round_trip_through_app_data() {
     if let Ok(path) = store_path(app.handle()) {
         let _ = fs::remove_file(path);
     }
+}
+
+#[tokio::test]
+async fn transcript_export_rejects_non_uuid_ids_and_renders_the_session() {
+    let temp = tempdir().expect("tempdir");
+    let profile = temp.path().to_string_lossy().to_string();
+    for bad in ["../secret", "latest", ""] {
+        assert!(
+            export_claude_transcript(profile.clone(), bad.to_string())
+                .await
+                .is_err(),
+            "{bad:?} must be rejected"
+        );
+    }
+
+    let project_dir = temp.path().join("projects").join("D--work-proj");
+    fs::create_dir_all(&project_dir).expect("create project dir");
+    let id = "44444444-4444-4444-4444-444444444444";
+    let record =
+        serde_json::json!({ "type": "user", "message": { "content": "Full conversation" } });
+    fs::write(project_dir.join(format!("{id}.jsonl")), record.to_string())
+        .expect("write transcript");
+
+    let text = export_claude_transcript(profile, id.to_string())
+        .await
+        .expect("export valid session");
+    assert!(text.contains("Full conversation"), "{text}");
 }

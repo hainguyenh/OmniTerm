@@ -18,7 +18,7 @@ describe('wakeAgent', () => {
     expect(await wakeAgent({ agent: 'claude', profileDir: 'D:\\p\\work', prompt: 'hi' }, deps)).toEqual({ ok: true })
     const [exe, args, options] = run.mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv; cwd: string }]
     expect(exe).toBe(claude)
-    expect(args).toEqual(['-p', 'hi', '--model', 'haiku'])
+    expect(args).toEqual(['--tools', '', '--no-session-persistence', '--disable-slash-commands', '--strict-mcp-config', '-p', 'hi', '--model', 'haiku'])
     expect(options.env.CLAUDE_CONFIG_DIR).toBe('D:\\p\\work')
     expect(options.cwd).toBe(deps.tmp)
   })
@@ -38,7 +38,7 @@ describe('wakeAgent', () => {
     await wakeAgent({ agent: 'claude', launcher: 'claude-th', prompt: 'hi' }, deps)
     const [exe, args, options] = run.mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv }]
     expect(exe).toBe(launcher)
-    expect(args).toEqual(['-p', 'hi', '--model', 'haiku'])
+    expect(args).toEqual(['--tools', '', '--no-session-persistence', '--disable-slash-commands', '--strict-mcp-config', '-p', 'hi', '--model', 'haiku'])
     expect(options.env).not.toHaveProperty('CLAUDE_CONFIG_DIR')
   })
 
@@ -106,6 +106,28 @@ describe('createService', () => {
     expect(await service.fetchUsage({ agent: 'codex' })).toMatchObject({ error: 'unsupported' })
   })
 
+  it('falls back to cachedUsageUtilization from config when claude /usage fails', async () => {
+    const run = vi.fn(async () => cliResult({ stdout: 'Quick safety check: Do you trust this folder?' }))
+    const cachedConfig = JSON.stringify({
+      fetchedAtMs: 1234567,
+      cachedUsageUtilization: {
+        five_hour: { utilization: 12, resets_at: '2026-09-30T00:00:00.000Z' },
+        seven_day: { utilization: 45, resets_at: '2026-10-05T00:00:00.000Z' },
+      },
+    })
+    const readTail = vi.fn(async () => cachedConfig)
+    const service = createService(fakeDeps({}, { run, readTail, resolve: () => 'claude' }))
+    const snapshot = await service.fetchUsage({ agent: 'claude' })
+    expect(snapshot).toMatchObject({
+      fetchedAt: 1234567,
+      source: 'cli',
+      windows: [
+        { kind: 'session', usedPct: 12 },
+        { kind: 'weekly', usedPct: 45 },
+      ],
+    })
+  })
+
   it('turns provider crashes into failed snapshots', async () => {
     const service = createService(fakeDeps({}, { listDir: () => { throw new Error('disk gone') } }))
     expect(await service.fetchUsage({ agent: 'codex' })).toMatchObject({ error: 'failed', message: 'disk gone' })
@@ -137,6 +159,8 @@ describe('plugin entry', () => {
     expect(handler?.('agentQuota.info')).toEqual({ name: 'Agent Quota', agents: ['claude', 'codex', 'agy'] })
     expect(await handler?.('agentQuota.wake', { agent: 'claude', prompt: 'hi' })).toEqual({ ok: true })
     expect(await handler?.('agentQuota.fetchUsage', { agent: 'codex' })).toMatchObject({ error: 'unsupported' })
+    // The hidden profile probe's scratch folder is the sidecar's own temp dir, never a renderer path.
+    expect(handler?.('agentQuota.probeDir', 'C:\\elsewhere')).toBe(deps.tmp)
     expect(() => handler?.('agentQuota.nope')).toThrow('Unknown Agent Quota method "agentQuota.nope"')
     expect(deactivate()).toBeUndefined()
   })

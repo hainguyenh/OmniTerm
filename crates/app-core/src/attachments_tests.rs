@@ -203,3 +203,24 @@ fn ignores_malformed_drop_files_blocks() {
     out_of_range[0] = 250;
     assert!(parse_drop_files(&out_of_range).is_empty());
 }
+
+#[test]
+fn sanitize_session_dir_cleans_and_defaults() {
+    assert_eq!(sanitize_session_dir("sess-1"), "sess-1");
+    assert_eq!(sanitize_session_dir("tab_123"), "tab_123");
+    assert_eq!(sanitize_session_dir("../evil/path"), "evilpath");
+    assert_eq!(sanitize_session_dir("   "), "common");
+    assert_eq!(sanitize_session_dir(""), "common");
+}
+
+#[test]
+fn list_attachments_collects_from_subdirectories() {
+    let temp = dir();
+    let sub = temp.path().join("sess-a");
+    fs::create_dir_all(&sub).expect("create sub");
+    save_attachment(&sub, "file.txt", b"content", 100).expect("save in sub");
+    let listed = list_attachments(temp.path());
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].name, "file-100.txt");
+}
+

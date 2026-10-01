@@ -7,6 +7,7 @@ import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
 import { applyThemeVars, isSquareTheme, themeCssVars } from './utils/themeVars'
 import { diag } from './diag'
+import { setLargePasteThresholds } from './utils/largeTextPaste'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
@@ -35,6 +36,8 @@ interface AppSettings {
   blurInactiveDock?: boolean
   blurEnabled?: boolean
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
+  /** Large-paste thresholds; validated by utils/largeTextPaste.ts resolveLargePaste. */
+  largePaste?: { promptChars?: number; attachChars?: number }
 }
 
 function App() {
@@ -116,6 +119,9 @@ function App() {
       window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
     })
   }, [])
+
+  // Read at paste time by every pane in this window (main or detached).
+  useEffect(() => setLargePasteThresholds(appSettings.largePaste), [appSettings.largePaste])
 
   const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? themes[0] ?? TOKYO_NIGHT
 

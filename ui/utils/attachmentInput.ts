@@ -23,13 +23,16 @@ export const formatAttachmentPaths = (paths: readonly string[]): string =>
   paths.map((path) => (/\s/.test(path) ? `"${path}"` : path)).join(' ')
 
 /** Store each file; a file that is empty, too large or refused by the backend is skipped. */
-export const saveAttachmentFiles = async (files: readonly File[]): Promise<SavedAttachment[]> => {
+export const saveAttachmentFiles = async (
+  files: readonly File[],
+  sessionId?: string,
+): Promise<SavedAttachment[]> => {
   const saved: SavedAttachment[] = []
   for (const file of files) {
     if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) continue
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const info = await window.omnitermAPI.attachments.save(file.name, bytes)
+      const info = await window.omnitermAPI.attachments.save(file.name, bytes, sessionId)
       if (info) saved.push(info.kind === 'image' ? { info, bytes } : { info })
     } catch {
       // Unreadable or refused (size, disk): leave this file out; the rest still attach.

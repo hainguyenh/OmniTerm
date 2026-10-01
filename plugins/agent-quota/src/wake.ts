@@ -20,9 +20,9 @@ export async function wakeAgent(request: WakeRequest, deps: ProviderDeps): Promi
     return { ok: false, message: `${name} CLI not found.` }
   }
   const args = request.agent === 'claude'
-    ? ['-p', request.prompt, '--model', 'haiku']
+    ? ['--tools', '', '--no-session-persistence', '--disable-slash-commands', '--strict-mcp-config', '-p', request.prompt, '--model', 'haiku']
     : request.agent === 'agy'
-      ? ['-p', request.prompt]
+      ? ['-p', request.prompt, '--disable-slash-commands']
       : ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', request.prompt]
   const result = await deps.run(command.exe, args, { env: command.env, timeoutMs: WAKE_TIMEOUT_MS, cwd: deps.tmp })
   if (result.timedOut) return { ok: false, message: 'The wake prompt timed out.' }

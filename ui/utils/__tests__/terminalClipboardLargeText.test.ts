@@ -21,6 +21,7 @@ const save = vi.fn(async (name: string) => info(name.replace('.', '-1.')))
 const term = () => ({
   onSelectionChange: vi.fn(() => ({ dispose: vi.fn() })),
   paste: vi.fn(),
+  focus: vi.fn(),
 }) as unknown as Terminal & { paste: ReturnType<typeof vi.fn> }
 
 describe('large text paste handling through terminal clipboard', () => {
@@ -49,7 +50,7 @@ describe('large text paste handling through terminal clipboard', () => {
 
     await clipboard.paste()
 
-    expect(save).toHaveBeenCalledWith('pasted-text.txt', expect.anything())
+    expect(save).toHaveBeenCalledWith('pasted-text.txt', expect.anything(), 'sess-agent')
     expect(target.paste).toHaveBeenCalledWith('C:/data/attachments/pasted-text-1.txt')
     expect(onFilesSaved).toHaveBeenCalledWith([{ info: info('pasted-text-1.txt') }])
     clipboard.dispose()
@@ -97,7 +98,7 @@ describe('large text paste handling through terminal clipboard', () => {
 
     expect(event.preventDefault).toHaveBeenCalled()
     await vi.waitFor(() => expect(target.paste).toHaveBeenCalledWith('C:/data/attachments/pasted-data-1.json'))
-    expect(save).toHaveBeenCalledWith('pasted-data.json', expect.anything())
+    expect(save).toHaveBeenCalledWith('pasted-data.json', expect.anything(), 'sess-agent-native')
     expect(onFilesSaved).toHaveBeenCalledOnce()
     expect(noteLocalEcho).toHaveBeenCalledOnce()
   })
@@ -133,7 +134,7 @@ describe('large text paste handling through terminal clipboard', () => {
     gate(event)
 
     await vi.waitFor(() => expect(target.paste).toHaveBeenCalledWith('C:/data/attachments/pasted-document-1.md'))
-    expect(save).toHaveBeenCalledWith('pasted-document.md', expect.anything())
+    expect(save).toHaveBeenCalledWith('pasted-document.md', expect.anything(), 'sess-prompt-test')
     expect(onFilesSaved).toHaveBeenCalledOnce()
 
     unsubscribe()

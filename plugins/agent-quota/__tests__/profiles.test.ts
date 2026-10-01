@@ -75,6 +75,7 @@ describe('listProfiles', () => {
     const deps = fakeDeps({
       [path.join(HOME, '.claude-custom', 'settings.json')]: '{}',
       [path.join(HOME, 'claude-profiles', 'team', 'settings.json')]: '{}',
+      [path.join(HOME, 'claude-profiles', 'claude-work', 'settings.json')]: '{}',
     }, {
       mtime: async (file) => (file.includes('claude') ? 1 : null),
     })
@@ -89,6 +90,12 @@ describe('listProfiles', () => {
       agent: 'claude',
       profileName: 'claude-team',
       profileDir: path.join(HOME, 'claude-profiles', 'team'),
+      launcher: null,
+    })
+    expect(profiles).toContainEqual({
+      agent: 'claude',
+      profileName: 'claude-work',
+      profileDir: path.join(HOME, 'claude-profiles', 'claude-work'),
       launcher: null,
     })
   })

@@ -32,36 +32,42 @@ export default function TerminalToolbarSettings({ value, onChange }: TerminalToo
     footer: surface === 'footer' ? [...actions] : footer,
   })
 
-  const group = (surface: 'header' | 'footer', title: string, options: readonly TerminalToolbarAction[], selected: readonly TerminalToolbarAction[]) => (
-    <fieldset className="flex flex-col gap-1.5">
-      <legend className="text-[10px] font-semibold uppercase tracking-widest text-theme-dim">{title}</legend>
-      {options.map((action) => {
-        const index = selected.indexOf(action)
-        const checked = index !== -1
-        return (
-          <div key={action} className="flex items-center gap-1.5 rounded-lg border border-theme-border px-2 py-1 text-xs">
-            <GripVertical className="h-3 w-3 text-theme-dim" aria-hidden="true" />
-            <label className="flex min-w-0 flex-1 items-center gap-2">
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(event) => update(surface, event.target.checked
-                  ? [...selected, action]
-                  : selected.filter((item) => item !== action))}
-              />
-              <span className="truncate">{TERMINAL_ACTION_LABELS[action]}</span>
-            </label>
-            <button type="button" disabled={!checked || index === 0} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} up`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={() => update(surface, move(selected, index, -1))}>
-              <ArrowUp className="h-3 w-3" />
-            </button>
-            <button type="button" disabled={!checked || index === selected.length - 1} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} down`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={() => update(surface, move(selected, index, 1))}>
-              <ArrowDown className="h-3 w-3" />
-            </button>
-          </div>
-        )
-      })}
-    </fieldset>
-  )
+  const group = (surface: 'header' | 'footer', title: string, options: readonly TerminalToolbarAction[], selected: readonly TerminalToolbarAction[]) => {
+    const ordered = [
+      ...selected.filter((action) => options.includes(action)),
+      ...options.filter((action) => !selected.includes(action)),
+    ]
+    return (
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-[10px] font-semibold uppercase tracking-widest text-theme-dim">{title}</legend>
+        {ordered.map((action) => {
+          const index = selected.indexOf(action)
+          const checked = index !== -1
+          return (
+            <div key={action} className="flex items-center gap-1.5 rounded-lg border border-theme-border px-2 py-1 text-xs">
+              <GripVertical className="h-3 w-3 text-theme-dim" aria-hidden="true" />
+              <label className="flex min-w-0 flex-1 items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => update(surface, event.target.checked
+                    ? [...selected, action]
+                    : selected.filter((item) => item !== action))}
+                />
+                <span className="truncate">{TERMINAL_ACTION_LABELS[action]}</span>
+              </label>
+              <button type="button" disabled={!checked || index === 0} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} up`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={() => update(surface, move(selected, index, -1))}>
+                <ArrowUp className="h-3 w-3" />
+              </button>
+              <button type="button" disabled={!checked || index === selected.length - 1} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} down`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={() => update(surface, move(selected, index, 1))}>
+                <ArrowDown className="h-3 w-3" />
+              </button>
+            </div>
+          )
+        })}
+      </fieldset>
+    )
+  }
 
   return (
     <section className="flex flex-col gap-2 border-t border-theme-border pt-3" aria-label="Global terminal toolbar">
