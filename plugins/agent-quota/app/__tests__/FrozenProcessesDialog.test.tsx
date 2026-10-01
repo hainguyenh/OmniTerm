@@ -136,4 +136,136 @@ describe('FrozenProcessesDialog', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByText('Suspended Processes')).toBeNull()
   })
+
+  it('closes dialog on backdrop click', async () => {
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    const backdrop = await screen.findByTestId('aq-frozen-dialog-backdrop')
+    fireEvent.mouseDown(backdrop)
+    expect(screen.queryByText('Suspended Processes')).toBeNull()
+  })
+
+  it('closes dialog on close button click', async () => {
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    await screen.findByText('Suspended Processes')
+    const closeBtn = screen.getByLabelText('Close dialog')
+    fireEvent.click(closeBtn)
+    expect(screen.queryByText('Suspended Processes')).toBeNull()
+  })
+
+  it('calls terminate and removes process when Stop is clicked', async () => {
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    await screen.findByText('claude.exe')
+
+    const stopBtns = screen.getAllByRole('button', { name: /Stop/i })
+    fireEvent.click(stopBtns[0])
+
+    await waitFor(() => {
+      expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
+    })
+    expect(screen.queryByText('PID 101')).toBeNull()
+    expect(screen.getByText('PID 202')).toBeInTheDocument()
+  })
+
+  it('closes dialog when all remaining processes are terminated', async () => {
+    mockGetHeld.mockResolvedValueOnce([
+      {
+        pid: 101,
+        startTime: 100,
+        image: 'claude.exe',
+        profileName: 'work',
+        threads: [],
+      },
+    ])
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    await screen.findByText('claude.exe')
+
+    const stopBtn = screen.getByRole('button', { name: /Stop/i })
+    fireEvent.click(stopBtn)
+
+    await waitFor(() => {
+      expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('Suspended Processes')).toBeNull()
+    })
+  })
+
+  it('closes dialog when all remaining processes are individually resumed', async () => {
+    mockGetHeld.mockResolvedValueOnce([
+      {
+        pid: 101,
+        startTime: 100,
+        image: 'claude.exe',
+        profileName: 'work',
+        threads: [],
+      },
+    ])
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    await screen.findByText('claude.exe')
+
+    const resumeBtn = screen.getByTitle('Thaw this process')
+    fireEvent.click(resumeBtn)
+
+    await waitFor(() => {
+      expect(mockResumePid).toHaveBeenCalledWith('s1', 101)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('Suspended Processes')).toBeNull()
+    })
+  })
+
+  it('falls back to terminal process when held processes return empty', async () => {
+    mockGetHeld.mockResolvedValueOnce([])
+    seed({
+      terminals: [
+        terminal({
+          sessionId: 's1',
+          agent: 'agy',
+          pid: 999,
+          startTime: 1234,
+          profileName: 'dev',
+        }),
+      ],
+    })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    expect(await screen.findByText('agy.exe')).toBeInTheDocument()
+    expect(screen.getByText('PID 999')).toBeInTheDocument()
+  })
+
+  it('falls back to terminal process when getHeld rejects', async () => {
+    mockGetHeld.mockRejectedValueOnce(new Error('fetch failed'))
+    seed({
+      terminals: [
+        terminal({
+          sessionId: 's1',
+          agent: 'claude',
+          pid: 888,
+          startTime: 4321,
+          profileName: 'default',
+        }),
+      ],
+    })
+    setReviewSession('s1')
+
+    render(<FrozenProcessesDialog />)
+    expect(await screen.findByText('claude.exe')).toBeInTheDocument()
+    expect(screen.getByText('PID 888')).toBeInTheDocument()
+  })
 })

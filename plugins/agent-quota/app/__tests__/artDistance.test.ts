@@ -94,5 +94,19 @@ describe('artDistance', () => {
       expect(disconnect).toHaveBeenCalled()
       vi.unstubAllGlobals()
     })
+
+    it('gracefully handles environment without ResizeObserver', () => {
+      const original = (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver
+      try {
+        delete (globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver
+        const element = document.createElement('span')
+        vi.spyOn(element, 'getBoundingClientRect').mockReturnValue({ width: 300 } as DOMRect)
+        const ref = { current: element }
+        const { result } = renderHook(() => useArtDistanceFactor(ref))
+        expect(result.current).toBe(calcArtDistanceFactor(300))
+      } finally {
+        ;(globalThis as unknown as { ResizeObserver?: unknown }).ResizeObserver = original
+      }
+    })
   })
 })
