@@ -12,6 +12,7 @@ import { parseAgentTitle } from '../utils/agentTitle'
 import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
 import { whenAgentSessionsHydrated } from '../utils/agentSessionDurable'
 import { markRestoredPane } from '../utils/agentPresenceStore'
+import { agentLaunchedBy, noteAgentLaunch } from '../utils/agentLaunchSignal'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
@@ -68,23 +69,28 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
 
 function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
   const stored = findSessionByTabId(tab.id)
-    ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+    ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
+    ?? loadStoredSessions().find(item => item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+  const rawAgent = stored?.agent ?? tab.recovery.agent
   const agentName = parseAgentTitle(tab.name)?.agentName
     ?? parseAgentTitle(savedConn?.name)?.agentName
-    ?? (stored ? (AGENT_DISPLAY_NAMES[stored.agent] ?? 'Claude Code') : undefined)
-  const launcher = stored?.launcher === 'agy-gemini' ? undefined : (stored?.launcher ?? (
-    stored?.profileName
-      ? stored.profileName.startsWith('claude-') || stored.profileName.startsWith('codex-') || stored.profileName.startsWith('opencode-') || (stored.profileName.startsWith('agy-') && stored.profileName !== 'agy-gemini')
-        ? stored.profileName
-        : stored.profileName !== 'claude' && stored.profileName !== 'codex' && stored.profileName !== 'opencode' && stored.profileName !== 'agy' && stored.profileName !== 'gemini' && !(stored.agent === 'agy' && stored.profileName === 'gemini')
-          ? `${stored.agent}-${stored.profileName}`
+    ?? (rawAgent ? (AGENT_DISPLAY_NAMES[rawAgent] ?? rawAgent) : undefined)
+  const sessionId = stored?.sessionId ?? tab.recovery.agentSessionId
+  const candidateLauncher = stored?.launcher ?? tab.recovery.launcher
+  const candidateProfile = stored?.profileName ?? tab.recovery.profileName
+  const launcher = candidateLauncher === 'agy-gemini' ? undefined : (candidateLauncher ?? (
+    candidateProfile
+      ? candidateProfile.startsWith('claude-') || candidateProfile.startsWith('codex-') || candidateProfile.startsWith('opencode-') || (candidateProfile.startsWith('agy-') && candidateProfile !== 'agy-gemini')
+        ? candidateProfile
+        : candidateProfile !== 'claude' && candidateProfile !== 'codex' && candidateProfile !== 'opencode' && candidateProfile !== 'agy' && candidateProfile !== 'gemini' && !(rawAgent === 'agy' && candidateProfile === 'gemini')
+          ? `${rawAgent}-${candidateProfile}`
           : undefined
       : undefined
   ))
-  const cleanProfile = stored?.profileName === 'agy-gemini' || (stored?.agent === 'agy' && stored?.profileName === 'gemini')
+  const cleanProfile = candidateProfile === 'agy-gemini' || (rawAgent === 'agy' && candidateProfile === 'gemini')
     ? undefined
-    : stored?.profileName
-  return formatAgentResumeCommand(agentName, stored?.sessionId, launcher, cleanProfile)
+    : candidateProfile
+  return formatAgentResumeCommand(agentName, sessionId, launcher, cleanProfile)
 }
 
 export function useSessionRestore(input: SessionRestoreInput): void {
@@ -147,6 +153,10 @@ export function useSessionRestore(input: SessionRestoreInput): void {
             if (opened) {
               conn = opened
               if (resumeCommand) {
+                // Freeze the pane before its agent draws anything: every restored agent gets its
+                // folder-trust answer and `/usage` read without the user typing into it first.
+                const agent = agentLaunchedBy(resumeCommand)
+                if (agent) noteAgentLaunch(tab.id, agent)
                 const stored = findSessionByTabId(tab.id)
                   ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
                 if (stored) {

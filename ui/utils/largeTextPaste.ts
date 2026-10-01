@@ -7,10 +7,10 @@
  * saved as attachment documents and referenced by path instead, allowing the agent
  * to inspect full context with native file tools.
  *
- * Thresholds:
- * - < 1,000 chars: Paste directly (no prompt).
+ * Thresholds (Settings → General → Attachments; defaults shown):
+ * - below 1,000 chars: Paste directly (no prompt).
  * - 1,000 - 3,000 chars: Prompt user (Attach as document vs Paste directly).
- * - > 3,000 chars: Force/attach as document directly.
+ * - above 3,000 chars: Attach as document directly.
  */
 import type { Terminal } from '@xterm/xterm'
 
@@ -19,6 +19,37 @@ import { requestLargeTextPasteDecision } from './largeTextPasteStore'
 
 export const LARGE_TEXT_PROMPT_THRESHOLD = 1000
 export const LARGE_TEXT_FORCE_THRESHOLD = 3000
+/** The range the settings accept for either threshold. */
+export const LARGE_PASTE_MIN_CHARS = 100
+export const LARGE_PASTE_MAX_CHARS = 1_000_000
+
+export interface LargePasteThresholds {
+  /** From this many characters, ask whether to attach the paste as a document. */
+  promptChars: number
+  /** Above this many characters, attach it without asking. Never below `promptChars`. */
+  attachChars: number
+}
+
+const clampChars = (value: unknown, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(LARGE_PASTE_MAX_CHARS, Math.max(LARGE_PASTE_MIN_CHARS, Math.round(value)))
+    : fallback
+
+/** Validate the persisted `largePaste` setting; anything unreadable falls back to the defaults. */
+export const resolveLargePaste = (value: unknown): LargePasteThresholds => {
+  const record = value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const promptChars = clampChars(record.promptChars, LARGE_TEXT_PROMPT_THRESHOLD)
+  return { promptChars, attachChars: Math.max(promptChars, clampChars(record.attachChars, LARGE_TEXT_FORCE_THRESHOLD)) }
+}
+
+/** Set by App from the settings, read at paste time by every pane in the window. */
+let thresholds = resolveLargePaste(undefined)
+
+export const setLargePasteThresholds = (value: unknown): void => {
+  thresholds = resolveLargePaste(value)
+}
+
+export const largePasteThresholds = (): LargePasteThresholds => thresholds
 
 export const countLines = (text: string): number => {
   if (!text) return 0
@@ -57,11 +88,14 @@ export const detectTextAttachmentName = (text: string): string => {
 /**
  * Save text content as an attachment file via the backend attachment manager.
  */
-export const saveTextAsAttachment = async (text: string): Promise<SavedAttachment | null> => {
+export const saveTextAsAttachment = async (
+  text: string,
+  sessionId?: string,
+): Promise<SavedAttachment | null> => {
   const nameHint = detectTextAttachmentName(text)
   const bytes = new TextEncoder().encode(text)
   try {
-    const info = await window.omnitermAPI.attachments?.save(nameHint, bytes)
+    const info = await window.omnitermAPI.attachments?.save(nameHint, bytes, sessionId)
     return info ? { info } : null
   } catch {
     return null
@@ -74,6 +108,7 @@ export interface HandleLargeTextPasteOptions {
   sessionId?: string
   noteLocalEcho: () => void
   onFilesSaved?: (saved: SavedAttachment[]) => void
+  canInsertImagePaths?: boolean
   promptDecision?: (
     sessionId: string,
     text: string,
@@ -93,16 +128,18 @@ export const handleLargeTextPaste = async ({
   sessionId,
   noteLocalEcho,
   onFilesSaved,
+  canInsertImagePaths,
   promptDecision = requestLargeTextPasteDecision,
 }: HandleLargeTextPasteOptions): Promise<boolean> => {
-  if (text.length < LARGE_TEXT_PROMPT_THRESHOLD) {
+  const { promptChars, attachChars } = largePasteThresholds()
+  if (text.length < promptChars) {
     noteLocalEcho()
     term.paste(text)
     return true
   }
 
   const attachDirectly = async (): Promise<boolean> => {
-    const saved = await saveTextAsAttachment(text)
+    const saved = await saveTextAsAttachment(text, sessionId)
     if (saved) {
       onFilesSaved?.([saved])
       noteLocalEcho()
@@ -115,24 +152,38 @@ export const handleLargeTextPaste = async ({
     return true
   }
 
-  if (text.length > LARGE_TEXT_FORCE_THRESHOLD) {
+  const canInsert = canInsertImagePaths ?? true
+  if (canInsert && text.length > attachChars) {
     return attachDirectly()
   }
 
-  // Between 1,000 and 3,000 characters: prompt the user
+  // Between the two thresholds (or above attachChars for unconfirmed agent): prompt the user
   const charCount = text.length
   const lineCount = countLines(text)
   const preview = createTextPreview(text)
   const effectiveSessionId = sessionId ?? 'active'
   const decision = await promptDecision(effectiveSessionId, text, charCount, lineCount, preview)
+  try {
+    if (decision === 'attach') {
+      return await attachDirectly()
+    }
+    if (decision === 'paste') {
+      noteLocalEcho()
+      term.paste(text)
+      return true
+    }
+    return false
+  } finally {
+    refocus(term)
+  }
+}
 
-  if (decision === 'attach') {
-    return attachDirectly()
-  }
-  if (decision === 'paste') {
-    noteLocalEcho()
-    term.paste(text)
-    return true
-  }
-  return false
+/**
+ * The dialog took the keyboard (its default button is focused), so whatever the user chose —
+ * even Cancel — the pane they pasted into gets it back. Once more after the dialog has unmounted,
+ * because removing the focused button would leave the focus on the page body.
+ */
+const refocus = (term: Terminal): void => {
+  term.focus()
+  setTimeout(() => term.focus(), 0)
 }

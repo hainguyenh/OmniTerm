@@ -8,6 +8,7 @@
   --aq-art-icon-size: 1.5rem;
   --aq-art-tier-scale: 1;
   --aq-art-travel: 7.6s;
+  --aq-art-distance-factor: 1;
   position: relative;
   display: block;
   width: 100%;
@@ -29,7 +30,7 @@
   object-fit: contain;
   /* A larger tier stands over the terminal's first row; clicks must still reach it. */
   pointer-events: none;
-  animation: aq-busy-art-travel calc(var(--aq-art-travel) / var(--aq-art-speed)) ease-in-out infinite;
+  animation: aq-busy-art-travel calc(var(--aq-art-travel) * var(--aq-art-distance-factor) / var(--aq-art-speed)) ease-in-out infinite;
   will-change: left, transform;
 }
 
@@ -107,9 +108,276 @@
   }
 }
 
+/*
+ * Blazing flame effect when quota >= 90% (isBlazing).
+ * Fiery aura around the running icon and a burning fire trail behind it along the path.
+ */
+.aq-busy-art-blazing {
+  --aq-flame-core: #fff580;
+  --aq-flame-warm: #ffaa00;
+  --aq-flame-hot: #ff4500;
+  --aq-flame-deep: #cc1100;
+}
+
+.aq-busy-art-blazing > img {
+  filter: drop-shadow(0 0 6px var(--aq-flame-hot)) drop-shadow(0 0 2px var(--aq-flame-core)) brightness(1.1) contrast(1.15);
+  animation:
+    aq-busy-art-travel calc(var(--aq-art-travel) * var(--aq-art-distance-factor) / var(--aq-art-speed)) ease-in-out infinite,
+    aq-blazing-heat 0.25s ease-in-out infinite alternate;
+}
+
+@keyframes aq-blazing-heat {
+  from {
+    filter: drop-shadow(0 0 5px var(--aq-flame-hot)) drop-shadow(0 0 2px var(--aq-flame-core)) brightness(1.08);
+  }
+
+  to {
+    filter: drop-shadow(0 0 8px var(--aq-flame-hot)) drop-shadow(0 0 3px var(--aq-flame-warm)) brightness(1.18);
+  }
+}
+
+/*
+ * The blaze container tracks the runner in lockstep, sharing the exact same travel animation
+ * and horizontal flip (scaleX) on return trips so the trail is always trailing behind.
+ */
+.aq-art-blaze {
+  --aq-art-box: calc(var(--aq-art-icon-size) * var(--aq-art-tier-scale));
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 0;
+  width: var(--aq-art-box);
+  height: var(--aq-art-box);
+  pointer-events: none;
+  animation: aq-busy-art-travel calc(var(--aq-art-travel) * var(--aq-art-distance-factor) / var(--aq-art-speed)) ease-in-out infinite;
+  will-change: left, transform;
+}
+
+/* Fire at the running position: radial heat glow and leaping flame tongues around the icon. */
+.aq-art-fire-runner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.aq-art-runner-glow {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 240 100 / 0.7) 10%, rgb(255 100 0 / 0.5) 45%, rgb(220 20 0 / 0.25) 70%, transparent 90%);
+  filter: blur(3px);
+  animation: aq-blaze-glow 0.35s ease-in-out infinite alternate;
+}
+
+.aq-art-runner-flame {
+  position: absolute;
+  bottom: 0;
+  border-radius: 50% 50% 25% 25% / 60% 60% 40% 40%;
+  transform-origin: bottom center;
+}
+
+.aq-runner-flame-back {
+  width: 70%;
+  height: 95%;
+  background: linear-gradient(to top, var(--aq-flame-deep), var(--aq-flame-hot) 60%, var(--aq-flame-warm));
+  opacity: 0.85;
+  filter: blur(1px);
+  animation: aq-flame-dance-1 0.3s ease-in-out infinite alternate;
+}
+
+.aq-runner-flame-front {
+  width: 50%;
+  height: 75%;
+  background: linear-gradient(to top, var(--aq-flame-hot), var(--aq-flame-warm) 50%, var(--aq-flame-core));
+  opacity: 0.95;
+  animation: aq-flame-dance-2 0.24s ease-in-out infinite alternate;
+}
+
+/* Sparks/embers rising from the running position */
+.aq-art-runner-spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--aq-flame-core);
+  box-shadow: 0 0 4px var(--aq-flame-hot);
+}
+
+.aq-spark-1 {
+  top: 15%;
+  left: 25%;
+  animation: aq-spark-fly-1 0.55s ease-out infinite;
+}
+
+.aq-spark-2 {
+  top: 25%;
+  left: 65%;
+  animation: aq-spark-fly-2 0.7s ease-out infinite 0.15s;
+}
+
+.aq-spark-3 {
+  top: 40%;
+  left: 45%;
+  animation: aq-spark-fly-1 0.6s ease-out infinite 0.3s;
+}
+
+/* Fire burning on the travel path, trailing behind the runner for a short section. */
+.aq-art-fire-trail {
+  position: absolute;
+  top: 50%;
+  right: calc(100% - 6px);
+  width: clamp(38px, calc(var(--aq-art-box) * 1.8), 64px);
+  height: calc(var(--aq-art-box) * 0.85);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* Burning ground track along the path */
+.aq-art-trail-ground {
+  position: absolute;
+  bottom: 2px;
+  right: 0;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to left, #fff 0%, var(--aq-flame-core) 15%, var(--aq-flame-hot) 50%, var(--aq-flame-deep) 80%, transparent 100%);
+  box-shadow: 0 0 6px rgb(255 100 0 / 0.9), 0 0 12px rgb(255 40 0 / 0.6);
+  animation: aq-trail-burn 0.3s ease-in-out infinite alternate;
+}
+
+/* Flame tongues along the trail behind the runner */
+.aq-art-trail-flame {
+  position: absolute;
+  bottom: 3px;
+  border-radius: 50% 50% 20% 20% / 60% 60% 40% 40%;
+  transform-origin: bottom center;
+}
+
+.aq-trail-flame-1 {
+  right: 8px;
+  width: 12px;
+  height: 80%;
+  background: linear-gradient(to top, var(--aq-flame-hot), var(--aq-flame-warm) 60%, var(--aq-flame-core));
+  opacity: 0.9;
+  filter: drop-shadow(0 0 4px var(--aq-flame-hot));
+  animation: aq-flame-dance-1 0.28s ease-in-out infinite alternate;
+}
+
+.aq-trail-flame-2 {
+  right: 22px;
+  width: 10px;
+  height: 60%;
+  background: linear-gradient(to top, var(--aq-flame-deep), var(--aq-flame-hot) 70%, var(--aq-flame-warm));
+  opacity: 0.8;
+  filter: drop-shadow(0 0 3px var(--aq-flame-hot));
+  animation: aq-flame-dance-2 0.36s ease-in-out infinite alternate 0.08s;
+}
+
+.aq-trail-flame-3 {
+  right: 34px;
+  width: 8px;
+  height: 40%;
+  background: linear-gradient(to top, rgb(160 0 0 / 0.9), var(--aq-flame-deep) 70%, var(--aq-flame-hot));
+  opacity: 0.65;
+  filter: drop-shadow(0 0 2px var(--aq-flame-deep));
+  animation: aq-flame-dance-1 0.42s ease-in-out infinite alternate 0.16s;
+}
+
+@keyframes aq-blaze-glow {
+  from {
+    transform: scale(0.92);
+    opacity: 0.75;
+  }
+
+  to {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes aq-flame-dance-1 {
+  0% {
+    transform: scaleY(0.9) skewX(-4deg);
+  }
+
+  50% {
+    transform: scaleY(1.1) skewX(5deg);
+  }
+
+  100% {
+    transform: scaleY(0.95) skewX(-2deg);
+  }
+}
+
+@keyframes aq-flame-dance-2 {
+  0% {
+    transform: scaleY(1.05) skewX(3deg);
+  }
+
+  50% {
+    transform: scaleY(0.85) skewX(-5deg);
+  }
+
+  100% {
+    transform: scaleY(1.1) skewX(2deg);
+  }
+}
+
+@keyframes aq-trail-burn {
+  from {
+    opacity: 0.85;
+    filter: brightness(0.95);
+  }
+
+  to {
+    opacity: 1;
+    filter: brightness(1.2);
+  }
+}
+
+@keyframes aq-spark-fly-1 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(-10px, -14px) scale(0.2);
+    opacity: 0;
+  }
+}
+
+@keyframes aq-spark-fly-2 {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate(-8px, -18px) scale(0.2);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .aq-busy-art > img {
     animation: none;
     transform: translateY(-50%);
+  }
+
+  .aq-art-blaze {
+    animation: none;
+    transform: translateY(-50%);
+  }
+
+  .aq-art-runner-glow,
+  .aq-art-runner-flame,
+  .aq-art-runner-spark,
+  .aq-art-trail-ground,
+  .aq-art-trail-flame {
+    animation: none !important;
   }
 }

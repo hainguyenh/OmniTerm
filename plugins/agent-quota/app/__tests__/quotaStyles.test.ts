@@ -28,6 +28,19 @@ describe('agent quota styles', () => {
     expect(rule(lines, '.aq-line')).toContain('grid-column: 1 / -1')
   })
 
+  // Regression: once the danger-zone number moved after the track, the weekly reset countdown was
+  // squeezed to an ellipsis of nothing. The tracks shorten instead, and medium panes keep it.
+  it('never clips or hides the reset countdown before the narrowest panes; the tracks shrink instead', () => {
+    const lines = css('agentQuota.css')
+    const reset = rule(lines, '.aq-reset')
+    expect(reset).toContain('min-width: max-content')
+    expect(reset).not.toContain('overflow: hidden')
+    expect(rule(lines, '.aq-lines')).toMatch(/minmax\(40px, 1fr\) auto auto/)
+    const medium = lines.slice(lines.indexOf('@container (max-width: 440px)'), lines.indexOf('@container (max-width: 240px)'))
+    expect(medium).not.toContain('.aq-reset')
+    expect(lines.slice(lines.indexOf('@container (max-width: 240px)'))).toContain('.aq-reset')
+  })
+
   it('paints the profiles dialog with a theme colour that exists', () => {
     expect(rule(css('profilesDashboard.css'), '.aq-pd-dialog')).toContain('background: var(--theme-popup-bg')
   })

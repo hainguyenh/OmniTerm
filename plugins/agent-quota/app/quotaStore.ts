@@ -67,7 +67,14 @@ export interface QuotaState {
   quickOpen: boolean
   /** Session whose per-terminal popover is open. */
   editing: string | null
+  /** Session whose suspended processes review dialog is open. */
+  reviewSessionId: string | null
   confirm: ConfirmRequest | null
+  /**
+   * Sessions whose manual read found no usage panel on screen: session → when it was asked. The
+   * engine reads the pane until the user's own `/usage` panel shows up (see manualUsageRead.ts).
+   */
+  awaitingUsage: Record<string, number>
   /** Coarse clock shared by every countdown, advanced by the engine once a second. */
   now: number
 }
@@ -82,7 +89,9 @@ export const initialQuotaState = (): QuotaState => ({
   notices: [],
   quickOpen: false,
   editing: null,
+  reviewSessionId: null,
   confirm: null,
+  awaitingUsage: {},
   now: Date.now(),
 })
 
@@ -96,6 +105,14 @@ export function updateQuota(update: (current: QuotaState) => QuotaState): void {
   if (next === state) return
   state = next
   for (const listener of [...listeners]) listener()
+}
+
+/** Merge a patch into one profile; a profile that is gone is left alone. */
+export function patchProfile(key: string, patch: (profile: ProfileQuota) => Partial<ProfileQuota>): void {
+  updateQuota((current) => {
+    const profile = current.profiles[key]
+    return profile ? { ...current, profiles: { ...current.profiles, [key]: { ...profile, ...patch(profile) } } } : current
+  })
 }
 
 export function subscribeQuota(listener: () => void): () => void {
@@ -156,6 +173,10 @@ export function setEditing(sessionId: string | null): void {
   updateQuota((current) => (current.editing === sessionId ? current : { ...current, editing: sessionId }))
 }
 
+export function setReviewSession(sessionId: string | null): void {
+  updateQuota((current) => (current.reviewSessionId === sessionId ? current : { ...current, reviewSessionId: sessionId }))
+}
+
 /** Replace (or with `null`, drop) one instance's override. */
 export function setOverride(instanceKey: string, override: AgentOverride | null): void {
   updateQuota((current) => {
@@ -190,18 +211,25 @@ export interface QuotaCommands {
   saveConfig(config: QuotaConfig): void
   refresh(profileKey?: string): void
   wake(target: { sessionId: string } | 'all'): void
+  suspend(sessionId: string): void
   resume(sessionId: string): void
   resumeAll(): void
   openSettings(): void
+  /** Read the usage panel on this pane's screen, or wait for the user to open one. */
+  readUsage(sessionId: string): void
+  cancelUsageRead(sessionId: string): void
 }
 
 const NO_COMMANDS: QuotaCommands = {
   saveConfig: () => {},
   refresh: () => {},
   wake: () => {},
+  suspend: () => {},
   resume: () => {},
   resumeAll: () => {},
   openSettings: () => {},
+  readUsage: () => {},
+  cancelUsageRead: () => {},
 }
 
 let commands: QuotaCommands = NO_COMMANDS

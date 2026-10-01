@@ -99,7 +99,9 @@ export function createService(deps: ProviderDeps) {
     return run
   }
 
-  return { fetchUsage, wake, listProfiles: () => listProfiles(deps) }
+  // The scratch folder the renderer's hidden probe starts agents in (app/hiddenProfileProbe.ts):
+  // created by the sidecar at start-up, never a path the renderer chose.
+  return { fetchUsage, wake, listProfiles: () => listProfiles(deps), probeDir: () => deps.tmp }
 }
 
 export function activate(host: Host, deps: ProviderDeps = createNodeDeps((message) => host.services.log(message))): void {
@@ -111,6 +113,7 @@ export function activate(host: Host, deps: ProviderDeps = createNodeDeps((messag
     if (method === 'agentQuota.fetchUsage') return service.fetchUsage(parseFetchRequest(args[0]))
     if (method === 'agentQuota.wake') return service.wake(parseWakeRequest(args[0]))
     if (method === 'agentQuota.listProfiles') return service.listProfiles()
+    if (method === 'agentQuota.probeDir') return service.probeDir()
     throw new Error(`Unknown Agent Quota method "${method}"`)
   })
   host.services.log('Agent Quota activated')

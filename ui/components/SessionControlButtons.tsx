@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { Eraser, ExternalLink, Maximize2, Minimize2, MoreHorizontal, Save, Settings2, Square } from 'lucide-react'
 import type { Connection } from '@omniterm/contract'
 import { detachTitle, type DetachAction } from '../detachControl'
@@ -292,6 +292,22 @@ export default function SessionControlButtons({
   const headerActions = toolbarActionsFor({ header: appearance?.headerActions ? [...appearance.headerActions] : undefined }, 'header')
   const footerActions = toolbarActionsFor({ footer: appearance?.footerActions ? [...appearance.footerActions] : undefined }, 'footer')
 
+  const renderControl = (key: ControlKey) => {
+    if (hiddenControls.includes(key)) return null
+    switch (key) {
+      case 'currentDir': return <Fragment key={key}>{currentDirectoryControl}</Fragment>
+      case 'theme': return <Fragment key={key}>{themeControl}</Fragment>
+      case 'detach': return <Fragment key={key}>{detachControl}</Fragment>
+      case 'fullscreen': return <Fragment key={key}>{fullscreenControl}</Fragment>
+      case 'font': return <Fragment key={key}>{fontControl}</Fragment>
+      case 'stop': return <Fragment key={key}>{stopControl}</Fragment>
+      case 'clear': return <Fragment key={key}>{clearControl}</Fragment>
+      case 'copy': return <TerminalCopyMenu key={key} sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />
+      case 'save': return <Fragment key={key}>{saveControl}</Fragment>
+      default: return null
+    }
+  }
+
   return (
     <span
       ref={rootRef}
@@ -303,15 +319,7 @@ export default function SessionControlButtons({
       <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
         {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
       </span>
-      {availableControls.includes('currentDir') && !hiddenControls.includes('currentDir') && currentDirectoryControl}
-      {availableControls.includes('theme') && !hiddenControls.includes('theme') && themeControl}
-      {availableControls.includes('detach') && !hiddenControls.includes('detach') && detachControl}
-      {availableControls.includes('fullscreen') && !hiddenControls.includes('fullscreen') && fullscreenControl}
-      {availableControls.includes('font') && !hiddenControls.includes('font') && fontControl}
-      {availableControls.includes('stop') && !hiddenControls.includes('stop') && stopControl}
-      {availableControls.includes('clear') && !hiddenControls.includes('clear') && clearControl}
-      {availableControls.includes('copy') && !hiddenControls.includes('copy') && <TerminalCopyMenu sessionId={sessionId} placement={tooltipPlacement === 'top' ? 'top' : 'bottom'} />}
-      {availableControls.includes('save') && !hiddenControls.includes('save') && saveControl}
+      {availableControls.map(renderControl)}
       {appearance?.onToolbarActionsChange && resolvedSurface === 'footer' && (
         <Tooltip content="Customize terminal actions" placement={tooltipPlacement}>
           <button type="button" onClick={(event) => { event.stopPropagation(); setCustomizeOpen(open => !open); setMenuOpen(false) }} className={buttonClass} aria-label="Customize terminal actions" aria-haspopup="dialog" aria-expanded={customizeOpen}>

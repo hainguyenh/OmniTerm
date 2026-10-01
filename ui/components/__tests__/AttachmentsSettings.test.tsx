@@ -27,14 +27,14 @@ beforeEach(() => {
 
 describe('AttachmentsSettings', () => {
   it('summarizes what is stored and opens the folder for review', async () => {
-    render(<AttachmentsSettings />)
+    render(<AttachmentsSettings onLargePasteChange={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('attachments-summary')).toHaveTextContent('2 files · 2.5 MB stored'))
     fireEvent.click(screen.getByRole('button', { name: /Open folder/ }))
     expect(openInSystem).toHaveBeenCalledWith('C:/data/attachments')
   })
 
   it('clears only after confirmation, then reports the result and refreshes', async () => {
-    render(<AttachmentsSettings />)
+    render(<AttachmentsSettings onLargePasteChange={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('attachments-summary')).toHaveTextContent('2 files'))
 
     fireEvent.click(screen.getByRole('button', { name: /Clear all/ }))
@@ -52,8 +52,28 @@ describe('AttachmentsSettings', () => {
 
   it('keeps Clear disabled when nothing is stored', async () => {
     stored = []
-    render(<AttachmentsSettings />)
+    render(<AttachmentsSettings onLargePasteChange={vi.fn()} />)
     await waitFor(() => expect(screen.getByTestId('attachments-summary')).toHaveTextContent('0 files'))
     expect(screen.getByRole('button', { name: /Clear all/ })).toBeDisabled()
+  })
+
+  it('shows the large-paste thresholds and saves a clamped value when a field is committed', () => {
+    const onLargePasteChange = vi.fn()
+    render(<AttachmentsSettings largePaste={{ promptChars: 2000 }} onLargePasteChange={onLargePasteChange} />)
+    const prompt = screen.getByLabelText('Ask to attach pasted text from (characters)')
+    const attach = screen.getByLabelText('Attach as a document without asking above (characters)')
+    expect(prompt).toHaveValue(2000)
+    expect(attach).toHaveValue(3000)
+
+    // Typing alone saves nothing; leaving the field does.
+    fireEvent.change(attach, { target: { value: '500' } })
+    expect(onLargePasteChange).not.toHaveBeenCalled()
+    fireEvent.blur(attach)
+    expect(onLargePasteChange).toHaveBeenCalledWith({ promptChars: 2000, attachChars: 2000 })
+
+    fireEvent.change(prompt, { target: { value: '' } })
+    fireEvent.keyDown(prompt, { key: 'Enter' })
+    expect(onLargePasteChange).toHaveBeenCalledTimes(1)
+    expect(prompt).toHaveValue(2000)
   })
 })

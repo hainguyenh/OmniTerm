@@ -124,9 +124,10 @@ describe("SessionMetricsChips", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders null latency as em dash", () => {
+  it("renders null latency as a plain dash with no icon", () => {
     render(<SessionMetricsChips status="connected" latency={null} metrics={undefined} />);
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
+    expect(screen.getByTitle("TCP latency to host · not measured").querySelector("svg")).toBeNull();
   });
 
   it("renders compact latency without unit", () => {

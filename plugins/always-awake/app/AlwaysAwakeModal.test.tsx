@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AlwaysAwakeModal from './AlwaysAwakeModal'
-import { durationFromExpiry } from './awakeSchedule'
+import { defaultCustomExpiry, endOfToday, fromLocalInput, scheduleFromStatus, toLocalInput } from './awakeSchedule'
 import { mockOmnitermAPI } from '../../../ui/testUtils'
 
 const status: AlwaysAwakeStatus = {
@@ -30,7 +30,7 @@ describe('AlwaysAwakeModal', () => {
     expect(screen.getByRole('radio', { name: /While terminal work is active/ })).toBeChecked()
     fireEvent.click(screen.getByRole('radio', { name: /Always during schedule/ }))
     expect(screen.getByRole('radio', { name: /Always during schedule/ })).toBeChecked()
-    fireEvent.click(screen.getByRole('button', { name: 'Mon 08:00' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
@@ -49,22 +49,36 @@ describe('AlwaysAwakeModal', () => {
       return setState.mock.calls.at(-1)![0].expiresAtMs
     }
 
-    const endOfToday = new Date()
-    endOfToday.setHours(23, 59, 59, 999)
-    const today = await expiryFor('Today')
-    expect(today).toBeLessThanOrEqual(endOfToday.getTime())
-    expect(today).toBeGreaterThan(Date.now())
+    expect(await expiryFor('Today')).toBe(endOfToday())
 
-    // 24 hours out, allowing for the second or two the test itself takes.
-    const day = await expiryFor('24 hours')
-    expect(Math.abs(day - (Date.now() + 24 * 60 * 60 * 1000))).toBeLessThan(5_000)
+    // Custom starts at 08:00 tomorrow.
+    const custom = await expiryFor('Custom')
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    expect(new Date(custom).getDate()).toBe(tomorrow.getDate())
+    expect([new Date(custom).getHours(), new Date(custom).getMinutes()]).toEqual([8, 0])
 
-    // The next Monday 08:00 is always in the future, and never more than a week out.
-    const monday = await expiryFor('Mon 08:00')
-    expect(monday).toBeGreaterThan(Date.now())
-    expect(monday).toBeLessThan(Date.now() + 8 * 24 * 60 * 60 * 1000)
-    expect(new Date(monday).getDay()).toBe(1)
-    expect(new Date(monday).getHours()).toBe(8)
+    // …and the user can set their own.
+    const later = new Date()
+    later.setDate(later.getDate() + 3)
+    later.setHours(18, 30, 0, 0)
+    fireEvent.change(screen.getByLabelText('Keep awake until'), { target: { value: toLocalInput(later.getTime()) } })
+    expect(await expiryFor('Custom')).toBe(later.getTime())
+  })
+
+  it('refuses a custom time that is not in the future', () => {
+    const setState = vi.fn(async () => status)
+    mockOmnitermAPI({ alwaysAwake: { setState } })
+    render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
+
+    fireEvent.change(screen.getByLabelText('Keep awake until'), { target: { value: toLocalInput(Date.now() - 3_600_000) } })
+    expect(screen.getByText('Pick a time in the future.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('switch', { name: 'Always Awake' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Keep awake until'), { target: { value: '' } })
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(setState).not.toHaveBeenCalled()
   })
 
   it('shows a failure from the backend instead of closing', async () => {
@@ -143,45 +157,45 @@ describe('AlwaysAwakeModal', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled())
   })
 
-  it('opens on the schedule that is actually running, not always on 24 hours', () => {
-    // Reopening used to reset the group to its `24h` default, so the panel claimed a schedule the
+  it('opens on the schedule that is actually running, not always on its default', () => {
+    // Reopening used to reset the group to its default, so the panel claimed a schedule the
     // machine was not keeping.
-    const endOfToday = new Date()
-    endOfToday.setHours(23, 59, 59, 999)
-    render(
-      <AlwaysAwakeModal
-        status={{ ...status, enabled: true, expiresAtMs: endOfToday.getTime() }}
-        onClose={vi.fn()}
-        onSaved={vi.fn()}
-      />,
+    const { unmount } = render(
+      <AlwaysAwakeModal status={{ ...status, enabled: true, expiresAtMs: endOfToday() }} onClose={vi.fn()} onSaved={vi.fn()} />,
     )
     expect(screen.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: '24 hours' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByLabelText('Keep awake until')).toBeNull()
+    unmount()
+
+    const custom = fromLocalInput(toLocalInput(Date.now() + 5 * 86_400_000))
+    render(<AlwaysAwakeModal status={{ ...status, enabled: true, expiresAtMs: custom }} onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByLabelText('Keep awake until')).toHaveValue(toLocalInput(custom))
   })
 
   it('classifies a stored deadline back into the schedule that produced it', () => {
-    const endOfToday = new Date()
-    endOfToday.setHours(23, 59, 59, 999)
-    const nextMonday = new Date()
-    nextMonday.setDate(nextMonday.getDate() + (((1 - nextMonday.getDay() + 7) % 7) || 7))
-    nextMonday.setHours(8, 0, 0, 0)
+    const now = Date.now()
+    const tomorrowAt8 = defaultCustomExpiry()
+    const custom = now + 2 * 86_400_000
 
-    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: endOfToday.getTime() })).toBe('today')
-    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: nextMonday.getTime() })).toBe('nextMonday')
-    // A rolling 24 hours is not an absolute instant, so it is the fallback rather than a match.
-    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: Date.now() + 86_400_000 })).toBe('24h')
-    expect(durationFromExpiry({ ...status, enabled: false, expiresAtMs: endOfToday.getTime() })).toBe('24h')
-    expect(durationFromExpiry({ ...status, enabled: true, expiresAtMs: 0 })).toBe('24h')
+    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: endOfToday() }, now)).toEqual({ duration: 'today', customAt: tomorrowAt8 })
+    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: custom }, now)).toEqual({ duration: 'custom', customAt: custom })
+    // Nothing running (off, lapsed, or never set): Custom at its 08:00-tomorrow default.
+    for (const stored of [{ enabled: false, expiresAtMs: custom }, { enabled: true, expiresAtMs: now - 1 }, { enabled: true, expiresAtMs: 0 }]) {
+      expect(scheduleFromStatus({ ...status, ...stored }, now)).toEqual({ duration: 'custom', customAt: tomorrowAt8 })
+    }
   })
 
   it('shows the deadline each schedule resolves to, and updates it on selection', () => {
     render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
     const deadline = () => screen.getByText(/^Until /).textContent
 
-    const asDay = deadline()
-    fireEvent.click(screen.getByRole('button', { name: 'Mon 08:00' }))
-    expect(deadline()).not.toBe(asDay)
-    expect(screen.getByRole('button', { name: 'Mon 08:00' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'true')
+    const asCustom = deadline()
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }))
+    expect(deadline()).not.toBe(asCustom)
+    expect(screen.getByRole('button', { name: 'Today' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('turns the feature off and reports unsupported platforms', async () => {

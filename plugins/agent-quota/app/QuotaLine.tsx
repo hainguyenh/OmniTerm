@@ -116,7 +116,7 @@ export function QuotaLine({ window, limit, animations, showReset, now, onLimitCh
           {labels.danger.text}
         </span>
       )}
-      {showReset &&<span className="aq-reset">{formatReset(window.resetsAt, now)}</span>}
+      {showReset && <span className="aq-reset">{formatReset(window.resetsAt, now)}</span>}
     </div>
   )
 }

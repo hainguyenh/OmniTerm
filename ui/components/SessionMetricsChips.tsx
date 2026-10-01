@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Cpu, MemoryStick, HardDrive, Clock, Signal, SignalHigh, SignalLow, SignalMedium, SignalZero } from 'lucide-react'
+import { Cpu, MemoryStick, HardDrive, Clock, Signal, SignalHigh, SignalLow, SignalMedium } from 'lucide-react'
 import { SessionStatus } from './MainLayout'
 
 // ── Session metrics footer chips ────────────────────────────────────────────────
@@ -99,7 +99,7 @@ const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, c
     : 'text-theme-error'
 
   const level = latency == null ? null : LATENCY_LEVELS.find(entry => latency < entry.below) ?? LATENCY_LEVELS[3]
-  const LatencyIcon = level?.Icon ?? SignalZero
+  const LatencyIcon = level?.Icon ?? Signal
 
   const cpu = metrics?.cpu ?? null
   const memUsed = metrics?.memUsed ?? null
@@ -109,11 +109,12 @@ const MetricsChips: React.FC<MetricsChipsProps> = ({ status, latency, metrics, c
 
   return (
     <div className={`flex items-center flex-shrink-0 ${compact ? 'gap-1' : 'gap-2'}`}>
+      {/* A live probe pulses its signal bars; with no measurement there is nothing to show but "-". */}
       <MetricChip
-        icon={<LatencyIcon className="w-3 h-3" data-latency-level={level?.word ?? 'unknown'} />}
-        value={latency == null ? '—' : `${latency}${compact ? '' : ' ms'}`}
+        icon={level ? <LatencyIcon className="w-3 h-3 motion-safe:animate-pulse" data-latency-level={level.word} /> : null}
+        value={latency == null ? '-' : `${latency}${compact ? '' : ' ms'}`}
         colorClass={latColor}
-        title={level ? `TCP latency to host · ${level.word}` : 'TCP latency to host'}
+        title={level ? `TCP latency to host · ${level.word}` : 'TCP latency to host · not measured'}
         compact={compact}
       />
       {cpu != null && (

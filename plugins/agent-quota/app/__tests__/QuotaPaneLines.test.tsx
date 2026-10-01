@@ -102,13 +102,12 @@ describe('QuotaPaneLines', () => {
     expect(screen.getByTestId('aq-strip')).toHaveClass('aq-size-normal')
   })
 
-  it('shows the agent icon right after the profile name', () => {
+  it('shows the profile name without an agent icon', () => {
     seed()
     render(<QuotaPaneLines sessionId="s1" />)
     const name = screen.getByTestId('aq-strip').querySelector('.aq-meta-name')
     expect(name).toHaveTextContent('work')
-    expect(name?.nextElementSibling?.tagName.toLowerCase()).toBe('svg')
-    expect(name?.previousElementSibling).toBeNull()
+    expect(screen.getByTestId('aq-strip').querySelector('.aq-meta svg')).toBeNull()
   })
 
   it('shows a paused terminal and lets the user enable monitoring again', () => {
@@ -140,14 +139,17 @@ describe('QuotaPaneLines', () => {
     render(<QuotaPaneLines sessionId="s1" />)
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Session (5h) limit' }), { key: 'ArrowLeft' })
     expect(getQuotaState().overrides['s1:10:100']).toEqual({ limits: { session: 89 } })
-    // The settings button carries the custom badge; the meta slot keeps only name and agent icon.
+    // The settings button carries the custom badge; the meta slot keeps only the profile name.
     const settings = screen.getByRole('button', { name: 'Quota limits for this terminal' })
     expect(settings).toHaveClass('aq-override')
     expect(settings).toHaveAttribute('title', 'Custom settings for this terminal')
-    expect(document.querySelectorAll('.aq-meta svg')).toHaveLength(1)
+    expect(screen.getByTestId('aq-setting-override-badge')).toBeInTheDocument()
+    expect(screen.getByTestId('aq-setting-override-badge')).toHaveTextContent('!')
+    expect(document.querySelectorAll('.aq-meta svg')).toHaveLength(0)
     fireEvent.keyDown(screen.getByRole('slider', { name: 'Session (5h) limit' }), { key: 'ArrowRight' })
     expect(getQuotaState().overrides).toEqual({})
     expect(screen.getByRole('button', { name: 'Quota limits for this terminal' })).not.toHaveClass('aq-override')
+    expect(screen.queryByTestId('aq-setting-override-badge')).toBeNull()
   })
 
   it('toggles scheduled wake-up without waking the profile immediately', () => {
@@ -155,10 +157,12 @@ describe('QuotaPaneLines', () => {
     render(<QuotaPaneLines sessionId="s1" />)
     const wake = screen.getByRole('button', { name: 'Enable scheduled wake-up for this terminal' })
     expect(wake).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('aq-wake-disabled-icon')).toBeInTheDocument()
     fireEvent.click(wake)
     expect(getQuotaState().overrides['s1:10:100']).toMatchObject({ wake: { mode: 'afterReset' } })
     expect(wake).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Disable scheduled wake-up for this terminal' })).toHaveClass('text-theme-accent')
+    expect(screen.queryByTestId('aq-wake-disabled-icon')).toBeNull()
     const toggle = screen.getByRole('button', { name: 'Quota limits for this terminal' })
     fireEvent.click(toggle)
     expect(screen.getByRole('dialog', { name: 'Quota limits for this terminal' })).toBeInTheDocument()
@@ -187,6 +191,7 @@ describe('QuotaPaneLines', () => {
     })
     render(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
+    expect(screen.getByText('Week')).toBeInTheDocument()
   })
 
   it('shows the weekly window in a terminal whose "Show weekly quota" override is on', () => {

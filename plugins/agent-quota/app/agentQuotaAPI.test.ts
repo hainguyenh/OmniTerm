@@ -105,6 +105,19 @@ describe('createAgentQuotaAPI', () => {
     invoke.mockRejectedValueOnce('boom')
     expect(await api.wake({ agent: 'claude', prompt: 'hi' })).toEqual({ ok: false, message: 'boom' })
   })
+
+  it('accepts only a plain folder path as the hidden probe scratch folder', async () => {
+    const api = createAgentQuotaAPI()
+    invoke.mockResolvedValueOnce('C:\\Temp\\omniterm-wake')
+    expect(await api.probeDir?.()).toBe('C:\\Temp\\omniterm-wake')
+    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.probeDir', args: [] })
+    for (const bad of ['', 42, null, 'x'.repeat(1025), 'C:\\a\0b']) {
+      invoke.mockResolvedValueOnce(bad)
+      expect(await api.probeDir?.()).toBeNull()
+    }
+    invoke.mockRejectedValueOnce(new Error('no plugin'))
+    expect(await api.probeDir?.()).toBeNull()
+  })
 })
 
 describe('parseDiscoveredProfiles', () => {

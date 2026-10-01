@@ -3,7 +3,7 @@ import { Clock, ShieldAlert, Snowflake, X } from 'lucide-react'
 
 import { AGENT_LABELS, effectiveConfig, WINDOW_LABELS } from './quotaConfig'
 import { formatCountdown } from './quotaPolicy'
-import { useQuota } from './quotaStore'
+import { setReviewSession, useQuota } from './quotaStore'
 import { FROZEN_OVERLAY_EVENT } from './frozenOverlayEvents'
 
 /** Covers a terminal whose agent the guard froze, while allowing the user to inspect the frozen output. */
@@ -82,13 +82,22 @@ export function SuspendedOverlay({ sessionId }: { sessionId: string }) {
         <div className="text-[10px] text-theme-dim">
           To resume this process, navigate to Settings → Agent Quota. Hiding this overlay only reveals the frozen terminal; it does not resume the process.
         </div>
-        <button
-          type="button"
-          onClick={() => setHidden(true)}
-          className="self-start flex items-center gap-1 px-2.5 py-1 rounded-lg border border-theme-border hover:border-theme-accent"
-        >
-          <X className="w-3 h-3" /> Hide overlay
-        </button>
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            onClick={() => setReviewSession(sessionId)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-theme-warning text-theme-warning hover:bg-theme-warning/10 transition-colors"
+          >
+            <Snowflake className="w-3 h-3" /> Review processes
+          </button>
+          <button
+            type="button"
+            onClick={() => setHidden(true)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-theme-border text-theme-dim hover:text-theme-fg hover:border-theme-accent transition-colors"
+          >
+            <X className="w-3 h-3" /> Hide overlay
+          </button>
+        </div>
       </div>
     </div>
   )

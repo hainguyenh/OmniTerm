@@ -248,21 +248,41 @@ pub fn parse_drop_files(block: &[u8]) -> Vec<PathBuf> {
     names.into_iter().map(PathBuf::from).collect()
 }
 
+/// Reduce session id to a safe subdirectory name without control characters or separators.
+pub fn sanitize_session_dir(session_id: &str) -> String {
+    let cleaned: String = session_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+        .take(64)
+        .collect();
+    if cleaned.is_empty() {
+        "common".to_string()
+    } else {
+        cleaned
+    }
+}
+
+fn collect_attachments(dir: &Path, out: &mut Vec<AttachmentInfo>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if let Ok(metadata) = entry.metadata() {
+            if metadata.is_file() {
+                if let Some(info) = info_for(&entry.path(), &metadata) {
+                    out.push(info);
+                }
+            } else if metadata.is_dir() {
+                collect_attachments(&entry.path(), out);
+            }
+        }
+    }
+}
+
 /// Every regular file in `dir`, newest first. A missing folder is an empty list.
 pub fn list_attachments(dir: &Path) -> Vec<AttachmentInfo> {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut infos: Vec<AttachmentInfo> = entries
-        .flatten()
-        .filter_map(|entry| {
-            let metadata = entry.metadata().ok()?;
-            metadata
-                .is_file()
-                .then(|| info_for(&entry.path(), &metadata))
-                .flatten()
-        })
-        .collect();
+    let mut infos = Vec::new();
+    collect_attachments(dir, &mut infos);
     infos.sort_by(|a, b| {
         b.modified_ms
             .cmp(&a.modified_ms)

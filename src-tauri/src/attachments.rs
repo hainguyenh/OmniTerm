@@ -22,6 +22,8 @@ mod clipboard_files;
 
 /// Header carrying the `encodeURIComponent`-encoded original file name of a raw-body upload.
 const NAME_HEADER: &str = "x-omniterm-attachment-name";
+/// Header carrying the optional session ID to scope attachments into a session subfolder.
+const SESSION_HEADER: &str = "x-omniterm-session-id";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,12 +33,18 @@ pub struct AttachmentListing {
     files: Vec<AttachmentInfo>,
 }
 
-fn attachments_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-    let dir = app
+fn attachments_dir<R: Runtime>(
+    app: &AppHandle<R>,
+    session_id: Option<&str>,
+) -> Result<PathBuf, String> {
+    let mut dir = app
         .path()
         .app_local_data_dir()
         .map(|dir| dir.join("attachments"))
         .map_err(|error| format!("Failed to get app data dir: {error}"))?;
+    if let Some(sid) = session_id.filter(|s| !s.trim().is_empty()) {
+        dir = dir.join(attachments::sanitize_session_dir(sid));
+    }
     std::fs::create_dir_all(&dir)
         .map_err(|error| format!("Failed to create attachments dir: {error}"))?;
     Ok(dir)
@@ -59,16 +67,17 @@ async fn blocking<T: Send + 'static>(
 }
 
 /// Persist pasted clipboard-image bytes as a PNG attachment and return its absolute path, so a
-/// terminal agent can attach it by path. Same contract as before; only the folder changed.
+/// terminal agent can attach it by path. Scoped to a session subfolder when session_id is provided.
 #[tauri::command]
 pub async fn save_temp_image<R: Runtime>(
     app: AppHandle<R>,
     bytes: Vec<u8>,
+    session_id: Option<String>,
 ) -> Result<String, String> {
     if bytes.is_empty() {
         return Err("Clipboard image payload is empty.".to_string());
     }
-    let dir = attachments_dir(&app)?;
+    let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Saving the pasted image", move || {
         attachments::save_attachment(&dir, "paste.png", &bytes, stamp())
     })
@@ -94,7 +103,12 @@ pub async fn save_attachment<R: Runtime>(
         .and_then(|value| value.to_str().ok())
         .and_then(attachments::percent_decode)
         .unwrap_or_default();
-    let dir = attachments_dir(&app)?;
+    let session_id = request
+        .headers()
+        .get(SESSION_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(attachments::percent_decode);
+    let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Saving the attachment", move || {
         attachments::save_attachment(&dir, &hint, &bytes, stamp())
     })
@@ -107,8 +121,9 @@ pub async fn save_attachment<R: Runtime>(
 #[tauri::command]
 pub async fn import_clipboard_files<R: Runtime>(
     app: AppHandle<R>,
+    session_id: Option<String>,
 ) -> Result<Vec<AttachmentInfo>, String> {
-    let dir = attachments_dir(&app)?;
+    let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Reading copied files", move || {
         let stamp = stamp();
         clipboard_file_paths()
@@ -130,11 +145,16 @@ fn clipboard_file_paths() -> Vec<PathBuf> {
 }
 
 #[tauri::command]
-pub async fn list_attachments<R: Runtime>(app: AppHandle<R>) -> Result<AttachmentListing, String> {
-    let dir = attachments_dir(&app)?;
+pub async fn list_attachments<R: Runtime>(
+    app: AppHandle<R>,
+    session_id: Option<String>,
+) -> Result<AttachmentListing, String> {
+    let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Listing attachments", move || {
         let mut files = attachments::list_attachments(&dir);
-        files.extend(attachments::legacy_pastes(&std::env::temp_dir()));
+        if session_id.is_none() {
+            files.extend(attachments::legacy_pastes(&std::env::temp_dir()));
+        }
         AttachmentListing {
             dir: dir.to_string_lossy().into_owned(),
             files,
@@ -145,10 +165,15 @@ pub async fn list_attachments<R: Runtime>(app: AppHandle<R>) -> Result<Attachmen
 
 /// Delete every stored attachment, plus pasted images older builds left in the OS temp dir.
 #[tauri::command]
-pub async fn clear_attachments<R: Runtime>(app: AppHandle<R>) -> Result<ClearReport, String> {
-    let dir = attachments_dir(&app)?;
+pub async fn clear_attachments<R: Runtime>(
+    app: AppHandle<R>,
+    session_id: Option<String>,
+) -> Result<ClearReport, String> {
+    let is_all = session_id.is_none();
+    let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Clearing attachments", move || {
-        attachments::clear_attachments(&dir, Some(&std::env::temp_dir()))
+        let temp_dir = if is_all { Some(std::env::temp_dir()) } else { None };
+        attachments::clear_attachments(&dir, temp_dir.as_deref())
     })
     .await
 }

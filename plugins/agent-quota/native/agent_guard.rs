@@ -5,7 +5,7 @@
 //! detection just found as that session's main agent (or one of that agent's sub-agents), and every
 //! resume re-checks the process start time, so a recycled pid is never signalled.
 
-use super::agent_detect::{detect_main_agent, suspend_targets, DetectedAgent, ProcRow, ProcTarget};
+use super::agent_detect::{detect_main_agent, DetectedAgent, ProcRow, ProcTarget};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -83,9 +83,107 @@ fn same(a: &ProcTarget, b: &ProcTarget) -> bool {
     a.pid == b.pid && a.start_time == b.start_time
 }
 
-/// Freeze the main agent's tree. Each call re-scans, so the watchdog catches a sub-agent — or a new
-/// thread in an already-held process — that appeared after the first freeze; nothing already held
-/// is suspended twice.
+fn norm_path(p: &str) -> String {
+    p.trim()
+        .trim_end_matches(['/', '\\'])
+        .replace('/', "\\")
+        .to_ascii_lowercase()
+}
+
+/// All processes to freeze for the main agent `(pid, start_time)` under `shell`:
+/// the main process, all its agent descendants, and any other process on the system
+/// running under the same profile (including detached sub-agents and sibling panes).
+pub fn suspend_targets_for_profile(
+    rows: &[ProcRow],
+    shell: u32,
+    pid: u32,
+    start_time: u64,
+    home: Option<&str>,
+) -> Vec<ProcTarget> {
+    let Some(main) = rows.iter().find(|r| r.pid == pid && r.start_time == start_time) else {
+        return Vec::new();
+    };
+    let Some(kind) = super::agent_detect::classify(main) else {
+        return Vec::new();
+    };
+
+    let detected = detect_main_agent(rows, shell, home);
+    let target_profile_dir = detected
+        .as_ref()
+        .and_then(|d| d.profile_dir.clone())
+        .or_else(|| super::agent_detect::profile_dir(kind, main, home));
+    let target_profile_name = detected
+        .as_ref()
+        .map(|d| d.profile_name.clone())
+        .unwrap_or_else(|| super::agent_detect::profile_name(kind, target_profile_dir.as_deref()));
+
+    let mut out: Vec<ProcTarget> = Vec::new();
+    let mut seen_pids = std::collections::HashSet::new();
+
+    let mut add_target = |r: &ProcRow| {
+        if seen_pids.insert(r.pid) {
+            out.push(ProcTarget {
+                pid: r.pid,
+                start_time: r.start_time,
+                image: r.image.clone(),
+                threads: Vec::new(),
+                profile_name: Some(target_profile_name.clone()),
+            });
+        }
+    };
+
+    // 1. The main process
+    add_target(main);
+
+    // 2. Descendants of main
+    let main_descendants = super::agent_detect::descendant_indices(rows, pid);
+    for &idx in &main_descendants {
+        let r = &rows[idx];
+        if super::agent_detect::classify(r).is_some() {
+            add_target(r);
+        }
+    }
+
+    // 3. All matching agent processes on the system using the same profile
+    let mut matching_procs = Vec::new();
+    for r in rows {
+        if r.pid == pid {
+            continue;
+        }
+        if let Some(r_kind) = super::agent_detect::classify(r) {
+            if r_kind == kind {
+                let r_dir = super::agent_detect::profile_dir(r_kind, r, home);
+                let dir_match = match (&target_profile_dir, &r_dir) {
+                    (Some(t), Some(rd)) => norm_path(t) == norm_path(rd),
+                    (None, None) => true,
+                    _ => false,
+                };
+                let r_name = super::agent_detect::profile_name(r_kind, r_dir.as_deref());
+                let name_match = r_name.eq_ignore_ascii_case(&target_profile_name);
+                if dir_match || name_match {
+                    matching_procs.push(r.pid);
+                    add_target(r);
+                }
+            }
+        }
+    }
+
+    // 4. Descendants of any matching process (e.g. sub-agents of detached processes)
+    for match_pid in matching_procs {
+        for idx in super::agent_detect::descendant_indices(rows, match_pid) {
+            let r = &rows[idx];
+            if super::agent_detect::classify(r).is_some() {
+                add_target(r);
+            }
+        }
+    }
+
+    out
+}
+
+/// Freeze the main agent's tree and profile-wide processes. Each call re-scans, so the watchdog
+/// catches a sub-agent — or a new thread in an already-held process — that appeared after the first
+/// freeze; nothing already held is suspended twice.
 pub fn suspend_session(
     ops: &dyn ProcOps,
     rows: &[ProcRow],
@@ -93,10 +191,11 @@ pub fn suspend_session(
     pid: u32,
     start_time: u64,
     held: &mut Vec<ProcTarget>,
+    home: Option<&str>,
 ) -> Result<SuspendReport, String> {
     verify_main(rows, shell, pid, start_time)?;
     let mut report = SuspendReport::default();
-    for mut target in suspend_targets(rows, pid, start_time) {
+    for mut target in suspend_targets_for_profile(rows, shell, pid, start_time, home) {
         if let Some(existing) = held.iter_mut().find(|existing| same(existing, &target)) {
             if let Ok(threads) = ops.suspend(existing.pid, &existing.threads) {
                 existing.threads.extend(threads);
@@ -136,9 +235,10 @@ pub fn terminate_session(
     pid: u32,
     start_time: u64,
     held: Vec<ProcTarget>,
+    home: Option<&str>,
 ) -> Result<usize, String> {
     verify_main(rows, shell, pid, start_time)?;
-    let mut targets = suspend_targets(rows, pid, start_time);
+    let mut targets = suspend_targets_for_profile(rows, shell, pid, start_time, home);
     targets.reverse();
     let mut stopped = 0;
     for target in targets {
