@@ -69,42 +69,48 @@ export default function TerminalActionsCustomize({
     selected: readonly TerminalToolbarAction[],
     available: readonly TerminalToolbarAction[],
     surface: 'header' | 'footer',
-  ) => (
-    <fieldset className="mt-2 first:mt-0">
-      <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-theme-dim">{title}</legend>
-      <div className="grid gap-1">
-        {options.map(action => {
-          const supported = available.includes(action)
-          return (
-            <div key={action} className={`flex items-center gap-2 rounded px-1.5 py-1 text-xs ${supported ? 'text-theme-fg hover:bg-theme-bg' : 'text-theme-dim/50'}`}>
-              <label className="flex min-w-0 flex-1 items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(action)}
-                  disabled={!supported}
-                  onChange={event => onChange({
-                    header: surface === 'header' ? toggle(headerActions, action, event.target.checked) : [...headerActions],
-                    footer: surface === 'footer' ? toggle(footerActions, action, event.target.checked) : [...footerActions],
-                  })}
-                />
-                <span className="min-w-0 flex-1 truncate">{TERMINAL_ACTION_LABELS[action]}</span>
-              </label>
-              {selected.includes(action) && (
-                <span className="flex items-center gap-0.5">
-                  <button type="button" disabled={selected.indexOf(action) === 0} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} up`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange({ header: surface === 'header' ? move(headerActions, headerActions.indexOf(action), -1) : [...headerActions], footer: surface === 'footer' ? move(footerActions, footerActions.indexOf(action), -1) : [...footerActions] }) }}>
-                    ↑
-                  </button>
-                  <button type="button" disabled={selected.indexOf(action) === selected.length - 1} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} down`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange({ header: surface === 'header' ? move(headerActions, headerActions.indexOf(action), 1) : [...headerActions], footer: surface === 'footer' ? move(footerActions, footerActions.indexOf(action), 1) : [...footerActions] }) }}>
-                    ↓
-                  </button>
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </fieldset>
-  )
+  ) => {
+    const ordered = [
+      ...selected.filter((action) => options.includes(action)),
+      ...options.filter((action) => !selected.includes(action)),
+    ]
+    return (
+      <fieldset className="mt-2 first:mt-0">
+        <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-theme-dim">{title}</legend>
+        <div className="grid gap-1">
+          {ordered.map(action => {
+            const supported = available.includes(action)
+            return (
+              <div key={action} className={`flex items-center gap-2 rounded px-1.5 py-1 text-xs ${supported ? 'text-theme-fg hover:bg-theme-bg' : 'text-theme-dim/50'}`}>
+                <label className="flex min-w-0 flex-1 items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(action)}
+                    disabled={!supported}
+                    onChange={event => onChange({
+                      header: surface === 'header' ? toggle(headerActions, action, event.target.checked) : [...headerActions],
+                      footer: surface === 'footer' ? toggle(footerActions, action, event.target.checked) : [...footerActions],
+                    })}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{TERMINAL_ACTION_LABELS[action]}</span>
+                </label>
+                {selected.includes(action) && (
+                  <span className="flex items-center gap-0.5">
+                    <button type="button" disabled={selected.indexOf(action) === 0} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} up`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange({ header: surface === 'header' ? move(headerActions, headerActions.indexOf(action), -1) : [...headerActions], footer: surface === 'footer' ? move(footerActions, footerActions.indexOf(action), -1) : [...footerActions] }) }}>
+                      ↑
+                    </button>
+                    <button type="button" disabled={selected.indexOf(action) === selected.length - 1} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} down`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange({ header: surface === 'header' ? move(headerActions, headerActions.indexOf(action), 1) : [...headerActions], footer: surface === 'footer' ? move(footerActions, footerActions.indexOf(action), 1) : [...footerActions] }) }}>
+                      ↓
+                    </button>
+                  </span>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </fieldset>
+    )
+  }
 
   return (
     <div

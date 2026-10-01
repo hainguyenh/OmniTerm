@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { TerminalAgent } from '../quotaStore'
 
-import { canProbeInline, isBlockingScreen, probeUsageInline, type ProbeIO } from '../inlineUsageProbe'
+import { canProbeInline, hasLaunchHold, holdForLaunch, isBlockingScreen, isTrustScreen, probeUsageInline, releaseLaunchHold, type ProbeIO } from '../inlineUsageProbe'
 
 const T0 = Date.UTC(2026, 8, 25, 3, 0)
 
@@ -88,6 +88,28 @@ describe('inline quota probe', () => {
     expect(isHeld()).toBe(false)
   })
 
+  it('auto-confirms folder trust prompt, then sends /usage and reads quota', async () => {
+    const TRUST_PROMPT = [
+      'Quick safety check: Do you trust the authors of the files in this folder?',
+      '[1] Yes, trust this folder (default)',
+      '[2] No, exit',
+    ]
+    const { io, sent } = fakeIO({ screen: TRUST_PROMPT, reply: PANEL })
+    let current = TRUST_PROMPT
+    io.screen = () => current
+    const originalSend = io.send
+    io.send = (id, data) => {
+      originalSend(id, data)
+      if (data === '1\r') {
+        current = PROMPT
+      }
+    }
+    const snapshot = await probeUsageInline(terminal(), io)
+
+    expect(snapshot?.windows.map((window) => [window.kind, window.usedPct])).toEqual([['session', 19], ['weekly', 8]])
+    expect(sent).toEqual(['1\r', '/usage', '\r', '\x1b'])
+  })
+
   it('reads Codex with /status from the rendered screen and sends no Esc', async () => {
     const { io, sent } = fakeIO({ replyScreen: CODEX_STATUS })
     const snapshot = await probeUsageInline(terminal({ agent: 'codex', profileKey: 'codex:c:\\p' }), io)
@@ -107,6 +129,46 @@ describe('inline quota probe', () => {
   it('does not read a reading that was already on screen before the command', async () => {
     const { io } = fakeIO({ screen: [...PROMPT, ...CODEX_STATUS], replyScreen: [] })
     expect(await probeUsageInline(terminal({ agent: 'codex' }), io)).toBeNull()
+  })
+
+  it('reads usage reply when a previous session already printed usage in scrollback', async () => {
+    const previousScrollback = [...PROMPT, ...PANEL.split('\r\n'), 'PS C:\\> claude', ...PROMPT]
+    const { io } = fakeIO({ screen: previousScrollback, replyScreen: PANEL.split('\r\n') })
+    const snapshot = await probeUsageInline(terminal(), io)
+    expect(snapshot?.windows.map((window) => [window.kind, window.usedPct])).toEqual([['session', 19], ['weekly', 8]])
+  })
+
+  it('reads usage when previous session had trust prompt in scrollback and user exited', async () => {
+    const previousTrustScrollback = [
+      'Quick safety check: Do you trust the authors of the files in this folder?',
+      '[1] Yes, trust this folder',
+      '❯ /exit',
+      'PS C:\\> claude-other',
+      ...PROMPT,
+    ]
+    const { io, sent } = fakeIO({ screen: previousTrustScrollback, reply: PANEL })
+    const snapshot = await probeUsageInline(terminal(), io)
+    expect(snapshot?.windows.map((window) => [window.kind, window.usedPct])).toEqual([['session', 19], ['weekly', 8]])
+    expect(sent).toEqual(['/usage', '\r', '\x1b'])
+  })
+
+  it('auto-confirms chained folder and environment trust prompts', async () => {
+    const TRUST_1 = ['Quick safety check: Do you trust the authors of the files in this folder?', '[1] Yes, trust this folder', '[2] No, exit']
+    const TRUST_2 = ['Do you trust this environment?', '1. Yes, trust env', '2. No']
+    let current = TRUST_1
+    const { io, sent } = fakeIO({ screen: TRUST_1, reply: PANEL })
+    io.screen = () => current
+    const origSend = io.send
+    io.send = (id, data) => {
+      origSend(id, data)
+      if (data === '1\r') {
+        if (current === TRUST_1) current = TRUST_2
+        else if (current === TRUST_2) current = PROMPT
+      }
+    }
+    const snapshot = await probeUsageInline(terminal(), io)
+    expect(snapshot?.windows.map((window) => [window.kind, window.usedPct])).toEqual([['session', 19], ['weekly', 8]])
+    expect(sent).toEqual(['1\r', '1\r', '/usage', '\r', '\x1b'])
   })
 
   it('gives up after the timeout, still closing the panel and releasing input', async () => {
@@ -189,6 +251,39 @@ describe('inline quota probe', () => {
   })
 })
 
+describe('launch hold', () => {
+  it('is taken over by the probe: one hold from launch to release, even if the user typed meanwhile', async () => {
+    const pane = fakeIO({ reply: PANEL, typedDuringHold: 'hi' })
+    const holds: string[] = []
+    const io: ProbeIO = { ...pane.io, hold: (id) => { holds.push(id); return pane.io.hold(id) } }
+    holdForLaunch('s1', io)
+    expect(hasLaunchHold('s1')).toBe(true)
+    // Typing before the probe began would decline it, but those keys were held back from the agent.
+    const snapshot = await probeUsageInline(terminal(), { ...io, lastUserInputAt: () => T0 })
+
+    expect(snapshot?.windows[0]).toMatchObject({ kind: 'session', usedPct: 19 })
+    expect(holds).toEqual(['s1'])
+    expect(pane.sent).toEqual(['/usage', '\r', '\x1b', 'hi'])
+    expect(hasLaunchHold('s1')).toBe(false)
+    expect(pane.isHeld()).toBe(false)
+  })
+
+  it('is handed back, with what was typed, when the probe declines or it is released', async () => {
+    const stale = fakeIO({ typedDuringHold: 'x' })
+    holdForLaunch('s1', stale.io)
+    expect(await probeUsageInline(terminal({ startTime: T0 / 1000 - 120 }), stale.io)).toBeNull()
+    expect(stale.sent).toEqual(['x'])
+    expect(stale.isHeld()).toBe(false)
+
+    const released = fakeIO({ typedDuringHold: 'y' })
+    holdForLaunch('s2', released.io)
+    releaseLaunchHold('s2', released.io)
+    releaseLaunchHold('s2', released.io)
+    expect(released.sent).toEqual(['y'])
+    expect(hasLaunchHold('s2')).toBe(false)
+  })
+})
+
 describe('isBlockingScreen', () => {
   it('spots pickers and dialogs that need the user', () => {
     expect(isBlockingScreen(RESUME_PICKER)).toBe(true)
@@ -202,3 +297,15 @@ describe('isBlockingScreen', () => {
     expect(isBlockingScreen(['> 1. first step of my earlier prompt', ...PROMPT])).toBe(false)
   })
 })
+
+describe('isTrustScreen', () => {
+  it('spots folder trust checks', () => {
+    expect(isTrustScreen(['Quick safety check: Do you trust the authors of the files in this folder?'])).toBe(true)
+    expect(isTrustScreen(['Do you trust the files in this folder?'])).toBe(true)
+    expect(isTrustScreen(['Do you trust this folder?'])).toBe(true)
+    expect(isTrustScreen(['[1] Yes, trust this folder (default)'])).toBe(true)
+    expect(isTrustScreen(['❯ 1. Yes, trust this project'])).toBe(true)
+    expect(isTrustScreen(PROMPT)).toBe(false)
+  })
+})
+

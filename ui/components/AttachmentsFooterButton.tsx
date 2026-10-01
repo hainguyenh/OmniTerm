@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { ExternalLink, FileText, FolderOpen, Image as ImageIcon, Paperclip } from 'lucide-react'
+import { ExternalLink, FileText, FolderOpen, Image as ImageIcon, Paperclip, Plus } from 'lucide-react'
 
 import { usePanePresence } from '../utils/agentPresenceStore'
+import { formatAttachmentPaths, saveAttachmentFiles } from '../utils/attachmentInput'
 import { canOpenAttachment, formatBytes } from '../utils/attachmentTypes'
 import { getPastedImages, requestOpen, subscribePastedImage } from '../utils/pastedImageStore'
-import { getSessionAttachments, subscribeSessionAttachments, type SessionAttachment } from '../utils/sessionAttachmentStore'
+import { getSessionAttachments, recordSavedAttachments, subscribeSessionAttachments, type SessionAttachment } from '../utils/sessionAttachmentStore'
 import { formatTimeAgo } from '../utils/storedSessionResume'
 import { Tooltip } from './Tooltip'
 
 const ITEM_BTN = 'w-5 h-5 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent'
 
-const openFolder = async () => {
-  const { dir } = await window.omnitermAPI.attachments.list()
+const openFolder = async (sessionId?: string) => {
+  const { dir } = await window.omnitermAPI.attachments.list(sessionId)
   if (dir) await window.omnitermAPI.app.openInSystem(dir)
 }
 
@@ -61,6 +62,20 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
   )
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLSpanElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleAttachFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (files.length === 0) return
+    const saved = await saveAttachmentFiles(files, sessionId)
+    if (saved.length === 0) return
+    recordSavedAttachments(sessionId, saved)
+    const paths = formatAttachmentPaths(saved.map(({ info }) => info.path))
+    if (paths) {
+      window.omnitermAPI?.connect?.localInput?.(sessionId, paths)
+    }
+  }
 
   useEffect(() => {
     if (!open) return
@@ -101,6 +116,21 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
         <div role="dialog" aria-label="Attachments in this pane"
           className="absolute bottom-full right-0 mb-1 w-72 max-h-80 flex flex-col rounded-xl border border-theme-border bg-theme-popup shadow-2xl text-xs"
         >
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-2 border-b border-theme-border text-[11px] font-medium text-theme-accent hover:bg-white/5 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Attach files...
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={handleAttachFiles}
+            data-testid="attachment-file-input"
+          />
           {items.length === 0
             ? <p className="p-3 text-[11px] text-theme-dim">Paste (Ctrl+V) or drop images and files here to attach them to the agent.</p>
             : (
@@ -110,7 +140,7 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
                 ))}
               </ul>
             )}
-          <button type="button" onClick={() => void openFolder()}
+          <button type="button" onClick={() => void openFolder(sessionId)}
             className="flex items-center gap-1.5 px-3 py-2 border-t border-theme-border text-[11px] text-theme-dim hover:text-theme-accent"
           >
             <FolderOpen className="w-3.5 h-3.5" /> Open attachments folder

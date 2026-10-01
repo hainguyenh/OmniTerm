@@ -1,17 +1,21 @@
 import { useEffect, useRef } from 'react'
 
+import type { AgentKind } from '../src/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { QuotaConfig } from './quotaConfig'
 
 import { diag } from '../../../ui/diag'
+import { onAgentLaunch } from '../../../ui/utils/agentLaunchSignal'
+import { readPaneScreen } from '../../../ui/utils/paneScreens'
 import { setDashboardOpen, useProfileDashboard } from './profileDashboard'
 import { clearOverrides, getQuotaState, registerQuotaCommands, setQuickOpen, updateQuota, useQuota } from './quotaStore'
 import { parseQuotaConfig } from './quotaConfig'
 import { QuotaEngine } from './quotaEngine'
-import { LIVE_PROBE_IO, probeUsageInline } from './inlineUsageProbe'
+import { holdForLaunch, LIVE_PROBE_IO, probeUsageInline, releaseLaunchHold } from './inlineUsageProbe'
 import { DangerConfirmDialog, QuotaNotices } from './QuotaOverlays'
 import { QuotaProfilesDashboard } from './QuotaProfilesDashboard'
 import { QuotaQuickPopover } from './QuotaQuickPopover'
+import { FrozenProcessesDialog } from './FrozenProcessesDialog'
 
 export interface AgentQuotaRootProps {
   api: AgentQuotaAPI
@@ -35,6 +39,8 @@ const AVAILABILITY_POLL_MS = 5_000
 export const QUICK_SETTINGS_EVENT = 'omniterm:agent-quota'
 /** Asks the settings modal to show the Agent Quota tab. */
 export const SETTINGS_TAB_EVENT = 'omniterm:settings-tab'
+
+const isMonitoredAgent = (agent: string): agent is AgentKind => agent === 'claude' || agent === 'codex' || agent === 'agy'
 
 /**
  * Mounted once in the main window. Probes for the plugin, feeds the global configuration into the
@@ -97,8 +103,13 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       setTimer: (run, ms) => setTimeout(run, ms),
       clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
       inlineProbe: (terminal) => probeUsageInline(terminal, LIVE_PROBE_IO),
+      launchHold: { hold: (sessionId) => holdForLaunch(sessionId), release: (sessionId) => releaseLaunchHold(sessionId) },
+      readScreen: readPaneScreen,
     })
     engineRef.current = engine
+    const stopLaunchWatch = onAgentLaunch((sessionId, agent) => {
+      if (isMonitoredAgent(agent)) engine.noteLaunch(sessionId, agent)
+    })
     const unregister = registerQuotaCommands({
       saveConfig: (config: QuotaConfig) => {
         const { appSettings: current, setAppSettings: set } = latest.current
@@ -107,8 +118,11 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       },
       refresh: (profileKey) => engine.refresh(profileKey),
       wake: (target) => engine.wake(target),
+      suspend: (sessionId) => engine.suspend(sessionId),
       resume: (sessionId) => engine.resume(sessionId),
       resumeAll: () => engine.resumeAll(),
+      readUsage: (sessionId) => engine.readUsage(sessionId),
+      cancelUsageRead: (sessionId) => engine.cancelUsageRead(sessionId),
       openSettings: () => {
         setQuickOpen(false)
         latest.current.openSettings()
@@ -117,6 +131,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
     })
     engine.start()
     return () => {
+      stopLaunchWatch()
       engine.stop()
       unregister()
       engineRef.current = null
@@ -148,6 +163,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
     <>
       {quickOpen && <QuotaQuickPopover />}
       {dashboardOpen && <QuotaProfilesDashboard />}
+      <FrozenProcessesDialog />
       <DangerConfirmDialog />
       <QuotaNotices />
     </>

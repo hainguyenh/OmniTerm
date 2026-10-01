@@ -43,12 +43,13 @@
 
 .aq-pd-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(130px, 1.4fr) 95px 95px 145px;
   align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
+  gap: 12px;
+  padding: 8px 10px;
   border: 1px solid var(--theme-border);
   border-radius: 10px;
+  min-height: 52px;
 }
 
 .aq-pd-row[data-status="best"] {
@@ -109,17 +110,20 @@
 .aq-pd-status-cell {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
 }
 
 .aq-pd-status {
-  padding: 1px 6px;
+  padding: 2px 8px;
   border: 1px solid var(--theme-border);
   border-radius: 999px;
   white-space: nowrap;
   font-size: 10px;
   font-weight: 600;
   color: var(--theme-dim);
+  text-align: center;
 }
 
 .aq-pd-row[data-status="best"] .aq-pd-status {

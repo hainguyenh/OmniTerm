@@ -1,11 +1,12 @@
 import { ImagePlus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
-
-import type { ArtSize, ArtSpeed, DisplayConfig, PaceTier } from './quotaConfig'
+import type React from 'react'
+import { useRef, useState } from 'react'
 
 import '../../../ui/components/customArtPreview.css'
+import { useArtDistanceFactor } from './artDistance'
 import './headerBusyArt.css'
 import { HEADER_LOADING_ART, PACE_SLOTS, resolvePaceArt, usePaceCustomArt } from './headerLoadingArt'
+import type { ArtSize, ArtSpeed, DisplayConfig, PaceTier } from './quotaConfig'
 import { PACE_TIERS } from './quotaConfig'
 import { CompactSwitch, Segmented, SubHeading } from './settingsControls'
 
@@ -93,12 +94,13 @@ export function LoadingArtSettings({ display, onChange, refreshCustomArt }: {
                 <div key={tier} className="flex items-center gap-2 h-6">
                   <span className="w-14 shrink-0 text-[10px] font-semibold">{TIERS[tier].label}</span>
                   <span className="relative flex-1 self-stretch">
-                    <span
-                      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${size} aq-art-speed-${speed}`}
-                      data-testid={`art-preview-${tier}`}
-                    >
-                      <img src={resolvePaceArt(tier, previewMode, paceArt)} alt="" aria-hidden="true" draggable="false" />
-                    </span>
+                    <ArtPreviewItem
+                      tier={tier}
+                      size={size}
+                      speed={speed}
+                      previewMode={previewMode}
+                      paceArt={paceArt}
+                    />
                   </span>
                 </div>
               ))}
@@ -107,6 +109,33 @@ export function LoadingArtSettings({ display, onChange, refreshCustomArt }: {
         </section>
       )}
     </div>
+  )
+}
+
+function ArtPreviewItem({
+  tier,
+  size,
+  speed,
+  previewMode,
+  paceArt,
+}: {
+  tier: PaceTier
+  size: ArtSize
+  speed: ArtSpeed
+  previewMode: 'light' | 'dark'
+  paceArt: Record<PaceTier, { light: string | null; dark: string | null }>
+}) {
+  const containerRef = useRef<HTMLSpanElement>(null)
+  const distanceFactor = useArtDistanceFactor(containerRef)
+  return (
+    <span
+      ref={containerRef}
+      className={`aq-busy-art aq-busy-art-${tier} aq-art-size-${size} aq-art-speed-${speed}`}
+      data-testid={`art-preview-${tier}`}
+      style={distanceFactor !== undefined ? ({ '--aq-art-distance-factor': distanceFactor } as React.CSSProperties) : undefined}
+    >
+      <img src={resolvePaceArt(tier, previewMode, paceArt)} alt="" aria-hidden="true" draggable="false" />
+    </span>
   )
 }
 

@@ -98,6 +98,8 @@ interface AppSettings {
   agentRenewStrategy?: 'reopen' | 'new-command'
   /** Agent Quota plugin settings; validated by plugins/agent-quota/app/quotaConfig.ts. */
   agentQuota?: unknown
+  /** Large text paste into agent panes: ask from `promptChars`, attach above `attachChars` (utils/largeTextPaste.ts). */
+  largePaste?: { promptChars?: number; attachChars?: number }
 }
 
 interface SessionMetrics {
@@ -388,6 +390,8 @@ interface Window {
     agentSessions?: {
       detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex' | 'agy'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>
+      /** The whole Claude conversation as plain text; null when there is no session file. */
+      exportClaudeTranscript?: (profileDir: string, sessionId: string) => Promise<string | null>
       loadStore?: () => Promise<unknown>
       saveStore?: (document: Record<string, unknown>) => Promise<void>
     }

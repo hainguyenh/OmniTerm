@@ -8,6 +8,7 @@
   --aq-art-icon-size: 1.5rem;
   --aq-art-tier-scale: 1;
   --aq-art-travel: 7.6s;
+  --aq-art-distance-factor: 1;
   position: relative;
   display: block;
   width: 100%;
@@ -29,7 +30,7 @@
   object-fit: contain;
   /* A larger tier stands over the terminal's first row; clicks must still reach it. */
   pointer-events: none;
-  animation: aq-busy-art-travel calc(var(--aq-art-travel) / var(--aq-art-speed)) ease-in-out infinite;
+  animation: aq-busy-art-travel calc(var(--aq-art-travel) * var(--aq-art-distance-factor) / var(--aq-art-speed)) ease-in-out infinite;
   will-change: left, transform;
 }
 

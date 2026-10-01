@@ -82,4 +82,33 @@ describe('AttachmentsFooterButton', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog', { name: 'Attachments in this pane' })).toBeNull()
   })
+
+  it('allows attaching files via the Attach files button and file picker', async () => {
+    const localInput = vi.fn()
+    mockOmnitermAPI({
+      app: { openInSystem },
+      attachments: {
+        save: vi.fn(async (name: string, bytes: Uint8Array) => ({
+          name,
+          path: `C:/data/attachments/${name}`,
+          size: bytes.length,
+          modifiedMs: Date.now(),
+          kind: 'file' as const,
+        })),
+        list: vi.fn(async () => ({ dir: 'C:/data/attachments', files: [] })),
+      },
+      connect: { localInput },
+    })
+    act(() => setPanePresence({ s1: { agent: 'agy', profileName: 'agy', pid: 1, startTime: 1 } }))
+    render(<AttachmentsFooterButton sessionId="s1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Attachments' }))
+    const attachBtn = screen.getByRole('button', { name: /Attach files/ })
+    expect(attachBtn).toBeInTheDocument()
+    const input = screen.getByTestId('attachment-file-input')
+    const file = new File(['hello'], 'document.pdf', { type: 'application/pdf' })
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => {
+      expect(localInput).toHaveBeenCalledWith('s1', 'C:/data/attachments/document.pdf')
+    })
+  })
 })

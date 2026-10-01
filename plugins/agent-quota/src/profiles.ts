@@ -95,8 +95,9 @@ export async function listProfiles(deps: ProviderDeps, platform: NodeJS.Platform
   const profilesDir = path.join(deps.home, 'claude-profiles')
   const profileSubdirs = await safely(() => deps.listDir(profilesDir), [])
   for (const sub of profileSubdirs) {
-    if (/^[A-Za-z0-9_.]{1,40}$/.test(sub)) {
-      const profileName = sub.startsWith('claude-') ? sub : `claude-${sub}`
+    const suffix = sub.startsWith('claude-') ? sub.slice(7) : sub
+    if (/^[A-Za-z0-9_.]{1,40}$/.test(suffix)) {
+      const profileName = `claude-${suffix}`
       const dir = path.join(profilesDir, sub)
       if ((await safely(() => deps.mtime(dir), null)) !== null) {
         const key = platform === 'win32' ? profileName.toLowerCase() : profileName

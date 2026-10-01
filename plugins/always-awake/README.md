@@ -24,7 +24,8 @@ The sleep request cannot outlive the app. It is scoped to the OmniTerm process t
 `RunEvent::ExitRequested`/`Exit` calls `AlwaysAwakeState::begin_shutdown`, which the poller notices
 within ~50 ms and releases on; the loop also stops if the app's managed state disappears; and Windows
 drops a dead process's execution state regardless. A saved schedule *is* restored on the next launch —
-that is deliberate, so a 24-hour schedule survives a restart — and the panel shows ON when it is.
+that is deliberate, so a custom deadline (08:00 tomorrow by default) survives a restart — and the panel
+shows ON when it is.
 
 Nothing here runs until the plugin activates. The Activity Bar icon appears only once the plugin has
 answered `alwaysAwake.info`, and the native poller is spawned by the first `get_state` call rather

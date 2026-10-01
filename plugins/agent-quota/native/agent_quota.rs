@@ -71,12 +71,7 @@ impl ProcSource for LiveSource {
     }
 
     fn action_rows(&self, shell: u32) -> Vec<ProcRow> {
-        self.with_system(|system| {
-            let mut rows = agent_snapshot::tree_rows(system, &[shell]);
-            let hosts = agent_detect::script_host_pids(&rows);
-            agent_snapshot::fill_command_lines(system, &mut rows, &hosts);
-            rows
-        })
+        self.with_system(|system| agent_snapshot::action_rows(system, shell))
     }
 
     fn start_times(&self, pids: &[u32]) -> HashMap<u32, u64> {
@@ -130,6 +125,34 @@ impl AgentQuotaState {
             .unwrap_or_default()
     }
 
+    fn get_held(&self, session_id: Option<&str>) -> Vec<ProcTarget> {
+        let held = match self.held.lock() {
+            Ok(h) => h,
+            Err(_) => return Vec::new(),
+        };
+        if let Some(id) = session_id {
+            held.get(id).cloned().unwrap_or_default()
+        } else {
+            held.values().flatten().cloned().collect()
+        }
+    }
+
+    fn resume_pid(&self, session_id: &str, pid: u32) -> Result<bool, String> {
+        let mut held_guard = self
+            .held
+            .lock()
+            .map_err(|_| "Agent Quota hold lock is poisoned".to_string())?;
+        let Some(targets) = held_guard.get_mut(session_id) else {
+            return Ok(false);
+        };
+        let Some(pos) = targets.iter().position(|t| t.pid == pid) else {
+            return Ok(false);
+        };
+        let target = targets.remove(pos);
+        let _ = self.ops.resume(target.pid, &target.threads);
+        Ok(true)
+    }
+
     fn detect(&self, shells: &[(String, u32)]) -> Vec<SessionAgent> {
         let pids: Vec<u32> = shells.iter().map(|(_, pid)| *pid).collect();
         let rows = self.source.detection_rows(&pids);
@@ -150,7 +173,8 @@ impl AgentQuotaState {
             .lock()
             .map_err(|_| "Agent Quota hold lock is poisoned".to_string())?;
         let entry = held.entry(session_id.to_string()).or_default();
-        agent_guard::suspend_session(self.ops.as_ref(), &rows, shell, pid, start_time, entry)
+        let home = agent_snapshot::home_dir();
+        agent_guard::suspend_session(self.ops.as_ref(), &rows, shell, pid, start_time, entry, home.as_deref())
     }
 
     fn terminate(
@@ -162,7 +186,8 @@ impl AgentQuotaState {
     ) -> Result<usize, String> {
         let rows = self.source.action_rows(shell);
         let held = self.take_held(session_id);
-        agent_guard::terminate_session(self.ops.as_ref(), &rows, shell, pid, start_time, held)
+        let home = agent_snapshot::home_dir();
+        agent_guard::terminate_session(self.ops.as_ref(), &rows, shell, pid, start_time, held, home.as_deref())
     }
 }
 
@@ -252,6 +277,29 @@ pub async fn agent_quota_terminate<R: Runtime>(
     let shell = session_shell(&app, &session_id)?;
     blocking(&app, move |state| {
         state.terminate(&session_id, shell, pid, start_time)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_quota_get_held<R: Runtime>(
+    app: AppHandle<R>,
+    session_id: Option<String>,
+) -> Result<Vec<ProcTarget>, String> {
+    blocking(&app, move |state| {
+        Ok(state.get_held(session_id.as_deref()))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn agent_quota_resume_pid<R: Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    pid: u32,
+) -> Result<bool, String> {
+    blocking(&app, move |state| {
+        state.resume_pid(&session_id, pid)
     })
     .await
 }

@@ -295,6 +295,6 @@ export const AGENT_LABELS: Record<AgentKind, string> = {
 
 export const WINDOW_LABELS: Record<WindowKind, { long: string; short: string }> = {
   session: { long: 'Session (5h)', short: '5h' },
-  weekly: { long: 'Weekly', short: 'Wk' },
+  weekly: { long: 'Weekly', short: 'Week' },
   monthly: { long: 'Monthly', short: 'Mo' },
 }

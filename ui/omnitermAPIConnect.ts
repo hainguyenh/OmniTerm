@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { failSession, onSession, startSession, type ReplayMetadata } from './tauriSessions'
 import { diag } from './diag'
+import { sendInOrder } from './utils/sessionInputQueue'
 
 function onEvent<T>(eventName: string, callback: (payload: T) => void): () => void {
   let unlisten: UnlistenFn | null = null
@@ -33,8 +34,9 @@ export function createConnectAPI(): any {
     localDisconnect: (id: string) =>
       invoke('disconnect_session', { id }).catch(() => {}),
     interruptSession: (id: string) => invoke<void>('interrupt_session', { id }),
+    // In typing order: see sessionInputQueue.ts for why back-to-back sends could overtake each other.
     localInput: (id: string, data: string) =>
-      invoke('send_session_input', { id, data }).catch(() => {}),
+      sendInOrder(id, () => invoke('send_session_input', { id, data })),
     localResize: (id: string, size: { cols: number; rows: number }) =>
       invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
     onLocalReady: (id: string, cb: (label?: string, replay?: ReplayMetadata) => void) => onSession(id, 'ready', cb),
@@ -56,7 +58,7 @@ export function createConnectAPI(): any {
       }
     },
     sshDisconnect: (id: string) => { void invoke('disconnect_session', { id }).catch(() => {}) },
-    sshInput: (id: string, data: string) => { void invoke('send_session_input', { id, data }).catch(() => {}) },
+    sshInput: (id: string, data: string) => { void sendInOrder(id, () => invoke('send_session_input', { id, data })) },
     sshResize: (id: string, size: { cols: number; rows: number }) => invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
     onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
     onSSHData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),

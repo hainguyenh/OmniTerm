@@ -84,13 +84,14 @@
 /*
  * Every line of a strip shares one grid (each line is a subgrid row), so the label, track and
  * reset columns line up and the 5h, weekly and monthly tracks are always the same width, whatever
- * each line's reset text measures.
+ * each line's reset text measures. When the strip is short of room the tracks give it up: the
+ * danger-zone number and the reset countdown keep their full width.
  */
 .aq-lines {
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: 2.6rem minmax(96px, 1fr) auto;
+  grid-template-columns: 2.8rem minmax(40px, 1fr) auto auto;
   align-content: center;
   column-gap: 5px;
   row-gap: 2px;
@@ -114,10 +115,9 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 /*
@@ -164,11 +164,22 @@
   text-shadow: none;
 }
 
+/*
+ * A danger zone too narrow for its number: the number takes its own grid column after the track,
+ * so every track in the strip shortens just enough to fit it instead of overlapping the safe range.
+ */
+.aq-danger-value-outside {
+  grid-column: 3;
+  position: static;
+  transform: none;
+}
+
+/* Never clipped: an ellipsis let the column collapse to nothing next to an outside danger number. */
 .aq-reset {
+  grid-column: 4;
+  min-width: max-content;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .aq-track {
@@ -466,14 +477,13 @@
   opacity: 0.55;
 }
 
-/* Medium panes: short labels, no reset countdown. */
+/* Medium panes: short labels and shorter tracks; the reset countdown stays. */
 @container (max-width: 440px) {
   .aq-lines {
-    grid-template-columns: 2.2rem minmax(72px, 1fr) auto;
+    grid-template-columns: 2.4rem minmax(32px, 1fr) auto auto;
     column-gap: 4px;
   }
 
-  .aq-reset,
   .aq-meta-name {
     display: none;
   }
@@ -482,11 +492,12 @@
 /* Narrow panes: preserve the label and both percentages; hide only secondary controls. */
 @container (max-width: 240px) {
   .aq-lines {
-    grid-template-columns: 2rem minmax(56px, 1fr);
+    grid-template-columns: 2.2rem minmax(56px, 1fr);
     column-gap: 3px;
   }
 
   .aq-danger-value,
+  .aq-reset,
   .aq-actions {
     display: none;
   }
@@ -518,4 +529,38 @@
 
 .aq-probe-badge {
   background: color-mix(in srgb, var(--theme-sidebar-bg) 95%, transparent);
+}
+
+/* Waits under the strip for the user's own usage panel; it overlays the pane without taking focus. */
+.aq-usage-callout {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 6px;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: min(320px, calc(100% - 12px));
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-bg);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--theme-bg) 60%, transparent);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--theme-fg);
+  user-select: text;
+}
+
+.aq-usage-callout-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+  color: var(--theme-accent);
+}
+
+.aq-usage-callout-text code {
+  font-family: var(--theme-font-mono, monospace);
+  color: var(--theme-accent);
 }

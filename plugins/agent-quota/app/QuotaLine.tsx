@@ -34,7 +34,7 @@ interface QuotaLineProps {
  * limit marker, the danger zone from the limit to 100%. Both unused ranges share the track's own
  * background — the marker is the boundary. The fill's colour is the zone of used ÷ limit, so moving
  * the limit re-colours it immediately. The used % is centred in the fill and the danger zone's size
- * centred in the danger zone. The limit marker is a slider: drag it, or focus it and use the arrow
+ * centred in the danger zone — or, when the zone is too narrow for it, just after the track. The limit marker is a slider: drag it, or focus it and use the arrow
  * keys (Shift for steps of 5).
  */
 export function QuotaLine({ window, limit, animations, showReset, now, onLimitChange, size = 'normal', tooltipSuffix }: QuotaLineProps) {
@@ -89,7 +89,7 @@ export function QuotaLine({ window, limit, animations, showReset, now, onLimitCh
         >
           {labels.used.text}
         </span>
-        {labels.danger && (
+        {labels.danger?.inside && (
           <span className="aq-track-value aq-danger-value" style={{ left: `${labels.danger.at}%` }} aria-label={`${label.long} danger zone above the limit`}>
             {labels.danger.text}
           </span>
@@ -111,6 +111,11 @@ export function QuotaLine({ window, limit, animations, showReset, now, onLimitCh
           />
         )}
       </div>
+      {labels.danger && !labels.danger.inside && (
+        <span className="aq-track-value aq-danger-value aq-danger-value-outside" aria-label={`${label.long} danger zone above the limit`}>
+          {labels.danger.text}
+        </span>
+      )}
       {showReset && <span className="aq-reset">{formatReset(window.resetsAt, now)}</span>}
     </div>
   )
