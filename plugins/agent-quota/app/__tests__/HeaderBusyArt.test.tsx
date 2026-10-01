@@ -139,4 +139,50 @@ describe('HeaderBusyArt', () => {
     expect(art.style.getPropertyValue('--aq-art-distance-factor')).toBeTruthy()
     vi.unstubAllGlobals()
   })
+
+  it('renders light mode artwork and applies custom artSize and artSpeed', () => {
+    seed({
+      config: {
+        ...DEFAULT_QUOTA_CONFIG,
+        display: {
+          ...DEFAULT_QUOTA_CONFIG.display,
+          customArtSession: true,
+          animations: true,
+          artSize: 'large',
+          artSpeed: 'fast',
+        },
+      },
+      terminals: [terminal()],
+      profiles: [profile(reading(30, 30))],
+    })
+    render(<HeaderBusyArt sessionId="s1" darkMode={false} fallback={<span>dots</span>} />)
+    const art = screen.getByRole('status')
+    expect(art).toHaveClass('aq-art-size-large')
+    expect(art).toHaveClass('aq-art-speed-fast')
+    const img = art.querySelector('img')
+    expect(img).toBeInTheDocument()
+    expect(img?.getAttribute('src')).toBeTruthy()
+  })
+
+  it('falls back to default limit and normal size/speed when artSize and artSpeed are undefined', () => {
+    seed({
+      config: {
+        ...DEFAULT_QUOTA_CONFIG,
+        display: {
+          ...DEFAULT_QUOTA_CONFIG.display,
+          customArtSession: true,
+          animations: true,
+          artSize: undefined,
+          artSpeed: undefined,
+        },
+      },
+      terminals: [],
+      profiles: [],
+    })
+    render(<HeaderBusyArt sessionId="missing" fallback={<span>dots</span>} />)
+    const art = screen.getByRole('status')
+    expect(art).toHaveAttribute('data-loading-tier', 'onTrack')
+    expect(art).toHaveClass('aq-art-size-normal')
+    expect(art).toHaveClass('aq-art-speed-normal')
+  })
 })
