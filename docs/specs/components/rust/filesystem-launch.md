@@ -58,6 +58,7 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 - `safe_viewable_path_excluding` — owned by this spec.
 - `read_viewable_excluding` — owned by this spec.
 - `write_editable` — owned by this spec.
+- `open_text_file` / `save_text_file` (`text_file.rs`) — owned by this spec.
 - `resolve_launch` — owned by this spec.
 - `script_run_request` — owned by this spec.
 - `default_shell` — owned by this spec.
@@ -75,7 +76,9 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 | `safe_subdir` | Authorize directory cwd. | Protect terminal cwd. | Canonicalize root+relative and ensure contained directory. | Open terminal. |
 | `safe_viewable_path_excluding` | Authorize viewable target with exclusions. | Protect reads/policy. | Containment + kind + excluded extension. | Open file. |
 | `read_viewable_excluding` | Read bounded safe text. | Single safe read boundary. | Resolve target, enforce max bytes, read text. | Viewer. |
-| `write_editable` | Write bounded safe text. | Single safe write boundary. | Resolve editable target, enforce size, write. | Editor save. |
+| `write_editable` | Write bounded safe text. | Script-only write boundary. | Resolve editable target, enforce size, write. | Legacy `write_script` save. |
+| `open_text_file` | Open a viewable file for the editor. | One read that also yields what the editor needs to pick a profile. | View gate, size cap, sniff, BOM strip, EOL/line/longest-line stats, mtime and read-only flag. | Editor open/reload. |
+| `save_text_file` | Save editor content. | Conflict-safe, binary-safe, crash-safe writes for any text file. | Size cap incl. BOM, conflict outcome, binary/read-only refusal, temp file + rename with in-place fallback. | Editor save. |
 | `resolve_launch` | Resolve process launch spec. | Tauri-free launch rules. | Validate/build executable args/cwd. | Session start. |
 | `script_run_request` | Build workspace script request. | Central script kind/shell semantics. | Map script info to OpenShellRequest. | Workspace run. |
 | `default_shell` | Choose default shell identifier. | Consistent folder terminal. | Platform-aware closed choice. | Open Terminal. |
@@ -106,6 +109,7 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 ## Source map
 
 - `crates/app-core/src/safepath.rs`
+- `crates/app-core/src/text_file.rs`
 - `crates/app-core/src/launch.rs`
 - `crates/app-core/src/workspace_launch.rs`
 - `crates/app-core/src/rdp_launch.rs`

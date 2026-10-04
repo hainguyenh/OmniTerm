@@ -99,6 +99,27 @@ const uiVars = (ui: UITheme, mode: ThemeMode): Record<string, string> => ({
 })
 
 /**
+ * Syntax colours for the built-in editor, taken from the terminal palette so code reads in the same
+ * colours as the shell beside it. Exposed as variables (not baked into the editor's highlight style)
+ * so a theme or dark/light switch recolours every open editor without reconfiguring it.
+ */
+const syntaxVars = (terminal: TerminalTheme): Record<string, string> => ({
+  '--theme-cursor': terminal.cursor,
+  '--theme-syntax-keyword': terminal.magenta,
+  '--theme-syntax-string': terminal.green,
+  '--theme-syntax-number': terminal.yellow,
+  '--theme-syntax-function': terminal.blue,
+  '--theme-syntax-type': terminal.cyan,
+  '--theme-syntax-property': terminal.brightCyan,
+  '--theme-syntax-tag': terminal.red,
+  '--theme-syntax-attribute': terminal.brightYellow,
+  '--theme-syntax-constant': terminal.brightRed,
+  '--theme-syntax-heading': terminal.blue,
+  '--theme-syntax-link': terminal.cyan,
+  '--theme-syntax-invalid': terminal.red,
+})
+
+/**
  * Every CSS variable the app reads, resolved for one theme in one appearance mode.
  *
  * The optional `ui` colours (hover, overlay, selection foreground, warning/error/success) fall back to
@@ -121,6 +142,7 @@ export const themeCssVars = (theme: AppTheme, mode: ThemeMode): Record<string, s
     '--theme-warning': WARNING_FALLBACK,
     '--theme-error': ERROR_FALLBACK,
     '--theme-success': SUCCESS_FALLBACK,
+    ...syntaxVars(terminal),
     // A `ui` block the editor has only partially filled in (setting one colour on a theme that had no
     // block at all) must not blank out every other variable, so the legacy values stay underneath and
     // only the keys the theme actually defines are layered on top.

@@ -15,7 +15,7 @@ vi.mock('../WorkspacePanel', () => ({ default: (p: any) => <div data-testid="wor
 vi.mock('../FileBrowser', () => ({ default: (p: any) => <div data-testid="files">{p.id}:{p.connectionName}:{String(p.active)}</div> }))
 vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onPickPane?.({ left: 6, bottom: 7 })}>pick-pane</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
 vi.mock('../WaitingPane', () => ({ default: (p: any) => <div data-testid={p.compact ? `waiting-${p.paneIndex}` : 'waiting'}><button onClick={p.onNewSession}>new-wait</button><button onClick={() => p.onPickShell({ left: 4, bottom: 5 })}>shell-wait</button>{p.onChooseSession && <button onClick={p.onChooseSession}>choose-wait</button>}</div> }))
-vi.mock('../ScriptViewer', () => ({ default: (p: any) => <div data-testid="editor"><button onClick={p.onRun}>run-editor</button><button onClick={p.onClose}>close-editor</button><button onClick={() => p.onDirtyChange(true)}>dirty-editor</button><button onClick={() => p.onDirtyChange(false)}>clean-editor</button></div> }))
+vi.mock('../editor/FileEditorTab', () => ({ FileEditorTab: (p: any) => <div data-testid="editor"><button onClick={p.onRun}>run-editor</button><button onClick={p.onClose}>close-editor</button><button onClick={() => p.onDirtyChange(true)}>dirty-editor</button><button onClick={() => p.onDirtyChange(false)}>clean-editor</button></div> }))
 vi.mock('../TerminalView', () => ({ default: (p: any) => <div data-testid={`terminal-${p.id}`} data-mode={p.mode} data-font={p.fontSize}><button onClick={() => p.onStatus('connected')}>terminal-status</button><button onClick={() => p.onMetrics({ latency: 7 })}>terminal-metrics</button><button onClick={() => p.onActivity(true)}>terminal-busy</button><button onClick={() => p.onExit(0)}>terminal-exit</button><button onClick={p.onRestart}>terminal-restart</button>{p.onFontSizeChange && <button onClick={() => p.onFontSizeChange(p.fontSize + 2)}>terminal-font</button>}</div> }))
 vi.mock('../RDPView', () => ({ default: (p: any) => <div data-testid={`rdp-${p.id}`} data-active={String(p.active)}><button onClick={() => p.onStatus('connected')}>rdp-status</button><button onClick={() => p.onLatency(33)}>rdp-latency</button></div> }))
 vi.mock('../ConnectingOverlay', () => ({ default: () => <div data-testid="connecting" /> }))
@@ -333,7 +333,7 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTestId('waiting-1').closest('.absolute')).toHaveClass('z-10')
   })
 
-  it('covers editor, RDP, detached, terminal, hidden, and connecting session variants', () => {
+  it('covers editor, RDP, detached, terminal, hidden, and connecting session variants', async () => {
     const editor = { workspaceId: 'w', script: { path: '/a.ts', name: 'a.ts', kind: 'file' } }
     const m = model({
       layoutMode: 4,
@@ -351,7 +351,8 @@ describe('MainLayoutView coverage', () => {
       connById: (id?: string) => (id === 'local' ? { ...local, localKeepOpen: false } : [local, ssh, rdp].find(c => c.id === id)),
     })
     const { container } = render(<MainLayoutView model={m} />)
-    fireEvent.click(screen.getByText('run-editor'))
+    // The editor tab is lazy-loaded with the first opened file.
+    fireEvent.click(await screen.findByText('run-editor'))
     fireEvent.click(screen.getByText('close-editor'))
     fireEvent.click(screen.getByText('dirty-editor'))
     fireEvent.click(screen.getByText('clean-editor'))

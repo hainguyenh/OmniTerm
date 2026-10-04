@@ -1,4 +1,4 @@
-//! Command-path validation and edge cases for workspace operations. 
+//! Command-path validation and edge cases for workspace operations.
 use super::*;
 use crate::workspace_folders::{add_workspace_folder, remove_workspace_folder};
 #[test]

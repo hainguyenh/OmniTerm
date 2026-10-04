@@ -47,6 +47,15 @@ describe('themeCssVars', () => {
     expect(vars['--theme-accent']).toBe(TOKYO_NIGHT.ui.dark.accent)
   })
 
+  it('derives the editor syntax colours from the active terminal palette', () => {
+    const dark = themeCssVars(TOKYO_NIGHT, 'dark')
+    const light = themeCssVars(TOKYO_NIGHT, 'light')
+    expect(dark['--theme-syntax-keyword']).toBe(TOKYO_NIGHT.terminal.dark.magenta)
+    expect(dark['--theme-syntax-string']).toBe(TOKYO_NIGHT.terminal.dark.green)
+    expect(dark['--theme-cursor']).toBe(TOKYO_NIGHT.terminal.dark.cursor)
+    expect(light['--theme-syntax-keyword']).toBe(TOKYO_NIGHT.terminal.light.magenta)
+  })
+
   it('falls back to the previously hardcoded values when the optional colours are absent', () => {
     const dark = themeCssVars(TOKYO_NIGHT, 'dark')
     const light = themeCssVars(TOKYO_NIGHT, 'light')

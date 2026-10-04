@@ -57,6 +57,7 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 - `scan_workspace_entries` — owned by this spec.
 - `read_script` — owned by this spec.
 - `write_script` — owned by this spec.
+- `open_text_file` / `save_text_file` — built-in editor read/write; see feature-file-browser-view-editor.
 - `run_script` — owned by this spec.
 - `resolveNewSessionWorkspace` / `defaultWorkspaceToSelection` / `isSelectionLive` — owned by this spec.
 
@@ -67,8 +68,9 @@ On workspace scan, file open/save, script/RDP run or Open Terminal from a folder
 | `logical_target` | Resolve logical namespace to folder+relative path. | Select exactly one real root. | Split first segment and look up saved folder ID. | Before all workspace IO/run. |
 | `scan_scripts` | Aggregate scripts from all roots. | Composite script discovery. | Scan each existing folder and namespace results. | Script refresh. |
 | `scan_workspace_entries` | Page folder-scoped entries. | Bound tree IO. | Resolve target then page scan. | Expand/show more. |
-| `read_script` | Read safe viewable file. | Viewer/editor content. | Resolve target then `read_viewable_excluding`. | Open file. |
-| `write_script` | Write safe editable file. | Editor save. | Resolve target then `write_editable`. | Save file. |
+| `read_script` | Read safe viewable file. | Provider/legacy read. | Resolve target then `read_viewable_excluding`. | Provider read. |
+| `write_script` | Write a script file. | Provider/legacy script save. | Resolve target then `write_editable` (script allow-list). | Provider save. |
+| `open_text_file` / `save_text_file` | Built-in editor open/save. | Edit any viewable file safely. | Resolve target, then `app_core::text_file` on the blocking pool. | Editor tab open/save. |
 | `run_script` | Run file or open folder terminal. | Execution/terminal functionality. | Resolve safe runnable/cwd then launch RDP/ad-hoc shell. | Run/Open Terminal. |
 | `resolveNewSessionWorkspace` | Pick the target workspace for a new terminal. | Launch sites without an explicit target still land predictably. | Walk explicit → default setting → last-used, dropping dead selections via a liveness check. | New session/quick shell without explicit workspace. |
 | `defaultWorkspaceToSelection` / `isSelectionLive` | Encode the setting as a selection string and validate it against the live catalog. | Stale saved choices must degrade, not break launches. | Reuse selection encoding; check workspace/folder existence. | Resolution walk and settings persistence. |

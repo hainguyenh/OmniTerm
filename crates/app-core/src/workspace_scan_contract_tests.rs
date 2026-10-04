@@ -102,9 +102,10 @@ fn entries_serialize_with_the_field_names_the_renderer_reads() {
         shell: None,
         editable: None,
         viewable: None,
+        deferred: Some(true),
     };
     let value = serde_json::to_value(&entry).unwrap();
-    for key in ["id", "name", "path", "isDir", "kind"] {
+    for key in ["id", "name", "path", "isDir", "kind", "deferred"] {
         assert!(value.get(key).is_some(), "{key} must be serialized");
     }
     assert_eq!(value["isDir"], serde_json::json!(true));

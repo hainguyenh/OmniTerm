@@ -1,8 +1,10 @@
 import type React from 'react'
-import { RotateCw, Unplug } from 'lucide-react'
+import { RotateCw, Sparkles, Unplug } from 'lucide-react'
 import type { Connection, SessionStatus } from '@omniterm/contract'
 import { FrozenSessionStatus } from '../../plugins/agent-quota/app/paneHosts'
+import { usePanePresence } from '../utils/agentPresenceStore'
 import { AttachmentsFooterButton } from './AttachmentsFooterButton'
+import { GitBranchFooter } from './git/GitBranchFooter'
 import SessionControlButtons, { type SessionControlAppearance } from './SessionControlButtons'
 import MetricsChips from './SessionMetricsChips'
 import { Tooltip } from './Tooltip'
@@ -19,6 +21,7 @@ interface SessionFooterBarProps {
   locationLabel: string
   shellLabel?: string
   appearance?: SessionControlAppearance
+  gitCwd?: string
   onSaveOutput: () => void
   onReconnect: () => void
   onDisconnect: () => void
@@ -32,8 +35,9 @@ interface SessionFooterBarProps {
  */
 export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
   conn, sessionId, status, latency, metrics, connectedAt, layoutMode, busy, locationLabel,
-  shellLabel, appearance, onSaveOutput, onReconnect, onDisconnect,
+  shellLabel, appearance, gitCwd, onSaveOutput, onReconnect, onDisconnect,
 }) => {
+  const presence = usePanePresence(sessionId)
   return (
     <div data-session-footer className="relative z-30 order-last h-7 flex-shrink-0 bg-theme-sidebar border-t border-theme-border flex items-center gap-2 px-2.5 select-none">
       <FrozenSessionStatus sessionId={sessionId} />
@@ -41,6 +45,17 @@ export const SessionFooterBar: React.FC<SessionFooterBarProps> = ({
         <span className="truncate">{locationLabel}</span>
         {shellLabel && <span className="flex-shrink-0 text-theme-dim/70">// {shellLabel}</span>}
       </span>
+      {presence?.modelInfo && (
+        <span
+          data-testid="session-agent-model"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-theme-dim hover:text-theme-fg hover:bg-theme-bg/60 transition-colors font-mono text-[10px] cursor-default flex-shrink-0"
+          title={`AI Agent Model: ${presence.modelInfo.display}`}
+        >
+          <Sparkles className="w-3 h-3 text-theme-accent" />
+          <span className="font-semibold text-theme-fg">{presence.modelInfo.display}</span>
+        </span>
+      )}
+      {gitCwd && <GitBranchFooter cwd={gitCwd} />}
       <MetricsChips status={status} latency={latency} metrics={metrics} connectedAt={connectedAt} compact={layoutMode > 1} />
       <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
         <AttachmentsFooterButton sessionId={sessionId} />

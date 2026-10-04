@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Connection } from '@omniterm/contract'
 import { mockOmnitermAPI } from '../../testUtils'
+import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 import { recordPastedImage, releaseSessionMedia } from '../../utils/sessionAttachmentStore'
 import { SessionFooterBar } from '../SessionFooterBar'
 
@@ -13,6 +14,7 @@ const local: Connection = {
 beforeEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+  resetPanePresenceForTests()
   vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:mock-image')
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
   releaseSessionMedia('s1')
@@ -108,4 +110,33 @@ describe('SessionFooterBar controls', () => {
     expect(container.querySelector('[data-agent-badge]')).toBeNull()
     unmount()
   })
+
+  it('displays the active AI agent model and effort', () => {
+    act(() => {
+      setPanePresence({
+        s1: {
+          agent: 'agy',
+          profileName: 'agy',
+          pid: 1234,
+          startTime: 100,
+          modelInfo: {
+            model: 'Gemini 3.8 Flash',
+            effort: 'High',
+            display: 'Gemini 3.8 Flash - High',
+          },
+        },
+      })
+    })
+    const { unmount } = renderFooter()
+    expect(screen.getByTestId('session-agent-model')).toHaveTextContent('Gemini 3.8 Flash - High')
+    unmount()
+  })
+
+  it('renders git branch without conflict or clean status', () => {
+    const { unmount } = renderFooter({ gitCwd: 'F:/repo' })
+    expect(screen.queryByText(/clean/i)).toBeNull()
+    expect(screen.queryByText(/conflict/i)).toBeNull()
+    unmount()
+  })
 })
+

@@ -28,6 +28,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
   })
 
   it('paints every workspace row with the sidebar theme background styling', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
     mockScan([dir('folder#1')], [file('folder#1/run.bat', 'bat', 'cmd')])
     const { container } = render(<WorkspacePanel onOpenScript={vi.fn()} />)
     await screen.findByText('my-project')
@@ -287,6 +288,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
    * the views that load every folder, an unloaded folder must not appear at all.
    */
   it('never flashes unloaded folders while the scripts view is draining', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
     let release!: () => void
     const gate = new Promise<void>(r => { release = r })
     const scanFolderEntries = vi.fn(async (_id: string, folder: string) => {
@@ -359,6 +361,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
 
   /** A folder with nothing runnable in it is noise by default, but the filter can ask for it. */
   it('hides a folder that holds no scripts until empty folders are asked for', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
     mockScan([dir('empty')], [BAT])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
@@ -373,6 +376,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
   })
 
   it('hides non-script files until the filter is opened up to all files', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
     mockScan([], [BAT, file('notes.txt', 'txt')])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
@@ -404,6 +408,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
   /** The scripts view promises the whole workspace: everything is loaded, and no "Show more" row
    *  may appear — paging rows exist only for "All files" and "Selected types". */
   it('loads every file in the scripts view, with no "Show more" row', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
     const scanFolderEntries = vi.fn()
       .mockResolvedValueOnce(page([BAT], true, 2))
       .mockResolvedValueOnce(page([file('more.ps1', 'ps1', 'powershell')]))

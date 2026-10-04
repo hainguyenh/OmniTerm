@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Bot, Database, FileText, Info, Lock, Plus, Sliders, SquareTerminal, X } from 'lucide-react'
+import { Bot, Database, FileText, GitBranch, Info, Lock, Plus, Sliders, SquareTerminal, X } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
 import { pickShell, type ShellOption } from '../shellOptions'
 import type { UseDialogReturn } from '../hooks/useDialog'
@@ -246,7 +246,29 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         />
       </section>
 
-      {/* ── Section 4: Files & Attachments ── */}
+      {/* ── Section 4: Git Integration ── */}
+      <section className={CARD_CLS} aria-label="Git Integration Preferences">
+        <div className={SECTION_TITLE_CLS}>
+          <GitBranch className="w-3.5 h-3.5 text-theme-accent" />
+          <span>Git Integration</span>
+        </div>
+        <ToggleRow
+          label="Enable Git utilities"
+          description="Show Git workspace in Activity Bar and repository branch indicator in the status bar."
+          checked={appSettings.gitUtilEnabled ?? true}
+          onChange={() => patch({ gitUtilEnabled: !(appSettings.gitUtilEnabled ?? true) })}
+          ariaLabel="Enable Git utilities"
+        />
+        <ToggleRow
+          label="Show Git Graph tab"
+          description="Display the Source Git Graph navigation tab in the Git workspace view."
+          checked={appSettings.gitGraphEnabled ?? true}
+          onChange={() => patch({ gitGraphEnabled: !(appSettings.gitGraphEnabled ?? true) })}
+          ariaLabel="Show Git Graph tab"
+        />
+      </section>
+
+      {/* ── Section 5: Files & Attachments ── */}
       <section className={CARD_CLS} aria-label="Files & Attachments Preferences">
         <div className={SECTION_TITLE_CLS}>
           <FileText className="w-3.5 h-3.5 text-theme-accent" />

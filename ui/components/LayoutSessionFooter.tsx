@@ -21,6 +21,8 @@ interface LayoutSessionFooterProps {
   layoutMode: number
   activity: Record<string, boolean>
   appearance?: SessionControlAppearance
+  rawCwd?: string
+  gitEnabled?: boolean
   onReconnect: (sessionId: string) => void
   onDisconnect: (sessionId: string) => void
 }
@@ -41,6 +43,7 @@ export function PaneSessionFooter({
   const locationLabel = conn.type === 'LOCAL' ? (liveCwd ?? tab.name) : `${conn.user}@${conn.host}:${conn.port}`
   const shell = conn.type === 'LOCAL' ? resolveShellLabel(model.shellOptions ?? [], conn.shell) : undefined
   const appearance = resolveAppearance?.(tab.id, tab.connId)
+  const gitEnabled = model.appSettings?.gitUtilEnabled ?? true
 
   return (
     <SessionFooterBar
@@ -55,6 +58,7 @@ export function PaneSessionFooter({
       locationLabel={locationLabel}
       shellLabel={shell}
       appearance={appearance}
+      gitCwd={gitEnabled && conn.type === 'LOCAL' ? (liveCwd ?? undefined) : undefined}
       onSaveOutput={() => dispatchTerminalSave(tab.id)}
       onReconnect={() => reconnectSession(tab.id)}
       onDisconnect={() => disconnectSession(tab.id)}
@@ -64,7 +68,7 @@ export function PaneSessionFooter({
 
 export default function LayoutSessionFooter({
   activeTabId, conn, footerWorkspaceTitle, localLocationLabel, shellLabel, statuses, latencies,
-  metrics, connectedAt, layoutMode, activity, appearance, onReconnect, onDisconnect,
+  metrics, connectedAt, layoutMode, activity, appearance, rawCwd, gitEnabled = true, onReconnect, onDisconnect,
 }: LayoutSessionFooterProps) {
   if (layoutMode > 1 && layoutMode <= 4) return null
   return (
@@ -82,6 +86,8 @@ export default function LayoutSessionFooter({
         layoutMode={layoutMode}
         activity={activity}
         appearance={appearance}
+        rawCwd={rawCwd}
+        gitEnabled={gitEnabled}
         onReconnect={onReconnect}
         onDisconnect={onDisconnect}
       />

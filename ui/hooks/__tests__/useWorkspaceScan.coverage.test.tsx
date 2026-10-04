@@ -204,4 +204,23 @@ describe('useWorkspaceScan', () => {
     })
     await waitFor(() => expect(result.current.loadingAll).toBeNull())
   })
+
+  it('merges a deferred folder subfolders into the skeleton and keeps loadAll out of them', async () => {
+    const nodeModules = { ...dir('node_modules'), deferred: true }
+    const pkg = { ...dir('node_modules/pkg'), deferred: true }
+    const scanFolders = vi.fn().mockResolvedValue([dir('docs'), nodeModules])
+    const scanFolderEntries = vi.fn(async (_ws: string, folder: string) => folder === 'node_modules'
+      ? { entries: [file('node_modules/a.txt')], total: 1, hasMore: false, subfolders: [pkg, nodeModules] }
+      : { entries: [], total: 0, hasMore: false })
+    mockOmnitermAPI({ workspace: { scanFolders, scanFolderEntries } })
+    const { result } = renderHook(() => useWorkspaceScan())
+    await act(async () => result.current.scan('ws'))
+
+    await act(async () => { await result.current.loadAll('ws') })
+    expect(scanFolderEntries).not.toHaveBeenCalledWith('ws', 'node_modules', 0, 2000)
+
+    await act(async () => { await result.current.loadFolder('ws', 'node_modules') })
+    expect(result.current.folders.ws.map((entry) => entry.id)).toEqual(['docs', 'node_modules', 'node_modules/pkg'])
+    expect(result.current.files.ws.node_modules.map((entry) => entry.id)).toEqual(['node_modules/a.txt'])
+  })
 })
