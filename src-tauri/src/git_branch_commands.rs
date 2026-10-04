@@ -68,6 +68,8 @@ mod tests {
 
     #[test]
     fn commands_resolve_the_repository_and_surface_core_errors() {
+        // Spawns `git`: hold the test lock so no other test has `PATH` swapped out meanwhile.
+        let _guard = crate::test_support::lock();
         let manifest_dir = env!("CARGO_MANIFEST_DIR").to_string();
         let invalid = block_on(git_rename_branch(
             manifest_dir.clone(),
