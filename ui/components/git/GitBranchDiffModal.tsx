@@ -74,8 +74,9 @@ export const GitBranchDiffModal: React.FC<GitBranchDiffModalProps> = ({
     setCherryPicking(commitId)
     try {
       const res = await api.cherryPick(cwd, commitId)
-      setActionNotice(res || `Cherry-pick of ${commitId.slice(0, 7)} succeeded`)
+      // Reload first: `loadComparison` clears the notice, so setting it before would wipe it.
       await loadComparison(baseBranch, targetBranch)
+      setActionNotice(res || `Cherry-pick of ${commitId.slice(0, 7)} succeeded`)
       window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
     } catch (err) {
       setActionNotice(`Cherry-pick failed: ${String(err)}`)
