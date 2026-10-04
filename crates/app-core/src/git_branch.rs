@@ -97,12 +97,14 @@ fn get_merged_branches(repo_root: &Path) -> HashSet<String> {
 
 /// Lists all local and remote branches in the repository.
 pub fn get_branches(repo_root: &Path) -> Result<Vec<GitBranchInfo>, String> {
+    // `lstrip=2`, not `short`: `short` turns `refs/remotes/origin/HEAD` into a bare `origin`, which
+    // then slipped past the `/HEAD` filter and was listed as a local branch named `origin`.
     let stdout = run_git_cmd(
         repo_root,
         &[
             "branch",
             "-a",
-            "--format=%(refname:short)\t%(HEAD)\t%(upstream:short)\t%(upstream:track)\t%(committerdate:unix)\t%(subject)\t%(authorname)",
+            "--format=%(refname:lstrip=2)\t%(HEAD)\t%(upstream:short)\t%(upstream:track)\t%(committerdate:unix)\t%(subject)\t%(authorname)",
         ],
     )?;
     let text = String::from_utf8_lossy(&stdout);

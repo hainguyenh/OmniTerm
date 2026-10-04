@@ -136,11 +136,19 @@ pub fn revert_paths(repo_root: &Path, paths: &[String]) -> Result<(), String> {
     if paths.is_empty() {
         return Ok(());
     }
-    let mut restore_args = vec!["restore", "--"];
-    for p in paths {
-        restore_args.push(p.as_str());
+    // `git restore` rejects the whole list when any path is untracked, which used to leave the
+    // tracked files of a mixed selection modified. Restore only what git tracks; `git clean`
+    // below removes the rest.
+    let mut ls_args = vec!["ls-files", "-z", "--"];
+    ls_args.extend(paths.iter().map(String::as_str));
+    let listed = run_git_cmd(repo_root, &ls_args)?;
+    let listed = String::from_utf8_lossy(&listed);
+    let tracked: Vec<&str> = listed.split('\0').filter(|p| !p.is_empty()).collect();
+    if !tracked.is_empty() {
+        let mut restore_args = vec!["restore", "--"];
+        restore_args.extend(tracked);
+        run_git_cmd(repo_root, &restore_args)?;
     }
-    let _ = run_git_cmd(repo_root, &restore_args);
 
     let mut clean_args = vec!["clean", "-f", "--"];
     for p in paths {
@@ -201,30 +209,34 @@ pub fn get_commit_log(repo_root: &Path, limit: usize) -> Result<Vec<GitCommitSum
 /// Retrieves git blame information for a file.
 pub fn get_file_blame(repo_root: &Path, file_path: &str) -> Result<Vec<GitBlameLine>, String> {
     let normalized_path = file_path.replace('\\', "/");
-    let stdout = run_git_cmd(repo_root, &["blame", "--date=short", "-s", "--", &normalized_path])?;
+    // No `-s`: it drops the author and date this parser reads, which left `author` empty and put
+    // the commit (or a renamed file's old path) into `date`.
+    let stdout = run_git_cmd(
+        repo_root,
+        &["blame", "--date=short", "--", &normalized_path],
+    )?;
     let text = String::from_utf8_lossy(&stdout);
     let mut lines = Vec::new();
     for (idx, raw_line) in text.lines().enumerate() {
         let line_str = raw_line.to_string();
-        if let Some(paren_pos) = line_str.find(')') {
-            let meta = &line_str[..paren_pos];
-            let content = if paren_pos + 1 < line_str.len() {
-                line_str[paren_pos + 1..].trim_start_matches(' ').to_string()
-            } else {
-                String::new()
+        // `<commit> [<old path>] (<author> <date> <line>) <content>`: the old path appears only for
+        // lines that came from a renamed file, so the metadata is read inside the parentheses.
+        let open = line_str.find('(');
+        let close = open.and_then(|open| line_str[open..].find(')').map(|at| open + at));
+        if let (Some(open), Some(close)) = (open, close) {
+            let commit = line_str[..open]
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string();
+            let parts: Vec<&str> = line_str[open + 1..close].split_whitespace().collect();
+            let (author, date) = match parts.len() {
+                n if n >= 3 => (parts[..n - 2].join(" "), parts[n - 2].to_string()),
+                _ => (String::new(), String::new()),
             };
-            let parts: Vec<&str> = meta.split_whitespace().collect();
-            let commit = parts.first().unwrap_or(&"").to_string();
-            let author = if parts.len() >= 3 {
-                parts[1..parts.len() - 2].join(" ").trim_start_matches('(').to_string()
-            } else {
-                String::new()
-            };
-            let date = if parts.len() >= 2 {
-                parts[parts.len() - 2].to_string()
-            } else {
-                String::new()
-            };
+            // One separator space follows the parenthesis; the rest is the line's own indentation.
+            let rest = &line_str[close + 1..];
+            let content = rest.strip_prefix(' ').unwrap_or(rest).to_string();
             lines.push(GitBlameLine {
                 commit,
                 author,
