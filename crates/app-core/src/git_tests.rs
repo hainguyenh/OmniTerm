@@ -55,6 +55,8 @@ mod tests {
 
     #[test]
     fn test_find_repo_root_and_status() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = find_repo_root(manifest_dir);
         assert!(
@@ -76,6 +78,8 @@ mod tests {
 
     #[test]
     fn test_get_commit_log() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = find_repo_root(manifest_dir).expect("repo root exists");
         let log = get_commit_log(&root, 5);
@@ -88,6 +92,8 @@ mod tests {
 
     #[test]
     fn test_get_file_diff_existing() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = find_repo_root(manifest_dir).expect("repo root exists");
         let diff = get_file_diff(&root, "Cargo.toml", false);
@@ -100,6 +106,8 @@ mod tests {
 
     #[test]
     fn test_resolve_git_binary() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let binary = crate::git::resolve_git_binary();
         assert!(!binary.as_os_str().is_empty());
     }
@@ -113,6 +121,8 @@ mod tests {
 
     #[test]
     fn test_find_repo_root_nonexistent() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let fake_path = Path::new("D:/nonexistent_folder_xyz_12345");
         let root = find_repo_root(fake_path);
         assert!(root.is_err());
@@ -165,6 +175,8 @@ u UU N... 100644 100644 100644 100644 5555 6666 7777 conflict/test.ts\0\
 
     #[test]
     fn test_get_file_diff_path_handling() {
+        // Spawns git: PATH must not be swapped out by another test meanwhile.
+        let _guard = crate::test_support::lock();
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = find_repo_root(manifest_dir).expect("repo root exists");
 

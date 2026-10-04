@@ -17,6 +17,8 @@ use tauri::{test::MockRuntime, Manager};
 #[cfg(target_os = "linux")]
 #[path = "ipc_dialog_tests.rs"]
 mod dialogs;
+#[path = "ipc_git_tests.rs"]
+mod git_ipc;
 #[path = "ipc_persistence_tests.rs"]
 mod persistence;
 #[path = "ipc_runtime_tests.rs"]

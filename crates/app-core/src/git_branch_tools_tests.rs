@@ -39,6 +39,8 @@ fn repo() -> (tempfile::TempDir, PathBuf) {
 
 #[test]
 fn fast_forwards_a_branch_that_is_not_checked_out() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
     let (_dir, root) = repo();
     commit(&root, "b.txt", "second");
 
@@ -60,6 +62,8 @@ fn fast_forwards_a_branch_that_is_not_checked_out() {
 
 #[test]
 fn refuses_diverged_untracked_and_checked_out_branches() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
     let (_dir, root) = repo();
     git(&root, &["checkout", "-q", "topic"]);
     commit(&root, "t.txt", "topic work");
@@ -89,6 +93,8 @@ fn refuses_diverged_untracked_and_checked_out_branches() {
 
 #[test]
 fn renames_branches_and_rejects_invalid_names() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
     let (_dir, root) = repo();
     rename_branch(&root, "topic", "feature/topic").expect("rename");
     assert!(git(&root, &["branch", "--list", "feature/topic"]).contains("feature/topic"));
@@ -105,6 +111,8 @@ fn renames_branches_and_rejects_invalid_names() {
 
 #[test]
 fn sets_and_unsets_the_upstream() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
     let (_dir, root) = repo();
     git(&root, &["branch", "loose"]);
 
@@ -122,6 +130,8 @@ fn sets_and_unsets_the_upstream() {
 
 #[test]
 fn adds_worktrees_next_to_the_repository() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
     let (_dir, root) = repo();
     git(&root, &["branch", "feature/wt"]);
 
