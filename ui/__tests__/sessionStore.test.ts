@@ -78,6 +78,28 @@ describe('sessionStore', () => {
     })
   })
 
+  /**
+   * Regression: the loader rebuilt each pane's recovery from cwd/shell alone, so the agent session a
+   * restore falls back on when no stored session names the pane never survived a reload.
+   */
+  it('round-trips a pane agent session, and drops a non-string agent field as malformed', () => {
+    const recovery = {
+      cwd: 'F:/repo',
+      cwdSource: 'reported' as const,
+      agent: 'claude',
+      agentSessionId: 's-1',
+      profileName: 'work',
+      launcher: 'claude-work',
+    }
+    saveSnapshot(makeSnapshot({ activeTabs: [{ id: 'tab-1', connId: 'adhoc-1', name: 'PowerShell', recovery }] }))
+    expect(loadSnapshot()?.activeTabs[0].recovery).toEqual(recovery)
+
+    const stored = JSON.parse(storage[SNAPSHOT_KEY])
+    stored.activeTabs[0].recovery.agentSessionId = 42
+    storage[SNAPSHOT_KEY] = JSON.stringify(stored)
+    expect(loadSnapshot()?.activeTabs[0].recovery).not.toHaveProperty('agentSessionId')
+  })
+
   it('migrates v1-v3 while dropping process persistence, scrollback, and command metadata', () => {
     for (const version of [1, 2, 3] as const) {
       storage[SNAPSHOT_KEY] = JSON.stringify({
