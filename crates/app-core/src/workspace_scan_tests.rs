@@ -213,20 +213,25 @@ fn the_entry_scan_reports_hidden_entries_and_deep_folders() {
 // ── Folder skeleton ──────────────────────────────────────────────────────────
 
 /// The panel shows every folder before any file, so `scan_folders` has to report the whole
-/// skeleton — nested, hidden, and ignored directories included in exactly the way the full walk
-/// would report them.
+/// skeleton — nested and hidden directories included, heavy ones as deferred rows that are not
+/// descended into, and VCS stores left out (like Zed and VS Code).
 #[test]
 fn the_folder_skeleton_reports_every_directory() {
     let (_d, root) = tree();
     touch(&root.join("tools").join("go.sh"));
     touch(&root.join("a").join("b").join("deep.txt"));
     touch(&root.join(".vscode").join("settings.json"));
-    touch(&root.join("node_modules").join("bad.txt"));
+    touch(&root.join("node_modules").join("pkg").join("index.js"));
+    touch(&root.join("a").join("Dist").join("bundle.js"));
+    touch(&root.join(".git").join("HEAD"));
     touch(&root.join("keep.txt"));
 
-    let ids: Vec<_> = scan_folders(&root).into_iter().map(|e| e.id).collect();
-    assert_eq!(ids, vec![".vscode", "a", "a/b", "tools"]);
-    assert!(scan_folders(&root).iter().all(|e| e.is_dir && e.kind == "dir"));
+    let folders = scan_folders(&root);
+    let ids: Vec<_> = folders.iter().map(|e| e.id.as_str()).collect();
+    assert_eq!(ids, vec![".vscode", "a", "a/Dist", "a/b", "node_modules", "tools"]);
+    assert!(folders.iter().all(|e| e.is_dir && e.kind == "dir"));
+    let deferred: Vec<_> = folders.iter().filter(|e| e.deferred == Some(true)).map(|e| e.id.as_str()).collect();
+    assert_eq!(deferred, vec!["a/Dist", "node_modules"]);
 }
 
 // ── Per-folder paging ────────────────────────────────────────────────────────
@@ -320,7 +325,7 @@ fn folder_pages_reject_paths_outside_the_workspace() {
 #[test]
 fn as_script_converts_script_entries_only() {
     fn make_entry(is_dir: bool, kind: &str) -> WorkspaceEntry {
-        WorkspaceEntry { id: "s".into(), name: "s".into(), path: "s".into(), is_dir, kind: kind.into(), shell: None, editable: None, viewable: None }
+        WorkspaceEntry { id: "s".into(), name: "s".into(), path: "s".into(), is_dir, kind: kind.into(), shell: None, editable: None, viewable: None, deferred: None }
     }
     assert!(make_entry(true, "bat").as_script().is_none());
     for kind in ["txt", "json", "rs"] { assert!(make_entry(false, kind).as_script().is_none()); }

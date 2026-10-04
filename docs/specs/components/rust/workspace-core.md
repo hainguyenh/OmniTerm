@@ -79,8 +79,8 @@ On workspace load/import/move/pin/path resolution and scan/page requests.
 | `namespace_path` | Build logical namespaced path. | Avoid cross-root collisions. | Join folder ID with relative path. | Scan result identity. |
 | `scan_dir_excluding` | Scan runnable scripts with exclusions. | Script discovery. | Walk root/classify/filter. | Script refresh. |
 | `scan_entries_excluding` | Scan entries with exclusions. | File/tree discovery. | Walk/classify/filter. | Entry scan. |
-| `scan_folders` | Scan directory skeleton. | Fast lazy tree. | Enumerate directories. | Initial scan. |
-| `scan_folder_files_excluding` | Page files in one relative folder. | Bound large directory payload. | Validate folder, scan/classify and slice offset/limit. | Expand/show more. |
+| `scan_folders` | Scan directory skeleton. | Fast lazy tree. | Enumerate directories; report deferred dirs (`node_modules`, `dist`, `build`, …) without descending; hide `.git`/`.svn`/`.hg`. | Initial scan. |
+| `scan_folder_files_excluding` | Page files in one relative folder. | Bound large directory payload. | Validate folder, scan/classify and slice offset/limit; inside a deferred subtree the first page also carries the direct subfolders. | Expand/show more. |
 | `scan_entries_page_excluding` | Generic paged entry scan. | Reusable bounded scanning. | Resolve relative dir and paginate. | Paged scan. |
 
 ## State and data

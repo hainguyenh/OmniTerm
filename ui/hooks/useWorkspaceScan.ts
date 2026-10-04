@@ -72,6 +72,10 @@ export function useWorkspaceScan() {
     setLoadingFolders((prev) => new Set(prev).add(key))
     try {
       const page = await window.omnitermAPI.workspace.scanFolderEntries(id, folder, 0, PAGE_SIZE)
+      // A deferred folder (`node_modules`, `dist`, …) is not in the skeleton below itself, so its
+      // subfolders arrive with this page and join the skeleton here.
+      const subfolders = page.subfolders ?? []
+      if (subfolders.length > 0) setFolders((prev) => ({ ...prev, [id]: mergeFolders(prev[id] ?? [], subfolders) }))
       setFiles((prev) => ({
         ...prev,
         [id]: { ...(prev[id] ?? {}), [folder]: page.entries },
@@ -108,6 +112,7 @@ export function useWorkspaceScan() {
     try {
       const loaded = knownLoaded ?? stateRef.current.files[id]?.[folder]?.length ?? 0
       const page = await window.omnitermAPI.workspace.scanFolderEntries(id, folder, loaded, PAGE_SIZE)
+      if (!page) return null
       setFiles((prev) => ({
         ...prev,
         [id]: { ...(prev[id] ?? {}), [folder]: [...(prev[id]?.[folder] ?? []), ...page.entries] },
@@ -130,7 +135,8 @@ export function useWorkspaceScan() {
     inFlight.current.add(key)
     setLoadingAll(id)
     try {
-      const paths = ['', ...(stateRef.current.folders[id] ?? []).map((d) => d.id)]
+      // Deferred folders are left alone: no whole-workspace view shows dependency or build output.
+      const paths = ['', ...(stateRef.current.folders[id] ?? []).filter((d) => !d.deferred).map((d) => d.id)]
       // Every folder needs its first page — `loadFolder` skips what is already loaded. Track each
       // folder's hasMore/loaded-count from what it actually returned rather than re-reading
       // `stateRef` afterward: several pages resolving back-to-back can outrun the render that would
@@ -183,4 +189,12 @@ export function useWorkspaceScan() {
     folders, files, pageInfo, scanning, loadingMore, loadingAll, loadingFolders,
     scan, loadFolder, loadMore, loadAll, entriesOf,
   }
+}
+
+/** `current` plus the `added` folders it does not hold yet, kept in the skeleton's id order. */
+function mergeFolders(current: WorkspaceEntry[], added: WorkspaceEntry[]): WorkspaceEntry[] {
+  const known = new Set(current.map((entry) => entry.id))
+  const fresh = added.filter((entry) => !known.has(entry.id))
+  if (fresh.length === 0) return current
+  return [...current, ...fresh].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
 }

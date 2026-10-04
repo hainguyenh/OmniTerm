@@ -51,6 +51,11 @@ export default defineConfig({
     },
   },
   plugins: [react()],
+  // The editor's preview workers (ui/components/editor/editorWorkers.ts) are module workers; the
+  // CSP admits them because they load from the app origin, unlike blob: workers.
+  worker: {
+    format: 'es',
+  },
   optimizeDeps: {
     entries: ['index.html'],
   },

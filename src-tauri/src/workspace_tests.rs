@@ -233,4 +233,3 @@ fn empty_workspace_files_and_runtime_settings_cover_all_fallbacks() {
     assert!(excluded_viewable_exts(app.handle()).is_empty());
     let _ = std::fs::remove_dir_all(data_dir);
 }
-

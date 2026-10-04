@@ -1,0 +1,62 @@
+.git-branch-inspector .git-branch-action-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.git-branch-inspector .git-branch-action-list button {
+  border: 1px solid var(--theme-border);
+  font-size: 11px;
+}
+
+.git-branch-more-tools {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-dim);
+  font-size: 11px;
+}
+
+.git-branch-more-tools summary {
+  cursor: pointer;
+}
+
+.git-branch-more-tools p {
+  margin-block: 12px 6px;
+  font-size: 10px;
+}
+
+.git-branch-more-tools button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: start;
+}
+
+.git-branch-tool-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 4px 8px;
+}
+
+.git-branch-tool-form input {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-bg);
+  color: var(--theme-fg);
+  font-family: var(--theme-font-mono);
+}
+
+.git-branch-more-tools .git-branch-tool-form button {
+  width: auto;
+}
+
+.git-branch-tool-error {
+  color: var(--theme-error);
+  overflow-wrap: anywhere;
+}

@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 /**
- * Rendered Markdown (with Mermaid fenced blocks) for `ScriptViewer`'s Preview mode.
+ * Rendered Markdown (with Mermaid fenced blocks) for the file editor's Preview mode.
  *
  * Markdown parsing itself is synchronous and cannot hang, but a Mermaid diagram's render is async and
  * can be slow or simply never resolve on malformed/huge input. `onFallback` fires once — either because

@@ -38,6 +38,9 @@ interface AppSettings {
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
   /** Large-paste thresholds; validated by utils/largeTextPaste.ts resolveLargePaste. */
   largePaste?: { promptChars?: number; attachChars?: number }
+  /** Whether the Git integration utility is enabled (Activity bar tab and status bar branch indicator). */
+  gitUtilEnabled?: boolean
+  gitGraphEnabled?: boolean
 }
 
 function App() {
@@ -48,6 +51,8 @@ function App() {
     checkUpdatesOnStartup: true,
     darkMode: true,
     defaultShell: 'powershell',
+    gitUtilEnabled: true,
+    gitGraphEnabled: true,
   })
   const [themes, setThemes] = useState<AppTheme[]>([TOKYO_NIGHT])
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(1)

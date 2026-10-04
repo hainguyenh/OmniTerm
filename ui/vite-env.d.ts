@@ -100,6 +100,10 @@ interface AppSettings {
   agentQuota?: unknown
   /** Large text paste into agent panes: ask from `promptChars`, attach above `attachChars` (utils/largeTextPaste.ts). */
   largePaste?: { promptChars?: number; attachChars?: number }
+  /** Whether the Git integration utility is enabled (Activity bar tab and status bar branch indicator). */
+  gitUtilEnabled?: boolean
+  /** Whether the Git Graph tab is enabled in Git Workspace view. */
+  gitGraphEnabled?: boolean
 }
 
 interface SessionMetrics {
@@ -129,13 +133,7 @@ interface PluginDescriptor {
   activeInvokeHandler: boolean
 }
 
-interface ConnectionProviderCapabilities {
-  protocols: Array<'SSH' | 'RDP'>
-  credentialPolicy: 'prompt-every-time'
-  scopes: Array<'personal' | 'workspace'>
-  sftp: boolean
-  importExport: boolean
-}
+type ConnectionProviderCapabilities = import('@omniterm/contract').ConnectionProviderCapabilities
 
 /** Update-checker state pushed from main via 'updates:state'. */
 interface UpdateState {
@@ -331,6 +329,9 @@ interface Window {
       run: (payload: { workspaceId: string; script?: import('@omniterm/contract').WorkspaceScript; subPath?: string }) => Promise<boolean>
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>
+      openTextFile: (workspaceId: string, path: string) => Promise<import('./utils/textFileWire').TextFileContent>
+      saveTextFile: (workspaceId: string, path: string, request: import('./utils/textFileWire').TextFileSaveRequest) => Promise<import('./utils/textFileWire').TextFileSaveOutcome>
+      openImageFile: (workspaceId: string, path: string) => Promise<Uint8Array>
       loadConnections: (workspaceId: string) => Promise<import('@omniterm/contract').Connection[]>
       saveConnections: (workspaceId: string, connections: import('@omniterm/contract').Connection[]) => Promise<void>
       deleteConnection: (workspaceId: string, connectionId: string) => Promise<void>
@@ -390,7 +391,7 @@ interface Window {
     agentSessions?: {
       detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex' | 'agy'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>
-      /** The whole Claude conversation as plain text; null when there is no session file. */
+      resolveModel?: (agent: string, profileDir?: string, cwd?: string) => Promise<{ model: string; effort?: string; display: string } | null>
       exportClaudeTranscript?: (profileDir: string, sessionId: string) => Promise<string | null>
       loadStore?: () => Promise<unknown>
       saveStore?: (document: Record<string, unknown>) => Promise<void>

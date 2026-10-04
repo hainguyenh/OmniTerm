@@ -160,6 +160,42 @@ describe('workspace', () => {
     ])
   })
 
+  it('opens and saves editor files scoped by workspace id and validates the replies', async () => {
+    invokeMock.mockResolvedValueOnce({
+      content: 'a', size: 1, mtimeMs: 5, lineCount: 1, maxLineLen: 1, eol: 'crlf',
+      mixedEol: false, hasBom: true, readOnly: false,
+    })
+    await expect(api.workspace.openTextFile('ws#1', 'folder#1/app.ts')).resolves.toMatchObject({
+      content: 'a', eol: 'crlf', hasBom: true,
+    })
+    expect(lastInvoke()).toEqual(['open_text_file', { workspaceId: 'ws#1', path: 'folder#1/app.ts' }])
+
+    invokeMock.mockResolvedValueOnce({ status: 'conflict', reason: 'modified', diskMtimeMs: 9 })
+    const request = { content: 'b', bom: false, expectedMtimeMs: 5, expectedSize: 1 }
+    await expect(api.workspace.saveTextFile('ws#1', 'folder#1/app.ts', request)).resolves.toEqual({
+      status: 'conflict', reason: 'modified', diskMtimeMs: 9,
+    })
+    expect(lastInvoke()).toEqual([
+      'save_text_file', { workspaceId: 'ws#1', path: 'folder#1/app.ts', request },
+    ])
+
+    invokeMock.mockResolvedValueOnce({ content: 1 })
+    await expect(api.workspace.openTextFile('ws#1', 'folder#1/app.ts')).rejects.toThrow('Invalid text file reply')
+  })
+
+  it('reads image bytes as a binary reply and refuses anything else', async () => {
+    invokeMock.mockResolvedValueOnce(new Uint8Array([1, 2]).buffer)
+    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).resolves.toEqual(new Uint8Array([1, 2]))
+    expect(lastInvoke()).toEqual(['open_image_file', { workspaceId: 'ws#1', path: 'folder#1/logo.png' }])
+
+    const view = new Uint8Array([3])
+    invokeMock.mockResolvedValueOnce(view)
+    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).resolves.toBe(view)
+
+    invokeMock.mockResolvedValueOnce([1, 2])
+    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).rejects.toThrow('could not be read')
+  })
+
   it('normalizes workspaces whose older wire payload omits empty pins', async () => {
     invokeMock.mockResolvedValueOnce([{
       id: 'ws#1',

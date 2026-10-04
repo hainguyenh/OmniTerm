@@ -10,20 +10,19 @@ import { BAT, RDP, WS, dir, file, mockScan, page } from './workspacePanelTestUti
 describe('WorkspacePanel filters and connections', () => {
   beforeEach(() => localStorage.clear())
 
-  /** The scan reports dot-files now; only "All files" shows them. */
-  it('keeps hidden files out of the default view and shows them under "All files"', async () => {
+  /** Hidden files are shown under "All files" and kept out of "Scripts". */
+  it('keeps hidden files out of the scripts view and shows them under "All files"', async () => {
     mockScan([dir('.vscode')], [BAT, file('.env', 'env'), file('.vscode/settings.json', 'json')])
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
-    expect(screen.queryByText('.env')).not.toBeInTheDocument()
-    expect(screen.queryByText('.vscode')).not.toBeInTheDocument()
+    expect(screen.getByText('.env')).toBeInTheDocument()
+    expect(screen.getByText('.vscode')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
-    fireEvent.click(screen.getByLabelText('All files'))
-    expect(screen.getByText('.env')).toBeInTheDocument()
-    // The hidden folder is part of the tree once "All files" admits it.
-    expect(screen.getByText('.vscode')).toBeInTheDocument()
+    fireEvent.click(screen.getByLabelText('Scripts only'))
+    expect(screen.queryByText('.env')).not.toBeInTheDocument()
+    expect(screen.queryByText('.vscode')).not.toBeInTheDocument()
   })
 
   /** One tick on a folder has to speak for everything under it, or the tree is unusable. */
@@ -109,15 +108,15 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('deploy.bat')
     fireEvent.click(screen.getByLabelText('Filter what this workspace shows'))
-    fireEvent.click(screen.getByLabelText('All files'))
-    // Closed first: the open menu's own radio label reads "All files" too.
+    fireEvent.click(screen.getByLabelText('Scripts only'))
+    // Closed first: the open menu's own radio label reads "Scripts only" too.
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.getByText('All files')).toBeInTheDocument()
+    expect(screen.getByText('Scripts')).toBeInTheDocument()
 
-    // A path-based selection is workspace-scoped, so the second workspace starts from the default.
+    // A filter selection is workspace-scoped, so the second workspace starts from the default.
     fireEvent.click(screen.getByText('other-project'))
-    await waitFor(() => expect(screen.getByText('Scripts')).toBeInTheDocument())
-    expect(screen.queryByText('notes.txt')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('All files')).toBeInTheDocument())
+    expect(screen.getByText('notes.txt')).toBeInTheDocument()
   })
 
   it('searches folders, files and connections at once', async () => {

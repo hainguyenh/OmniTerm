@@ -165,3 +165,23 @@ pub async fn agent_sessions_save<R: Runtime>(
     .map_err(|error| format!("Session store write failed: {error}"))?
     .map_err(|error| format!("Session store write failed: {error}"))
 }
+
+/// Resolve the active AI agent model and reasoning effort from its configuration.
+#[tauri::command]
+pub async fn resolve_agent_model(
+    agent: String,
+    profile_dir: Option<String>,
+    cwd: Option<String>,
+) -> Option<app_core::agent_model::AgentModelInfo> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app_core::agent_model::resolve_agent_model(
+            &agent,
+            profile_dir.as_deref().map(Path::new),
+            cwd.as_deref().map(Path::new),
+        )
+    })
+    .await
+    .ok()
+    .flatten()
+}
+

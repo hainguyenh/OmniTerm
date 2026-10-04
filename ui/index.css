@@ -301,16 +301,6 @@ input::placeholder, select::placeholder, textarea::placeholder {
   font-style: italic;
 }
 
-/* Script editor overlay: keep the textarea's text + background transparent so the
-   syntax-highlighted <pre> underneath shows through. Overrides the readability rule
-   above (which is !important), while the caret stays visible via caret-color. */
-textarea.code-editor-textarea {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent;
-  background-color: transparent !important;
-  caret-color: var(--theme-fg) !important;
-}
-
 /* ── Custom dialog (DialogHost) — fully driven by theme CSS variables ─────── */
 :root {
   --dialog-tone-info:    var(--theme-accent);
