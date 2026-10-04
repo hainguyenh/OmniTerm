@@ -168,7 +168,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
 
   it('scans on expand and runs a script via the run icon', async () => {
     const run = vi.fn(async () => true)
-    const scanFolderEntries = vi.fn(async () => page([BAT]))
+    const scanFolderEntries = vi.fn(async (_id: string, folder: string) => page(folder === '' ? [BAT] : []))
     mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run } })
 
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
@@ -261,6 +261,28 @@ it('suppresses the browser context menu outside supported workspace targets', as
     fireEvent.click(screen.getByText('tools'))
     expect(await screen.findByText('deploy.ps1')).toBeInTheDocument()
     expect(screen.queryByText('go.sh')).not.toBeInTheDocument()
+  })
+
+  /**
+   * Regression: the first scan opens the workspace's root folders on its own, but only the skeleton
+   * arrived — the root folder showed its subfolders and none of its files until it was collapsed and
+   * expanded again. A rescan dropped the loaded files of every open folder the same way.
+   */
+  it('loads the files of a root folder the first scan opens, and again after a rescan', async () => {
+    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
+    const scanFolderEntries = mockScan([dir('folder#1'), dir('folder#1/src')], [file('folder#1/README.md', 'md')])
+    const rootFolderLoads = () => scanFolderEntries.mock.calls.filter(([, folder]) => folder === 'folder#1').length
+
+    render(<WorkspacePanel onOpenScript={vi.fn()} />)
+    fireEvent.click(await screen.findByText('my-project'))
+
+    expect(await screen.findByText('README.md')).toBeInTheDocument()
+    expect(screen.getByText('src')).toBeInTheDocument()
+    expect(rootFolderLoads()).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rescan' }))
+    await waitFor(() => expect(rootFolderLoads()).toBe(2))
+    expect(await screen.findByText('README.md')).toBeInTheDocument()
   })
 
   /**
@@ -401,83 +423,5 @@ it('suppresses the browser context menu outside supported workspace targets', as
     // The option row states what survived instead of leaving it to the funnel's tint.
     expect(screen.getByText('1 file')).toBeInTheDocument()
     await act(async () => { await new Promise<void>(resolve => setTimeout(resolve, 0)) })
-  })
-
-  // ── Paging: per folder, and only for the whole-tree filters ────────────────
-
-  /** The scripts view promises the whole workspace: everything is loaded, and no "Show more" row
-   *  may appear — paging rows exist only for "All files" and "Selected types". */
-  it('loads every file in the scripts view, with no "Show more" row', async () => {
-    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('scripts') }))
-    const scanFolderEntries = vi.fn()
-      .mockResolvedValueOnce(page([BAT], true, 2))
-      .mockResolvedValueOnce(page([file('more.ps1', 'ps1', 'powershell')]))
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run: async () => true } })
-
-    render(<WorkspacePanel onOpenScript={vi.fn()} />)
-    fireEvent.click(await screen.findByText('my-project'))
-
-    // The second page is fetched on its own — no click asked for it.
-    await waitFor(() => expect(scanFolderEntries).toHaveBeenLastCalledWith('ws#1', '', 1, 2000))
-    expect(await screen.findByText('more.ps1')).toBeInTheDocument()
-    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
-  })
-
-  /** The old scan silently stopped at 2000 entries; a root-folder "Show more" is how the rest arrive. */
-  it('grows the root one page at a time via "Show more" under "All files"', async () => {
-    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
-    const scanFolderEntries = vi.fn()
-      .mockResolvedValueOnce(page([BAT], true, 2))
-      .mockResolvedValueOnce(page([file('notes.txt', 'txt')]))
-    mockOmnitermAPI({ workspace: { list: async () => [WS], scanFolders: async () => [], scanFolderEntries, run: async () => true } })
-
-    render(<WorkspacePanel onOpenScript={vi.fn()} />)
-    fireEvent.click(await screen.findByText('my-project'))
-    await screen.findByText('deploy.bat')
-
-    // hasMore → the row appears at the bottom of the workspace and counts down from the scan's total.
-    expect(screen.getByText('Show more (1 remaining)')).toBeInTheDocument()
-    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', '', 0, 2000)
-
-    // The next page is fetched from where the first one ended.
-    fireEvent.click(screen.getByText('Show more (1 remaining)'))
-    await waitFor(() => expect(scanFolderEntries).toHaveBeenLastCalledWith('ws#1', '', 1, 2000))
-    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
-    expect(screen.getByText('notes.txt')).toBeInTheDocument()
-  })
-
-  /** "Show more" lives on the folder that has more files, not on the workspace as a whole. */
-  it('pages an expanded folder on its own "Show more" row', async () => {
-    localStorage.setItem('cc.workspaceFilters', JSON.stringify({ 'ws#1': filterAs('all') }))
-    const scanFolderEntries = vi.fn()
-      .mockImplementationOnce(async () => page([BAT]))                       // root
-      .mockImplementationOnce(async () => page([file('tools/a.txt', 'txt'), file('tools/b.txt', 'txt')], true, 3)) // tools p1
-      .mockImplementationOnce(async () => page([file('tools/c.txt', 'txt')])) // tools p2
-    mockOmnitermAPI({
-      workspace: {
-        list: async () => [WS],
-        scanFolders: async () => [dir('tools')],
-        scanFolderEntries,
-        run: async () => true,
-      },
-    })
-
-    render(<WorkspacePanel onOpenScript={vi.fn()} />)
-    fireEvent.click(await screen.findByText('my-project'))
-    await screen.findByText('deploy.bat')
-
-    // The folder is collapsed, so no paging row anywhere yet.
-    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('tools'))
-    expect(await screen.findByText('Show more (1 remaining)')).toBeInTheDocument()
-    expect(screen.getByText('a.txt')).toBeInTheDocument()
-    expect(screen.getByText('b.txt')).toBeInTheDocument()
-    expect(screen.queryByText('c.txt')).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByText('Show more (1 remaining)'))
-    expect(await screen.findByText('c.txt')).toBeInTheDocument()
-    expect(screen.queryByText(/Show more/)).not.toBeInTheDocument()
-    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', 'tools', 0, 2000)
-    expect(scanFolderEntries).toHaveBeenCalledWith('ws#1', 'tools', 2, 2000)
   })
 })

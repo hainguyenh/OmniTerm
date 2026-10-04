@@ -100,7 +100,9 @@ describe('WorkspacePanel filters and connections', () => {
       workspace: {
         list: async () => [WS, WS2],
         scanFolders: async () => [],
-        scanFolderEntries: async () => page([BAT, file('notes.txt', 'txt')]),
+        // Root files only: the root folders the first scan opens hold nothing of their own here.
+        scanFolderEntries: async (_id: string, folder: string) =>
+          page(folder === '' ? [BAT, file('notes.txt', 'txt')] : []),
         run: async () => true,
       },
     })

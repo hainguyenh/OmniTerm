@@ -184,18 +184,28 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   }, [reportFailure])
 
   const toggleDir = useCallback((key: string) => {
-    const wasExpanded = expandedDirs.has(key)
     setExpandedDirs((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next
     })
-    if (!wasExpanded) {
-      const slash = key.indexOf(':')
-      void loadFolder(key.slice(0, slash), key.slice(slash + 1))
+  }, [])
+
+  // Every expanded folder of the open workspace needs its first page. Driven from state rather than
+  // from the click: the first scan opens the root folders without a click, and a rescan drops every
+  // loaded page while those folders stay open — both used to leave an open folder showing only its
+  // subfolders until it was collapsed and expanded again. `loadFolder` skips loaded/in-flight ones.
+  useEffect(() => {
+    if (expandedId === null || folders[expandedId] === undefined) return
+    const prefix = `${expandedId}:`
+    for (const key of expandedDirs) {
+      if (!key.startsWith(prefix)) continue
+      const folder = key.slice(prefix.length)
+      if (files[expandedId]?.[folder] !== undefined) continue
+      loadFolder(expandedId, folder).catch((err: unknown) => diag.warn('[WorkspacePanel] Could not load folder', err))
     }
-  }, [expandedDirs, loadFolder])
+  }, [expandedId, expandedDirs, folders, files, loadFolder])
 
   const viewOf = useMemo(() => {
     const cache = new Map<string, ReturnType<typeof buildWorkspacePanelView>>()
@@ -233,13 +243,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       for (const k of keys) allCollapsed ? next.add(k) : next.delete(k)
       return next
     })
-    if (allCollapsed) {
-      for (const k of keys) {
-        const slash = k.indexOf(':')
-        void loadFolder(k.slice(0, slash), k.slice(slash + 1))
-      }
-    }
-  }, [collectDirKeys, viewOf, expandedDirs, loadFolder])
+  }, [collectDirKeys, viewOf, expandedDirs])
 
   const { isHighlighted, registerRow } = useTreeReveal({
     revealRequest, entriesOf, scan: scanOnce, loadFolder, filterOf, setExpandedId, setFlatView,
