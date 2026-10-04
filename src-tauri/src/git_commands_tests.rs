@@ -1,3 +1,12 @@
+// The flow tests and their temporary-repository helper live in sibling files, registered here so
+// the crate root stays within its size limit.
+#[path = "git_commands_fixture_tests.rs"]
+pub(crate) mod repo;
+#[path = "git_commands_flow_tests.rs"]
+mod flow;
+#[path = "git_commands_remote_tests.rs"]
+mod remote;
+
 #[cfg(test)]
 mod tests {
     use crate::git_commands::*;

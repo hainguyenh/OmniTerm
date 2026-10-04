@@ -30,6 +30,18 @@ pub mod workspace_model;
 pub mod workspace_scan;
 
 #[cfg(test)]
+mod git_branch_flow_tests;
+#[cfg(test)]
+mod git_diff_flow_tests;
+#[cfg(test)]
+mod git_flow_tests;
+#[cfg(test)]
+mod git_regression_tests;
+#[cfg(test)]
+mod git_stash_flow_tests;
+#[cfg(test)]
+mod git_test_repo;
+#[cfg(test)]
 mod git_tests;
 #[cfg(test)]
 mod test_support;
