@@ -65,7 +65,7 @@ describe('FrozenProcessesDialog', () => {
     render(<FrozenProcessesDialog />)
 
     expect(await screen.findByText('Suspended Processes')).toBeInTheDocument()
-    expect(screen.getByText(/2 processes · 4 threads suspended/)).toBeInTheDocument()
+    expect(await screen.findByText(/2 processes · 4 threads suspended/)).toBeInTheDocument()
     expect(screen.getByText('claude.exe')).toBeInTheDocument()
     expect(screen.getByText('node.exe')).toBeInTheDocument()
     expect(screen.getByText('PID 101')).toBeInTheDocument()

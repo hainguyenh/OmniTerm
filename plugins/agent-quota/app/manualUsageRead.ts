@@ -45,12 +45,16 @@ function tryRead(deps: ManualReadDeps, terminal: TerminalAgent): boolean {
   return true
 }
 
-/** The button: read the panel on screen now, or start waiting for the user to open one. */
 export function readUsageNow(deps: ManualReadDeps, sessionId: string): void {
-  const terminal = getQuotaState().terminals[sessionId]
-  if (!terminal || tryRead(deps, terminal)) return
+  const state = getQuotaState()
+  const terminal = state.terminals[sessionId] ?? Object.values(state.terminals).find((t) => t.sessionId === sessionId)
+  if (!terminal) {
+    pushNotice('warning', 'No active monitored agent process found for this terminal.')
+    return
+  }
+  if (tryRead(deps, terminal)) return
   const now = deps.now()
-  updateQuota((state) => ({ ...state, awaitingUsage: { ...state.awaitingUsage, [sessionId]: now } }))
+  updateQuota((s) => ({ ...s, awaitingUsage: { ...s.awaitingUsage, [sessionId]: now } }))
 }
 
 /** Each engine tick: look again at every pane waiting for its panel. */

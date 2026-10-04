@@ -5,7 +5,8 @@ import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { DashboardRow } from './profileDashboard'
 
 import { probeProfilesHidden } from './hiddenProfileProbe'
-import { fetchAllMissingProfiles, fetchInactiveProfile, getProfileDashboard, resetProfileDashboard } from './profileDashboard'
+import { fetchAllMissingProfiles, fetchInactiveProfile, fetchProfileRow, getProfileDashboard, resetProfileDashboard } from './profileDashboard'
+import { registerQuotaCommands } from './quotaStore'
 
 vi.mock('./hiddenProfileProbe', () => ({
   probeProfilesHidden: vi.fn(),
@@ -78,5 +79,25 @@ describe('profile dashboard reads through the hidden terminal', () => {
     await fetchInactiveProfile(row('claude-c'), api(fetchUsage, false))
     expect(probeProfilesHidden).not.toHaveBeenCalled()
     expect(manual('claude-c')).toMatchObject({ reading: ok(33) })
+  })
+
+  it('hands an open profile its fresh reading and keeps a newer one over an older fallback (regression)', async () => {
+    const recordReading = vi.fn()
+    const refresh = vi.fn()
+    const unregister = registerQuotaCommands({ recordReading, refresh })
+    const older: QuotaSnapshot = { ...ok(40), fetchedAt: T0 - 60_000 }
+    vi.mocked(probeProfilesHidden).mockImplementationOnce(async (targets, _deps, onResult) => {
+      onResult(targets[0].key, ok(70))
+      return []
+    })
+    const active = { ...row('claude-a'), activeTerminalCount: 1 }
+    await fetchProfileRow(active, api(vi.fn()))
+    expect(refresh).toHaveBeenCalledWith('claude:launcher:claude-a')
+    expect(recordReading).toHaveBeenCalledWith('claude:launcher:claude-a', ok(70))
+
+    vi.mocked(probeProfilesHidden).mockImplementationOnce(async (targets) => targets.map((target) => target.key))
+    await fetchProfileRow(active, api(vi.fn(async () => older)))
+    expect(manual('claude-a')).toMatchObject({ reading: ok(70), fetching: false })
+    unregister()
   })
 })

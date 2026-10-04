@@ -138,4 +138,19 @@ describe('readUsageScreen', () => {
     expect(readUsageScreen('claude', PROMPT, T0)).toBeNull()
     expect(readUsageScreen('claude', [...PROMPT, '> /usage'], T0)).toBeNull()
   })
+
+  it('reads the panel when subagents are present in the output', () => {
+    const subagentLines = [
+      '> /usage',
+      'Current session: 46% used · resets Sep 25, 12:59pm',
+      'Current week (all models): 87% used · resets Sep 25, 10:59pm',
+      "What's contributing to your limits usage?",
+      'Last 24h · 132 requests · 2 sessions',
+      '  100% of your usage came from subagent-heavy sessions',
+      '  59% of your usage was at >150k context',
+      '  Top subagents: Explore 30%, general-purpose 26%',
+    ]
+    const snapshot = readUsageScreen('claude', subagentLines, T0)
+    expect(snapshot?.windows.map((w) => [w.kind, w.usedPct])).toEqual([['session', 46], ['weekly', 87]])
+  })
 })

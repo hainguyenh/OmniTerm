@@ -23,14 +23,29 @@ export function registerPaneScreen(sessionId: string, term: ScreenSource): { dis
   }
 }
 
-/** The bottom page of the pane (what a pane scrolled to its tail shows), one string per row. */
+/** The recent lines of the pane (including the tail page and recent scrollback), one string per row. */
 export function readPaneScreen(sessionId: string): string[] | null {
   const term = screens.get(sessionId)
   if (!term) return null
   const buffer = term.buffer.active
+  const bufAny = buffer as unknown as { length?: number; viewportY?: number }
+  const hasLength = typeof bufAny.length === 'number'
+  const totalLength = hasLength ? (bufAny.length as number) : buffer.baseY + term.rows
+  if (totalLength === 0) return []
+
+  const maxLines = Math.min(totalLength, 300)
+  let startRow = Math.max(0, totalLength - maxLines)
+  if (typeof bufAny.viewportY === 'number') {
+    startRow = Math.min(startRow, Math.max(0, bufAny.viewportY))
+  }
+  if (!hasLength) {
+    startRow = buffer.baseY
+  }
+
   const lines: string[] = []
-  for (let row = 0; row < term.rows; row += 1) {
-    lines.push(buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? '')
+  const endRow = hasLength ? totalLength : buffer.baseY + term.rows
+  for (let row = startRow; row < endRow; row += 1) {
+    lines.push(buffer.getLine(row)?.translateToString(true) ?? '')
   }
   return lines
 }

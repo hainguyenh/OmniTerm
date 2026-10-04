@@ -16,13 +16,16 @@ export function redactSample(text: string): string {
     .replace(/\b(?:sk-[\w-]{8,}|[A-Za-z0-9_-]{32,})\b/g, '<redacted>')
 }
 
+interface CachedUtilization {
+  five_hour?: { utilization?: number | null; resets_at?: string | null }
+  seven_day?: { utilization?: number | null; resets_at?: string | null }
+  extra_usage?: { monthly_limit?: number | null; used_credits?: number | null; is_enabled?: boolean }
+}
+
 interface CachedUsageDoc {
   fetchedAtMs?: number
-  cachedUsageUtilization?: {
-    five_hour?: { utilization?: number | null; resets_at?: string | null }
-    seven_day?: { utilization?: number | null; resets_at?: string | null }
-    extra_usage?: { monthly_limit?: number | null; used_credits?: number | null; is_enabled?: boolean }
-  }
+  /** Claude Code nests the reading under `utilization` with its own `fetchedAtMs`. */
+  cachedUsageUtilization?: CachedUtilization & { fetchedAtMs?: number; utilization?: CachedUtilization }
   projects?: Record<string, { hasTrustDialogAccepted?: boolean }>
 }
 
@@ -30,7 +33,8 @@ function parseCachedUsage(raw: string | null, now: number): QuotaSnapshot | null
   if (!raw) return null
   try {
     const doc = JSON.parse(raw) as CachedUsageDoc
-    const u = doc.cachedUsageUtilization
+    const cached = doc.cachedUsageUtilization
+    const u = cached?.utilization ?? cached
     if (!u) return null
     const windows: QuotaWindow[] = []
     if (typeof u.five_hour?.utilization === 'number') {
@@ -60,7 +64,7 @@ function parseCachedUsage(raw: string | null, now: number): QuotaSnapshot | null
       : undefined
     return {
       windows,
-      fetchedAt: doc.fetchedAtMs ?? now,
+      fetchedAt: cached?.fetchedAtMs ?? doc.fetchedAtMs ?? now,
       source: 'cli',
       ...(credits ? { credits } : {}),
     }

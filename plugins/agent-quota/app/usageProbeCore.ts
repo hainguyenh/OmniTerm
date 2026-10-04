@@ -314,12 +314,27 @@ export async function submitAndRead(
  */
 export function readUsageScreen(agent: AgentKind, lines: readonly string[], now: number): QuotaSnapshot | null {
   const probe = AGENT_PROBES[agent]
-  let lastCommand = lines.length - 1
-  while (lastCommand >= 0 && !lines[lastCommand].includes(probe.command)) lastCommand -= 1
-  const candidates = lastCommand === -1 ? [lines] : [lines.slice(lastCommand + 1), lines]
-  for (const candidate of candidates) {
+  const commandIndices: number[] = []
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].includes(probe.command)) {
+      commandIndices.push(i)
+    }
+  }
+
+  for (const idx of commandIndices) {
+    const candidates = [lines.slice(idx + 1), lines.slice(idx)]
+    for (const candidate of candidates) {
+      if (candidate.length === 0) continue
+      const parsed = probe.parse(candidate.join('\n'), now)
+      if (parsed.ok) return { windows: parsed.windows, fetchedAt: now, source: 'cli' }
+    }
+  }
+
+  for (const candidate of [lines.slice(-60), lines]) {
+    if (candidate.length === 0) continue
     const parsed = probe.parse(candidate.join('\n'), now)
     if (parsed.ok) return { windows: parsed.windows, fetchedAt: now, source: 'cli' }
   }
+
   return null
 }

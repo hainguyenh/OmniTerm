@@ -218,6 +218,8 @@ export interface QuotaCommands {
   /** Read the usage panel on this pane's screen, or wait for the user to open one. */
   readUsage(sessionId: string): void
   cancelUsageRead(sessionId: string): void
+  /** Hand a reading taken outside the engine (the Profiles dialog) to the profile's engine state. */
+  recordReading(profileKey: string, snapshot: QuotaSnapshot): void
 }
 
 const NO_COMMANDS: QuotaCommands = {
@@ -230,6 +232,7 @@ const NO_COMMANDS: QuotaCommands = {
   openSettings: () => {},
   readUsage: () => {},
   cancelUsageRead: () => {},
+  recordReading: () => {},
 }
 
 let commands: QuotaCommands = NO_COMMANDS
