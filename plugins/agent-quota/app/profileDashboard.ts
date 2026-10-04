@@ -6,6 +6,7 @@ import type { HiddenProbeDeps } from './hiddenProfileProbe'
 import type { ProfileQuota, QuotaState, TerminalAgent } from './quotaStore'
 
 import { liveHiddenProbeDeps, probeProfilesHidden } from './hiddenProfileProbe'
+import { isOlderReading } from './quotaPolicy'
 import { quotaCommands } from './quotaStore'
 
 /** The Profiles dialog is a view of the engine's current terminal/profile state. */
@@ -87,9 +88,12 @@ function markFetching(rows: readonly DashboardRow[]): void {
 }
 
 function applyReading(key: string, snapshot: QuotaSnapshot, errorOverride?: string): void {
-  patchReading(key, (previous) => snapshot.error
-    ? { reading: previous?.reading, error: errorOverride ?? snapshot.message ?? 'The quota update failed.', fetching: false }
-    : { reading: snapshot, error: undefined, fetching: false })
+  patchReading(key, (previous) => {
+    if (snapshot.error) return { reading: previous?.reading, error: errorOverride ?? snapshot.message ?? 'The quota update failed.', fetching: false }
+    return { reading: isOlderReading(snapshot, previous?.reading) ? previous?.reading : snapshot, error: undefined, fetching: false }
+  })
+  // An open profile's pane strip, guard and wake read the engine's state, not this dialog's.
+  if (!snapshot.error) quotaCommands().recordReading(key, snapshot)
 }
 
 async function backgroundRead(row: DashboardRow, api: AgentQuotaAPI): Promise<QuotaSnapshot> {

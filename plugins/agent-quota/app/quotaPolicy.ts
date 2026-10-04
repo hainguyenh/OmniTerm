@@ -77,6 +77,15 @@ export function isFresh(snapshot: QuotaSnapshot | undefined, now: number): snaps
   return !!snapshot && !snapshot.error && snapshot.windows.length > 0 && now - snapshot.fetchedAt <= FRESH_MS
 }
 
+/**
+ * A good reading taken before the one already held. Claude's `-p /usage` draws no limits panel
+ * while no 5-hour session is running, so the sidecar falls back to the usage Claude Code cached in
+ * its config — often older than the panel the user just read; that must never roll the profile back.
+ */
+export function isOlderReading(snapshot: QuotaSnapshot, held: QuotaSnapshot | undefined): boolean {
+  return !snapshot.error && !!held && snapshot.fetchedAt < held.fetchedAt
+}
+
 export function windowOf(snapshot: QuotaSnapshot | undefined, kind: WindowKind): QuotaWindow | undefined {
   return snapshot?.windows.find((window) => window.kind === kind)
 }

@@ -72,6 +72,13 @@ describe('parseClaudeUsage', () => {
     })
   })
 
+  it('reads the last session window when a screen holds more than one panel', () => {
+    expect(parseClaudeUsage('Current session: 5% used\nCurrent session: 12% used', NOW)).toMatchObject({
+      ok: true,
+      windows: [{ kind: 'session', usedPct: 12 }],
+    })
+  })
+
   it('drops a reset date too far ahead to be real', () => {
     expect(parseClaudeUsage('Current session: 5% used · resets 2026-12-25T00:00:00Z', NOW)).toEqual({
       ok: true,

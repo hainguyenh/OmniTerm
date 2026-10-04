@@ -221,6 +221,28 @@ describe('QuotaEngine', () => {
     expect(profile.nextFetchAt - at).toBe(30_000)
   })
 
+  it('never rolls a newer manual reading back to an older background one (regression)', async () => {
+    const { engine, run, setUsage, advance } = setup()
+    await run()
+    const key = 'claude:c:\\p\\work'
+    // The user read /usage by hand a minute later; the idle profile's `-p /usage` then falls back
+    // to the older reading Claude Code cached in its config.
+    engine.recordReading(key, reading(70, 30, T0 + 60_000))
+    engine.recordReading('claude:not-open', reading(1))
+    await engine.settle()
+    setUsage(reading(40, 20, T0))
+    updateQuota((state) => ({ ...state, profiles: { ...state.profiles, [key]: { ...state.profiles[key], nextFetchAt: 0 } } }))
+    const at = advance(120_000)
+    await run(at)
+    const profile = getQuotaState().profiles[key]
+    expect(profile.lastGood).toEqual(reading(70, 30, T0 + 60_000))
+    expect(profile.snapshot).toEqual(reading(70, 30, T0 + 60_000))
+    expect(profile.history.map((sample) => sample.usedPct)).toEqual([40, 70])
+    expect(profile).toMatchObject({ fetching: false, errorStreak: 0 })
+    expect(profile.nextFetchAt).toBeGreaterThan(at)
+    expect(getQuotaState().profiles['claude:not-open']).toBeUndefined()
+  })
+
   it('wakes by hand for one terminal or every active profile, skipping a spent week', async () => {
     const { api, run, engine } = setup()
     await run()

@@ -138,6 +138,28 @@ export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = f
                   onChange={(event) => patch({ hardStopAtPct: clampLimit(Number(event.target.value)) })} />%
               </label>
             </div>
+            <CompactSwitch
+              label="Auto-continue on interrupted response"
+              note="send prompt if response stopped arriving after resume"
+              checked={config.resumeRecovery.enabled}
+              onChange={() => patch({ resumeRecovery: { ...config.resumeRecovery, enabled: !config.resumeRecovery.enabled } })}
+              ariaLabel={`Auto-continue ${name} on interrupted response`}
+            />
+            {config.resumeRecovery.enabled && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-theme-dim">
+                <label className="flex items-center gap-1.5" title="Seconds to wait after resume before checking for interrupted response error.">
+                  Check delay (s)
+                  <input type="number" min={1} max={30} value={config.resumeRecovery.delaySeconds} className={`${FIELD} w-14`}
+                    onChange={(event) => patch({ resumeRecovery: { ...config.resumeRecovery, delaySeconds: minutes(event.target.value, 1, 30) } })} />
+                </label>
+                <label className="flex flex-1 min-w-[12rem] items-center gap-1.5" title="Command to send into the terminal when the interrupted error is detected (e.g. continue or tiếp tục).">
+                  Continue command
+                  <input type="text" maxLength={120} value={config.resumeRecovery.prompt} className={`${FIELD} flex-1`}
+                    aria-label={`${name} continue command`}
+                    onChange={(event) => patch({ resumeRecovery: { ...config.resumeRecovery, prompt: event.target.value } })} />
+                </label>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-1.5 text-theme-dim">

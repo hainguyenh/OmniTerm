@@ -12,6 +12,7 @@ import { clearOverrides, getQuotaState, registerQuotaCommands, setQuickOpen, upd
 import { parseQuotaConfig } from './quotaConfig'
 import { QuotaEngine } from './quotaEngine'
 import { holdForLaunch, LIVE_PROBE_IO, probeUsageInline, releaseLaunchHold } from './inlineUsageProbe'
+import { clearAllResumeRecovery } from './resumeRecovery'
 import { DangerConfirmDialog, QuotaNotices } from './QuotaOverlays'
 import { QuotaProfilesDashboard } from './QuotaProfilesDashboard'
 import { QuotaQuickPopover } from './QuotaQuickPopover'
@@ -123,6 +124,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       resumeAll: () => engine.resumeAll(),
       readUsage: (sessionId) => engine.readUsage(sessionId),
       cancelUsageRead: (sessionId) => engine.cancelUsageRead(sessionId),
+      recordReading: (profileKey, snapshot) => engine.recordReading(profileKey, snapshot),
       openSettings: () => {
         setQuickOpen(false)
         latest.current.openSettings()
@@ -136,6 +138,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       unregister()
       engineRef.current = null
       clearOverrides()
+      clearAllResumeRecovery()
       // Leaving (plugin disabled, window closing): nothing may stay frozen without a guard to thaw it.
       void api.resumeAll().catch((error: unknown) => diag.error('[agentQuota] resume-all on shutdown failed', error))
     }
