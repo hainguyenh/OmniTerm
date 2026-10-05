@@ -77,3 +77,9 @@ fn refuses_images_over_the_ceiling() {
     let error = read_image_file(&root_str(&root), "huge.webp", &[]).expect_err("too large");
     assert!(error.contains("viewer limit is 25.0 MB"), "{error}");
 }
+
+#[test]
+fn refuses_missing_image_file() {
+    let (_dir, root) = workspace();
+    assert!(read_image_file(&root_str(&root), "missing.png", &[]).is_err());
+}

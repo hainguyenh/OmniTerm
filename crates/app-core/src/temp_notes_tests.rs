@@ -83,4 +83,22 @@ fn test_temp_notes_edge_cases_and_filtering() {
     let list = list_temp_notes(&non_existent).expect("list filtered");
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].id, "note-sub");
+
+    // multiple notes exercise sorting by mtime
+    let written2 = write_temp_note(&non_existent, "note-sub2", "Sub Note 2").expect("write note 2");
+    assert_eq!(written2.id, "note-sub2");
+    let list_multi = list_temp_notes(&non_existent).expect("list multi");
+    assert_eq!(list_multi.len(), 2);
+
+    // write fails when temp_dir is a file
+    let file_as_dir = dir.path().join("file_not_dir");
+    std::fs::write(&file_as_dir, b"not a directory").expect("write file");
+    assert!(write_temp_note(&file_as_dir, "note-fail", "content").is_err());
+    assert!(list_temp_notes(&file_as_dir).is_err());
+
+    // write and delete fail when note path is an existing directory
+    let note_dir_path = non_existent.join("note-is-dir.txt");
+    std::fs::create_dir(&note_dir_path).expect("create note dir");
+    assert!(write_temp_note(&non_existent, "note-is-dir", "content").is_err());
+    assert!(delete_temp_note(&non_existent, "note-is-dir").is_err());
 }
