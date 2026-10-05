@@ -19,7 +19,8 @@ fn pasted_images_land_in_the_app_attachments_folder_and_are_listed() {
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with("paste-") && name.ends_with(".png")));
 
-    let listing = tauri::async_runtime::block_on(list_attachments(handle.clone(), None)).expect("list");
+    let listing =
+        tauri::async_runtime::block_on(list_attachments(handle.clone(), None)).expect("list");
     assert_eq!(listing.dir, dir.to_string_lossy());
     assert!(listing.files.iter().any(|info| info.path == path));
 
@@ -38,12 +39,39 @@ fn pasted_images_land_in_the_app_attachments_folder_and_are_listed() {
         "sess-abcdef"
     );
 
-    let session_listing = tauri::async_runtime::block_on(list_attachments(
-        handle,
-        Some("sess-abc/def".into()),
-    ))
-    .expect("session list");
-    assert!(session_listing.files.iter().any(|info| info.path == session_path));
+    let session_listing =
+        tauri::async_runtime::block_on(list_attachments(handle, Some("sess-abc/def".into())))
+            .expect("session list");
+    assert!(session_listing
+        .files
+        .iter()
+        .any(|info| info.path == session_path));
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn clear_attachments_and_import_clipboard_files_lifecycle() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+    let dir = attachments_dir(&handle, None).expect("attachments dir");
+
+    let report = tauri::async_runtime::block_on(clear_attachments(handle.clone(), None))
+        .expect("clear attachments");
+    assert_eq!(report.removed, 0);
+
+    let path = tauri::async_runtime::block_on(save_temp_image(handle.clone(), vec![1, 2, 3], None))
+        .expect("save pasted image");
+    assert!(PathBuf::from(&path).exists());
+    let report = tauri::async_runtime::block_on(clear_attachments(handle.clone(), None))
+        .expect("clear attachments");
+    assert_eq!(report.removed, 1);
+    assert!(!PathBuf::from(&path).exists());
+
+    let imported = tauri::async_runtime::block_on(import_clipboard_files(handle.clone(), None))
+        .expect("import clipboard files");
+    assert!(imported.is_empty());
 
     let _ = fs::remove_dir_all(&dir);
 }
