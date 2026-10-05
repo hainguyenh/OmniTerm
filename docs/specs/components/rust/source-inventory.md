@@ -376,6 +376,7 @@ ename_folder<br>`crates/app-core/src/workspace_model.rs` | Mutate/persist contro
 | `add_worktree`<br>`crates/app-core/src/git_branch_tools.rs` | Check a branch out into a new worktree | Work on a branch without switching the main checkout | Run git worktree add at `<repo>.worktrees/<branch>`; remote branches get a tracking branch | When user opens a branch in a worktree |
 | `default_worktree_path`<br>`crates/app-core/src/git_branch_tools.rs` | Default worktree location | Predictable sibling folder | Join `<repo>.worktrees` with the flattened branch name | When adding a worktree without a path |
 | `git_update_branch` / `git_rename_branch` / `git_set_upstream` / `git_add_worktree`<br>`src-tauri/src/git_branch_commands.rs` | IPC endpoints for branch maintenance | Expose branch tools to renderer | Resolve repo root and dispatch the core function on the blocking pool | On branch tool actions from UI |
+| `on_blocking_pool` / `in_repo`<br>`src-tauri/src/git_branch_commands.rs` | Shared runners for every git IPC command | Keep git child processes off the IPC thread | Run the work on the blocking pool (inside the repository containing `cwd` for `in_repo`) and report a panicked task as an error | On every git command |
 
 ## State and data
 
