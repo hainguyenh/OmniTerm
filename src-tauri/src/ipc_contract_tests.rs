@@ -23,8 +23,11 @@ mod git_ipc;
 mod persistence;
 #[path = "ipc_runtime_tests.rs"]
 mod runtime;
+#[path = "ipc_temp_note_tests.rs"]
+mod temp_note_ipc;
 #[path = "ipc_text_file_tests.rs"]
 mod text_file_ipc;
+
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
 #[path = "ipc_workspace_tests.rs"]

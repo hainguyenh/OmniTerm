@@ -85,10 +85,12 @@ mod app_commands;
 mod connection_commands;
 #[path = "command_edge_tests.rs"]
 mod edge_commands;
-#[path = "command_persistence_tests.rs"]
-mod persistence;
 #[path = "command_file_view_tests.rs"]
 mod file_view_command_tests;
+#[path = "command_persistence_tests.rs"]
+mod persistence;
+#[path = "command_temp_note_tests.rs"]
+mod temp_note_commands;
 #[path = "command_text_file_tests.rs"]
 mod text_file_command_tests;
 #[path = "command_workspace_tests.rs"]

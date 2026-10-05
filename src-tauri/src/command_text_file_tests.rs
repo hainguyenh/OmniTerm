@@ -2,8 +2,9 @@
 //! settings-backed cap and exclusions, and the conflict round trip.
 
 use super::*;
-use crate::text_file_commands::{open_text_file, save_text_file};
+use crate::text_file_commands::{create_text_file, open_text_file, save_text_file};
 use app_protocol::text_file::{TextFileSaveOutcome, TextFileSaveRequest};
+
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -115,11 +116,40 @@ fn text_file_commands_apply_the_configured_cap_and_exclusions() {
     .expect_err("over the cap");
     assert!(large.contains("Max file size to open"));
     let blocked = block_on(save_text_file(
-        app,
-        workspace.id,
+        app.clone(),
+        workspace.id.clone(),
         format!("{folder}/notes.md"),
         request("x", 0, 0),
     ))
     .expect_err("excluded kinds cannot be saved either");
     assert!(blocked.contains("cannot be viewed"));
+}
+
+#[test]
+fn text_file_commands_create_file() {
+    let fixture = MockApp::new();
+    let app = fixture.handle();
+    let root = TempDir::new().expect("temp root");
+    let workspace = block_on(workspace::add_workspace(
+        app.clone(),
+        root.path().to_string_lossy().into_owned(),
+    ))
+    .expect("add workspace");
+    let folder = workspace.folders[0].id.clone();
+
+    let created = block_on(create_text_file(
+        app.clone(),
+        workspace.id.clone(),
+        format!("{folder}/new-doc.txt"),
+    ))
+    .expect("create file");
+    assert_eq!(created, format!("{folder}/new-doc.txt"));
+    assert!(root.path().join("new-doc.txt").is_file());
+
+    assert!(block_on(create_text_file(
+        app,
+        workspace.id,
+        format!("{folder}/new-doc.txt"),
+    ))
+    .is_err());
 }

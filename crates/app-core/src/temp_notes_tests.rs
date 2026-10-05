@@ -48,3 +48,39 @@ fn test_extract_title_fallback() {
     assert_eq!(extracted.chars().count(), 41); // 40 chars + ellipsis
     assert!(extracted.ends_with('…'));
 }
+
+#[test]
+fn test_temp_notes_edge_cases_and_filtering() {
+    let dir = tempdir().expect("temp dir");
+    let non_existent = dir.path().join("sub_temp");
+
+    // list on non-existent dir returns empty vec
+    let empty = list_temp_notes(&non_existent).expect("non existent dir list");
+    assert!(empty.is_empty());
+
+    // write creates the directory if it didn't exist
+    let written = write_temp_note(&non_existent, "note-sub", "Sub Note").expect("write sub note");
+    assert_eq!(written.id, "note-sub");
+    assert!(non_existent.exists());
+
+    // invalid IDs error on read, write, delete
+    assert!(read_temp_note(&non_existent, "invalid/id").is_err());
+    assert!(write_temp_note(&non_existent, "invalid/id", "content").is_err());
+    assert!(delete_temp_note(&non_existent, "invalid/id").is_err());
+
+    // non-existent note errors on read
+    assert!(read_temp_note(&non_existent, "missing-note").is_err());
+
+    // non-existent note delete succeeds cleanly
+    assert!(delete_temp_note(&non_existent, "missing-note").is_ok());
+
+    // list filters out subdirectories, non-txt files and invalid-id files
+    std::fs::create_dir(non_existent.join("nested_folder")).expect("create folder");
+    std::fs::write(non_existent.join("readme.md"), b"markdown").expect("write md");
+    std::fs::write(non_existent.join("bad id.txt"), b"invalid stem").expect("write bad stem");
+    std::fs::write(non_existent.join(".txt"), b"empty stem").expect("write empty stem");
+
+    let list = list_temp_notes(&non_existent).expect("list filtered");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, "note-sub");
+}
