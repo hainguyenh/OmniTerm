@@ -53,6 +53,10 @@ export function useAppShortcuts({
       const inTerminal = active instanceof Element && !!active.closest('.xterm')
       const inPane = inTerminal || (active instanceof Element && !!active.closest('[data-pane-header]'))
       const isInput = (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) && !inTerminal
+      // The code editor claims a key by handling it (Ctrl+/ toggles a comment, Ctrl+D adds a cursor),
+      // which it marks with preventDefault. Those stay the editor's; every key it leaves alone still
+      // reaches the app shortcuts below, as in VS Code.
+      if (active instanceof Element && active.closest('.cm-editor') && e.defaultPrevented) return
 
       // A focused terminal wins the shell/agent's own control keys (Ctrl+W, Ctrl+B, Ctrl+N, Ctrl+P,
       // Ctrl+/, Ctrl+,, …) back from the app chrome — only the zoom trio and any Ctrl+Shift/Alt combo

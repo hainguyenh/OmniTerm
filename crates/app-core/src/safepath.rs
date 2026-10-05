@@ -106,7 +106,7 @@ pub fn canonical(path: &Path) -> Result<PathBuf, String> {
 }
 
 /// True if `candidate` is a strict descendant of `root`. Both must already be canonicalized.
-fn is_inside(root: &Path, candidate: &Path) -> bool {
+pub(crate) fn is_inside(root: &Path, candidate: &Path) -> bool {
     candidate != root && candidate.starts_with(root)
 }
 
@@ -119,7 +119,7 @@ pub const LAUNCHABLE_EXTS: [&str; 5] = ["bat", "cmd", "ps1", "sh", "rdp"];
 /// The containment half of `contained`, split out because the viewer's gate is a deny-list while the
 /// run/edit gates are allow-lists. Both halves must keep running in both directions: containment is
 /// what stops a crafted webview request from reaching outside the pinned workspace at all.
-fn contained_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
+pub fn contained_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
     let real_root = canonical(Path::new(root))?;
     let script_buf = Path::new(script_path);
     let target = if script_buf.is_relative() {
@@ -136,7 +136,7 @@ fn contained_path(root: &str, script_path: &str) -> Result<PathBuf, String> {
 }
 
 /// Lowercased extension of an already-resolved path, or `""` for an extensionless name.
-fn ext_of(path: &Path) -> String {
+pub(crate) fn ext_of(path: &Path) -> String {
     path.extension()
         .map(|e| e.to_string_lossy().to_lowercase())
         .unwrap_or_default()
@@ -247,7 +247,7 @@ pub fn safe_viewable_path_excluding(
 }
 
 /// Render a byte count the way the size-limit message needs to read.
-fn human_bytes(bytes: u64) -> String {
+pub(crate) fn human_bytes(bytes: u64) -> String {
     const MIB: u64 = 1024 * 1024;
     const KIB: u64 = 1024;
     if bytes >= MIB {
@@ -265,7 +265,17 @@ fn human_bytes(bytes: u64) -> String {
 /// Bounded rather than whole-file so the check costs the same for a 20 MB log as for a 200-byte
 /// script. Every binary format that matters puts a NUL in its header — this is a backstop for
 /// something `VIEW_DENY_EXTS` did not name, not a classifier.
-const SNIFF_BYTES: usize = 8 * 1024;
+pub(crate) const SNIFF_BYTES: usize = 8 * 1024;
+
+/// The refusal for a file over the configured open cap. It names the setting that raises the cap,
+/// which a generic "too large" could not.
+pub(crate) fn open_limit_error(size: u64, max_bytes: u64) -> String {
+    format!(
+        "This file is {} and the viewer limit is {}. Raise \"Max file size to open\" in Settings to view it.",
+        human_bytes(size),
+        human_bytes(max_bytes)
+    )
+}
 
 /// Decode bytes as text, refusing anything that reads as binary.
 ///
@@ -278,7 +288,7 @@ const SNIFF_BYTES: usize = 8 * 1024;
 /// No BOM stripping. A UTF-8 BOM is how `powershell.exe` recognizes an encoded script, and the editor
 /// writes back exactly what it was handed, so removing one here would silently change what the shell
 /// reads on the next run.
-fn sniff_text(bytes: Vec<u8>) -> Result<String, String> {
+pub(crate) fn sniff_text(bytes: Vec<u8>) -> Result<String, String> {
     if bytes[..bytes.len().min(SNIFF_BYTES)].contains(&0) {
         return Err("this looks like a binary file, not text".to_string());
     }
@@ -305,11 +315,7 @@ pub fn read_viewable_excluding(
     let real = safe_viewable_path_excluding(root, script_path, excluded)?;
     let size = fs::metadata(&real).map_err(|e| e.to_string())?.len();
     if size > max_bytes {
-        return Err(format!(
-            "This file is {} and the viewer limit is {}. Raise \"Max file size to open\" in Settings to view it.",
-            human_bytes(size),
-            human_bytes(max_bytes)
-        ));
+        return Err(open_limit_error(size, max_bytes));
     }
     sniff_text(fs::read(&real).map_err(|e| e.to_string())?)
 }

@@ -43,15 +43,15 @@ describe('isDefaultFilter', () => {
   it('ignores the path selection, which only exists once the mode has already changed', () => {
     expect(isDefaultFilter(DEFAULT_TREE_FILTER)).toBe(true)
     expect(isDefaultFilter({ ...DEFAULT_TREE_FILTER, paths: ['a.sh'] })).toBe(true)
-    expect(isDefaultFilter({ ...DEFAULT_TREE_FILTER, mode: 'all' })).toBe(false)
+    expect(isDefaultFilter({ ...DEFAULT_TREE_FILTER, mode: 'scripts' })).toBe(false)
     expect(isDefaultFilter({ ...DEFAULT_TREE_FILTER, showEmptyDirs: true })).toBe(false)
   })
 })
 
 describe('filterSummary', () => {
   it('names the mode, and counts only where the count is the whole story', () => {
-    expect(filterSummary(DEFAULT_TREE_FILTER, 4)).toBe('Scripts')
-    expect(filterSummary({ ...DEFAULT_TREE_FILTER, mode: 'all' }, 9)).toBe('All files')
+    expect(filterSummary(DEFAULT_TREE_FILTER, 4)).toBe('All files')
+    expect(filterSummary({ ...DEFAULT_TREE_FILTER, mode: 'scripts' }, 9)).toBe('Scripts')
     expect(filterSummary({ ...DEFAULT_TREE_FILTER, mode: 'selected' }, 3)).toBe('3 files')
     expect(filterSummary({ ...DEFAULT_TREE_FILTER, mode: 'selected' }, 1)).toBe('1 file')
   })
@@ -70,15 +70,37 @@ describe('discoverKinds', () => {
 })
 
 describe('applyFilter', () => {
-  // The default hides empty folders, so `docs` — which holds only a .txt — is not worth a row.
-  it('shows scripts and the folders holding them by default', () => {
-    expect(ids(applyFilter(scan, DEFAULT_TREE_FILTER))).toEqual([
+  it('shows scripts and the folders holding them in scripts mode', () => {
+    expect(ids(applyFilter(scan, { ...DEFAULT_TREE_FILTER, mode: 'scripts' }))).toEqual([
       'infra', 'infra/deploy.ps1', 'infra/host.rdp',
     ])
   })
 
-  it('shows every file in all mode', () => {
-    expect(ids(applyFilter(scan, { ...DEFAULT_TREE_FILTER, mode: 'all' })).length).toBe(scan.length)
+  it('shows every file by default in all mode', () => {
+    expect(ids(applyFilter(scan, DEFAULT_TREE_FILTER)).length).toBe(scan.length)
+  })
+
+  // Zed/VS Code parity: an empty folder is still part of the project's file tree.
+  it('keeps empty folders in all mode', () => {
+    expect(ids(applyFilter([...scan, dir('logs')], DEFAULT_TREE_FILTER))).toContain('logs')
+  })
+
+  // `node_modules`, `dist`, … belong to the file explorer, never to a script or type view.
+  it('shows deferred folders and their contents only in all mode', () => {
+    const deferred = [
+      { ...dir('node_modules'), deferred: true },
+      { ...dir('node_modules/pkg'), deferred: true },
+      file('node_modules/pkg/run.sh', 'sh'),
+      file('node_modules/setup.ps1', 'ps1'),
+    ]
+    const withDeps = [...scan, ...deferred]
+    expect(ids(applyFilter(withDeps, DEFAULT_TREE_FILTER))).toEqual(expect.arrayContaining(deferred.map((e) => e.id)))
+    expect(ids(applyFilter(withDeps, { ...DEFAULT_TREE_FILTER, mode: 'scripts', showEmptyDirs: true }))).toEqual([
+      'docs', 'infra', 'infra/deploy.ps1', 'infra/host.rdp',
+    ])
+    expect(ids(applyFilter(withDeps, { ...DEFAULT_TREE_FILTER, mode: 'types', kinds: ['ps1'] }, new Set(['node_modules'])))).toEqual([
+      'infra', 'infra/deploy.ps1',
+    ])
   })
 
   it('shows only the ticked files in selected mode', () => {
@@ -127,7 +149,7 @@ describe('applyFilter', () => {
   // folder loses its parent row and gets re-synthesised as a placeholder by the tree builder.
   it('keeps the ancestors of a `keepDirs` member that holds no matching file itself', () => {
     const deep = [dir('a'), dir('a/b'), dir('a/b/c'), file('a/b/c/notes.txt', 'txt')]
-    const filtered = applyFilter(deep, DEFAULT_TREE_FILTER, new Set(['a/b/c']))
+    const filtered = applyFilter(deep, { ...DEFAULT_TREE_FILTER, mode: 'scripts' }, new Set(['a/b/c']))
     expect(ids(filtered)).toEqual(['a', 'a/b', 'a/b/c'])
   })
 })

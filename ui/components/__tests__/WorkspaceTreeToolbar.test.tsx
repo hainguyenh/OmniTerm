@@ -7,7 +7,7 @@ import WorkspaceTreeToolbar from '../WorkspaceTreeToolbar'
 import { DEFAULT_TREE_FILTER, type TreeFilter } from '../../utils/workspaceFilter'
 
 describe('WorkspaceTreeToolbar', () => {
-  it('renders the filter summary label for default scripts mode', () => {
+  it('renders the filter summary label for default all files mode', () => {
     render(<WorkspaceTreeToolbar
       filter={DEFAULT_TREE_FILTER}
       fileCount={0}
@@ -20,16 +20,16 @@ describe('WorkspaceTreeToolbar', () => {
       scanning={false}
       onRescan={vi.fn()}
     />)
-    expect(screen.getByText('Scripts')).toBeInTheDocument()
+    expect(screen.getByText('All files')).toBeInTheDocument()
   })
 
-  it(' renders filter label "All files" for all mode', () => {
-    const filter: TreeFilter = { ...DEFAULT_TREE_FILTER, mode: 'all' }
+  it('renders filter label "Scripts" for scripts mode', () => {
+    const filter: TreeFilter = { ...DEFAULT_TREE_FILTER, mode: 'scripts' }
     render(<WorkspaceTreeToolbar
       filter={filter} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    expect(screen.getByText('All files')).toBeInTheDocument()
+    expect(screen.getByText('Scripts')).toBeInTheDocument()
   })
 
   it('renders count label for selected mode', () => {
@@ -47,7 +47,7 @@ describe('WorkspaceTreeToolbar', () => {
       filter={DEFAULT_TREE_FILTER} fileCount={0} onOpenFilterMenu={onOpenFilterMenu} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    fireEvent.click(screen.getByText('Scripts'))
+    fireEvent.click(screen.getByText('All files'))
     expect(onOpenFilterMenu).toHaveBeenCalledTimes(1)
     const rect = onOpenFilterMenu.mock.calls[0][0]
     expect(rect).toBeTruthy()
@@ -134,12 +134,12 @@ describe('WorkspaceTreeToolbar', () => {
   })
 
   it('tints filter triggers when filter is not default', () => {
-    const filter: TreeFilter = { ...DEFAULT_TREE_FILTER, mode: 'all' }
+    const filter: TreeFilter = { ...DEFAULT_TREE_FILTER, mode: 'scripts' }
     render(<WorkspaceTreeToolbar
       filter={filter} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    const labelBtn = screen.getByText('All files')
+    const labelBtn = screen.getByText('Scripts')
     expect(labelBtn.className).toContain('text-[var(--theme-accent)]')
   })
 })

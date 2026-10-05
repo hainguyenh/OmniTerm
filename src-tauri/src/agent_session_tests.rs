@@ -225,3 +225,25 @@ async fn transcript_export_rejects_non_uuid_ids_and_renders_the_session() {
         .expect("export valid session");
     assert!(text.contains("Full conversation"), "{text}");
 }
+
+#[test]
+fn model_command_reads_the_profile_config_and_ignores_unknown_agents() {
+    let temp = tempdir().expect("tempdir");
+    fs::write(temp.path().join("settings.json"), r#"{"model": "opus"}"#).expect("write settings");
+    let profile = Some(temp.path().to_string_lossy().into_owned());
+
+    let info = tauri::async_runtime::block_on(resolve_agent_model(
+        "claude".to_string(),
+        profile.clone(),
+        None,
+    ))
+    .expect("model from the profile settings");
+    assert_eq!(info.display, "Claude Opus");
+
+    let unknown = tauri::async_runtime::block_on(resolve_agent_model(
+        "unknown-agent".to_string(),
+        profile,
+        Some("C:/work".to_string()),
+    ));
+    assert!(unknown.is_none());
+}

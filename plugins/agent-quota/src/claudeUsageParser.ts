@@ -114,7 +114,9 @@ export function parseClaudeUsage(raw: string, now: number = Date.now()): ClaudeU
         : reading
     ))
   const byKind = (kind: WindowKind) => readings.filter((reading) => reading.kind === kind)
-  const session = byKind('session')[0]
+  // A pane screen can hold several panels; the last one drawn is the freshest.
+  const sessions = byKind('session')
+  const session = sessions[sessions.length - 1]
   if (!session) {
     return { ok: false, error: 'parse_failed', message: 'The /usage output named no session window.' }
   }

@@ -8,7 +8,7 @@ import { intervalForProfile } from './profileInterval'
 import { instanceKeyOf, profileKeyOf } from './profileKey'
 import { AGENT_LABELS, type AgentConfig } from './quotaConfig'
 import { isHeld } from './quotaGuard'
-import { windowOf } from './quotaPolicy'
+import { isOlderReading, windowOf } from './quotaPolicy'
 import { getQuotaState, patchProfile, pushNotice, terminalConfig, updateQuota } from './quotaStore'
 import { pushSample } from './smartInterval'
 import { dueWake, rememberReset, weekSpent } from './wakePolicy'
@@ -167,6 +167,11 @@ export class QuotaEngine {
     cancelUsageRead(sessionId)
   }
 
+  /** A reading taken outside the engine (the Profiles dialog); a profile with no open pane is left alone. */
+  recordReading(profileKey: string, snapshot: QuotaSnapshot): void {
+    if (getQuotaState().profiles[profileKey]) this.manualRead.record(profileKey, snapshot)
+  }
+
   private async detect(now: number): Promise<void> {
     this.detecting = true
     try {
@@ -303,14 +308,16 @@ export class QuotaEngine {
     const global = getQuotaState().config.agents[profile.agent]
     const wakeDelays = this.configsForProfile(key).map((config) => config.wake.delayMinutes)
     const wakeDelay = wakeDelays.length > 0 ? Math.max(...wakeDelays) : global.wake.delayMinutes
-    patchProfile(key, (current) => ({
-      snapshot,
-      lastGood: snapshot.error ? current.lastGood : snapshot,
-      history: !snapshot.error && session ? pushSample(current.history, { at: now, usedPct: session.usedPct }) : current.history,
-      errorStreak: snapshot.error ? current.errorStreak + 1 : 0,
-      wake: snapshot.error ? current.wake : rememberReset(current.wake, snapshot, wakeDelay, now),
-    }))
-    await runGuards(this.deps.api, key, snapshot, now)
+    if (!isOlderReading(snapshot, profile.lastGood)) {
+      patchProfile(key, (current) => ({
+        snapshot,
+        lastGood: snapshot.error ? current.lastGood : snapshot,
+        history: !snapshot.error && session ? pushSample(current.history, { at: now, usedPct: session.usedPct }) : current.history,
+        errorStreak: snapshot.error ? current.errorStreak + 1 : 0,
+        wake: snapshot.error ? current.wake : rememberReset(current.wake, snapshot, wakeDelay, now),
+      }))
+      await runGuards(this.deps.api, key, snapshot, now)
+    }
     patchProfile(key, (current) => ({ fetching: false, nextFetchAt: now + intervalForProfile(current, this.inputs.busy, this.deps.random, now) }))
   }
 

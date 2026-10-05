@@ -344,6 +344,8 @@ function createTauriAPI(): any {
       detect: () => invoke<DetectedPaneAgent[]>('agent_quota_detect').catch(() => []),
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) =>
         invoke<string | null>('resolve_claude_session', { profileDir, cwd, sinceEpochSecs }).catch(() => null),
+      resolveModel: (agent: string, profileDir?: string, cwd?: string) =>
+        invoke<{ model: string; effort?: string; display: string } | null>('resolve_agent_model', { agent, profileDir, cwd }).catch(() => null),
       // Only on an explicit Save: the rendered conversation goes to the file the user picks.
       exportClaudeTranscript: (profileDir: string, sessionId: string) =>
         invoke<string>('export_claude_transcript', { profileDir, sessionId }).catch(() => null),

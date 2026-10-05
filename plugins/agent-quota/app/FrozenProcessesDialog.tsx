@@ -6,7 +6,8 @@ import { createAgentQuotaAPI } from './agentQuotaAPI'
 import { useDialogDrag } from './dialogDrag'
 import { AGENT_LABELS } from './quotaConfig'
 import { formatCountdown } from './quotaPolicy'
-import { quotaCommands, setReviewSession, useQuota } from './quotaStore'
+import { getQuotaState, quotaCommands, setReviewSession, terminalConfig, useQuota } from './quotaStore'
+import { scheduleResumeRecovery } from './resumeRecovery'
 
 /**
  * Review modal dialog showing every process and thread suspended under the current agent profile.
@@ -99,6 +100,11 @@ export function FrozenProcessesDialog() {
           const next = prev.filter((p) => p.pid !== pid)
           if (next.length === 0) {
             handleClose()
+            const currentTerminal = getQuotaState().terminals[reviewSessionId]
+            if (currentTerminal) {
+              const cfg = terminalConfig(getQuotaState(), currentTerminal)
+              scheduleResumeRecovery(reviewSessionId, cfg.resumeRecovery)
+            }
           }
           return next
         })

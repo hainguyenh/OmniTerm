@@ -1,10 +1,10 @@
 #[path = "../../plugins/agent-quota/native/agent_quota.rs"]
 pub mod agent_quota;
+pub mod agent_session;
 #[path = "../../plugins/always-awake/native/always_awake.rs"]
 pub mod always_awake;
 mod app_utils;
 mod attachments;
-pub mod agent_session;
 mod launcher;
 mod os_actions;
 mod plugin_commands;
@@ -17,10 +17,16 @@ mod window_control;
 
 #[cfg(test)]
 mod command_coverage_tests;
+mod file_view_commands;
+mod git_branch_commands;
+pub mod git_commands;
+#[cfg(test)]
+mod git_commands_tests;
 #[cfg(test)]
 mod ipc_contract_tests;
 #[cfg(test)]
 mod test_support;
+mod text_file_commands;
 
 // Public so the integration tests under tests/ can drive the real launch and command paths.
 pub mod adhoc;
@@ -35,10 +41,10 @@ pub use app_protocol::{openshell, session_status, shell_spec};
 pub use app_core::win_job;
 pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 pub mod pty;
-mod pty_lease;
 mod pty_interrupt;
-mod pty_status;
+mod pty_lease;
 pub mod pty_resolve;
+mod pty_status;
 pub mod safepath_command;
 pub use app_core::safepath;
 pub use app_core::workspace_scan;
@@ -287,6 +293,9 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace::run_script,
         workspace::read_script,
         workspace::write_script,
+        text_file_commands::open_text_file,
+        text_file_commands::save_text_file,
+        file_view_commands::open_image_file,
         safepath_command::system_excluded_view_exts,
         workspace_connections::load_workspace_connections,
         workspace_connections::save_workspace_connections,
@@ -324,6 +333,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         agent_quota::agent_quota_get_held,
         agent_quota::agent_quota_resume_pid,
         agent_session::resolve_claude_session,
+        agent_session::resolve_agent_model,
         agent_session::export_claude_transcript,
         agent_session::agent_sessions_load,
         agent_session::agent_sessions_save,
@@ -332,6 +342,43 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         attachments::import_clipboard_files,
         attachments::list_attachments,
         attachments::clear_attachments,
+        // Git
+        git_commands::git_status,
+        git_commands::git_diff,
+        git_commands::git_stage,
+        git_commands::git_unstage,
+        git_commands::git_revert,
+        git_commands::git_commit,
+        git_commands::git_log,
+        git_commands::git_branches,
+        git_commands::git_checkout,
+        git_commands::git_create_branch,
+        git_commands::git_delete_branches,
+        git_commands::git_fetch,
+        git_commands::git_pull,
+        git_commands::git_push,
+        git_commands::git_merge,
+        git_commands::git_rebase,
+        git_commands::git_init,
+        git_commands::git_diff_branch,
+        git_commands::git_blame,
+        git_commands::git_delete_file,
+        git_commands::git_read_file,
+        git_commands::git_read_file_revision,
+        git_commands::git_write_file,
+        git_commands::git_compare_branches,
+        git_commands::git_stash_list,
+        git_commands::git_stash_save,
+        git_commands::git_stash_pop,
+        git_commands::git_stash_apply,
+        git_commands::git_stash_drop,
+        git_commands::git_cherry_pick,
+        git_commands::git_file_history,
+        file_view_commands::git_file_context,
+        git_branch_commands::git_update_branch,
+        git_branch_commands::git_rename_branch,
+        git_branch_commands::git_set_upstream,
+        git_branch_commands::git_add_worktree,
     ])
 }
 
@@ -351,4 +398,3 @@ fn handle_second_instance<R: tauri::Runtime>(app: &tauri::AppHandle<R>, argv: &[
         let _ = window.set_focus();
     }
 }
-

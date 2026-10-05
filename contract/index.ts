@@ -139,6 +139,11 @@ export interface WorkspaceEntry {
    * every file the scan reports; absent for a directory, which has no contents to show.
    */
   viewable?: boolean
+  /**
+   * Set on a directory the skeleton does not descend into (`node_modules`, `dist`, … and everything
+   * below them): its subfolders arrive with its first page (`WorkspaceEntryPage.subfolders`).
+   */
+  deferred?: boolean
 }
 
 /**
@@ -152,6 +157,8 @@ export interface WorkspaceEntryPage {
   total: number
   /** Whether more entries exist past this page. */
   hasMore: boolean
+  /** A deferred folder's direct subfolders, on its first page only; absent otherwise. */
+  subfolders?: WorkspaceEntry[]
 }
 
 /** An action a provider offers for a script (defaults to a single "Run"); lets plugins expand

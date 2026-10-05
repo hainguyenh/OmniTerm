@@ -4,8 +4,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { maskRustNonCode, matchingBrace } from './rust-source-mask.mjs'
+
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']
-const IMPORT_PATTERN = /(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)/g
+// Static/re-export imports, dynamic `import()`, and Vite worker entries. A worker module is reached
+// only through `new URL('./x.worker.ts', import.meta.url)`, never through an import statement.
+const IMPORT_PATTERN = /(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|new\s+URL\(\s*['"]([^'"]+)['"]\s*,\s*import\.meta\.url/g
 
 function walk(dir, found = []) {
   if (!fs.existsSync(dir)) return found
@@ -46,128 +50,6 @@ function resolveImport(importer, specifier, sourceSet) {
   return candidates.find((candidate) => sourceSet.has(candidate)) ?? null
 }
 
-// Replace comments and string/character literals with spaces while preserving offsets. This keeps
-// brace matching stable without mistaking documentation examples or format strings for Rust syntax.
-function maskRustNonCode(source) {
-  const out = [...source]
-  let index = 0
-  let blockDepth = 0
-  let state = 'code'
-  let rawHashes = 0
-
-  const blank = (at) => {
-    if (out[at] !== '\n' && out[at] !== '\r') out[at] = ' '
-  }
-
-  while (index < source.length) {
-    const current = source[index]
-    const next = source[index + 1]
-
-    if (state === 'line-comment') {
-      blank(index)
-      if (current === '\n') state = 'code'
-      index += 1
-      continue
-    }
-    if (state === 'block-comment') {
-      blank(index)
-      if (current === '/' && next === '*') {
-        blank(index + 1)
-        blockDepth += 1
-        index += 2
-      } else if (current === '*' && next === '/') {
-        blank(index + 1)
-        blockDepth -= 1
-        index += 2
-        if (blockDepth === 0) state = 'code'
-      } else {
-        index += 1
-      }
-      continue
-    }
-    if (state === 'string' || state === 'character') {
-      blank(index)
-      if (current === '\\') {
-        blank(index + 1)
-        index += 2
-      } else if ((state === 'string' && current === '"') || (state === 'character' && current === "'")) {
-        state = 'code'
-        index += 1
-      } else {
-        index += 1
-      }
-      continue
-    }
-    if (state === 'raw-string') {
-      blank(index)
-      if (current === '"' && source.slice(index + 1, index + 1 + rawHashes) === '#'.repeat(rawHashes)) {
-        for (let offset = 1; offset <= rawHashes; offset += 1) blank(index + offset)
-        index += rawHashes + 1
-        state = 'code'
-      } else {
-        index += 1
-      }
-      continue
-    }
-
-    if (current === '/' && next === '/') {
-      blank(index)
-      blank(index + 1)
-      state = 'line-comment'
-      index += 2
-      continue
-    }
-    if (current === '/' && next === '*') {
-      blank(index)
-      blank(index + 1)
-      state = 'block-comment'
-      blockDepth = 1
-      index += 2
-      continue
-    }
-    if (current === '"') {
-      blank(index)
-      state = 'string'
-      index += 1
-      continue
-    }
-    if (current === "'") {
-      // A lifetime such as `'a` is code, while a quoted scalar such as `'{'` is a character literal.
-      const close = source.indexOf("'", index + 1)
-      if (close > index + 1 && close - index <= 6) {
-        blank(index)
-        state = 'character'
-      }
-      index += 1
-      continue
-    }
-    if (current === 'r') {
-      const raw = source.slice(index).match(/^r(#{0,16})"/)
-      if (raw) {
-        rawHashes = raw[1].length
-        for (let offset = 0; offset < raw[0].length; offset += 1) blank(index + offset)
-        index += raw[0].length
-        state = 'raw-string'
-        continue
-      }
-    }
-    index += 1
-  }
-  return out.join('')
-}
-
-function matchingBrace(source, openIndex) {
-  let depth = 0
-  for (let index = openIndex; index < source.length; index += 1) {
-    if (source[index] === '{') depth += 1
-    if (source[index] === '}') {
-      depth -= 1
-      if (depth === 0) return index
-    }
-  }
-  return -1
-}
-
 export function findOrphanModules({ root = process.cwd(), sourceRoots, entrypoints }) {
   const absoluteRoot = path.resolve(root)
   const files = sourceRoots.flatMap((sourceRoot) => walk(path.resolve(absoluteRoot, sourceRoot)))
@@ -178,7 +60,7 @@ export function findOrphanModules({ root = process.cwd(), sourceRoots, entrypoin
     const source = fs.readFileSync(file, 'utf8')
     IMPORT_PATTERN.lastIndex = 0
     for (const match of source.matchAll(IMPORT_PATTERN)) {
-      const target = resolveImport(file, match[1] ?? match[2], sourceSet)
+      const target = resolveImport(file, match[1] ?? match[2] ?? match[3], sourceSet)
       if (target) incoming.set(target, (incoming.get(target) ?? 0) + 1)
     }
   }

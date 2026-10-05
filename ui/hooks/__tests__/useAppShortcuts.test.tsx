@@ -163,6 +163,29 @@ describe('useAppShortcuts', () => {
     expect(setAppSettings).toHaveBeenCalledWith({ ...appSettings, darkMode: false })
     cleanup()
   })
+  it('leaves a key the code editor handled to the editor, but not one it ignored', () => {
+    const setAppSettings = vi.fn()
+    const host = document.createElement('div')
+    host.className = 'cm-editor'
+    const content = document.createElement('div')
+    content.tabIndex = 0
+    host.appendChild(content)
+    document.body.appendChild(host)
+    content.focus()
+    renderHook(() => useAppShortcuts({
+      appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+      changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
+      isDetached: false, onToggleFullscreen: vi.fn(),
+    }))
+    const handled = new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true })
+    handled.preventDefault()
+    window.dispatchEvent(handled)
+    expect(setAppSettings).not.toHaveBeenCalled()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
+    expect(setAppSettings).toHaveBeenCalledTimes(1)
+    host.remove()
+  })
+
   it('zooms out inside terminal via changeFontSize', () => {
     const { changeFontSize, cleanup } = setup('xterm')
     window.dispatchEvent(ctrlKey('-'))

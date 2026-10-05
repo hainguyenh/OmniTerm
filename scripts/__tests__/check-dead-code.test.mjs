@@ -29,6 +29,22 @@ test('findOrphanModules follows static, re-export, dynamic, and index imports', 
   }
 })
 
+test('findOrphanModules follows Vite worker URL entries', () => {
+  const root = fixture({
+    'src/main.tsx': "export const make = () => new Worker(new URL('./parse.worker.ts', import.meta.url), { type: 'module' })",
+    'src/parse.worker.ts': 'self.postMessage(1)',
+    'src/unreached.worker.ts': 'self.postMessage(2)',
+  })
+  try {
+    assert.deepEqual(
+      findOrphanModules({ root, sourceRoots: ['src'], entrypoints: ['src/main.tsx'] }),
+      ['src/unreached.worker.ts'],
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('findOrphanModules reports production files with no importer', () => {
   const root = fixture({
     'src/main.tsx': "import './used'",

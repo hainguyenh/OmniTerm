@@ -55,7 +55,11 @@ function launcherFor(found: { launcher?: string; profileName?: string; agent: st
   return found.profileName.startsWith(`${found.agent}-`) ? found.profileName : `${found.agent}-${found.profileName}`
 }
 
-function presenceOf(found: { agent: DetectedPaneAgent['agent']; profileName: string; launcher?: string; pid: number; startTime: number }, sessionId?: string): PanePresence {
+function presenceOf(
+  found: { agent: DetectedPaneAgent['agent']; profileName: string; launcher?: string; pid: number; startTime: number },
+  sessionId?: string,
+  modelInfo?: PanePresence['modelInfo'],
+): PanePresence {
   return {
     agent: found.agent,
     profileName: found.profileName,
@@ -63,6 +67,7 @@ function presenceOf(found: { agent: DetectedPaneAgent['agent']; profileName: str
     pid: found.pid,
     startTime: found.startTime,
     ...(sessionId ? { claudeSessionId: sessionId, agentSessionId: sessionId } : {}),
+    ...(modelInfo ? { modelInfo } : {}),
   }
 }
 
@@ -91,6 +96,9 @@ function buildSnapshot(
     const stored = findSessionByTabId(tab.id)
     const presence = getPanePresence(tab.id)
     const agent = stored?.agent ?? presence?.agent ?? parseAgentTitle(tab.name)?.agentName
+    const agentSessionId = stored?.sessionId ?? presence?.agentSessionId ?? presence?.claudeSessionId
+    const profileName = stored?.profileName ?? presence?.profileName
+    const launcher = stored?.launcher ?? presence?.launcher
     return {
       id: tab.id,
       connId: tab.connId,
@@ -100,9 +108,9 @@ function buildSnapshot(
         cwdSource: sessionCwds[tab.id] ? 'reported' : conn?.localCwd ? 'launch' : 'unknown',
         ...(conn?.shell ? { shell: conn.shell } : {}),
         ...(agent ? { agent } : {}),
-        ...(stored?.sessionId ? { agentSessionId: stored.sessionId } : {}),
-        ...(stored?.profileName ? { profileName: stored.profileName } : {}),
-        ...(stored?.launcher ? { launcher: stored.launcher } : {}),
+        ...(agentSessionId ? { agentSessionId } : {}),
+        ...(profileName ? { profileName } : {}),
+        ...(launcher ? { launcher } : {}),
       },
     }
   })
@@ -291,8 +299,13 @@ export function useSessionPersistence({
           const previous = getPanePresence(tab.id)
           const sameProcess = previous?.pid === found.pid && previous.startTime === found.startTime
           const priorSessionId = sameProcess ? (previous.agentSessionId ?? previous.claudeSessionId) : undefined
-          nextPresence[tab.id] = presenceOf(found, priorSessionId)
+          let modelInfo = sameProcess ? previous?.modelInfo : undefined
           const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+          if (window.omnitermAPI?.agentSessions?.resolveModel) {
+            modelInfo = (await window.omnitermAPI.agentSessions.resolveModel(found.agent, found.profileDir, cwd)) ?? modelInfo
+            if (cancelled) return
+          }
+          nextPresence[tab.id] = presenceOf(found, priorSessionId, modelInfo)
           let sessionId = priorSessionId
           if (found.agent === 'claude') {
             sessionId = (await resolveClaudeSessionId(found, cwd)) ?? priorSessionId
@@ -301,7 +314,7 @@ export function useSessionPersistence({
             sessionId = 'latest'
           }
           if (!sessionId) continue
-          nextPresence[tab.id] = presenceOf(found, sessionId)
+          nextPresence[tab.id] = presenceOf(found, sessionId, modelInfo)
           const title = extractAgentWorkItem(tab.name)
           bindActiveSession({
             id: `${found.agent}:${sessionId === 'latest' ? `${found.agent}-${tab.id}` : sessionId}`,

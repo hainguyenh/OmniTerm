@@ -24,6 +24,12 @@ export interface WakeConfig {
   prompt: string
 }
 
+export interface ResumeRecoveryConfig {
+  enabled: boolean
+  delaySeconds: number
+  prompt: string
+}
+
 export interface AgentConfig {
   enabled: boolean
   /** Used-percent at which the window counts as exhausted, per window. */
@@ -37,6 +43,7 @@ export interface AgentConfig {
   /** Stop (not just freeze) the agent if usage still climbs past this while suspended. */
   hardStopAtPct: number | null
   wake: WakeConfig
+  resumeRecovery: ResumeRecoveryConfig
 }
 
 export interface IconConfig {
@@ -95,9 +102,11 @@ export interface AgentOverride {
   wake?: WakeConfig
   /** Show the weekly line in this terminal even while the global auto-hide would hide it. */
   showWeekly?: boolean
+  /** Optional per-terminal resume recovery settings. */
+  resumeRecovery?: Partial<ResumeRecoveryConfig>
 }
 
-const defaultAgent = (enabled: boolean): AgentConfig => ({
+const defaultAgent = (enabled: boolean, defaultRecovery = false): AgentConfig => ({
   enabled,
   limits: { session: 90, weekly: 95, monthly: 95 },
   suspendAtLimit: true,
@@ -106,6 +115,7 @@ const defaultAgent = (enabled: boolean): AgentConfig => ({
   guardMinutes: 10,
   hardStopAtPct: null,
   wake: { mode: 'off', time: '06:00', delayMinutes: 2, prompt: 'hi' },
+  resumeRecovery: { enabled: defaultRecovery, delaySeconds: 3, prompt: 'continue' },
 })
 
 /** Turtle → rabbit → plane → superman, from calm to way over pace. Text glyphs: no bundled assets,
@@ -132,7 +142,7 @@ export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
     artSpeed: 'normal',
     artSize: 'normal',
   },
-  agents: { claude: defaultAgent(true), codex: defaultAgent(true), agy: defaultAgent(true) },
+  agents: { claude: defaultAgent(true, true), codex: defaultAgent(true, false), agy: defaultAgent(true, false) },
 }
 
 export const MIN_LIMIT = 5
@@ -161,6 +171,7 @@ function parseAgent(value: unknown, fallback: AgentConfig): AgentConfig {
   const limits = record(source.limits)
   const wake = record(source.wake)
   const hardStop = source.hardStopAtPct
+  const recovery = record(source.resumeRecovery)
   // A stored `icon` (the retired header-icon setting) is dropped here and on the next save.
   return {
     enabled: bool(source.enabled, fallback.enabled),
@@ -179,6 +190,11 @@ function parseAgent(value: unknown, fallback: AgentConfig): AgentConfig {
       time: typeof wake.time === 'string' && TIME.test(wake.time) ? wake.time : fallback.wake.time,
       delayMinutes: num(wake.delayMinutes, fallback.wake.delayMinutes, 0, 120),
       prompt: typeof wake.prompt === 'string' && isSafePrompt(wake.prompt.trim()) ? wake.prompt.trim().slice(0, 120) : fallback.wake.prompt,
+    },
+    resumeRecovery: {
+      enabled: bool(recovery.enabled, fallback.resumeRecovery.enabled),
+      delaySeconds: num(recovery.delaySeconds, fallback.resumeRecovery.delaySeconds, 1, 30),
+      prompt: typeof recovery.prompt === 'string' && isSafePrompt(recovery.prompt.trim()) ? recovery.prompt.trim().slice(0, 120) : fallback.resumeRecovery.prompt,
     },
   }
 }
@@ -254,11 +270,16 @@ export function effectiveConfig(global: AgentConfig, override: AgentOverride | u
     suspendAtLimit: override.suspendAtLimit ?? global.suspendAtLimit,
     autoResume: override.autoResume ?? global.autoResume,
     wake: override.wake ? { ...global.wake, ...override.wake } : global.wake,
+    resumeRecovery: override.resumeRecovery ? { ...global.resumeRecovery, ...override.resumeRecovery } : global.resumeRecovery,
   }
 }
 
 function sameWakeConfig(left: WakeConfig, right: WakeConfig): boolean {
   return left.mode === right.mode && left.time === right.time && left.delayMinutes === right.delayMinutes && left.prompt === right.prompt
+}
+
+function sameRecoveryConfig(left: ResumeRecoveryConfig, right: ResumeRecoveryConfig): boolean {
+  return left.enabled === right.enabled && left.delaySeconds === right.delaySeconds && left.prompt === right.prompt
 }
 
 /** Apply the per-terminal wake switch without losing the rest of its effective profile. */
@@ -275,12 +296,14 @@ export function pruneOverride(global: AgentConfig, override: AgentOverride): Age
   const limits = Object.fromEntries(
     Object.entries(override.limits ?? {}).filter(([kind, value]) => value !== global.limits[kind as WindowKind]),
   ) as Partial<Record<WindowKind, number>>
+  const effectiveRecovery = override.resumeRecovery ? { ...global.resumeRecovery, ...override.resumeRecovery } : global.resumeRecovery
   const pruned: AgentOverride = {
     ...(override.enabled !== undefined && override.enabled !== global.enabled ? { enabled: override.enabled } : {}),
     ...(Object.keys(limits).length > 0 ? { limits } : {}),
     ...(override.suspendAtLimit !== undefined && override.suspendAtLimit !== global.suspendAtLimit ? { suspendAtLimit: override.suspendAtLimit } : {}),
     ...(override.autoResume !== undefined && override.autoResume !== global.autoResume ? { autoResume: override.autoResume } : {}),
     ...(override.wake && !sameWakeConfig(override.wake, global.wake) ? { wake: override.wake } : {}),
+    ...(override.resumeRecovery && !sameRecoveryConfig(effectiveRecovery, global.resumeRecovery) ? { resumeRecovery: override.resumeRecovery } : {}),
     // Display-only: there is no global counterpart, so only `true` is a difference worth keeping.
     ...(override.showWeekly ? { showWeekly: true } : {}),
   }

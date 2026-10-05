@@ -1,6 +1,9 @@
 //! Bounded paging adapters for workspace scan results.
 
-use super::{file_entry, scan_entries_excluding, scan_root, WorkspaceEntry, WorkspaceEntryPage};
+use super::{
+    child_dirs, dir_entry, file_entry, in_deferred_subtree, scan_entries_excluding, scan_root,
+    WorkspaceEntry, WorkspaceEntryPage,
+};
 use crate::safepath;
 use std::fs;
 use std::path::Path;
@@ -13,6 +16,9 @@ use std::path::Path;
 /// folder's own files are listed — subdirectories are owned by the skeleton (`scan_folders`), and
 /// the listing never descends, so an ignored directory below is simply never visited. The files are
 /// sorted by `id`, so the same `offset` names the same files on every call.
+///
+/// A folder inside a deferred subtree (`node_modules`, `dist`, …) is not in the skeleton, so its
+/// first page also carries its direct subfolders, each deferred in turn.
 pub fn scan_folder_files_excluding(
     root: &Path,
     folder: &str,
@@ -36,10 +42,19 @@ pub fn scan_folder_files_excluding(
     files.sort_by(|a, b| a.id.cmp(&b.id));
     let total = files.len();
     let end = offset.saturating_add(limit).min(total);
+    let subfolders = if offset == 0 && in_deferred_subtree(folder) {
+        child_dirs(&dir)
+            .into_iter()
+            .map(|(name, path)| dir_entry(&root, &path, name, true))
+            .collect()
+    } else {
+        Vec::new()
+    };
     Ok(WorkspaceEntryPage {
         entries: files.get(offset..end).unwrap_or_default().to_vec(),
         total,
         has_more: end < total,
+        subfolders,
     })
 }
 
@@ -59,6 +74,7 @@ pub fn scan_entries_page_excluding(
         entries: all.get(offset..end).unwrap_or_default().to_vec(),
         total,
         has_more: end < total,
+        subfolders: Vec::new(),
     }
 }
 
@@ -94,15 +110,12 @@ mod tests {
         std::fs::write(sub.join("a.sh"), "echo a").unwrap();
         std::fs::write(sub.join("nested/hidden.sh"), "echo hidden").unwrap();
 
-        let page = scan_folder_files_excluding(
-            dir.path(),
-            "scripts",
-            &["txt".to_string()],
-            0,
-            10,
-        )
-        .unwrap();
-        assert_eq!(page.total, 2, "nested files belong to the nested folder's page");
+        let page = scan_folder_files_excluding(dir.path(), "scripts", &["txt".to_string()], 0, 10)
+            .unwrap();
+        assert_eq!(
+            page.total, 2,
+            "nested files belong to the nested folder's page"
+        );
         assert_eq!(page.entries[0].id, "scripts/a.sh");
         assert_eq!(page.entries[1].id, "scripts/z.txt");
         assert_eq!(page.entries[1].viewable, Some(false));
@@ -140,5 +153,49 @@ mod tests {
         assert!(beyond.entries.is_empty());
         assert!(!beyond.has_more);
     }
-}
 
+    /// A deferred folder's subfolders are not in the skeleton, so its first page carries them — each
+    /// deferred in turn — while later pages and skeleton folders carry none.
+    #[test]
+    fn deferred_folder_pages_carry_their_subfolders() {
+        let dir = tempdir().unwrap();
+        let root = dir.path();
+        let touch = |rel: &str| {
+            let path = root.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "").unwrap();
+        };
+        touch("node_modules/left-pad/index.js");
+        touch("node_modules/.bin/tool");
+        touch("node_modules/.git/HEAD");
+        touch("node_modules/a.txt");
+        touch("node_modules/b.txt");
+        touch("src/lib/x.ts");
+
+        let first = scan_folder_files_excluding(root, "node_modules", &[], 0, 1).unwrap();
+        let subs: Vec<_> = first.subfolders.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(subs, vec!["node_modules/.bin", "node_modules/left-pad"]);
+        assert!(first
+            .subfolders
+            .iter()
+            .all(|e| e.is_dir && e.deferred == Some(true)));
+        assert_eq!(first.total, 2);
+
+        let second = scan_folder_files_excluding(root, "node_modules", &[], 1, 1).unwrap();
+        assert!(
+            second.subfolders.is_empty(),
+            "only the first page lists subfolders"
+        );
+
+        let nested =
+            scan_folder_files_excluding(root, "node_modules/left-pad", &[], 0, 10).unwrap();
+        assert!(nested.subfolders.is_empty());
+        assert_eq!(nested.entries[0].id, "node_modules/left-pad/index.js");
+
+        let skeleton = scan_folder_files_excluding(root, "src", &[], 0, 10).unwrap();
+        assert!(
+            skeleton.subfolders.is_empty(),
+            "skeleton folders already know their subfolders"
+        );
+    }
+}

@@ -12,7 +12,7 @@ const entries = [
 ]
 
 describe('workspace panel view model', () => {
-  it('keeps folders that own connections even when the default script filter empties them', () => {
+  it('keeps folders that own connections even when a script filter empties them', () => {
     const view = buildWorkspacePanelView({
       workspaceId: 'ws',
       entries,
@@ -27,7 +27,7 @@ describe('workspace panel view model', () => {
         parentId: 'empty',
       }],
       filesByFolder: { tools: [entries[3], entries[4]] },
-      filter: DEFAULT_TREE_FILTER,
+      filter: { mode: 'scripts', kinds: [], paths: [], showEmptyDirs: false },
       query: '',
       expandedDirs: new Set(),
     })

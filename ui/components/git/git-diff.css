@@ -1,0 +1,205 @@
+.git-diff-identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-sidebar-bg);
+}
+
+.git-diff-filename {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 100px;
+  gap: 10px;
+}
+
+.git-diff-file-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 36px;
+  border: 1px solid var(--theme-border);
+  border-radius: 5px;
+  background: var(--theme-bg);
+}
+
+.git-diff-file-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.git-diff-filename > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.git-diff-filename strong,
+.git-diff-filename span:not(.git-diff-file-icon) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-diff-filename strong {
+  color: var(--theme-fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.git-diff-filename div > span {
+  color: var(--theme-dim);
+  font-size: 11px;
+}
+
+.git-diff-stats,
+.git-diff-navigation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.git-diff-stats span {
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.git-diff-navigation {
+  color: var(--theme-dim);
+}
+
+.git-diff-toolbar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--theme-border);
+  background: var(--theme-bg);
+}
+
+.git-segmented {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-bg);
+}
+
+.git-segmented button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 3px;
+  color: var(--theme-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.git-segmented button:hover {
+  background: var(--theme-hover-bg);
+  color: var(--theme-fg);
+}
+
+.git-segmented button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--theme-accent) 14%, var(--theme-bg));
+  color: var(--theme-accent);
+  font-weight: 600;
+}
+
+.git-segmented svg {
+  width: 15px;
+  height: 15px;
+}
+
+.git-diff-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.git-diff-notice {
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--theme-border);
+  color: var(--theme-fg);
+  font-size: 12px;
+}
+
+.git-diff-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--theme-border);
+  font-family: var(--theme-font-sans);
+}
+
+.git-diff-columns.with-revert {
+  grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+}
+
+.git-diff-chunk-column {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-inline: 1px solid var(--theme-border);
+  background: var(--theme-sidebar-bg);
+  color: var(--theme-dim);
+  font-size: 10px;
+}
+
+.git-diff-column {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--theme-sidebar-bg);
+  color: var(--theme-fg);
+  font-size: 11px;
+}
+
+.git-diff-column + .git-diff-column {
+  border-inline-start: 1px solid var(--theme-border);
+}
+
+.git-diff-column strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.git-diff-column svg {
+  width: 14px;
+  height: 14px;
+  color: var(--theme-dim);
+}
+
+.git-diff-column > span {
+  color: var(--theme-dim);
+}
+
+.git-diff-column.is-editable {
+  box-shadow: inset 0 2px var(--theme-success);
+}
+
+.git-diff-column.is-base {
+  box-shadow: inset 0 2px var(--theme-error);
+}

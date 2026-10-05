@@ -1,4 +1,4 @@
-import type React from 'react'
+import React, { useEffect } from 'react'
 import type { SessionStatus } from '@omniterm/contract'
 import { workingFolderLabel, workspaceLocationLabel } from '../utils/workspaceDisplay'
 import { newTerminalHoverText } from '../utils/newTerminalDescription'
@@ -6,7 +6,8 @@ import ActivityBar from './ActivityBar'
 import FileBrowser from './FileBrowser'
 import WorkspacePanel from './WorkspacePanel'
 import BookmarksPanel from './BookmarksPanel'
-import ScriptViewer from './ScriptViewer'
+import { GitWorkspaceView } from './git/GitWorkspaceView'
+import { EditorTabHost } from './editor/EditorTabHost'
 import TerminalView from './TerminalView'
 import RDPView from './RDPView'
 import ConnectingOverlay from './ConnectingOverlay'
@@ -22,6 +23,7 @@ import { paneIdentity } from '../paneIdentity'
 import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { isRenewing } from '../hooks/useRenewSession'
+import { useGitRepoCheck } from '../hooks/useGitRepoCheck'
 import { formatAgentProfileCommand } from '../utils/agentRegistry'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
@@ -58,15 +60,18 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
   const activeResolvedAppearance = activeTarget ? resolveAppearance?.(activeTarget.id, activeTarget.connId) : undefined
   const activeTerminalAppearance = activeTarget ? createTerminalAppearance({
     themes, appSettings, resolved: activeResolvedAppearance, target: activeTarget,
-    onThemeApply: model.onThemeApply,
-    onFontSizeChange: model.onFontSizeChange,
-    onToolbarActionsChange: model.onToolbarActionsChange,
+    onThemeApply: model.onThemeApply, onFontSizeChange: model.onFontSizeChange, onToolbarActionsChange: model.onToolbarActionsChange,
   }) : undefined
   const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
+  const rawActiveCwd = activeTabId ? (model.sessionCwds?.[activeTabId] ?? activeConnection?.localCwd) : undefined
+  const activeRepoCwd = rawActiveCwd || (footerWorkspace?.folders?.[0]?.path) || selectedWorkspace?.folders?.[0]?.path
+  const isGitRepo = useGitRepoCheck(activeRepoCwd, appSettings.gitUtilEnabled ?? true)
+  const gitEnabled = (appSettings.gitUtilEnabled ?? true) && isGitRepo
+  useEffect(() => {
+    if (!gitEnabled && activeView === 'git') handleViewChange(null)
+  }, [gitEnabled, activeView, handleViewChange])
   const footerWorkspaceTitle = workspaceLocationLabel(footerWorkspace)
-  const footerWorkingFolder = activeTabId
-    ? workingFolderLabel(model.sessionCwds?.[activeTabId] ?? activeConnection?.localCwd, model.workspaces ?? [])
-    : undefined
+  const footerWorkingFolder = activeTabId ? workingFolderLabel(rawActiveCwd, model.workspaces ?? []) : undefined
   const localFooterLocationLabel = footerWorkingFolder ?? footerWorkspaceTitle
   const activeShellLabel = activeConnection?.type === 'LOCAL' ? shellLabel(shellOptions ?? [], activeConnection.shell) : undefined
   const newSessionTitle = newTerminalHoverText(
@@ -85,6 +90,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           <ActivityBar
             activeView={activeView}
             filesEnabled={!!activeSshId && connectionCapabilities?.sftp === true}
+            gitEnabled={gitEnabled}
             onViewChange={handleViewChange}
             onSettingsClick={() => setSettingsOpen(true)}
             alwaysAwakeAvailable={alwaysAwakeAvailable}
@@ -97,7 +103,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           />
         )}
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
-        {!chromeHidden && activeView !== null && (
+        {!chromeHidden && activeView !== null && activeView !== 'git' && (
           <div
             className="flex-shrink-0 flex flex-col border-r border-[var(--theme-border)] min-w-0 overflow-hidden relative bg-theme-sidebar"
             style={{ width: sidebarVisible ? sidebarWidth : 0 }}
@@ -109,14 +115,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 showAlert={showAlert}
                 onConnectWorkspaceConnection={(connection, workspaceId) => handleConnect({ ...connection, workspaceId })}
                 hasConnectionProvider={hasConnectionProvider}
-                onAddWorkspaceConnection={(target) => {
-                  setConnFormInitial(undefined)
-                  openConnectionForm(target)
-                }}
-                onEditWorkspaceConnection={(target, conn) => {
-                  setConnFormInitial(conn)
-                  openConnectionForm(target)
-                }}
+                onAddWorkspaceConnection={(target) => { setConnFormInitial(undefined); openConnectionForm(target) }}
+                onEditWorkspaceConnection={(target, conn) => { setConnFormInitial(conn); openConnectionForm(target) }}
                 connectionsRevision={wsConnectionsRevision}
                 revealRequest={revealRequest}
                 onWorkspacesChanged={model.refreshWorkspaces}
@@ -134,14 +134,25 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             )}
           </div>
         )}
-        {!chromeHidden && activeView !== null && sidebarVisible && (
+        {!chromeHidden && activeView !== null && activeView !== 'git' && sidebarVisible && (
           <div
             className="w-1.5 flex-shrink-0 cursor-col-resize hover:bg-[var(--theme-accent)] transition-colors active:bg-[var(--theme-accent)] z-10"
             onMouseDown={handleResizeDragStart}
           />
         )}
         {/* ── Main area ───────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 relative">
+          {gitEnabled && activeView === 'git' && (
+            <div className="absolute inset-0 z-40 bg-theme-bg flex flex-col min-w-0 overflow-hidden">
+              <GitWorkspaceView
+                cwd={rawActiveCwd}
+                workspaces={model.workspaces}
+                savedConnections={model.savedConnections}
+                gitGraphEnabled={appSettings.gitGraphEnabled ?? true}
+                onClose={() => handleViewChange(null)}
+              />
+            </div>
+          )}
           {!chromeHidden && (
           <div className="relative z-30 flex flex-col border-b border-[var(--theme-border)] flex-shrink-0">
             {viewGroups.length > 0 && <ViewGroupTabs groups={viewGroups} activeGroupId={activeGroupId} totalTabCount={ungroupedTabCount} onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }} onUpdate={notifyViewGroupUpdate} onReorder={notifyViewGroupReorder} onUngroup={notifyViewGroupUngroup} />}
@@ -253,7 +264,6 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
               })}
             </div>
             </div>
-   
             </div>
           </div>
           )}
@@ -271,6 +281,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             layoutMode={layoutMode}
             activity={activity}
             appearance={activeTerminalAppearance}
+            rawCwd={rawActiveCwd}
+            gitEnabled={gitEnabled}
             onReconnect={reconnectSession}
             onDisconnect={disconnectSession}
           />
@@ -360,14 +372,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                   const restoreOutcome = restoreOutcomes[tab.id]
                   const restoreBlocked = restoreOutcome?.phase === 'pending' || restoreOutcome?.phase === 'failed'
                   const sessionView = editor ? (
-                    <ScriptViewer workspaceId={editor.workspaceId} script={editor.script}
-                      onClose={() => closeTab(tab.id)}
-                      onRun={() => { keepTab(tab.id); scriptRuns.run(editor.workspaceId, editor.script) }}
-                      onDirtyChange={(d) => {
-                        // An edit is a commitment — a peeked file stops being disposable.
-                        if (d) keepTab(tab.id)
-                        setEditorDirty(prev => (prev[tab.id] === d ? prev : { ...prev, [tab.id]: d }))
-                      }} />
+                    <EditorTabHost tabId={tab.id} editor={editor} visible={visible} closeTab={closeTab}
+                      keepTab={keepTab} runScript={scriptRuns.run} setEditorDirty={setEditorDirty} />
                   ) : restoreBlocked ? (
                     <SessionUnavailableOverlay
                       message={restoreOutcome.message}

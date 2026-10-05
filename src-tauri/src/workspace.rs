@@ -27,11 +27,11 @@ pub(crate) use crate::workspace_lifecycle::{
 pub(crate) use crate::workspace_persistence::workspaces_file;
 pub(crate) use crate::workspace_persistence::{read_workspaces, write_workspaces};
 #[cfg(test)]
-#[path = "workspace_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "workspace_command_validation_tests.rs"]
 mod command_validation_tests;
+#[cfg(test)]
+#[path = "workspace_tests.rs"]
+mod tests;
 
 fn display_name(path: &str) -> String {
     Path::new(path)
@@ -202,6 +202,7 @@ pub async fn scan_workspace_folders<R: Runtime>(
             shell: None,
             editable: None,
             viewable: None,
+            deferred: None,
         });
         let root = Path::new(&folder.path);
         if root.is_dir() {
@@ -229,6 +230,7 @@ pub async fn scan_workspace_entries<R: Runtime>(
             entries: Vec::new(),
             total: 0,
             has_more: false,
+            subfolders: Vec::new(),
         });
     }
     let target = logical_target(&workspace, &folder)?;
@@ -256,6 +258,11 @@ pub async fn scan_workspace_entries<R: Runtime>(
             .collect(),
         total: page.total,
         has_more: page.has_more,
+        subfolders: page
+            .subfolders
+            .into_iter()
+            .map(|entry| namespace_entry(&target.folder.id, entry))
+            .collect(),
     })
 }
 
@@ -307,7 +314,7 @@ pub async fn run_script<R: Runtime>(
     Ok(true)
 }
 
-fn max_open_bytes<R: Runtime>(app: &AppHandle<R>) -> u64 {
+pub(crate) fn max_open_bytes<R: Runtime>(app: &AppHandle<R>) -> u64 {
     let configured = crate::settings::read_settings(app)
         .get("maxOpenFileMb")
         .and_then(serde_json::Value::as_u64)
@@ -315,7 +322,7 @@ fn max_open_bytes<R: Runtime>(app: &AppHandle<R>) -> u64 {
     safepath::clamp_max_bytes(configured)
 }
 
-fn excluded_viewable_exts<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+pub(crate) fn excluded_viewable_exts<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
     crate::settings::read_settings(app)
         .get("excludedViewableExts")
         .and_then(serde_json::Value::as_array)

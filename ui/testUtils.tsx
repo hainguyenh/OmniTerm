@@ -169,6 +169,12 @@ const defaults: Api = {
     run: async () => true,
     readScript: async () => '',
     writeScript: async () => {},
+    openTextFile: async () => ({
+      content: '', size: 0, mtimeMs: 0, lineCount: 1, maxLineLen: 0, eol: 'lf' as const,
+      mixedEol: false, hasBom: false, readOnly: false,
+    }),
+    saveTextFile: async () => ({ status: 'saved' as const, size: 0, mtimeMs: 0 }),
+    openImageFile: async () => new Uint8Array(),
     loadConnections: async () => [],
     saveConnections: async () => {},
     deleteConnection: async () => {},

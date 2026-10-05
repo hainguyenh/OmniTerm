@@ -198,6 +198,11 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
             "write_script",
             json!({ "workspaceId": "x", "path": "a.sh", "content": 2 }),
         ),
+        ("open_text_file", json!({ "workspaceId": "x", "path": 2 })),
+        (
+            "save_text_file",
+            json!({ "workspaceId": "x", "path": "a.ts", "request": { "content": 2 } }),
+        ),
         ("load_workspace_connections", json!({ "workspaceId": 2 })),
         (
             "save_workspace_connections",

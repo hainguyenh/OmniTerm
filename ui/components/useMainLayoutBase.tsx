@@ -337,7 +337,7 @@ export function useMainLayoutBase({
           sidebarWidthRef.current = w;
       }
       const savedView = localStorage.getItem('cc.activeView');
-      if (savedView === 'workspace' || savedView === 'files' || savedView === 'bookmarks') {
+      if (savedView === 'workspace' || savedView === 'files' || savedView === 'bookmarks' || savedView === 'git') {
           setActiveView(savedView);
           lastViewRef.current = savedView;
       }
@@ -349,8 +349,10 @@ export function useMainLayoutBase({
       else if (savedView === 'null') {
           setActiveView(null);
       }
+      // `cwd` opens the terminal at an exact folder, e.g. a worktree the Git panel just created.
       const handleNewSession = (e: Event) => {
-          requestNewSession((e as CustomEvent).detail?.shell);
+          const detail = (e as CustomEvent<{ shell?: string; cwd?: string } | null>).detail;
+          requestNewSession(detail?.shell, undefined, detail?.cwd ?? null);
       };
       const handleToggleSidebar = () => {
           setActiveView(prev => {
@@ -367,13 +369,19 @@ export function useMainLayoutBase({
       const handleCommandPalette = () => {
           setCommandPaletteOpen(true);
       };
+      const handleOpenGit = () => {
+          setActiveView('git');
+          localStorage.setItem('cc.activeView', 'git');
+      };
       window.addEventListener('omniterm:new-session', handleNewSession);
       window.addEventListener('omniterm:toggle-sidebar', handleToggleSidebar);
       window.addEventListener('omniterm:command-palette', handleCommandPalette);
+      window.addEventListener('omniterm:open-git', handleOpenGit);
       return () => {
           window.removeEventListener('omniterm:new-session', handleNewSession);
           window.removeEventListener('omniterm:toggle-sidebar', handleToggleSidebar);
           window.removeEventListener('omniterm:command-palette', handleCommandPalette);
+          window.removeEventListener('omniterm:open-git', handleOpenGit);
       };
   }, [requestNewSession]);
   const handleResizeDragStart = useCallback((e: React.MouseEvent) => {

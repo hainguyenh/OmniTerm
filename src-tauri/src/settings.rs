@@ -76,6 +76,8 @@ pub fn defaults() -> Value {
         "shiftEnter": "esc-cr",
         "ctrlEnter": "lf",
         "workspaces": [],
+        "gitUtilEnabled": true,
+        "gitGraphEnabled": true,
     })
 }
 

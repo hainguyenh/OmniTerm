@@ -17,6 +17,8 @@ interface ActiveSessionFooterProps {
   layoutMode: number
   activity: Record<string, boolean>
   appearance?: SessionControlAppearance
+  rawCwd?: string
+  gitEnabled?: boolean
   onReconnect: (sessionId: string) => void
   onDisconnect: (sessionId: string) => void
 }
@@ -24,7 +26,7 @@ interface ActiveSessionFooterProps {
 /** Owns the active-session footer branch so the main shell stays focused on layout composition. */
 export default function ActiveSessionFooter({
   activeTabId, conn, footerWorkspaceTitle, localLocationLabel, shellLabel, statuses, latencies,
-  metrics, connectedAt, layoutMode, activity, appearance, onReconnect, onDisconnect,
+  metrics, connectedAt, layoutMode, activity, appearance, rawCwd, gitEnabled = true, onReconnect, onDisconnect,
 }: ActiveSessionFooterProps) {
   if (!activeTabId) return null
   if (!conn) {
@@ -53,6 +55,7 @@ export default function ActiveSessionFooter({
       locationLabel={locationLabel}
       shellLabel={shellLabel}
       appearance={appearance}
+      gitCwd={gitEnabled && conn.type === 'LOCAL' ? rawCwd : undefined}
       onSaveOutput={() => dispatchTerminalSave(activeTabId)}
       onReconnect={() => onReconnect(activeTabId)}
       onDisconnect={() => onDisconnect(activeTabId)}

@@ -115,6 +115,22 @@ describe('AgentQuotaSettings', () => {
     expect(claude).toMatchObject({ limits: { weekly: 80 }, autoResume: false, resumeDelayMinutes: 120, guardMinutes: 1, hardStopAtPct: 97 })
   })
 
+  it('configures auto-continue on interrupted response for an agent', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings />)
+    const toggle = claudeCard().getByRole('switch', { name: 'Auto-continue Claude Code on interrupted response' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    fireEvent.change(claudeCard().getByLabelText('Check delay (s)'), { target: { value: '5' } })
+    fireEvent.change(claudeCard().getByLabelText('Claude Code continue command'), { target: { value: 'tiếp tục' } })
+    apply()
+    expect(getQuotaState().config.agents.claude.resumeRecovery).toEqual({
+      enabled: true,
+      delaySeconds: 5,
+      prompt: 'tiếp tục',
+    })
+  })
+
   it('has no header icon setting: the busy header shows the loading artwork instead', () => {
     seed()
     render(<AgentQuotaSettings />)

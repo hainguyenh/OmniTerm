@@ -26,15 +26,18 @@ mod paging;
 pub use paging::{scan_entries_page_excluding, scan_folder_files_excluding};
 
 #[cfg(test)]
-#[path = "workspace_scan_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "workspace_scan_contract_tests.rs"]
 mod contract_tests;
+#[cfg(test)]
+#[path = "workspace_scan_tests.rs"]
+mod tests;
 
-/// Directories never descended into — noise or huge, and never where user scripts live.
-/// Applies to both views: these are *skipped*, not paged, because nobody has ever wanted to browse
-/// `node_modules` from a script launcher.
+/// Directories the eager walks never descend into — noise or huge, and never where user scripts live.
+///
+/// The script scan (`walk`) skips them outright. The folder skeleton reports all of them except the
+/// VCS stores as *deferred* rows instead: like Zed and VS Code, the tree shows `node_modules` or
+/// `dist` but lists their contents only when the user expands them, so one deep `node_modules`
+/// never bloats the up-front skeleton.
 const IGNORE_DIRS: [&str; 13] = [
     "node_modules",
     ".git",
@@ -50,6 +53,24 @@ const IGNORE_DIRS: [&str; 13] = [
     "vendor",
     "__pycache__",
 ];
+
+/// Version-control stores: hidden from every view, matching the editors' default file exclusions.
+const VCS_DIRS: [&str; 3] = [".git", ".svn", ".hg"];
+
+fn is_vcs_dir(name: &str) -> bool {
+    VCS_DIRS.contains(&name.to_lowercase().as_str())
+}
+
+/// Whether a directory with this name is listed lazily rather than walked into by the skeleton.
+fn is_deferred_dir(name: &str) -> bool {
+    IGNORE_DIRS.contains(&name.to_lowercase().as_str()) && !is_vcs_dir(name)
+}
+
+/// Whether `folder` (POSIX-relative) lies at or below a deferred directory — i.e. its subfolders
+/// are not part of the skeleton and have to ship with its file listing.
+fn in_deferred_subtree(folder: &str) -> bool {
+    folder.split('/').any(is_deferred_dir)
+}
 
 const MAX_SCRIPTS: usize = 500;
 /// Default entries per `scan_workspace_entries` call — the page the renderer asks for, and what one
@@ -100,6 +121,10 @@ pub struct WorkspaceEntry {
     /// Whether the viewer will show this file's contents as text — see `WorkspaceScript::viewable`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewable: Option<bool>,
+    /// `Some(true)` for a directory whose subfolders are not in the skeleton (`node_modules`,
+    /// `dist`, … and everything below them): they arrive with its first file page instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deferred: Option<bool>,
 }
 
 /// One page of a folder's files.
@@ -113,6 +138,10 @@ pub struct WorkspaceEntryPage {
     /// How many files the folder holds — what the "Show more (N remaining)" row counts down.
     pub total: usize,
     pub has_more: bool,
+    /// The direct subfolders of a deferred folder, on its first page only. Empty for skeleton
+    /// folders, whose subfolders `scan_folders` already reported.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub subfolders: Vec<WorkspaceEntry>,
 }
 
 /// The kinds `classify` can produce — i.e. the entries that are runnable.
@@ -198,6 +227,8 @@ pub fn scan_entries_excluding(root: &Path, excluded: &[String]) -> Vec<Workspace
 /// Not paged: directories are a small fraction of a workspace's entries (a 30k-file project has a
 /// few hundred folders), and the panel must show every folder up front before any of their files.
 /// Hidden directories are reported like everything else — "All files" really means all files.
+/// Deferred directories (`node_modules`, `dist`, …) are reported but not descended into; VCS stores
+/// are left out.
 pub fn scan_folders(root: &Path) -> Vec<WorkspaceEntry> {
     let root = scan_root(root);
     let mut found: Vec<WorkspaceEntry> = Vec::new();
@@ -207,33 +238,47 @@ pub fn scan_folders(root: &Path) -> Vec<WorkspaceEntry> {
 }
 
 fn collect_folders(root: &Path, dir: &Path, found: &mut Vec<WorkspaceEntry>) {
-    // An unreadable subdirectory is skipped rather than aborting the whole scan.
+    for (name, path) in child_dirs(dir) {
+        let deferred = is_deferred_dir(&name);
+        found.push(dir_entry(root, &path, name, deferred));
+        if !deferred {
+            collect_folders(root, &path, found);
+        }
+    }
+}
+
+/// The direct subdirectories of `dir` minus VCS stores, in name order. An unreadable directory
+/// yields none rather than aborting the scan.
+fn child_dirs(dir: &Path) -> Vec<(String, PathBuf)> {
     let Ok(mut entries) = fs::read_dir(dir).map(|it| it.flatten().collect::<Vec<_>>()) else {
-        return;
+        return Vec::new();
     };
     // Deterministic order: read_dir's order is filesystem-defined, and the ids must be stable.
     entries.sort_by_key(|e| e.file_name());
+    entries
+        .into_iter()
+        .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|entry| {
+            (
+                entry.file_name().to_string_lossy().into_owned(),
+                entry.path(),
+            )
+        })
+        .filter(|(name, _)| !is_vcs_dir(name))
+        .collect()
+}
 
-    for entry in entries {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let path = entry.path();
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if !file_type.is_dir() || IGNORE_DIRS.contains(&name.to_lowercase().as_str()) {
-            continue;
-        }
-        found.push(WorkspaceEntry {
-            id: rel_id(root, &path),
-            name,
-            path: path.to_string_lossy().into_owned(),
-            is_dir: true,
-            kind: "dir".to_string(),
-            shell: None,
-            editable: None,
-            viewable: None,
-        });
-        collect_folders(root, &path, found);
+fn dir_entry(root: &Path, path: &Path, name: String, deferred: bool) -> WorkspaceEntry {
+    WorkspaceEntry {
+        id: rel_id(root, path),
+        name,
+        path: path.to_string_lossy().into_owned(),
+        is_dir: true,
+        kind: "dir".to_string(),
+        shell: None,
+        editable: None,
+        viewable: None,
+        deferred: deferred.then_some(true),
     }
 }
 
@@ -252,7 +297,9 @@ fn file_entry(root: &Path, path: &Path, excluded: &[String]) -> WorkspaceEntry {
     // A non-script file still gets an entry: it is filtered out of the default view by the
     // renderer, not by the scan, so switching the filter needs no rescan.
     let (kind, shell, editable) = match classify(&ext) {
-        Some((kind, shell, editable)) => (kind.to_string(), shell.map(str::to_owned), Some(editable)),
+        Some((kind, shell, editable)) => {
+            (kind.to_string(), shell.map(str::to_owned), Some(editable))
+        }
         None if ext.is_empty() => ("file".to_string(), None, None),
         None => (ext.to_lowercase(), None, None),
     };
@@ -268,6 +315,7 @@ fn file_entry(root: &Path, path: &Path, excluded: &[String]) -> WorkspaceEntry {
         shell,
         editable,
         viewable: Some(safepath::is_viewable_kind_excluding(&ext, excluded)),
+        deferred: None,
     }
 }
 
@@ -311,16 +359,7 @@ fn walk(root: &Path, dir: &Path, found: &mut Vec<WorkspaceEntry>, excluded: &[St
             if IGNORE_DIRS.contains(&name.to_lowercase().as_str()) {
                 continue;
             }
-            found.push(WorkspaceEntry {
-                id: rel_id(root, &path),
-                name,
-                path: path.to_string_lossy().into_owned(),
-                is_dir: true,
-                kind: "dir".to_string(),
-                shell: None,
-                editable: None,
-                viewable: None,
-            });
+            found.push(dir_entry(root, &path, name, false));
             walk(root, &path, found, excluded);
         } else if file_type.is_file() {
             found.push(file_entry(root, &path, excluded));

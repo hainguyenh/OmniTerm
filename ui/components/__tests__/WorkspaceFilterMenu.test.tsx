@@ -253,18 +253,24 @@ describe('WorkspaceFilterMenu modes', () => {
   })
 
   it('toggles "Show empty folders" both ways', () => {
-    const { onChange } = open({ showEmptyDirs: false })
+    const { onChange } = open({ mode: 'scripts', showEmptyDirs: false })
     fireEvent.click(screen.getByLabelText('Show empty folders'))
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ showEmptyDirs: true }))
   })
 
+  it('hides "Show empty folders" in All files, which always lists every folder', () => {
+    open()
+    expect(screen.queryByLabelText('Show empty folders')).not.toBeInTheDocument()
+  })
+
   it('offers a reset only once the filter differs from the default', () => {
-    const { onChange } = open()
+    const first = open()
     expect(screen.queryByText('Reset to default')).not.toBeInTheDocument()
 
-    open({ mode: 'all' })
-    fireEvent.click(screen.getAllByText('Reset to default')[0])
-    expect(onChange).not.toHaveBeenCalledWith(DEFAULT_TREE_FILTER)
+    first.view.unmount()
+    const second = open({ mode: 'scripts' })
+    fireEvent.click(screen.getByText('Reset to default'))
+    expect(second.onChange).toHaveBeenCalledWith(DEFAULT_TREE_FILTER)
   })
 })
 
@@ -385,5 +391,36 @@ describe('WorkspaceFilterMenu file picking', () => {
       />,
     )
     expect(screen.getByText('No files in this workspace.')).toBeInTheDocument()
+  })
+
+  it('renders and invokes project default controls', () => {
+    const onSave = vi.fn()
+    const onClear = vi.fn()
+    const { view } = open({}, {
+      onSaveAsProjectDefault: onSave,
+      onClearProjectDefault: onClear,
+      hasProjectDefault: true,
+      isProjectDefault: false,
+    })
+
+    expect(screen.getByText('Project default')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Set as default' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear project default' }))
+    expect(onClear).toHaveBeenCalledTimes(1)
+
+    view.rerender(
+      <WorkspaceFilterMenu
+        filter={DEFAULT_TREE_FILTER}
+        onChange={vi.fn()}
+        entries={ENTRIES}
+        anchor={anchor()}
+        onClose={vi.fn()}
+        onSaveAsProjectDefault={onSave}
+        isProjectDefault={true}
+      />,
+    )
+    expect(screen.getByText('✓ Saved default')).toBeInTheDocument()
   })
 })

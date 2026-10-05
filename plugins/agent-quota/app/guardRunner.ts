@@ -7,6 +7,7 @@ import { AGENT_LABELS, pruneOverride } from './quotaConfig'
 import { INITIAL_GUARD, isHeld, manualResume, stepGuard, suspendFailed } from './quotaGuard'
 import { getQuotaState, pushNotice, setOverride, terminalConfig, updateQuota } from './quotaStore'
 import { isProbingUsage } from './inlineUsageProbe'
+import { scheduleResumeRecovery } from './resumeRecovery'
 
 /**
  * Runs the guard for every terminal on a profile after a reading, and carries out what it decides.
@@ -28,6 +29,8 @@ async function runAction(api: AgentQuotaAPI, terminal: TerminalAgent, action: Gu
   }
   if (action.type === 'resume') {
     await api.resume(sessionId)
+    const config = terminalConfig(getQuotaState(), terminal)
+    scheduleResumeRecovery(sessionId, config.resumeRecovery)
     return true
   }
   if (action.type === 'terminate') {
@@ -83,6 +86,7 @@ export async function releaseUnguarded(api: AgentQuotaAPI): Promise<void> {
     if (current.config.enabled && config.enabled && config.suspendAtLimit) continue
     writeGuard(terminal.instanceKey, { ...INITIAL_GUARD })
     await api.resume(terminal.sessionId)
+    scheduleResumeRecovery(terminal.sessionId, config.resumeRecovery)
     pushNotice('info', `${subjectOf(terminal)} resumed: its quota guard was switched off.`)
   }
 }
@@ -101,6 +105,7 @@ export async function resumeByHand(api: AgentQuotaAPI, sessionId: string, now: n
   }))
   writeGuard(terminal.instanceKey, manualResume(guard, now))
   await api.resume(sessionId)
+  scheduleResumeRecovery(sessionId, terminalConfig(current, terminal).resumeRecovery)
   pushNotice('info', `${subjectOf(terminal)} resumed by hand. Monitoring is paused for this agent until you enable it again.`)
 }
 
