@@ -27,6 +27,23 @@ export interface GitRepoStatus {
   is_detached: boolean
   files: GitFileChange[]
   conflict_count: number
+  /** Set only when `repo_root` is a linked worktree: the root of its main worktree. */
+  main_worktree?: string
+}
+
+/** One entry of `git worktree list`; the main worktree comes first. */
+export interface GitWorktreeInfo {
+  path: string
+  /** Short branch name; absent when detached or bare. */
+  branch?: string
+  head?: string
+  is_main: boolean
+  /** The worktree the listing was requested from. */
+  is_current: boolean
+  is_detached: boolean
+  is_bare: boolean
+  is_locked: boolean
+  is_prunable: boolean
 }
 
 export type GitDiffLineType = 'context' | 'addition' | 'deletion'
@@ -92,6 +109,8 @@ export interface GitBranchDeleteFailure {
 export interface GitDeleteBranchesResult {
   deleted: string[]
   failed: GitBranchDeleteFailure[]
+  /** Linked worktrees removed because they had a deleted branch checked out. */
+  removed_worktrees?: string[]
 }
 
 export interface GitBlameLine {

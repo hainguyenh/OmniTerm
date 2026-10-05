@@ -309,3 +309,28 @@ pub fn save_text_file(
         mtime_ms: mtime_ms(&metadata),
     })
 }
+
+/// Create an empty text file in the workspace if it does not already exist.
+pub fn create_text_file(root: &str, path: &str, excluded: &[String]) -> Result<String, String> {
+    let candidate = Path::new(root).join(path);
+    if candidate.exists() {
+        return Err("A file with this name already exists.".to_string());
+    }
+    let target = missing_target(root, path, excluded)?;
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("Could not create directory: {e}"))?;
+        }
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&target)
+        .map_err(|e| format!("Could not create file: {e}"))?;
+    file.flush().map_err(|e| e.to_string())?;
+    let rel = target
+        .strip_prefix(Path::new(root))
+        .map(|p| p.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| path.to_string());
+    Ok(rel)
+}

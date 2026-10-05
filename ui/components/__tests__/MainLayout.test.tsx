@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { fireEvent } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import { TOKYO_NIGHT } from "../../themes";
@@ -36,6 +36,7 @@ const baseSettings: AppSettings = {
     toggleAppFullscreen: "F11",
     agentQuota: "Ctrl+Alt+Q",
     pasteScript: "Ctrl+Alt+V",
+    newTempNote: "Ctrl+Shift+T",
   },
 };
 
@@ -86,7 +87,7 @@ describe("MainLayout", () => {
   /** A workspace is the only home for connections now — there is no separate personal section. */
   it("renders the empty sidebar state with no personal connections section", async () => {
     renderLayout();
-    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument());
+    expect(await screen.findByRole("heading", { name: "Your projects, together" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Personal Connections")).not.toBeInTheDocument();
     expect(screen.queryByTitle("New personal connection")).not.toBeInTheDocument();
   });
@@ -110,7 +111,8 @@ describe("MainLayout", () => {
       },
     });
     fireEvent.click(await screen.findByText("my-project"));
-    fireEvent.click(await screen.findByLabelText("Add connection in infra"));
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for infra" }));
+    fireEvent.click(screen.getByLabelText("Add connection in infra"));
     expect(await screen.findByRole("heading", { name: "New Connection" })).toBeInTheDocument();
     expect(screen.getAllByText("my-project", { selector: "span.text-xs" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
@@ -123,8 +125,9 @@ describe("MainLayout", () => {
   it("uses the Workspace header plus only to add a workspace", async () => {
     const add = vi.fn().mockResolvedValue(null);
     renderLayout({}, { workspace: { add } });
-    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument());
-    fireEvent.click(screen.getByLabelText("Add workspace folder"));
+    await screen.findByRole("heading", { name: "Your projects, together" });
+    fireEvent.click(screen.getByRole("button", { name: "Workspace options" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Add workspace folder" }));
     expect(add).toHaveBeenCalledOnce();
     expect(screen.queryByText("New connection")).not.toBeInTheDocument();
   });

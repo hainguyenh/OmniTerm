@@ -138,3 +138,15 @@ pub async fn open_in_system(path: String) -> Result<(), String> {
     opener::open(validated).map_err(|e| e.to_string())
 }
 
+pub fn handle_second_instance<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
+    if let Some(req) = app_protocol::openshell::parse_open_shell_args(argv) {
+        crate::adhoc::open_adhoc_shell(app, req);
+    } else if argv.iter().any(|a| a == "--open-shell") {
+        log::warn!("[launcher] ignored an --open-shell request with an unsupported shell");
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}

@@ -54,6 +54,27 @@ describe('GitInlineDiffEditor', () => {
     expect(local.state.doc.toString()).toBe('const a = 2')
   })
 
+  it('resizes the base side with the chunk-column divider and remembers it', () => {
+    localStorage.clear()
+    renderEditor('const a = 2', 'const a = 1')
+    const container = document.querySelector<HTMLElement>('.git-diff-split')
+    const split = () => container?.style.getPropertyValue('--git-diff-split')
+    expect(split()).toBe('0.5')
+    const divider = screen.getByRole('separator', { name: 'Resize base and working copy panes' })
+    // jsdom has no layout: the drag scale falls back to one unit per pixel, clamped to the bounds.
+    fireEvent.mouseDown(divider, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 100.25 })
+    expect(split()).toBe('0.75')
+    fireEvent.mouseMove(window, { clientX: 50 })
+    expect(split()).toBe('0.15')
+    fireEvent.mouseUp(window)
+    expect(localStorage.getItem('omniterm:git-diff-split')).toBe('0.15')
+    fireEvent.keyDown(divider, { key: 'ArrowRight' })
+    expect(Number(split())).toBeCloseTo(0.2)
+    fireEvent.doubleClick(divider)
+    expect(split()).toBe('0.5')
+  })
+
   it('keeps the full file expanded in full mode', () => {
     const server = Array.from({ length: 20 }, (_, i) => `l${i}`).join('\n')
     renderEditor(server.replace('l10', 'changed'), server, 'full')

@@ -8,6 +8,7 @@ import { rasterImageMime } from '../../utils/imageFile'
 // The editor and CodeMirror load with the first opened file, not with the app shell.
 const FileEditorTab = lazy(() => import('./FileEditorTab').then((module) => ({ default: module.FileEditorTab })))
 const ImageFileTab = lazy(() => import('./ImageFileTab').then((module) => ({ default: module.ImageFileTab })))
+const TempNoteEditorTab = lazy(() => import('./TempNoteEditorTab').then((module) => ({ default: module.TempNoteEditorTab })))
 
 interface EditorTabHostProps {
   tabId: string
@@ -34,9 +35,13 @@ export function EditorTabHost({ tabId, editor, visible, closeTab, keepTab, runSc
   }, [keepTab, runScript, tabId, workspaceId, script])
   const onClose = useCallback(() => closeTab(tabId), [closeTab, tabId])
 
+  const isTemp = workspaceId === '__temp__' || tabId.startsWith('temp:')
+
   return (
     <Suspense fallback={<div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin" aria-label="Loading" /></div>}>
-      {rasterImageMime(script.name) ? (
+      {isTemp ? (
+        <TempNoteEditorTab tabId={tabId} noteId={script.id} visible={visible} onClose={onClose} />
+      ) : rasterImageMime(script.name) ? (
         <ImageFileTab workspaceId={workspaceId} script={script} visible={visible} onClose={onClose} />
       ) : (
         <FileEditorTab tabId={tabId} workspaceId={workspaceId} script={script} visible={visible}

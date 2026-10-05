@@ -92,6 +92,19 @@ fn refuses_diverged_untracked_and_checked_out_branches() {
 }
 
 #[test]
+fn names_the_worktree_case_when_the_branch_is_checked_out_elsewhere() {
+    // Spawns git: PATH must not be swapped out by another test meanwhile.
+    let _guard = crate::test_support::lock();
+    let (dir, root) = repo();
+    let linked = dir.path().join("agent");
+    git(&root, &["worktree", "add", "-q", &linked.to_string_lossy(), "topic"]);
+    commit(&root, "b.txt", "second");
+
+    let err = update_branch_without_checkout(&root, "topic").unwrap_err();
+    assert!(err.contains("another worktree"), "{err}");
+}
+
+#[test]
 fn renames_branches_and_rejects_invalid_names() {
     // Spawns git: PATH must not be swapped out by another test meanwhile.
     let _guard = crate::test_support::lock();

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   ArrowLeftRight,
-  ChevronRight,
   GitBranch,
   GitCommit,
   GitCompare,
@@ -11,6 +10,7 @@ import {
 } from 'lucide-react'
 import { createGitAPI } from '../../gitAPI'
 import { Tooltip } from '../Tooltip'
+import { GitBranchDiffFileTree } from './GitBranchDiffFileTree'
 import type { GitBranchComparison } from './gitTypes'
 
 interface GitBranchDiffModalProps {
@@ -85,13 +85,16 @@ export const GitBranchDiffModal: React.FC<GitBranchDiffModalProps> = ({
     }
   }
 
+  // A file diff compares the working tree with a branch, so it must be the side that is not checked
+  // out: after a swap the target is the current branch, and diffing against it would show nothing.
+  const fileDiffBranch = targetBranch === initialBase ? baseBranch : targetBranch
   const files = comparison?.files ?? []
   const commitsAhead = comparison?.commits_ahead ?? []
   const commitsBehind = comparison?.commits_behind ?? []
 
   const content = (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none animate-in fade-in duration-150"
+      className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs select-none animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -180,47 +183,7 @@ export const GitBranchDiffModal: React.FC<GitBranchDiffModalProps> = ({
                 No differences found between {baseBranch} and {targetBranch}
               </div>
             ) : (
-              <div className="divide-y divide-theme-border/30">
-                {files.map((file) => {
-                  const statusLabel =
-                    file.staged === 'added'
-                      ? 'A'
-                      : file.staged === 'deleted'
-                        ? 'D'
-                        : file.staged === 'renamed'
-                          ? 'R'
-                          : 'M'
-                  const statusColor =
-                    statusLabel === 'A'
-                      ? 'text-emerald-400 bg-emerald-500/10'
-                      : statusLabel === 'D'
-                        ? 'text-rose-400 bg-rose-500/10'
-                        : 'text-blue-400 bg-blue-500/10'
-
-                  return (
-                    <div
-                      key={file.path}
-                      onClick={() => onOpenFileDiff(file.path, targetBranch)}
-                      className="px-4 py-2 flex items-center justify-between hover:bg-theme-hover cursor-pointer transition-colors group"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-4 h-4 rounded text-[10px] font-bold font-mono flex items-center justify-center flex-shrink-0 ${statusColor}`}
-                        >
-                          {statusLabel}
-                        </span>
-                        <span className="font-mono text-xs text-theme-fg truncate" title={file.path}>
-                          {file.path}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px] text-theme-dim group-hover:text-theme-fg flex-shrink-0">
-                        <span>View Diff</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <GitBranchDiffFileTree files={files} onOpenFile={(path) => onOpenFileDiff(path, fileDiffBranch)} />
             )
           ) : (
             <div className="p-3 flex flex-col gap-4">

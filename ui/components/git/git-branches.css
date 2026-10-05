@@ -87,7 +87,7 @@
 .git-branches-checkout svg,
 .git-branches-notice svg,
 .git-branch-inspector svg,
-.git-branch-update-dialog svg {
+.git-branch-dialog svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
@@ -430,21 +430,6 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.git-branch-preview-action {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 4px;
-  text-align: start;
-}
-
-.git-branch-preview-action small {
-  margin-inline-start: auto;
-  color: var(--theme-dim);
-  font-size: 10px;
 }
 
 .git-branch-empty {

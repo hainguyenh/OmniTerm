@@ -11,7 +11,7 @@ import MainLayoutView from '../MainLayoutView'
 import type { MainLayoutModel } from '../useMainLayoutController'
 
 vi.mock('../ActivityBar', () => ({ default: (p: any) => <div data-testid="activity"><button onClick={() => p.onViewChange('workspace')}>view</button><button onClick={p.onSettingsClick}>settings</button><span>{String(p.filesEnabled)}</span></div> }))
-vi.mock('../WorkspacePanel', () => ({ default: (p: any) => <div data-testid="workspace"><button onClick={() => p.onOpenScript?.('w', { path: '/x.ts' })}>open-script</button><button onClick={() => p.onRunScript?.('w', { path: '/x.ts' })}>run-script</button><button onClick={() => p.onAddWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' })}>add-conn</button><button onClick={() => p.onEditWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' }, { id: 'c' })}>edit-conn</button></div> }))
+vi.mock('../WorkspacePanel', () => ({ default: (p: any) => <div data-testid="workspace" data-active-file={p.activeFile ? `${p.activeFile.workspaceId}:${p.activeFile.path}` : ''}><button onClick={() => p.onOpenScript?.('w', { path: '/x.ts' })}>open-script</button><button onClick={() => p.onRunScript?.('w', { path: '/x.ts' })}>run-script</button><button onClick={() => p.onAddWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' })}>add-conn</button><button onClick={() => p.onEditWorkspaceConnection?.({ workspaceId: 'w', folders: [], rootLabel: 'W' }, { id: 'c' })}>edit-conn</button></div> }))
 vi.mock('../FileBrowser', () => ({ default: (p: any) => <div data-testid="files">{p.id}:{p.connectionName}:{String(p.active)}</div> }))
 vi.mock('../SessionTabs', () => ({ default: (p: any) => <div data-testid="tabs"><button onClick={() => p.onSelect(p.tabs[0].id)}>select-tab</button><button onClick={() => p.onPromote(p.tabs[0].id)}>promote-tab</button><button onClick={() => p.onClose(p.tabs[0].id)}>close-tab</button><button onContextMenu={(e: React.MouseEvent<HTMLButtonElement>) => p.onContextMenu(e, p.tabs[0].id)}>menu-tab</button><button title="New Terminal (Ctrl+N)" onClick={() => p.onNewSession()}>new-tab</button><button onClick={() => p.onPickShell({ left: 2, bottom: 3 })}>shell-tab</button><button onClick={() => p.onPickPane?.({ left: 6, bottom: 7 })}>pick-pane</button><button onClick={() => p.onReveal(p.tabs[0].id)}>reveal-tab</button>{p.detachAction && <button onClick={p.onToggleDetach}>toggle-detach</button>}</div> }))
 vi.mock('../WaitingPane', () => ({ default: (p: any) => <div data-testid={p.compact ? `waiting-${p.paneIndex}` : 'waiting'}><button onClick={p.onNewSession}>new-wait</button><button onClick={() => p.onPickShell({ left: 4, bottom: 5 })}>shell-wait</button>{p.onChooseSession && <button onClick={p.onChooseSession}>choose-wait</button>}</div> }))
@@ -107,6 +107,17 @@ describe('MainLayoutView coverage', () => {
     expect(screen.getByTestId('files')).toHaveTextContent('ssh:SSH:true')
     rerender(<MainLayoutView model={model({ activeView: 'files', activeSshId: null })} />)
     expect(screen.getByTestId('workspace')).toBeInTheDocument()
+  })
+
+  it('tells the workspace tree which file the active editor tab shows', () => {
+    const editor = { workspaceId: 'w', script: { id: 'folder#1/a.ts', path: 'folder#1/a.ts', name: 'a.ts', kind: 'ts' } }
+    const tabs = [{ id: 'edit-tab', connId: 'file', name: 'a.ts' }, { id: 'local-tab', connId: 'local', name: 'Local' }]
+    const shared = { activeView: 'workspace', activeTabs: tabs, panes: ['edit-tab'], editorTabs: { 'edit-tab': editor } }
+    const { rerender } = render(<MainLayoutView model={model({ ...shared, activeTabId: 'edit-tab' })} />)
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-active-file', 'w:folder#1/a.ts')
+
+    rerender(<MainLayoutView model={model({ ...shared, panes: ['local-tab'], activeTabId: 'local-tab' })} />)
+    expect(screen.getByTestId('workspace')).toHaveAttribute('data-active-file', '')
   })
 
   it('paints the secondary panel with the theme sidebar fill so workspace rows stand out', () => {

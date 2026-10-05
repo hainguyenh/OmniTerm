@@ -18,6 +18,40 @@ import { loadLanguage, resolveLanguageId } from './languageLoader'
 export interface TextEditorHandle {
   getText: () => string
   markSaved: () => void
+  /** Diff editors only: scroll to the next (1) or previous (-1) change, wrapping at either end. */
+  goToChange?: (direction: 1 | -1) => void
+}
+
+/** Which change the cursor is on (`index` -1 when between changes) out of how many. */
+export interface ChangePosition {
+  index: number
+  count: number
+}
+
+/** A changed stretch of the editable side, as document offsets. */
+export interface ChangeSpan {
+  from: number
+  to: number
+}
+
+/**
+ * The change to jump to from the cursor at `head`: the first one starting after it going forward,
+ * the last one starting before it going back, wrapping around at either end.
+ */
+export function nextChangeIndex(changes: readonly ChangeSpan[], head: number, direction: 1 | -1): number {
+  if (direction > 0) {
+    const index = changes.findIndex((change) => change.from > head)
+    return index === -1 ? 0 : index
+  }
+  for (let index = changes.length - 1; index >= 0; index -= 1) {
+    if (changes[index].from < head) return index
+  }
+  return changes.length - 1
+}
+
+/** The change holding the cursor, or -1 when it sits between changes. */
+export function changeIndexAt(changes: readonly ChangeSpan[], head: number): number {
+  return changes.findIndex((change) => change.from <= head && head <= change.to)
 }
 
 /** Equal-length edits are compared in full only after typing pauses, as in the file editor. */

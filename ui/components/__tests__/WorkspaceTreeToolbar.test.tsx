@@ -139,7 +139,8 @@ describe('WorkspaceTreeToolbar', () => {
       filter={filter} fileCount={0} onOpenFilterMenu={vi.fn()} filterMenuOpen={false}
       allCollapsed={null} onToggleCollapseAll={vi.fn()} flatView={false} onToggleFlatView={vi.fn()} scanning={false} onRescan={vi.fn()}
     />)
-    const labelBtn = screen.getByText('Scripts')
-    expect(labelBtn.className).toContain('text-[var(--theme-accent)]')
+    const trigger = screen.getByText('Scripts').closest('button') as HTMLElement
+    expect(trigger.className).toContain('text-[var(--theme-accent)]')
+    expect(trigger).toHaveAttribute('data-active', 'true')
   })
 })

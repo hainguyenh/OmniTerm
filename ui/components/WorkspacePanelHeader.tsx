@@ -1,7 +1,9 @@
 import React, { useState } from 'react'
-import { FileInput, FolderPlus, Plus } from 'lucide-react'
+import { FileInput, FolderPlus, Plus, X } from 'lucide-react'
+
 import WorkspaceSearchBar from './WorkspaceSearchBar'
 import { Tooltip } from './Tooltip'
+import { WorkspaceRowActions } from './WorkspaceRowActions'
 
 interface WorkspacePanelHeaderProps {
   query: string
@@ -10,8 +12,6 @@ interface WorkspacePanelHeaderProps {
   onAdd: () => void
   onCreate: (name: string) => void
 }
-
-const actionClass = 'flex-shrink-0 p-1 rounded hover:bg-[var(--theme-hover-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition-colors'
 
 const WorkspacePanelHeader: React.FC<WorkspacePanelHeaderProps> = ({
   query, onQueryChange, onImport, onAdd, onCreate,
@@ -28,38 +28,54 @@ const WorkspacePanelHeader: React.FC<WorkspacePanelHeaderProps> = ({
   }
 
   return (
-    <div className="border-b border-[var(--theme-border)]">
-      <div className="flex items-center gap-1 px-3 py-2">
-        <WorkspaceSearchBar query={query} onChange={onQueryChange} />
-        <Tooltip content="Import VS Code workspace" placement="bottom">
-          <button type="button" aria-label="Import VS Code workspace" onClick={onImport} className={actionClass}>
-            <FileInput className="w-4 h-4" />
-          </button>
-        </Tooltip>
+    <div className="workspace-panel-header">
+      <div className="workspace-panel-heading">
+        <h2>Workspaces</h2>
         <Tooltip content="New workspace" placement="bottom">
-          <button type="button" aria-label="New workspace" onClick={() => setCreating(value => !value)} className={actionClass}>
+          <button type="button" aria-label="New workspace" aria-expanded={creating} onClick={() => setCreating(value => !value)} className="workspace-icon-button workspace-primary-action">
             <Plus className="w-4 h-4" />
           </button>
         </Tooltip>
-        <Tooltip content="Add workspace folder" shortcut="Ctrl+Shift+N" placement="bottom">
-          <button type="button" aria-label="Add workspace folder" onClick={onAdd} className={actionClass}>
-            <FolderPlus className="w-4 h-4" />
-          </button>
-        </Tooltip>
+        <WorkspaceRowActions label="Workspace options" items={[
+          { label: 'Add workspace folder', icon: FolderPlus, onSelect: onAdd },
+          { label: 'Import VS Code workspace', icon: FileInput, onSelect: onImport },
+        ]} />
       </div>
+      <WorkspaceSearchBar query={query} onChange={onQueryChange} />
       {creating && (
-        <form className="flex items-center gap-1 px-3 pb-2" onSubmit={submit}>
-          <input
-            autoFocus
-            aria-label="Workspace name"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            placeholder="Workspace name"
-            className="min-w-0 flex-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs outline-none focus:border-[var(--theme-accent)]"
-          />
-          <button type="submit" aria-label="Create workspace" disabled={!name.trim()} className="rounded px-2 py-1 text-xs text-[var(--theme-accent)] hover:bg-[var(--theme-hover-bg)] disabled:opacity-40">
-            Create
-          </button>
+        <form className="workspace-create-form" onSubmit={submit}>
+          <label htmlFor="workspace-create-name">Workspace name</label>
+          <div className="workspace-create-controls">
+            <input
+              id="workspace-create-name"
+              autoFocus
+              aria-label="Workspace name"
+              value={name}
+              onChange={event => setName(event.target.value)}
+              placeholder="Workspace name"
+              onKeyDown={event => {
+              if (event.key === 'Escape') {
+                setCreating(false)
+                setName('')
+              }
+              }}
+              className="min-w-0 flex-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-1 text-xs outline-none focus:border-[var(--theme-accent)]"
+            />
+            <button type="submit" aria-label="Create workspace" disabled={!name.trim()} className="rounded px-2 py-1 text-xs text-[var(--theme-accent)] hover:bg-[var(--theme-hover-bg)] disabled:opacity-40">
+              Create
+            </button>
+            <button
+              type="button"
+              aria-label="Cancel new workspace"
+              className="workspace-icon-button"
+              onClick={() => {
+                setCreating(false)
+                setName('')
+              }}
+            >
+              <X aria-hidden="true" />
+            </button>
+          </div>
         </form>
       )}
     </div>

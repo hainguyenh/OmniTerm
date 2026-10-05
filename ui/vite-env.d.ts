@@ -31,13 +31,10 @@ interface ShortcutBindings {
   /** Agent Quota quick settings (plugin); inert without the plugin. */
   agentQuota: string
   pasteScript: string
+  newTempNote: string
 }
 
-/**
- * Per-terminal appearance overrides. Absent fields fall back to the app-wide default (or the
- * connection's persisted overrides, for in-session divergences). `fontSize` clamps 8–48, `themeId`
- * is any id from `themes.list`.
- */
+/** Per-terminal appearance overrides. fontSize clamps 8–48, themeId is any id from themes.list. */
 interface TerminalAppearance {
   fontSize?: number
   themeId?: string
@@ -306,7 +303,7 @@ interface Window {
       systemExcludedViewExts: () => Promise<string[]>
     }
     // Workspace view: composite containers of real folder roots, nested by stable workspace id.
-    workspace: {
+    workspace: import('./workspaceAPI').WorkspaceTreeEditAPI & {
       list: () => Promise<import('@omniterm/contract').Workspace[]>
       create: (name: string) => Promise<import('@omniterm/contract').Workspace>
       add: () => Promise<import('@omniterm/contract').Workspace | null>
@@ -331,11 +328,13 @@ interface Window {
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>
       openTextFile: (workspaceId: string, path: string) => Promise<import('./utils/textFileWire').TextFileContent>
       saveTextFile: (workspaceId: string, path: string, request: import('./utils/textFileWire').TextFileSaveRequest) => Promise<import('./utils/textFileWire').TextFileSaveOutcome>
+      createTextFile: (workspaceId: string, path: string) => Promise<string>
       openImageFile: (workspaceId: string, path: string) => Promise<Uint8Array>
       loadConnections: (workspaceId: string) => Promise<import('@omniterm/contract').Connection[]>
       saveConnections: (workspaceId: string, connections: import('@omniterm/contract').Connection[]) => Promise<void>
       deleteConnection: (workspaceId: string, connectionId: string) => Promise<void>
     }
+    tempNotes: import('./tempNotesAPI').TempNotesAPI
     updates: {
       check: () => Promise<UpdateState>
       state: () => Promise<UpdateState>

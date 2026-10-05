@@ -2,6 +2,7 @@ import type { MainLayoutProps } from './mainLayoutShared'
 import { useMainLayoutBase } from './useMainLayoutBase'
 import { useMainLayoutSessions } from './useMainLayoutSessions'
 import { useRenewSession } from '../hooks/useRenewSession'
+import { useTempNotes } from '../hooks/useTempNotes'
 
 export function useMainLayoutController(props: MainLayoutProps) {
   const base = useMainLayoutBase(props)
@@ -18,7 +19,13 @@ export function useMainLayoutController(props: MainLayoutProps) {
     activeTabId: base.activeTabId,
     onError: (message) => { void base.showAlert(message, { title: 'Renew session', tone: 'error' }) },
   })
-  return { ...base, ...sessions, ...renew }
+  const tempNotes = useTempNotes({
+    activeTabs: base.activeTabs,
+    setActiveTabs: base.setActiveTabs,
+    setEditorTabs: base.setEditorTabs,
+    showTab: sessions.showTab,
+  })
+  return { ...base, ...sessions, ...renew, ...tempNotes }
 }
 
 export type MainLayoutModel = ReturnType<typeof useMainLayoutController>

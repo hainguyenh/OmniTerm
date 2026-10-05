@@ -14,6 +14,7 @@ pub use crate::git_diff::*;
 pub use crate::git_history::*;
 pub use crate::git_stash::*;
 pub use crate::git_status::*;
+pub use crate::git_worktree::*;
 
 /// Resolves the Git executable path across common Windows installation paths and PATH.
 pub fn resolve_git_binary() -> PathBuf {

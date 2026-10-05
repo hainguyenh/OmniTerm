@@ -47,6 +47,8 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 - Canonical containment, not raw prefix matching.
 - View/edit/run are distinct capabilities.
 - Configured max bytes is bounded.
+- Tree edits resolve the entry's parent with symlinks followed and act on the entry itself, so a link is renamed or deleted as a link.
+- Tree rename/move/delete accept files only, never replace an existing entry, and cannot give a file a kind the viewer refuses unless it already had that kind.
 
 ## Functionalities
 
@@ -59,6 +61,7 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 - `read_viewable_excluding` — owned by this spec.
 - `write_editable` — owned by this spec.
 - `open_text_file` / `save_text_file` (`text_file.rs`) — owned by this spec.
+- `create_directory` / `move_file` / `delete_file` (`workspace_fs.rs`) — owned by this spec.
 - `resolve_launch` — owned by this spec.
 - `script_run_request` — owned by this spec.
 - `default_shell` — owned by this spec.
@@ -79,6 +82,9 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 | `write_editable` | Write bounded safe text. | Script-only write boundary. | Resolve editable target, enforce size, write. | Legacy `write_script` save. |
 | `open_text_file` | Open a viewable file for the editor. | One read that also yields what the editor needs to pick a profile. | View gate, size cap, sniff, BOM strip, EOL/line/longest-line stats, mtime and read-only flag. | Editor open/reload. |
 | `save_text_file` | Save editor content. | Conflict-safe, binary-safe, crash-safe writes for any text file. | Size cap incl. BOM, conflict outcome, binary/read-only refusal, temp file + rename with in-place fallback. | Editor save. |
+| `create_directory` | Create one subfolder. | The tree's New folder action. | Contained parent, portable-name check, `create_dir` (never `create_dir_all`). | New folder. |
+| `move_file` | Rename or move a file. | The tree's rename and Move to actions. | Contained parents, file-only source, portable-name and kind checks, no-replace guard with case-only rename allowed, copy-then-remove across drives. | Rename/move. |
+| `delete_file` | Permanently delete a file. | The tree's Delete action. | Contained parent, refuse directories, remove the entry itself. | Delete after confirmation. |
 | `resolve_launch` | Resolve process launch spec. | Tauri-free launch rules. | Validate/build executable args/cwd. | Session start. |
 | `script_run_request` | Build workspace script request. | Central script kind/shell semantics. | Map script info to OpenShellRequest. | Workspace run. |
 | `default_shell` | Choose default shell identifier. | Consistent folder terminal. | Platform-aware closed choice. | Open Terminal. |
@@ -103,6 +109,7 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 ## Verification
 
 - safepath/view tests
+- workspace_fs tests (escapes, names, kinds, clashes, cross-drive fallback, symlinks on Unix)
 - launch/workspace_launch/RDP tests
 - platform job tests
 
@@ -110,6 +117,7 @@ Before workspace file read/write/run, terminal cwd, local process launch or RDP 
 
 - `crates/app-core/src/safepath.rs`
 - `crates/app-core/src/text_file.rs`
+- `crates/app-core/src/workspace_fs.rs`
 - `crates/app-core/src/launch.rs`
 - `crates/app-core/src/workspace_launch.rs`
 - `crates/app-core/src/rdp_launch.rs`

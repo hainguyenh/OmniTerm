@@ -1,80 +1,69 @@
-import React from 'react'
 import { Monitor, Pencil, Play, Terminal, Trash2 } from 'lucide-react'
 import type { Connection } from '@omniterm/contract'
-import { Tooltip } from './Tooltip'
+import type { CSSProperties } from 'react'
 
-/**
- * A saved connection, rendered as a leaf of the workspace tree inside the folder its `parentId`
- * names — right next to the scripts it goes with.
- *
- * Its actions mirror a file row's: the primary one (connect) is a double-click or the play button,
- * and edit/delete only appear on hover so a dense tree stays readable.
- */
+import { Tooltip } from './Tooltip'
+import { useRowContextMenu } from './useRowContextMenu'
+import { WorkspaceRowActions } from './WorkspaceRowActions'
+
 interface WorkspaceConnectionRowProps {
   connection: Connection
-  /** Indent level in the tree, in the same units the file and folder rows use. */
   depth: number
-  onConnect?: (conn: Connection) => void
-  /** Absent when the host offers no edit affordance (e.g. a plugin-free build). */
-  onEdit?: (conn: Connection) => void
-  onDelete: (conn: Connection) => void
+  onConnect?: (connection: Connection) => void
+  onEdit?: (connection: Connection) => void
+  onDelete: (connection: Connection) => void
 }
 
-const typeIconFor = (type: Connection['type']) => {
-  if (type === 'RDP') return <Monitor className="w-4 h-4 flex-shrink-0 text-[#bb9af7]" />
-  const tint = type === 'SSH' ? 'text-[#7dcfff]' : 'text-[#9ece6a]'
-  return <Terminal className={`w-4 h-4 flex-shrink-0 ${tint}`} />
-}
-
-const hoverAction = 'flex-shrink-0 hidden group-hover:inline-flex p-1 rounded hover:bg-[var(--theme-bg)] transition'
-
-const WorkspaceConnectionRow: React.FC<WorkspaceConnectionRowProps> = ({
+export default function WorkspaceConnectionRow({
   connection, depth, onConnect, onEdit, onDelete,
-}) => (
-  <div
-    className="group flex items-center gap-2 pr-1 h-7 rounded bg-[var(--theme-bg)] cursor-pointer hover:bg-[var(--theme-hover-bg)]"
-    style={{ paddingLeft: 8 + depth * 12 }}
-    onDoubleClick={() => onConnect?.(connection)}
-    title={connection.type !== 'LOCAL'
-      ? `${connection.user ? connection.user + '@' : ''}${connection.host}:${connection.port}`
-      : connection.name}
-  >
-    {typeIconFor(connection.type)}
-    <span className="flex-1 min-w-0 truncate text-xs">{connection.name}</span>
-    <span className="text-[9px] text-[var(--theme-dim)] uppercase mr-1">{connection.type}</span>
-    <Tooltip content="Connect" placement="bottom">
+}: WorkspaceConnectionRowProps) {
+  const Icon = connection.type === 'RDP' ? Monitor : Terminal
+  const { actionsRef, onContextMenu } = useRowContextMenu()
+  return (
+    <div
+      className="workspace-connection-row"
+      style={{ '--tree-depth': depth } as CSSProperties}
+      onDoubleClick={() => onConnect?.(connection)}
+      onContextMenu={onContextMenu}
+      title={connection.type !== 'LOCAL'
+        ? `${connection.user ? connection.user + '@' : ''}${connection.host}:${connection.port}`
+        : connection.name}
+    >
+      <Icon className="workspace-connection-icon" aria-hidden="true" />
       <button
         type="button"
-        aria-label="Connect"
-        onClick={(e) => { e.stopPropagation(); onConnect?.(connection) }}
-        className={`${hoverAction} text-[var(--theme-accent)]`}
+        className="workspace-row-label"
+        disabled={!onConnect}
+        onDoubleClick={event => {
+          event.stopPropagation()
+          onConnect?.(connection)
+        }}
+        onClick={event => { if (event.detail === 0) onConnect?.(connection) }}
       >
-        <Play className="w-3.5 h-3.5" />
+        {connection.name}
       </button>
-    </Tooltip>
-    {onEdit && (
-      <Tooltip content="Edit connection" placement="bottom">
-        <button
-          type="button"
-          aria-label="Edit connection"
-          onClick={(e) => { e.stopPropagation(); onEdit(connection) }}
-          className={`${hoverAction} text-[var(--theme-dim)] hover:text-[var(--theme-fg)]`}
-        >
-          <Pencil className="w-3 h-3" />
-        </button>
-      </Tooltip>
-    )}
-    <Tooltip content="Delete connection" placement="bottom">
-      <button
-        type="button"
-        aria-label="Delete connection"
-        onClick={(e) => { e.stopPropagation(); onDelete(connection) }}
-        className={`${hoverAction} text-[var(--theme-dim)] hover:text-red-400`}
-      >
-        <Trash2 className="w-3 h-3" />
-      </button>
-    </Tooltip>
-  </div>
-)
-
-export default WorkspaceConnectionRow
+      <span className="workspace-connection-type">{connection.type}</span>
+      {onConnect && (
+        <Tooltip content="Connect" placement="bottom">
+          <button
+            type="button"
+            aria-label="Connect"
+            className="workspace-icon-button workspace-run-action"
+            onClick={event => {
+              event.stopPropagation()
+              onConnect(connection)
+            }}
+            onDoubleClick={event => event.stopPropagation()}
+          >
+            <Play aria-hidden="true" />
+          </button>
+        </Tooltip>
+      )}
+      <WorkspaceRowActions ref={actionsRef} label={`Actions for ${connection.name}`} items={[
+        ...(onConnect ? [{ label: 'Connect', icon: Play, onSelect: () => onConnect(connection) }] : []),
+        ...(onEdit ? [{ label: 'Edit connection', icon: Pencil, onSelect: () => onEdit(connection) }] : []),
+        { label: 'Delete connection', icon: Trash2, onSelect: () => onDelete(connection), danger: true },
+      ]} />
+    </div>
+  )
+}

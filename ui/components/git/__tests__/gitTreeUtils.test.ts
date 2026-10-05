@@ -44,6 +44,20 @@ describe('gitTreeUtils', () => {
     expect(rootFile?.type).toBe('file')
   })
 
+  it('keeps a wholly untracked directory as one named entry instead of a nameless file', () => {
+    const tree = buildGitTree([
+      { path: 'ui/__scratch__/', staged: 'unmodified', unstaged: 'untracked', is_conflicted: false },
+      { path: 'ui/a.ts', staged: 'unmodified', unstaged: 'modified', is_conflicted: false },
+    ])
+    const uiFolder = tree[0] as GitTreeFolderNode
+    expect(uiFolder.name).toBe('ui')
+    expect(uiFolder.children.map((child) => [child.type, child.name])).toEqual([
+      ['file', '__scratch__/'],
+      ['file', 'a.ts'],
+    ])
+    expect(uiFolder.children[0].path).toBe('ui/__scratch__/')
+  })
+
   it('calculates folder check state correctly (checked, unchecked, indeterminate)', () => {
     const tree = buildGitTree(mockFiles)
     const cratesFolder = tree.find((n) => n.name === 'crates/app-core/src') as GitTreeFolderNode

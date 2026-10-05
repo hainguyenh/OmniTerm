@@ -5,9 +5,8 @@
 
 use crate::git::run_git_cmd;
 pub use crate::git_branch_compare::compare_branches;
-use app_protocol::git::{
-    GitBranchDeleteFailure, GitBranchInfo, GitDeleteBranchesResult,
-};
+pub use crate::git_branch_delete::delete_branches;
+use app_protocol::git::GitBranchInfo;
 use std::collections::HashSet;
 use std::path::Path;
 
@@ -30,13 +29,18 @@ fn parse_track(track: &str) -> (u32, u32, bool) {
     (ahead, behind, is_gone)
 }
 
-/// Parses a single line from `git branch -a --format=...`.
+/// Parses a single line from `git branch -a --format=...`, whose first field is the full refname:
+/// `refs/remotes/` marks a remote branch whatever the remote is called.
 pub fn parse_branch_line(line: &str) -> Option<GitBranchInfo> {
     let parts: Vec<&str> = line.split('\t').collect();
-    if parts.is_empty() {
-        return None;
-    }
-    let name = parts[0].trim();
+    let refname = parts.first()?.trim();
+    let (name, is_remote) = match refname.strip_prefix("refs/remotes/") {
+        Some(name) => (name, true),
+        None => (
+            refname.strip_prefix("refs/heads/").unwrap_or(refname),
+            false,
+        ),
+    };
     if name.is_empty() || name == "HEAD" || name.ends_with("/HEAD") {
         return None;
     }
@@ -51,11 +55,8 @@ pub fn parse_branch_line(line: &str) -> Option<GitBranchInfo> {
 
     let track_raw = parts.get(3).map(|s| s.trim()).unwrap_or("");
     let (ahead, behind, is_gone) = parse_track(track_raw);
-    let is_remote = name.starts_with("origin/") || name.starts_with("remotes/");
 
-    let last_commit_timestamp = parts
-        .get(4)
-        .and_then(|s| s.trim().parse::<i64>().ok());
+    let last_commit_timestamp = parts.get(4).and_then(|s| s.trim().parse::<i64>().ok());
     let last_commit_message = parts
         .get(5)
         .map(|s| s.trim())
@@ -86,7 +87,8 @@ fn get_merged_branches(repo_root: &Path) -> HashSet<String> {
     let mut set = HashSet::new();
     if let Ok(stdout) = run_git_cmd(repo_root, &["branch", "--merged"]) {
         for line in String::from_utf8_lossy(&stdout).lines() {
-            let name = line.trim().trim_start_matches('*').trim();
+            // `*` marks this checkout's branch and `+` one checked out in another worktree.
+            let name = line.trim().trim_start_matches(['*', '+']).trim();
             if !name.is_empty() {
                 set.insert(name.to_string());
             }
@@ -97,14 +99,14 @@ fn get_merged_branches(repo_root: &Path) -> HashSet<String> {
 
 /// Lists all local and remote branches in the repository.
 pub fn get_branches(repo_root: &Path) -> Result<Vec<GitBranchInfo>, String> {
-    // `lstrip=2`, not `short`: `short` turns `refs/remotes/origin/HEAD` into a bare `origin`, which
-    // then slipped past the `/HEAD` filter and was listed as a local branch named `origin`.
+    // The full refname, not `short`: `short` turns `refs/remotes/origin/HEAD` into a bare `origin`,
+    // which then slipped past the `/HEAD` filter and was listed as a local branch named `origin`.
     let stdout = run_git_cmd(
         repo_root,
         &[
             "branch",
             "-a",
-            "--format=%(refname:lstrip=2)\t%(HEAD)\t%(upstream:short)\t%(upstream:track)\t%(committerdate:unix)\t%(subject)\t%(authorname)",
+            "--format=%(refname)\t%(HEAD)\t%(upstream:short)\t%(upstream:track)\t%(committerdate:unix)\t%(subject)\t%(authorname)",
         ],
     )?;
     let text = String::from_utf8_lossy(&stdout);
@@ -123,9 +125,44 @@ pub fn get_branches(repo_root: &Path) -> Result<Vec<GitBranchInfo>, String> {
     Ok(branches)
 }
 
-/// Switches to the specified branch or checkout target.
+fn ref_exists(repo_root: &Path, refname: &str) -> bool {
+    run_git_cmd(repo_root, &["show-ref", "--verify", "--quiet", refname]).is_ok()
+}
+
+/// The local branch a remote branch checks out as: `origin/feature/x` becomes `feature/x`. The
+/// longest matching remote wins, so a remote whose name contains `/` is stripped whole.
+fn local_name_of<'a>(repo_root: &Path, remote_branch: &'a str) -> &'a str {
+    let remotes = run_git_cmd(repo_root, &["remote"])
+        .map(|out| String::from_utf8_lossy(&out).into_owned())
+        .unwrap_or_default();
+    remotes
+        .lines()
+        .map(str::trim)
+        .filter_map(|remote| remote_branch.strip_prefix(remote)?.strip_prefix('/'))
+        .min_by_key(|name| name.len())
+        .or_else(|| remote_branch.split_once('/').map(|(_, name)| name))
+        .unwrap_or(remote_branch)
+}
+
+/// Switches to the specified branch or checkout target. A remote branch is checked out as its
+/// local tracking branch (created when missing) rather than as a detached `HEAD`.
 pub fn checkout_branch(repo_root: &Path, branch_name: &str) -> Result<String, String> {
-    let stdout = run_git_cmd(repo_root, &["checkout", branch_name])?;
+    let name = branch_name.trim();
+    if name.starts_with('-') {
+        return Err(format!("Branch must not start with '-': {name}"));
+    }
+    let is_remote_only = !ref_exists(repo_root, &format!("refs/heads/{name}"))
+        && ref_exists(repo_root, &format!("refs/remotes/{name}"));
+    let stdout = if !is_remote_only {
+        run_git_cmd(repo_root, &["checkout", name])?
+    } else {
+        let local = local_name_of(repo_root, name);
+        if ref_exists(repo_root, &format!("refs/heads/{local}")) {
+            run_git_cmd(repo_root, &["checkout", local])?
+        } else {
+            run_git_cmd(repo_root, &["checkout", "-b", local, "--track", name])?
+        }
+    };
     Ok(String::from_utf8_lossy(&stdout).trim().to_string())
 }
 
@@ -230,55 +267,13 @@ pub fn init_repo(path: &Path) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&stdout).trim().to_string())
 }
 
-/// Deletes one or more local Git branches, optionally forcing deletion.
-pub fn delete_branches(
-    repo_root: &Path,
-    branches: &[String],
-    force: bool,
-) -> Result<GitDeleteBranchesResult, String> {
-    let current_branch = run_git_cmd(repo_root, &["rev-parse", "--abbrev-ref", "HEAD"])
-        .map(|out| String::from_utf8_lossy(&out).trim().to_string())
-        .unwrap_or_default();
-
-    let mut result = GitDeleteBranchesResult::default();
-    let flag = if force { "-D" } else { "-d" };
-
-    for branch in branches {
-        let b = branch.trim();
-        if b.is_empty() {
-            continue;
-        }
-        if b == current_branch {
-            result.failed.push(GitBranchDeleteFailure {
-                branch: b.to_string(),
-                reason: "Cannot delete the currently checked out branch".into(),
-            });
-            continue;
-        }
-
-        match run_git_cmd(repo_root, &["branch", flag, b]) {
-            Ok(_) => {
-                result.deleted.push(b.to_string());
-            }
-            Err(e) => {
-                result.failed.push(GitBranchDeleteFailure {
-                    branch: b.to_string(),
-                    reason: e,
-                });
-            }
-        }
-    }
-
-    Ok(result)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_parse_branch_line() {
-        let line = "master\t*\torigin/master\t[ahead 1, behind 2]\t1786000000\tfeat: initial\tDev User";
+        let line = "refs/heads/master\t*\torigin/master\t[ahead 1, behind 2]\t1786000000\tfeat: initial\tDev User";
         let info = parse_branch_line(line).expect("parses successfully");
         assert_eq!(info.name, "master");
         assert!(info.is_current);
@@ -291,7 +286,7 @@ mod tests {
         assert_eq!(info.last_commit_message.as_deref(), Some("feat: initial"));
         assert_eq!(info.last_commit_author.as_deref(), Some("Dev User"));
 
-        let remote_line = "origin/main\t \t\t\t\t\t";
+        let remote_line = "refs/remotes/origin/main\t \t\t\t\t\t";
         let remote_info = parse_branch_line(remote_line).expect("parses remote branch");
         assert_eq!(remote_info.name, "origin/main");
         assert!(!remote_info.is_current);

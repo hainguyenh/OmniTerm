@@ -1,0 +1,53 @@
+.git-resize-grip {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  width: 14px;
+  height: 14px;
+  outline: none;
+  color: var(--theme-dim);
+  opacity: 0.7;
+}
+
+.git-resize-grip::after {
+  position: absolute;
+  inset: 3px;
+  content: '';
+  background: linear-gradient(
+    var(--git-grip-angle),
+    transparent 0 45%,
+    currentColor 45% 55%,
+    transparent 55% 70%,
+    currentColor 70% 80%,
+    transparent 80%
+  );
+}
+
+.git-resize-grip:hover,
+.git-resize-grip:focus-visible {
+  color: var(--theme-accent);
+  opacity: 1;
+}
+
+.git-resize-grip:focus-visible {
+  border-radius: 3px;
+  box-shadow: 0 0 0 2px var(--theme-accent);
+}
+
+.git-resize-grip.is-bottom-right {
+  --git-grip-angle: 135deg;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.git-resize-grip.is-top-right {
+  --git-grip-angle: 45deg;
+  top: 0;
+  cursor: nesw-resize;
+}
+
+/* A resized dialog carries an inline size; keep it inside the backdrop's padded viewport. */
+.git-branches-dialog.is-resized {
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+}

@@ -6,6 +6,13 @@ import { parseSaveOutcome, parseTextFileContent, type TextFileSaveRequest } from
 
 type WorkspaceWire = Omit<Workspace, 'pins'> & { pins?: Workspace['pins'] }
 
+/** The tree's file and folder edits; each resolves to the entry's new folder-namespaced path. */
+export interface WorkspaceTreeEditAPI {
+  createDirectory: (workspaceId: string, path: string) => Promise<string>
+  moveFile: (workspaceId: string, from: string, to: string) => Promise<string>
+  deleteFile: (workspaceId: string, path: string) => Promise<void>
+}
+
 /** Normalize versioned/persisted workspace payloads at the Tauri boundary. */
 function normalizeWorkspace(workspace: WorkspaceWire | undefined | null): Workspace {
   if (!workspace) return { id: '', name: '', folders: [], order: 0, pins: [] }
@@ -16,10 +23,23 @@ function normalizeWorkspaces(workspaces: WorkspaceWire[] | undefined | null): Wo
   return (workspaces ?? []).map(normalizeWorkspace)
 }
 
+function parseLogicalPath(value: unknown): string {
+  if (typeof value === 'string' && value) return value
+  throw new Error('The workspace entry could not be updated: unexpected response from the app.')
+}
+
 function parseImageBytes(value: unknown): Uint8Array {
   if (value instanceof ArrayBuffer) return new Uint8Array(value)
   if (value instanceof Uint8Array) return value
   throw new Error('The image could not be read: unexpected response from the app.')
+}
+
+const treeEdits: WorkspaceTreeEditAPI = {
+  createDirectory: (workspaceId, path) =>
+    invoke<unknown>('create_workspace_directory', { workspaceId, path }).then(parseLogicalPath),
+  moveFile: (workspaceId, from, to) =>
+    invoke<unknown>('move_workspace_file', { workspaceId, from, to }).then(parseLogicalPath),
+  deleteFile: (workspaceId, path) => invoke<void>('delete_workspace_file', { workspaceId, path }),
 }
 
 /** Thin renderer adapter for composite-workspace commands and file pickers. */
@@ -82,6 +102,9 @@ export function createWorkspaceAPI() {
       invoke<unknown>('open_text_file', { workspaceId, path }).then(parseTextFileContent),
     saveTextFile: (workspaceId: string, path: string, request: TextFileSaveRequest) =>
       invoke<unknown>('save_text_file', { workspaceId, path, request }).then(parseSaveOutcome),
+    createTextFile: (workspaceId: string, path: string) =>
+      invoke<string>('create_text_file', { workspaceId, path }),
+    ...treeEdits,
     // Raw image bytes for the editor's image viewer; the command answers with a binary IPC body.
     openImageFile: (workspaceId: string, path: string) =>
       invoke<unknown>('open_image_file', { workspaceId, path }).then(parseImageBytes),

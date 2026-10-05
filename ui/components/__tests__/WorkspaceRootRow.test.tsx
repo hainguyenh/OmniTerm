@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { Workspace } from '@omniterm/contract'
 import WorkspaceRootRow from '../WorkspaceRootRow'
+import { cssRule } from './workspaceTreeCss'
 
 const ws: Workspace = {
   id: 'w1',
@@ -13,6 +14,8 @@ const ws: Workspace = {
   order: 0,
   pins: [],
 }
+
+const openActions = () => fireEvent.click(screen.getByRole('button', { name: 'Actions for My Project' }))
 
 const props = () => ({
   workspace: ws,
@@ -29,10 +32,11 @@ describe('WorkspaceRootRow', () => {
   it('replaces the standard workspace icon with the custom icon at normal size', () => {
     const { container } = render(<WorkspaceRootRow {...props()} workspace={{ ...ws, icon: 'star', color: 'purple' }} />)
     const customIcon = screen.getByLabelText('Workspace custom icon')
-    expect(customIcon).toHaveClass('h-4', 'w-4')
-    expect(screen.getByLabelText('Workspace icon')).toHaveClass('h-4', 'w-4')
+    expect(customIcon).toHaveClass('workspace-root-icon')
+    expect(cssRule('.workspace-root-icon')).toContain('width: 16px;')
+    expect(screen.queryByLabelText('Workspace icon')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Workspace drag handle')).not.toBeInTheDocument()
-    expect(container.querySelector('[data-workspace-id="w1"]')?.querySelector('svg')).toBe(customIcon)
+    expect(Array.from(container.querySelectorAll('[data-workspace-id="w1"] .workspace-root-icon'))).toEqual([customIcon])
   })
 
   it('renders the container name and single folder path tooltip', () => {
@@ -44,7 +48,8 @@ describe('WorkspaceRootRow', () => {
   it('opens workspace rename from the action button without toggling the row', () => {
     const current = props()
     render(<WorkspaceRootRow {...current} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Rename workspace' }))
+    openActions()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Rename workspace' }))
     expect(screen.getByDisplayValue('My Project')).toBeInTheDocument()
     expect(current.onToggle).not.toHaveBeenCalled()
   })
@@ -53,7 +58,8 @@ describe('WorkspaceRootRow', () => {
     const current = props()
     render(<WorkspaceRootRow {...current} />)
     fireEvent.click(screen.getByRole('button', { name: 'Add folder to workspace' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
+    openActions()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove from workspaces' }))
     expect(current.onAddFolder).toHaveBeenCalledOnce()
     expect(current.onRemove).toHaveBeenCalledOnce()
     expect(current.onToggle).not.toHaveBeenCalled()
@@ -94,23 +100,49 @@ describe('WorkspaceRootRow', () => {
   it('paints the workspace row with the sidebar theme background', () => {
     const { container } = render(<WorkspaceRootRow {...props()} />)
     const row = container.querySelector('[data-workspace-id="w1"]') as HTMLElement
-    expect(row.className).toContain('bg-[var(--theme-sidebar-bg)]')
-    expect(row.className.split(/\s+/)).not.toContain('bg-[var(--theme-bg)]')
-    expect(row.className).toContain('hover:bg-[var(--theme-bg)]')
-    expect(row.className).not.toContain('hover:bg-[var(--theme-hover-bg)]')
+    expect(row).toHaveClass('workspace-root-row')
+    expect(cssRule('.workspace-root-row')).toContain('background: var(--theme-sidebar-bg);')
+    expect(cssRule('.workspace-root-row:hover')).toContain('background: var(--theme-hover-bg);')
   })
 
-  it('hides action buttons until hovered so the workspace title gets full row width', () => {
+  it('keeps only add-folder inline and fades it in so hovering never moves the title', () => {
     render(<WorkspaceRootRow {...props()} />)
-    const renameBtn = screen.getByRole('button', { name: 'Rename workspace' })
-    const addBtn = screen.getByRole('button', { name: 'Add folder to workspace' })
-    const removeBtn = screen.getByRole('button', { name: 'Remove from workspaces' })
+    expect(screen.getByRole('button', { name: 'Add folder to workspace' })).toHaveClass('workspace-quick-action')
+    expect(cssRule('.workspace-quick-action')).toContain('opacity: 0;')
+    expect(screen.queryByRole('button', { name: 'Rename workspace' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove from workspaces' })).not.toBeInTheDocument()
+  })
 
-    expect(renameBtn.className).toContain('hidden')
-    expect(renameBtn.className).toContain('group-hover:inline-flex')
-    expect(addBtn.className).toContain('hidden')
-    expect(addBtn.className).toContain('group-hover:inline-flex')
-    expect(removeBtn.className).toContain('hidden')
-    expect(removeBtn.className).toContain('group-hover:inline-flex')
+  it('opens the actions menu on right-click and keeps removal last', () => {
+    const current = props()
+    const { container } = render(<WorkspaceRootRow {...current} canMoveUp canMoveDown onAppearance={vi.fn()} />)
+    fireEvent.contextMenu(container.firstChild as HTMLElement, { clientX: 12, clientY: 30 })
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
+      'Add folder to workspace', 'Rename workspace', 'Workspace appearance…',
+      'Move workspace up', 'Move workspace down', 'Remove from workspaces',
+    ])
+    expect(current.onToggle).not.toHaveBeenCalled()
+  })
+
+  it('moves the workspace from the menu and with Alt+Arrow keys', () => {
+    const current = props()
+    const { container, rerender } = render(<WorkspaceRootRow {...current} canMoveDown />)
+    const toggle = () => container.querySelector('.workspace-root-toggle') as HTMLElement
+    openActions()
+    expect(screen.queryByRole('menuitem', { name: 'Move workspace up' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move workspace down' }))
+    expect(current.onMoveDown).toHaveBeenCalledOnce()
+
+    fireEvent.keyDown(toggle(), { key: 'ArrowUp', altKey: true })
+    expect(current.onMoveUp).not.toHaveBeenCalled()
+    fireEvent.keyDown(toggle(), { key: 'ArrowDown' })
+    expect(current.onMoveDown).toHaveBeenCalledOnce()
+    fireEvent.keyDown(toggle(), { key: 'ArrowDown', altKey: true })
+    expect(current.onMoveDown).toHaveBeenCalledTimes(2)
+
+    rerender(<WorkspaceRootRow {...current} canMoveUp />)
+    fireEvent.keyDown(toggle(), { key: 'ArrowUp', altKey: true })
+    expect(current.onMoveUp).toHaveBeenCalledOnce()
+    expect(current.onToggle).not.toHaveBeenCalled()
   })
 })
