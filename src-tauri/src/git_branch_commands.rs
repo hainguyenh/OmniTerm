@@ -3,18 +3,28 @@
 
 use std::path::{Path, PathBuf};
 
-/// Runs `op` against the repository containing `cwd` on the blocking pool — git is a child process.
-async fn in_repo<T, F>(cwd: String, op: F) -> Result<T, String>
+/// Runs `op` on the blocking pool — git is a child process, and the IPC thread must not wait on it.
+pub(crate) async fn on_blocking_pool<T, F>(op: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(op)
+        .await
+        .map_err(|e| format!("Task failed: {}", e))?
+}
+
+/// Runs `op` against the repository containing `cwd` on the blocking pool.
+pub(crate) async fn in_repo<T, F>(cwd: String, op: F) -> Result<T, String>
 where
     T: Send + 'static,
     F: FnOnce(&Path) -> Result<T, String> + Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(move || {
+    on_blocking_pool(move || {
         let repo_root = app_core::git::find_repo_root(&PathBuf::from(&cwd))?;
         op(&repo_root)
     })
     .await
-    .map_err(|e| format!("Task failed: {}", e))?
 }
 
 #[tauri::command]
