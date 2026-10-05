@@ -44,6 +44,16 @@ fn ipc_text_file_round_trip_uses_camel_case_and_tagged_outcomes() {
     assert_eq!(saved["status"], "saved");
     assert_eq!(saved["size"], 11);
 
+    let created = fixture.ok(
+        "create_text_file",
+        json!({
+            "workspaceId": workspace_id,
+            "path": format!("{folder_id}/new.txt"),
+        }),
+    );
+    assert_eq!(created, format!("{folder_id}/new.txt"));
+    assert!(project.join("new.txt").is_file());
+
     let conflict = fixture.ok(
         "save_text_file",
         json!({

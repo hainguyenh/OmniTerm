@@ -285,3 +285,22 @@ fn save_keeps_the_executable_bit() {
     let mode = fs::metadata(&path).expect("stat").permissions().mode();
     assert_eq!(mode & 0o777, 0o755);
 }
+
+#[test]
+fn create_text_file_creates_files_and_parents_and_refuses_duplicates_and_traversal() {
+    let f = fixture();
+    let rel = create_text_file(&f.root(), "created.txt", &[]).expect("create file");
+    assert_eq!(rel, "created.txt");
+    assert!(f.root.join("created.txt").is_file());
+    assert_eq!(f.read("created.txt"), b"");
+
+    let nested = create_text_file(&f.root(), "sub/note.md", &[]).expect("create in sub");
+    assert_eq!(nested, "sub/note.md");
+    assert!(f.root.join("sub/note.md").is_file());
+
+    let err = create_text_file(&f.root(), "created.txt", &[]).expect_err("duplicate file");
+    assert!(err.contains("already exists"));
+
+    assert!(create_text_file(&f.root(), "../outside.txt", &[]).is_err());
+    assert!(create_text_file(&f.root(), "bad.exe", &[]).is_err());
+}
