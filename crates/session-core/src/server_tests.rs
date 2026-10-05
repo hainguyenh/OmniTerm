@@ -351,5 +351,18 @@ async fn manager_is_idle_and_client_disconnected_cover_lifecycle_checks() {
     let dir = tempfile::tempdir().unwrap();
     let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
     assert!(manager.is_idle());
-    assert!(manager.client_disconnected("unknown"));
+    let _session = manager
+        .create(
+            "client1",
+            "req1",
+            "s1",
+            1,
+            PersistencePolicy::KeepRunning,
+            shell_launch("echo hi"),
+        )
+        .expect("create session");
+    assert!(!manager.is_idle());
+    assert!(!manager.client_disconnected("other_client"));
+    assert!(manager.client_disconnected("client1"));
+    assert!(manager.is_idle());
 }

@@ -67,6 +67,18 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
     for command in ["focus_terminal_window", "release_terminal_window"] {
         assert_eq!(fixture.ok(command, json!({ "id": "missing" })), Value::Null);
     }
+    assert!(fixture
+        .invoke(
+            "report_detached_terminal_context",
+            json!({ "sessionId": "missing", "cwd": null, "title": null }),
+        )
+        .is_err());
+    assert!(fixture.ok("list_attachments", json!({})).is_object());
+    assert_eq!(
+        fixture.ok("clear_attachments", json!({}))["removed"],
+        json!(0)
+    );
+    assert_eq!(fixture.ok("import_clipboard_files", json!({})), json!([]));
 
     let quick_shell = fixture.ok("open_quick_shell", json!({ "shell": null }));
     assert!(quick_shell["id"]
