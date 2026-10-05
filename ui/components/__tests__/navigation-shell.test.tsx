@@ -52,6 +52,34 @@ describe('navigation and empty-session shell', () => {
     expect(onSettingsClick).toHaveBeenCalledOnce()
   })
 
+  it('hides Git activity icon when gitEnabled is false and shows when true', () => {
+    const onViewChange = vi.fn()
+    const { rerender } = render(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        gitEnabled={false}
+        onViewChange={onViewChange}
+        onSettingsClick={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Git' })).not.toBeInTheDocument()
+
+    rerender(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        gitEnabled={true}
+        onViewChange={onViewChange}
+        onSettingsClick={vi.fn()}
+      />,
+    )
+    const gitBtn = screen.getByRole('button', { name: 'Git' })
+    expect(gitBtn).toBeInTheDocument()
+    fireEvent.click(gitBtn)
+    expect(onViewChange).toHaveBeenCalledWith('git')
+  })
+
   it('confirms one or many connected terminal closes and supports every cancel route', () => {
     const onConfirm = vi.fn()
     const onCancel = vi.fn()

@@ -18,7 +18,13 @@ const upsertWorkspaceConnection = vi.fn(async (_wId?: any, _target?: any, _conn?
 const loadShellOptions = vi.fn(async () => [{ id: 'powershell', label: 'PowerShell' }])
 vi.mock('../../hooks/useDialog', () => ({ useDialog: () => ({ dialogState: null, showAlert, showConfirm }) }))
 vi.mock('../../hooks/useSplitRatios', () => ({ useSplitRatios: () => [{ main: .5, cross: .5 }, setRatios, persistRatios] }))
-vi.mock('../../newSession', () => ({ openNewSession: (shell: any, connect: any) => openNewSession(shell, connect) }))
+const openNewSessionCwd = vi.fn()
+vi.mock('../../newSession', () => ({
+  openNewSession: (shell: any, connect: any, _workspaceId?: unknown, _folderId?: unknown, cwd?: unknown) => {
+    openNewSessionCwd(cwd ?? null)
+    return openNewSession(shell, connect)
+  },
+}))
 vi.mock('../../shellOptions', () => ({
   loadShellOptions: () => loadShellOptions(),
   pickShell: (options: Array<{ id: string }>, requested?: string) => options.some(o => o.id === requested) ? requested : options[0]?.id ?? 'powershell',
@@ -245,6 +251,10 @@ describe('useMainLayoutBase complete behavior', () => {
     act(() => window.dispatchEvent(new CustomEvent('omniterm:new-session', { detail: { shell: 'powershell' } })))
     await waitFor(() => expect(openNewSession).toHaveBeenCalledWith('powershell', expect.any(Function)))
     expect(connect).toHaveBeenCalledWith(expect.objectContaining({ id: 'new' }))
+
+    openNewSession.mockClear()
+    act(() => window.dispatchEvent(new CustomEvent('omniterm:new-session', { detail: { cwd: 'C:/repo.worktrees/topic' } })))
+    await waitFor(() => expect(openNewSessionCwd).toHaveBeenLastCalledWith('C:/repo.worktrees/topic'))
 
     openNewSession.mockClear()
     act(() => result.current.requestNewSession('powershell'))

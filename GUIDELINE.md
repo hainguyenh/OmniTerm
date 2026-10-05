@@ -298,7 +298,7 @@ OmniTerm/
 
 **PTY**: `start_local_session`, `send_session_input`, `resize_session`, `disconnect_session`, `prepare_ssh_session`
 **Connections**: `load_connections`, `save_connections`, `export_json`, `import_json`, `import_file`
-**Workspace**: `scan_scripts`, `scan_workspace_entries`, `read_script`, `write_script`, `load_workspace_connections`, `delete_workspace_connection`
+**Workspace**: `scan_scripts`, `scan_workspace_entries`, `read_script`, `write_script`, `open_text_file`, `save_text_file`, `load_workspace_connections`, `delete_workspace_connection`
 **Windows**: `detach_terminal`, `bootstrap_terminal_window`, `reattach_terminal`, `focus_terminal_window`, `release_terminal_window`
 **Plugins**: `install_plugin_package`, `remove_plugin`, `restart_app`, `plugin_invoke`, `plugin_auth_gate`
 **Utilities**: `minimize_window`, `toggle_maximize`, `get_version`, `reveal_log` (debug only), `list_themes`, `save_theme`, `change_font`

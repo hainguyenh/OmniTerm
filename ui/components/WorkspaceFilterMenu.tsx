@@ -41,6 +41,10 @@ interface WorkspaceFilterMenuProps {
   onAppearanceColorChange?: (color: WorkspaceColor | undefined) => void
   appearanceIcon?: WorkspaceIcon
   onAppearanceIconChange?: (icon: WorkspaceIcon | undefined) => void
+  isProjectDefault?: boolean
+  hasProjectDefault?: boolean
+  onSaveAsProjectDefault?: () => void
+  onClearProjectDefault?: () => void
 }
 
 const MENU_WIDTH = 288
@@ -55,6 +59,8 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   inheritWorkspaceFilter = false, onApplySameAsWorkspace,
   appearanceOnly = false, appearanceColor, onAppearanceColorChange,
   appearanceIcon, onAppearanceIconChange,
+  isProjectDefault = false, hasProjectDefault = false,
+  onSaveAsProjectDefault, onClearProjectDefault,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null)
   // Where the user dragged the dialog to; `null` = still where its trigger put it.
@@ -412,14 +418,17 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
           </div>
         )}
 
-        <label className="mt-1.5 flex items-center gap-1.5 border-t border-[var(--theme-border)] pt-1.5 text-[11px] cursor-pointer">
-          <input
-            type="checkbox"
-            checked={filter.showEmptyDirs}
-            onChange={() => onChange({ ...filter, showEmptyDirs: !filter.showEmptyDirs })}
-          />
-          Show empty folders
-        </label>
+        {/* "All files" always lists every folder, so the toggle only means something when narrowed. */}
+        {filter.mode !== 'all' && (
+          <label className="mt-1.5 flex items-center gap-1.5 border-t border-[var(--theme-border)] pt-1.5 text-[11px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filter.showEmptyDirs}
+              onChange={() => onChange({ ...filter, showEmptyDirs: !filter.showEmptyDirs })}
+            />
+            Show empty folders
+          </label>
+        )}
         {dirty && (
           <button
             type="button"
@@ -428,6 +437,33 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
           >
             Reset to default
           </button>
+        )}
+        {onSaveAsProjectDefault && (
+          <div className="mt-2 border-t border-[var(--theme-border)] pt-1.5 flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-[var(--theme-dim)]">Project default</span>
+              {isProjectDefault ? (
+                <span className="text-[10px] text-[var(--theme-accent)]">✓ Saved default</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSaveAsProjectDefault}
+                  className={smallButton}
+                >
+                  Set as default
+                </button>
+              )}
+            </div>
+            {hasProjectDefault && onClearProjectDefault && (
+              <button
+                type="button"
+                onClick={onClearProjectDefault}
+                className={`text-left ${smallButton}`}
+              >
+                Clear project default
+              </button>
+            )}
+          </div>
         )}
         </>}
       </div>

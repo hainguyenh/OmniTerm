@@ -84,6 +84,29 @@ describe('parseQuotaConfig', () => {
     })
     expect(parsed.agents.claude.wake.prompt).toBe(DEFAULT_QUOTA_CONFIG.agents.claude.wake.prompt)
   })
+
+  it('parses and validates resumeRecovery, clamping delay and validating prompt', () => {
+    const parsed = parseQuotaConfig({
+      agents: {
+        claude: {
+          resumeRecovery: { enabled: true, delaySeconds: 0, prompt: 'tiếp tục' },
+        },
+        codex: {
+          resumeRecovery: { enabled: true, delaySeconds: 50, prompt: 'invalid $(whoami)' },
+        },
+      },
+    })
+    expect(parsed.agents.claude.resumeRecovery).toEqual({
+      enabled: true,
+      delaySeconds: 1,
+      prompt: 'tiếp tục',
+    })
+    expect(parsed.agents.codex.resumeRecovery).toEqual({
+      enabled: true,
+      delaySeconds: 30,
+      prompt: DEFAULT_QUOTA_CONFIG.agents.codex.resumeRecovery.prompt,
+    })
+  })
 })
 
 describe('overrides', () => {
@@ -92,27 +115,31 @@ describe('overrides', () => {
   it('layers an override over the global agent settings', () => {
     expect(effectiveConfig(global, undefined)).toBe(global)
     const wake = { mode: 'timeOfDay' as const, time: '05:30', delayMinutes: 4, prompt: 'check status' }
-    const merged = effectiveConfig(global, { limits: { session: 70 }, suspendAtLimit: false, wake })
+    const recovery = { enabled: false, delaySeconds: 5, prompt: 'tiếp tục' }
+    const merged = effectiveConfig(global, { limits: { session: 70 }, suspendAtLimit: false, wake, resumeRecovery: recovery })
     expect(merged.limits).toEqual({ session: 70, weekly: 95, monthly: 95 })
     expect(merged.suspendAtLimit).toBe(false)
     expect(merged.autoResume).toBe(global.autoResume)
     expect(merged.wake).toEqual(wake)
+    expect(merged.resumeRecovery).toEqual(recovery)
     expect(effectiveConfig(global, { autoResume: false }).autoResume).toBe(false)
   })
 
   it('prunes fields that match the global value, dropping empty overrides', () => {
-    expect(pruneOverride(global, { limits: { session: 90 }, suspendAtLimit: true, autoResume: true })).toBeNull()
+    expect(pruneOverride(global, { limits: { session: 90 }, suspendAtLimit: true, autoResume: true, resumeRecovery: global.resumeRecovery })).toBeNull()
     expect(pruneOverride(global, {})).toBeNull()
     expect(pruneOverride(global, {
       limits: { session: 80, weekly: 95 },
       suspendAtLimit: false,
       autoResume: false,
       wake: { mode: 'afterReset', time: '06:00', delayMinutes: 3, prompt: 'wake' },
+      resumeRecovery: { prompt: 'tiếp tục' },
     })).toEqual({
       limits: { session: 80 },
       suspendAtLimit: false,
       autoResume: false,
       wake: { mode: 'afterReset', time: '06:00', delayMinutes: 3, prompt: 'wake' },
+      resumeRecovery: { prompt: 'tiếp tục' },
     })
   })
 

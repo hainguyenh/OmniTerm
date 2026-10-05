@@ -116,7 +116,7 @@ describe('entryNode / openable', () => {
     const node = entryNode({ ...file('notes.txt', 'txt'), viewable: true })
     expect(node.script).toBeUndefined()
     expect(node.openable?.path).toBe('/root/notes.txt')
-    // The flag travels on the record the viewer receives, so ScriptViewer can key its body off it.
+    // The flag travels on the record the viewer receives, so the file editor can key its body off it.
     expect(node.openable?.viewable).toBe(true)
     expect(node.openable?.editable).toBe(false)
   })

@@ -52,6 +52,7 @@ Before any file read/write/run, terminal cwd, connection/process launch, import,
 
 - `safe_viewable_path*` — owned by this spec.
 - `safe_editable_path` — owned by this spec.
+- `save_text_file` — owned by this spec.
 - `safe_runnable_path` — owned by this spec.
 - `validate_workspace_list` — owned by this spec.
 - `scrub_stored_secrets` — owned by this spec.
@@ -62,7 +63,8 @@ Before any file read/write/run, terminal cwd, connection/process launch, import,
 | Component | What | Why | How | When |
 |---|---|---|---|---|
 | `safe_viewable_path*` | Authorize contained viewable file. | Prevent traversal/disallowed reads. | Canonical containment + type/exclusion checks. | Read/view. |
-| `safe_editable_path` | Authorize contained editable file. | Prevent arbitrary writes. | Canonical containment + editable-kind check. | Save. |
+| `safe_editable_path` | Authorize contained editable file. | Prevent arbitrary writes. | Canonical containment + editable-kind check. | Legacy `write_script` save. |
+| `save_text_file` | Authorize and perform a built-in editor save. | Every viewable file is editable, so the write gate is the view gate plus write-side checks. | View gate (containment, deny-list incl. key material, user exclusions); refuse an existing binary file; mtime/size conflict outcome; recreate a deleted file only inside a contained parent; atomic temp-file rename. | Editor save. |
 | `safe_runnable_path` | Authorize contained runnable file. | Prevent arbitrary process launch. | Canonical containment + runnable-kind check. | Run. |
 | `validate_workspace_list` | Validate persisted hierarchy/folder/pins. | Reject corrupt state. | Check IDs/references/cycles. | Workspace load/write. |
 | `scrub_stored_secrets` | Remove connection secrets before storage. | Avoid credential-at-rest leakage. | Transform profile data before serialization. | Connection save/export. |

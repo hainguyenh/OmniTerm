@@ -17,10 +17,14 @@ use tauri::{test::MockRuntime, Manager};
 #[cfg(target_os = "linux")]
 #[path = "ipc_dialog_tests.rs"]
 mod dialogs;
+#[path = "ipc_git_tests.rs"]
+mod git_ipc;
 #[path = "ipc_persistence_tests.rs"]
 mod persistence;
 #[path = "ipc_runtime_tests.rs"]
 mod runtime;
+#[path = "ipc_text_file_tests.rs"]
+mod text_file_ipc;
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
 #[path = "ipc_workspace_tests.rs"]

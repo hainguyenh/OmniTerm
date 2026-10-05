@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import {
-  ChevronDown, ChevronRight, Filter, Folder, Loader2, Pencil, Pin, PinOff, Play, Terminal, Unlink,
+  ChevronDown, ChevronRight, Filter, Loader2, Pencil, Pin, PinOff, Play, Terminal, Unlink,
 } from 'lucide-react'
 import type {
   Connection,
@@ -9,7 +9,7 @@ import type {
   WorkspaceScript,
 } from '@omniterm/contract'
 import { entryNode, type WorkspaceTreeNode } from '../utils/scriptTree'
-import { fileKindMeta } from '../utils/fileKind'
+import { fileAppearance, folderAppearance } from '../utils/fileAppearance'
 import type { FolderPageInfo } from '../hooks/useWorkspaceScan'
 import {
   DEFAULT_FOLDER_FILTER,
@@ -21,6 +21,8 @@ import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceShowMore from './WorkspaceShowMore'
 import type { WorkspacePanelView } from './workspacePanelView'
 import { Tooltip } from './Tooltip'
+import { FileTypeIcon } from './FileTypeIcon'
+import './workspace-file-tree.css'
 
 interface WorkspaceTreeRendererProps {
   workspace: Workspace
@@ -52,6 +54,7 @@ interface WorkspaceTreeRendererProps {
     folderId: string,
     folderName: string,
     anchor: DOMRect,
+    folderPath?: string,
   ) => void
   renderConnectionAction: (workspace: Workspace, parentPath: string, parentLabel: string) => React.ReactNode
   onConnectWorkspaceConnection?: (connection: Connection, workspaceId: string) => void
@@ -120,17 +123,17 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
 
   const fileRow = (node: WorkspaceTreeNode, label: string, depth: number) => {
     const wsId = workspace.id
-    const meta = fileKindMeta(node.entry?.kind ?? '')
-    const Icon = meta.icon
+    const meta = fileAppearance(node.name, node.entry?.kind ?? '')
     const { script, openable } = node
-    const verb = openable?.editable ? 'View / edit' : openable ? 'View' : ''
+    // Every openable file opens editable in the built-in editor; `editable` now only marks scripts.
+    const verb = openable ? 'Open' : ''
     const title = verb ? `${verb} ${node.name}` : `${node.name} (${meta.label})`
     const highlighted = isHighlighted(wsId, node.path)
     return (
       <div
         key={node.path}
         ref={registerRow(wsId, node.path)}
-        className={`group flex items-center gap-2 pr-1 h-7 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
+        className={`workspace-file-row group flex items-center gap-2 pr-1 h-7 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
           highlighted
             ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]'
             : ''
@@ -139,8 +142,8 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
         onClick={() => { if (openable) onOpenScript(wsId, openable) }}
         title={title}
       >
-        <Icon className="w-4 h-4 flex-shrink-0" style={{ color: meta.color }} />
-        <span className={`flex-1 min-w-0 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`}>{label}</span>
+        <FileTypeIcon name={node.name} kind={node.entry?.kind ?? ''} />
+        <span className={`workspace-file-name flex-1 min-w-0 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`} style={openable ? { color: `color-mix(in srgb, ${meta.color} 24%, var(--theme-fg))` } : undefined}>{label}</span>
         <Tooltip content={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'} placement="bottom">
           <button
             type="button"
@@ -206,6 +209,8 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     if (!node.isDir) return fileRow(node, node.name, depth)
     const key = `${workspace.id}:${node.path}`
     const expanded = expandedDirs.has(key)
+    const folderMeta = folderAppearance(node.name, expanded)
+    const FolderIcon = folderMeta.icon
     const Chevron = expanded && loadingFolders.has(key) ? Loader2 : expanded ? ChevronDown : ChevronRight
     const rootFolder = depth === 1 ? workspace.folders.find(folder => folder.id === node.path) : undefined
     const pinned = isPinned(workspace, node.path)
@@ -214,9 +219,9 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
       : DEFAULT_FOLDER_FILTER
     const folderFilterActive = Boolean(rootFolder && !isDefaultFolderFilter(folderFilter))
     return (
-      <div key={key}>
+      <div key={key} className="workspace-folder-node" data-expanded={expanded} style={{ '--tree-guide-position': `${8 + depth * 12 + 7}px` } as React.CSSProperties}>
         <div
-          className="group flex items-center gap-1 h-7 pr-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
+          className="workspace-folder-row group flex items-center gap-1 h-7 pr-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
           style={{ paddingLeft: 8 + depth * 12 }}
           onClick={() => onToggleDir(key)}
           onContextMenu={event => {
@@ -227,6 +232,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
               rootFolder.id,
               rootFolder.name,
               new DOMRect(event.clientX, event.clientY, 0, 0),
+              rootFolder.path,
             )
           }}
         >
@@ -237,9 +243,10 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
               aria-label="Folder filter active"
             />
           )}
-          <Folder
+          <FolderIcon
             className="w-4 h-4 flex-shrink-0"
-            style={{ color: rootFolder?.color ? WORKSPACE_COLOR_VALUES[rootFolder.color] : 'var(--theme-dim)' }}
+            style={{ color: rootFolder?.color ? WORKSPACE_COLOR_VALUES[rootFolder.color] : folderMeta.color }}
+            aria-label={folderMeta.label}
           />
           {rootFolder && renamingFolderId === rootFolder.id ? (
             <input
@@ -375,7 +382,11 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     const needle = query.trim().toLowerCase()
     const files = view.files
       .filter((entry) => !needle || entry.id.toLowerCase().includes(needle))
-      .sort((left, right) => left.id.localeCompare(right.id))
+      .sort((left, right) => {
+        const la = left.id.toLowerCase()
+        const lb = right.id.toLowerCase()
+        return la < lb ? -1 : la > lb ? 1 : 0
+      })
     return <>{files.map((entry) => fileRow(entryNode(entry), entry.id, 1))}</>
   }
 

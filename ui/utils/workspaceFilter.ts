@@ -36,7 +36,7 @@ export interface TreeFilter {
 export const SCRIPT_KINDS = ['bat', 'ps1', 'sh', 'rdp']
 
 export const DEFAULT_TREE_FILTER: TreeFilter = {
-  mode: 'scripts',
+  mode: 'all',
   kinds: [],
   paths: [],
   showEmptyDirs: false,
@@ -81,6 +81,18 @@ export function discoverKinds(entries: WorkspaceEntry[]): string[] {
  */
 export function isHiddenEntry(entry: WorkspaceEntry): boolean {
   return entry.name.startsWith('.') || entry.id.split('/').some(seg => seg.startsWith('.'))
+}
+
+/**
+ * Entries inside a deferred folder (`node_modules`, `dist`, …) or the folder itself. Only "All files"
+ * shows them: a script launcher or a type/selection view never wanted dependency or build output.
+ * Every folder below a deferred one is deferred too, so a file only has to check its parent.
+ */
+function deferredSubtree(entries: WorkspaceEntry[]): (entry: WorkspaceEntry) => boolean {
+  const deferredDirs = new Set(entries.filter(e => e.isDir && e.deferred).map(e => e.id))
+  return (entry) => entry.isDir
+    ? entry.deferred === true
+    : deferredDirs.has(entry.id.slice(0, Math.max(0, entry.id.lastIndexOf('/'))))
 }
 
 /** Is this entry a runnable script (as opposed to a folder or a plain file)? */
@@ -154,11 +166,15 @@ export function applyFilter(
   keepDirs?: Set<string>,
 ): WorkspaceEntry[] {
   const chosen = filter.mode === 'selected' ? new Set(filter.paths) : new Set<string>()
-  // Hidden entries exist only for "All files": the other modes behaved as if the scan never saw
-  // dot-files, and nothing in their semantics asks for them now.
-  const base = filter.mode === 'all' ? entries : entries.filter(e => !isHiddenEntry(e))
+  // Hidden and deferred entries exist only for "All files": the other modes behaved as if the scan
+  // never saw dot-files or dependency/build folders, and nothing in their semantics asks for them.
+  const isDeferred = deferredSubtree(entries)
+  const base = filter.mode === 'all'
+    ? entries
+    : entries.filter(e => !isHiddenEntry(e) && !isDeferred(e))
   const files = base.filter(entry => !entry.isDir && keepsFile(entry, filter, chosen))
-  if (filter.showEmptyDirs) return [...base.filter(entry => entry.isDir), ...files]
+  // "All files" is a file explorer, like Zed or VS Code: an empty folder is still a folder.
+  if (filter.mode === 'all' || filter.showEmptyDirs) return [...base.filter(entry => entry.isDir), ...files]
 
   // Every ancestor directory of a kept file, by relative path.
   const populated = new Set<string>()

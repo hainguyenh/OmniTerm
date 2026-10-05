@@ -1,4 +1,5 @@
 import type { Connection, WorkspaceEntry, WorkspacePin, WorkspaceScript } from '@omniterm/contract'
+import { rasterImageMime } from './imageFile'
 import { isScriptEntry } from './workspaceFilter'
 
 /**
@@ -41,7 +42,9 @@ function sortNodes(nodes: WorkspaceTreeNode[], pinned: ReadonlySet<string>): voi
     const pinRank = Number(pinned.has(b.path)) - Number(pinned.has(a.path))
     if (pinRank !== 0) return pinRank
     if (rank(a) !== rank(b)) return rank(a) - rank(b)
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+    const la = a.name.toLowerCase()
+    const lb = b.name.toLowerCase()
+    return la < lb ? -1 : la > lb ? 1 : 0
   })
   for (const node of nodes) if (node.isDir) sortNodes(node.children, pinned)
 }
@@ -75,12 +78,13 @@ export function entryScript(entry: WorkspaceEntry): WorkspaceScript | undefined 
  *
  * Wider than `entryScript`: any file the scan marked `viewable` can be opened read-only. Falls back to
  * "runnable means viewable" when the flag is absent, so a plugin provider that predates the field
- * behaves exactly as it did before.
+ * behaves exactly as it did before. Raster images are never viewable as text but open in the image
+ * viewer, so they are openable too.
  */
 export function entryOpenable(entry: WorkspaceEntry): WorkspaceScript | undefined {
   if (entry.isDir) return undefined
   const viewable = entry.viewable ?? isScriptEntry(entry)
-  return viewable ? asScript(entry) : undefined
+  return viewable || rasterImageMime(entry.name) ? asScript(entry) : undefined
 }
 
 /**

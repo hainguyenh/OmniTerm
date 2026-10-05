@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
-import { DEFAULT_TREE_FILTER, type TreeFilter } from '../utils/workspaceFilter'
+import { areFiltersEqual, useWorkspaceFilters } from '../hooks/useWorkspaceFilters'
 import { diag } from '../diag'
 import { useTreeReveal } from '../hooks/useTreeReveal'
 import { useWorkspaceScan } from '../hooks/useWorkspaceScan'
@@ -47,70 +47,24 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
   const [wsConnections, setWsConnections] = useState<Record<string, Connection[]>>({})
   const [query, setQuery] = useState('')
-  const [filters, setFilters] = useState<Record<string, TreeFilter>>(() => {
-    try {
-      const saved = localStorage.getItem('cc.workspaceFilters')
-      return saved ? JSON.parse(saved) as Record<string, TreeFilter> : {}
-    } catch {
-      return {}
-    }
-  })
-  const [folderFilters, setFolderFilters] = useState<Record<string, Record<string, TreeFilter>>>(() => {
-    try {
-      const saved = localStorage.getItem('cc.workspaceFolderFilters')
-      return saved ? JSON.parse(saved) as Record<string, Record<string, TreeFilter>> : {}
-    } catch {
-      return {}
-    }
-  })
-
-  useEffect(() => {
-    localStorage.setItem('cc.workspaceFilters', JSON.stringify(filters))
-  }, [filters])
-  useEffect(() => {
-    localStorage.setItem('cc.workspaceFolderFilters', JSON.stringify(folderFilters))
-  }, [folderFilters])
-  const [filterMenu, setFilterMenu] = useState<{
-    workspaceId: string
-    folderId?: string
-    folderName?: string
-    appearanceOnly?: boolean
-    anchor: DOMRect
-  } | null>(null)
-
-  const filterOf = useCallback(
-    (wsId: string) => filters[wsId] ?? DEFAULT_TREE_FILTER,
-    [filters],
-  )
-
-  const openFilterMenu = useCallback((workspaceId: string, anchor: DOMRect) => {
-    setFilterMenu((prev) => (
-      prev?.workspaceId === workspaceId && !prev.folderId
-        ? null
-        : { workspaceId, anchor }
-    ))
-  }, [])
-
-  const openFolderFilterMenu = useCallback((
-    workspaceId: string,
-    folderId: string,
-    folderName: string,
-    anchor: DOMRect,
-  ) => {
-    setFilterMenu((prev) => (
-      prev?.workspaceId === workspaceId && prev.folderId === folderId
-        ? null
-        : { workspaceId, folderId, folderName, anchor }
-    ))
-  }, [])
-
-  const openWorkspaceAppearanceMenu = useCallback((workspaceId: string, anchor: DOMRect) => {
-    setFilterMenu((prev) => (
-      prev?.workspaceId === workspaceId && prev.appearanceOnly
-        ? null
-        : { workspaceId, appearanceOnly: true, anchor }
-    ))
-  }, [])
+  const {
+    setFilters,
+    folderFilters,
+    projectDefaultFilters,
+    filterMenu,
+    filterOf,
+    getFolderFilter,
+    resolvedFolderFilters,
+    setWorkspaceFilter,
+    setFolderFilter,
+    clearFolderFilterOverride,
+    setProjectDefaultFilter,
+    clearProjectDefaultFilter,
+    openFilterMenu,
+    openFolderFilterMenu,
+    openWorkspaceAppearanceMenu,
+    closeFilterMenu,
+  } = useWorkspaceFilters(workspaces)
 
   const refresh = useCallback(async () => {
     setWorkspaces(await window.omnitermAPI.workspace.list())
@@ -148,7 +102,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   }, [scanEntries, reloadConnections])
 
   const toggle = useCallback((id: string) => {
-    setFilterMenu(null)
+    closeFilterMenu()
     setExpandedId((prev) => {
       const next = prev === id ? null : id
       if (next && folders[next] === undefined) void scanOnce(next)
@@ -230,18 +184,28 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   }, [reportFailure])
 
   const toggleDir = useCallback((key: string) => {
-    const wasExpanded = expandedDirs.has(key)
     setExpandedDirs((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
       else next.add(key)
       return next
     })
-    if (!wasExpanded) {
-      const slash = key.indexOf(':')
-      void loadFolder(key.slice(0, slash), key.slice(slash + 1))
+  }, [])
+
+  // Every expanded folder of the open workspace needs its first page. Driven from state rather than
+  // from the click: the first scan opens the root folders without a click, and a rescan drops every
+  // loaded page while those folders stay open — both used to leave an open folder showing only its
+  // subfolders until it was collapsed and expanded again. `loadFolder` skips loaded/in-flight ones.
+  useEffect(() => {
+    if (expandedId === null || folders[expandedId] === undefined) return
+    const prefix = `${expandedId}:`
+    for (const key of expandedDirs) {
+      if (!key.startsWith(prefix)) continue
+      const folder = key.slice(prefix.length)
+      if (files[expandedId]?.[folder] !== undefined) continue
+      loadFolder(expandedId, folder).catch((err: unknown) => diag.warn('[WorkspacePanel] Could not load folder', err))
     }
-  }, [expandedDirs, loadFolder])
+  }, [expandedId, expandedDirs, folders, files, loadFolder])
 
   const viewOf = useMemo(() => {
     const cache = new Map<string, ReturnType<typeof buildWorkspacePanelView>>()
@@ -256,14 +220,14 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         rootFolders: workspaces.find(workspace => workspace.id === wsId)?.folders ?? [],
         filesByFolder: files[wsId] ?? {},
         filter: filterOf(wsId),
-        folderFilters: folderFilters[wsId] ?? {},
+        folderFilters: resolvedFolderFilters[wsId] ?? {},
         query,
         expandedDirs,
       })
       cache.set(wsId, view)
       return view
     }
-  }, [entriesOf, folders, files, wsConnections, workspaces, filterOf, folderFilters, query, expandedDirs])
+  }, [entriesOf, folders, files, wsConnections, workspaces, filterOf, resolvedFolderFilters, query, expandedDirs])
 
   const collapseStateOf = useCallback((wsId: string): boolean | null => {
     if (flatView) return null
@@ -279,13 +243,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
       for (const k of keys) allCollapsed ? next.add(k) : next.delete(k)
       return next
     })
-    if (allCollapsed) {
-      for (const k of keys) {
-        const slash = k.indexOf(':')
-        void loadFolder(k.slice(0, slash), k.slice(slash + 1))
-      }
-    }
-  }, [collectDirKeys, viewOf, expandedDirs, loadFolder])
+  }, [collectDirKeys, viewOf, expandedDirs])
 
   const { isHighlighted, registerRow } = useTreeReveal({
     revealRequest, entriesOf, scan: scanOnce, loadFolder, filterOf, setExpandedId, setFlatView,
@@ -369,7 +327,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                   query={query}
                   flatView={flatView}
                   filter={filterOf(ws.id)}
-                  folderFilters={folderFilters[ws.id] ?? {}}
+                  folderFilters={resolvedFolderFilters[ws.id] ?? {}}
                   expandedDirs={expandedDirs}
                   loadingFolders={loadingFolders}
                   scanning={scanning === ws.id}
@@ -401,76 +359,70 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         />
       </div>
 
-      {filterMenu && (
-        <WorkspaceFilterMenu
-          filter={filterMenu.folderId
-            ? folderFilters[filterMenu.workspaceId]?.[filterMenu.folderId] ?? filterOf(filterMenu.workspaceId)
-            : filterOf(filterMenu.workspaceId)}
-          onChange={(next) => {
-            if (filterMenu.appearanceOnly) return
-            const folderId = filterMenu.folderId
-            if (folderId) {
-              setFolderFilters(previous => ({
-                ...previous,
-                [filterMenu.workspaceId]: {
-                  ...(previous[filterMenu.workspaceId] ?? {}),
-                  [folderId]: next,
-                },
-              }))
-            } else {
-              setFilters(previous => ({ ...previous, [filterMenu.workspaceId]: next }))
-            }
-          }}
-          inheritWorkspaceFilter={Boolean(
-            !filterMenu.appearanceOnly
-            && filterMenu.folderId
-            && folderFilters[filterMenu.workspaceId]?.[filterMenu.folderId] === undefined,
-          )}
-          onApplySameAsWorkspace={!filterMenu.appearanceOnly && filterMenu.folderId
-            ? () => {
-              const folderId = filterMenu.folderId
-              if (!folderId) return
-              setFolderFilters(previous => {
-                const workspaceFilters = previous[filterMenu.workspaceId]
-                if (!workspaceFilters?.[folderId]) return previous
-                const nextWorkspaceFilters = { ...workspaceFilters }
-                delete nextWorkspaceFilters[folderId]
-                const next = { ...previous }
-                if (Object.keys(nextWorkspaceFilters).length === 0) delete next[filterMenu.workspaceId]
-                else next[filterMenu.workspaceId] = nextWorkspaceFilters
-                return next
-              })
-            }
-            : undefined}
-          entries={filterMenu.appearanceOnly
-            ? []
-            : filterMenu.folderId
-            ? entriesOf(filterMenu.workspaceId).filter(entry =>
-              entry.id === filterMenu.folderId || entry.id.startsWith(`${filterMenu.folderId}/`))
-            : entriesOf(filterMenu.workspaceId)}
-          anchor={filterMenu.anchor}
-          onClose={() => setFilterMenu(null)}
-          title={filterMenu.appearanceOnly
-            ? `APPEARANCE ${workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.name ?? 'Workspace'}`
-            : filterMenu.folderId
-            ? `FILTER ${filterMenu.folderName ?? filterMenu.folderId} Folder`
-            : 'FILTER Workspace'}
-          appearanceOnly={filterMenu.appearanceOnly}
-          appearanceColor={filterMenu.folderId
-            ? workspaces.find(workspace => workspace.id === filterMenu.workspaceId)
-              ?.folders.find(folder => folder.id === filterMenu.folderId)?.color
-            : workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.color}
-          appearanceIcon={workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.icon}
-          onAppearanceColorChange={filterMenu.appearanceOnly
-            ? color => { void setWorkspaceAppearance(filterMenu.workspaceId, color, workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.icon) }
-            : filterMenu.folderId
-              ? color => { void setWorkspaceFolderColor(filterMenu.workspaceId, filterMenu.folderId!, color) }
+      {filterMenu && (() => {
+        const folderKey = filterMenu.folderPath || filterMenu.folderId
+        const activeFilter = filterMenu.folderId
+          ? getFolderFilter(filterMenu.workspaceId, filterMenu.folderId, filterMenu.folderPath)
+          : filterOf(filterMenu.workspaceId)
+        const isProjectDefault = Boolean(folderKey && projectDefaultFilters[folderKey] && areFiltersEqual(activeFilter, projectDefaultFilters[folderKey]))
+        const hasProjectDefault = Boolean(folderKey && projectDefaultFilters[folderKey] !== undefined)
+        return (
+          <WorkspaceFilterMenu
+            filter={activeFilter}
+            onChange={(next) => {
+              if (filterMenu.appearanceOnly) return
+              if (filterMenu.folderId) {
+                setFolderFilter(filterMenu.workspaceId, filterMenu.folderId, next)
+              } else {
+                setWorkspaceFilter(filterMenu.workspaceId, next)
+              }
+            }}
+            inheritWorkspaceFilter={Boolean(
+              !filterMenu.appearanceOnly
+              && filterMenu.folderId
+              && folderFilters[filterMenu.workspaceId]?.[filterMenu.folderId] === undefined,
+            )}
+            onApplySameAsWorkspace={!filterMenu.appearanceOnly && filterMenu.folderId
+              ? () => clearFolderFilterOverride(filterMenu.workspaceId, filterMenu.folderId!)
               : undefined}
-          onAppearanceIconChange={filterMenu.appearanceOnly
-            ? icon => { void setWorkspaceAppearance(filterMenu.workspaceId, workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.color, icon) }
-            : undefined}
-        />
-      )}
+            isProjectDefault={isProjectDefault}
+            hasProjectDefault={hasProjectDefault}
+            onSaveAsProjectDefault={filterMenu.folderId && folderKey
+              ? () => setProjectDefaultFilter(folderKey, activeFilter)
+              : undefined}
+            onClearProjectDefault={filterMenu.folderId && folderKey && hasProjectDefault
+              ? () => clearProjectDefaultFilter(folderKey)
+              : undefined}
+            entries={filterMenu.appearanceOnly
+              ? []
+              : filterMenu.folderId
+              ? entriesOf(filterMenu.workspaceId).filter(entry =>
+                entry.id === filterMenu.folderId || entry.id.startsWith(`${filterMenu.folderId}/`))
+              : entriesOf(filterMenu.workspaceId)}
+            anchor={filterMenu.anchor}
+            onClose={closeFilterMenu}
+            title={filterMenu.appearanceOnly
+              ? `APPEARANCE ${workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.name ?? 'Workspace'}`
+              : filterMenu.folderId
+              ? `FILTER ${filterMenu.folderName ?? filterMenu.folderId} Folder`
+              : 'FILTER Workspace'}
+            appearanceOnly={filterMenu.appearanceOnly}
+            appearanceColor={filterMenu.folderId
+              ? workspaces.find(workspace => workspace.id === filterMenu.workspaceId)
+                ?.folders.find(folder => folder.id === filterMenu.folderId)?.color
+              : workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.color}
+            appearanceIcon={workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.icon}
+            onAppearanceColorChange={filterMenu.appearanceOnly
+              ? color => { void setWorkspaceAppearance(filterMenu.workspaceId, color, workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.icon) }
+              : filterMenu.folderId
+                ? color => { void setWorkspaceFolderColor(filterMenu.workspaceId, filterMenu.folderId!, color) }
+                : undefined}
+            onAppearanceIconChange={filterMenu.appearanceOnly
+              ? icon => { void setWorkspaceAppearance(filterMenu.workspaceId, workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.color, icon) }
+              : undefined}
+          />
+        )
+      })()}
       </div>
       {workspacePendingRemoval && (
         <ConfirmDialog

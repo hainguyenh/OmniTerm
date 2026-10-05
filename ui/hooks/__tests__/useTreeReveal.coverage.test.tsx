@@ -20,7 +20,10 @@ function deferred() {
   return { promise, resolve }
 }
 
-function setup(initialRequest: RevealRequest | null = null, filter: TreeFilter = DEFAULT_TREE_FILTER) {
+function setup(
+  initialRequest: RevealRequest | null = null,
+  filter: TreeFilter = { ...DEFAULT_TREE_FILTER, mode: 'scripts' },
+) {
   const scan = vi.fn().mockResolvedValue(undefined)
   const loadFolder = vi.fn().mockResolvedValue(undefined)
   const entriesOf = vi.fn().mockReturnValue([target])

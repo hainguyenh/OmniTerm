@@ -158,6 +158,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
                 const agent = agentLaunchedBy(resumeCommand)
                 if (agent) noteAgentLaunch(tab.id, agent)
                 const stored = findSessionByTabId(tab.id)
+                  ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
                   ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
                 if (stored) {
                   upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })

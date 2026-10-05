@@ -61,6 +61,9 @@ function isStringRecord(value: unknown): value is Record<string, string> {
   return Object.values(value as object).every(entry => typeof entry === 'string')
 }
 
+/** Optional agent details a restore falls back on when no stored session names the pane. */
+const AGENT_RECOVERY_FIELDS = ['agent', 'agentSessionId', 'profileName', 'launcher'] as const
+
 function isRecoveryContext(value: unknown): value is PaneRecoveryContext {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const context = value as Record<string, unknown>
@@ -106,11 +109,18 @@ function sanitizeConnection(value: unknown): PersistedConn | null {
 function recoveryFromLegacy(tab: Record<string, unknown>, conn: PersistedConn | undefined): PaneRecoveryContext {
   const raw = tab['recovery']
   if (isRecoveryContext(raw)) {
-    return {
+    const context: PaneRecoveryContext = {
       ...(raw.cwd ? { cwd: raw.cwd } : {}),
       cwdSource: raw.cwdSource,
       ...(raw.shell ? { shell: raw.shell } : {}),
     }
+    // Kept field by field: a malformed agent detail is dropped without discarding the whole layout.
+    const fields = raw as unknown as Record<string, unknown>
+    for (const field of AGENT_RECOVERY_FIELDS) {
+      const value = fields[field]
+      if (typeof value === 'string' && value) context[field] = value
+    }
+    return context
   }
 
   const legacy = raw && typeof raw === 'object' && !Array.isArray(raw)

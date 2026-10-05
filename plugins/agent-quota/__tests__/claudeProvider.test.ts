@@ -53,6 +53,30 @@ describe('fetchClaudeUsage', () => {
     expect(deps.log).toHaveBeenCalledWith(expect.stringContaining('unrecognised claude /usage output'))
   })
 
+  it('falls back to the reading Claude Code caches in the profile config, nested as it writes it', async () => {
+    const run = vi.fn(async () => cliResult({ stdout: "What's contributing to your limits usage?" }))
+    const config = JSON.stringify({
+      cachedUsageUtilization: {
+        fetchedAtMs: NOW - 60_000,
+        accountUuid: 'uuid',
+        utilization: {
+          five_hour: { utilization: 12, resets_at: '2026-09-25T05:59:00.000Z', limit_dollars: null },
+          seven_day: { utilization: 41, resets_at: '2026-09-30T02:00:00.000Z', limit_dollars: null },
+          extra_usage: { is_enabled: false, monthly_limit: null, used_credits: null },
+        },
+      },
+    })
+    const deps = fakeDeps({ [path.join(PROFILE, '.claude.json')]: config }, { run, resolve: () => EXE })
+    expect(await fetchClaudeUsage({ profileDir: PROFILE }, deps)).toEqual({
+      source: 'cli',
+      fetchedAt: NOW - 60_000,
+      windows: [
+        { kind: 'session', label: '5-hour limit', usedPct: 12, resetsAt: Date.UTC(2026, 8, 25, 5, 59) },
+        { kind: 'weekly', label: 'Weekly limit', usedPct: 41, resetsAt: Date.UTC(2026, 8, 30, 2, 0) },
+      ],
+    })
+  })
+
   it('reports timeouts and a signed-out profile without retrying the latter', async () => {
     const timeout = fakeDeps({}, { run: vi.fn(async () => cliResult({ timedOut: true })), resolve: () => EXE })
     expect(await fetchClaudeUsage({ profileDir: PROFILE }, timeout)).toMatchObject({ error: 'timeout' })

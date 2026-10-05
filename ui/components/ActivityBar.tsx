@@ -1,15 +1,17 @@
 import React from 'react'
-import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, MoonStar, Settings } from 'lucide-react'
+import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, GitBranch, MoonStar, Settings } from 'lucide-react'
 import { useQuotaActivityEntry } from '../../plugins/agent-quota/app/activityEntry'
 import { Tooltip } from './Tooltip'
 
-export type ActivityView = 'files' | 'workspace' | 'bookmarks'
+export type ActivityView = 'files' | 'workspace' | 'bookmarks' | 'git'
 
 interface ActivityBarProps {
   /** Which secondary panel is active, or null when the panel is collapsed. */
   activeView: ActivityView | null
   /** Whether the Files view is available (requires a connected SSH session). */
   filesEnabled: boolean
+  /** Whether the Git view is available (defaults to true). */
+  gitEnabled?: boolean
   /** Called when the user clicks a view icon. Passing the currently-active view
    *  signals the panel should collapse; passing a different view switches to it
    *  (and expands the panel if it was collapsed). */
@@ -31,6 +33,7 @@ interface ActivityBarProps {
 const ActivityBar: React.FC<ActivityBarProps> = ({
   activeView,
   filesEnabled,
+  gitEnabled = true,
   onViewChange,
   onSettingsClick,
   alwaysAwakeAvailable = false,
@@ -45,6 +48,7 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   const quota = useQuotaActivityEntry()
   const handleIconClick = (view: ActivityView) => {
     if (view === 'files' && !filesEnabled) return
+    if (view === 'git' && !gitEnabled) return
     // Clicking the active icon collapses the panel; clicking another one switches.
     onViewChange(activeView === view ? null : view)
   }
@@ -76,6 +80,15 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
           active={activeView === 'bookmarks'}
           onClick={() => handleIconClick('bookmarks')}
         />
+        {gitEnabled && (
+          <ActivityIcon
+            icon={<GitBranch className="w-5 h-5" />}
+            label="Git"
+            shortcut="Ctrl+Shift+G"
+            active={activeView === 'git'}
+            onClick={() => handleIconClick('git')}
+          />
+        )}
       </div>
 
       {/* ── Bottom icons (pinned) ──────────────────────────────────── */}

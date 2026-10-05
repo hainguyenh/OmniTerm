@@ -16,6 +16,8 @@ fn defaults_expose_every_field_the_renderer_reads() {
     assert_eq!(d["commandCompletion"], json!(true));
     assert_eq!(d["skippedVersion"], json!(null));
     assert_eq!(d["workspaces"], json!([]));
+    assert_eq!(d["gitUtilEnabled"], json!(true));
+    assert_eq!(d["gitGraphEnabled"], json!(true));
     assert!(d["shortcuts"].is_object());
 }
 

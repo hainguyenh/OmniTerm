@@ -1,0 +1,34 @@
+.file-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.file-type-icon > svg {
+  width: 16px;
+  height: 16px;
+}
+
+.file-type-mark {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  width: 15px;
+  height: 15px;
+  padding: 1px;
+  border-radius: 2px;
+  background: currentColor;
+  font-family: var(--theme-font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  -webkit-text-fill-color: var(--theme-bg);
+}
+
+.file-type-icon.is-ignored {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
