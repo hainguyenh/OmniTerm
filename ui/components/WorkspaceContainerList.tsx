@@ -1,6 +1,12 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { Workspace } from '@omniterm/contract'
-import { buildWorkspaceForest, siblingPosition, workspaceDropIndex } from '../utils/workspaceHierarchy'
+
+import {
+  buildWorkspaceForest,
+  siblingPosition,
+  workspaceDropIndex,
+  type WorkspaceSiblingPosition,
+} from '../utils/workspaceHierarchy'
 import WorkspaceRootRow from './WorkspaceRootRow'
 
 interface WorkspaceContainerListProps {
@@ -11,7 +17,7 @@ interface WorkspaceContainerListProps {
   onAddFolder: (workspaceId: string) => void
   onRemove: (workspaceId: string) => void
   onRename?: (workspaceId: string, name: string) => void
-  onContextMenu?: (workspaceId: string, event: React.MouseEvent<HTMLDivElement>) => void
+  onAppearance?: (workspaceId: string, anchor: DOMRect) => void
   onMove: (workspaceId: string, parentId: string | null, index: number) => void
   renderExpanded: (workspace: Workspace) => ReactNode
 }
@@ -24,29 +30,51 @@ export default function WorkspaceContainerList({
   onAddFolder,
   onRemove,
   onRename,
-  onContextMenu,
+  onAppearance,
   onMove,
   renderExpanded,
 }: WorkspaceContainerListProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const focusAfterMove = useRef<string | null>(null)
   const forest = buildWorkspaceForest(workspaces)
+
+  // A keyboard or menu move re-renders the list in its new order; when that drops focus, hand it
+  // back to the moved workspace so repeated Alt+Arrow presses keep working.
+  useEffect(() => {
+    const id = focusAfterMove.current
+    if (!id) return
+    focusAfterMove.current = null
+    if (document.activeElement && document.activeElement !== document.body) return
+    document
+      .querySelector<HTMLButtonElement>(`[data-workspace-id=${JSON.stringify(id)}] .workspace-root-toggle`)
+      ?.focus()
+  }, [workspaces])
+
+  const moveBy = (workspaceId: string, position: WorkspaceSiblingPosition, offset: -1 | 1) => {
+    focusAfterMove.current = workspaceId
+    onMove(workspaceId, position.parentId, position.index + offset)
+  }
 
   const renderNode = (node: (typeof forest)[number], depth: number): ReactNode => {
     const { workspace } = node
     const position = siblingPosition(workspaces, workspace.id)
     const expanded = expandedId === workspace.id
     return (
-      <div key={workspace.id} className="flex flex-col">
+      <div key={workspace.id} className="workspace-container" data-expanded={expanded}>
         <WorkspaceRootRow
           workspace={workspace}
           expanded={expanded}
           depth={depth}
+          canMoveUp={Boolean(position && position.index > 0)}
+          canMoveDown={Boolean(position && position.index < position.count - 1)}
           connectionAction={renderConnectionAction?.(workspace)}
           onToggle={() => onToggle(workspace.id)}
           onAddFolder={() => onAddFolder(workspace.id)}
+          onMoveUp={position ? () => moveBy(workspace.id, position, -1) : undefined}
+          onMoveDown={position ? () => moveBy(workspace.id, position, 1) : undefined}
           onRemove={() => onRemove(workspace.id)}
           onRename={onRename}
-          onContextMenu={event => onContextMenu?.(workspace.id, event)}
+          onAppearance={onAppearance ? anchor => onAppearance(workspace.id, anchor) : undefined}
           onDragStart={event => {
             event.dataTransfer.effectAllowed = 'move'
             event.dataTransfer.setData('text/plain', workspace.id)

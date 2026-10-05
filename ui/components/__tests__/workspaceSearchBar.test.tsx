@@ -3,49 +3,39 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import WorkspaceSearchBar from '../WorkspaceSearchBar'
+import WorkspaceSearchBar, { SEARCH_HINT } from '../WorkspaceSearchBar'
 
-const openBtn = () => screen.getByLabelText(/Search folders, files, connections/)
+const input = () => screen.getByLabelText('Search workspace')
 
 describe('WorkspaceSearchBar', () => {
-  it('is a single icon until it is clicked, then an input', () => {
+  it('is always an input that names what it searches and its hotkey', () => {
     render(<WorkspaceSearchBar query="" onChange={vi.fn()} />)
-    expect(screen.getByText('Workspaces')).toBeInTheDocument()
-    expect(openBtn().tagName).toBe('BUTTON')
-
-    fireEvent.click(openBtn())
-    // The title gives up the line: at 180px there is no room for both.
-    expect(screen.queryByText('Workspaces')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Search workspace').tagName).toBe('INPUT')
+    expect(input().tagName).toBe('INPUT')
+    expect(input()).toHaveAttribute('title', SEARCH_HINT)
+    expect(input()).toHaveAttribute('placeholder', 'Find in workspace…')
+    expect(screen.queryByRole('button', { name: 'Clear search (Esc)' })).not.toBeInTheDocument()
   })
 
-  it('opens on the hotkey and focuses the input', () => {
+  it('focuses the input on the hotkey', () => {
     render(<WorkspaceSearchBar query="" onChange={vi.fn()} />)
     fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true })
-    const input = screen.getByLabelText('Search workspace')
-    expect(input.tagName).toBe('INPUT')
-    expect(document.activeElement).toBe(input)
+    expect(document.activeElement).toBe(input())
   })
 
-  it('clears the query when it closes, so the tree is not left filtered by a hidden box', () => {
+  it('clears the query on Escape without letting the key close anything else', () => {
     const onChange = vi.fn()
-    render(<WorkspaceSearchBar query="go.sh" onChange={onChange} />)
-    fireEvent.click(openBtn())
-    fireEvent.keyDown(screen.getByLabelText('Search workspace'), { key: 'Escape' })
-
+    const outer = vi.fn()
+    render(<div onKeyDown={outer}><WorkspaceSearchBar query="go.sh" onChange={onChange} /></div>)
+    fireEvent.keyDown(input(), { key: 'Escape' })
     expect(onChange).toHaveBeenCalledWith('')
-    expect(screen.getByText('Workspaces')).toBeInTheDocument()
+    expect(outer).not.toHaveBeenCalled()
   })
 
-  /** Blurring to reach the results must not close the box; blurring an empty one should. */
-  it('stays open on blur while it holds a query', () => {
-    const { rerender } = render(<WorkspaceSearchBar query="go" onChange={vi.fn()} />)
-    fireEvent.click(openBtn())
-    fireEvent.blur(screen.getByLabelText('Search workspace'))
-    expect(screen.getByLabelText('Search workspace').tagName).toBe('INPUT')
-
-    rerender(<WorkspaceSearchBar query="" onChange={vi.fn()} />)
-    fireEvent.blur(screen.getByLabelText('Search workspace'))
-    expect(screen.getByText('Workspaces')).toBeInTheDocument()
+  it('offers a clear button while it holds a query and refocuses the input', () => {
+    const onChange = vi.fn()
+    render(<WorkspaceSearchBar query="go" onChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search (Esc)' }))
+    expect(onChange).toHaveBeenCalledWith('')
+    expect(document.activeElement).toBe(input())
   })
 })

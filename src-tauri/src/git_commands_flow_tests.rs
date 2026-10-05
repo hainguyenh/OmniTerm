@@ -282,6 +282,7 @@ fn branch_commands_create_checkout_compare_merge_and_delete() {
             "missing".into(),
         ],
         false,
+        None,
     ))
     .expect("delete branches");
     assert_eq!(result.deleted, vec!["topic", "feature"]);

@@ -7,9 +7,11 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_QUOTA_CONFIG } from '../quotaConfig'
 import {
+  clearAllManualPauses,
   clearManualPause,
   clearOverrides,
   dismissNotice,
+  getQuotaState,
   pushNotice,
   registerQuotaCommands,
   requestConfirm,
@@ -120,7 +122,7 @@ describe('quotaStore', () => {
     // clearManualPause with no guard or no bypassUntil is no-op
     act(() => clearManualPause('missing-key'))
 
-    // clearManualPause with active bypass clears it
+    // clearManualPause with active bypass and pause overrides clears both
     act(() => {
       updateQuota((current) => ({
         ...current,
@@ -132,12 +134,53 @@ describe('quotaStore', () => {
             bypassUntil: 123456,
           },
         },
+        overrides: {
+          'k1': { enabled: false, suspendAtLimit: false },
+          'k2': { enabled: false, suspendAtLimit: false, limits: { session: 80 } },
+        },
       }))
     })
     act(() => clearManualPause('k1'))
 
     const { result: guardsResult } = renderHook(() => useQuota((state) => state.guards))
     expect(guardsResult.current['k1']?.bypassUntil).toBeUndefined()
+    expect(getQuotaState().overrides['k1']).toBeUndefined()
+
+    act(() => clearManualPause('k2'))
+    expect(getQuotaState().overrides['k2']).toEqual({ limits: { session: 80 } })
+  })
+
+  it('clearAllManualPauses clears pauses for all or specific agents', () => {
+    resetQuotaStore()
+    act(() => {
+      updateQuota((current) => ({
+        ...current,
+        terminals: {
+          s1: terminal({ sessionId: 's1', instanceKey: 'k-claude', agent: 'claude' }),
+          s2: terminal({ sessionId: 's2', instanceKey: 'k-agy', agent: 'agy' }),
+        },
+        guards: {
+          'k-claude': { phase: 'active', lastAttemptAt: 100, risingCount: 0, bypassUntil: 9999 },
+          'k-agy': { phase: 'active', lastAttemptAt: 100, risingCount: 0, bypassUntil: 9999 },
+        },
+        overrides: {
+          'k-claude': { enabled: false, suspendAtLimit: false },
+          'k-agy': { enabled: false, suspendAtLimit: false },
+        },
+      }))
+    })
+
+    // Filtered to agy: only agy is cleared
+    act(() => clearAllManualPauses('agy'))
+    expect(getQuotaState().guards['k-agy']?.bypassUntil).toBeUndefined()
+    expect(getQuotaState().overrides['k-agy']).toBeUndefined()
+    expect(getQuotaState().guards['k-claude']?.bypassUntil).toBe(9999)
+    expect(getQuotaState().overrides['k-claude']).toBeDefined()
+
+    // Global clear: remaining claude is cleared
+    act(() => clearAllManualPauses())
+    expect(getQuotaState().guards['k-claude']?.bypassUntil).toBeUndefined()
+    expect(getQuotaState().overrides['k-claude']).toBeUndefined()
   })
 
   it('computes terminalConfig with effective overrides', () => {

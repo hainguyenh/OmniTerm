@@ -91,6 +91,21 @@ export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = f
                 <span className="w-10 text-right tabular-nums">{config.limits[kind]}%</span>
               </label>
             ))}
+            {agent === 'agy' && (
+              <label className="flex items-center gap-2 text-theme-fg">
+                <span className="w-20 text-theme-dim">Model pool</span>
+                <select
+                  value={config.agyModelFamily ?? 'auto'}
+                  aria-label={`${name} model quota pool`}
+                  className={`${FIELD} flex-1 min-w-0`}
+                  onChange={(event) => patch({ agyModelFamily: event.target.value as 'auto' | 'gemini' | 'claude' })}
+                >
+                  <option value="auto">Auto (from agy settings)</option>
+                  <option value="gemini">Google (Gemini Models)</option>
+                  <option value="claude">Claude & GPT models</option>
+                </select>
+              </label>
+            )}
             <div className="aq-strip aq-size-normal rounded-lg border border-theme-border" aria-label={`${name} limits preview`}>
               <div className="aq-lines">
                 {WINDOW_KINDS.map((kind) => {

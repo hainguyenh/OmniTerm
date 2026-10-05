@@ -4,6 +4,7 @@ pub mod agent_session;
 #[path = "../../plugins/always-awake/native/always_awake.rs"]
 pub mod always_awake;
 mod app_utils;
+pub use app_utils::handle_second_instance;
 mod attachments;
 mod launcher;
 mod os_actions;
@@ -24,9 +25,11 @@ pub mod git_commands;
 mod git_commands_tests;
 #[cfg(test)]
 mod ipc_contract_tests;
+mod temp_note_commands;
 #[cfg(test)]
 mod test_support;
 mod text_file_commands;
+mod workspace_file_commands;
 
 // Public so the integration tests under tests/ can drive the real launch and command paths.
 pub mod adhoc;
@@ -78,7 +81,7 @@ pub fn run() {
         // The single-instance plugin must be registered first so a second launch is forwarded before
         // any other plugin has a chance to initialize against a duplicate instance.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            handle_second_instance(app, &argv);
+            app_utils::handle_second_instance(app, &argv);
         }))
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -295,6 +298,15 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         workspace::write_script,
         text_file_commands::open_text_file,
         text_file_commands::save_text_file,
+        text_file_commands::create_text_file,
+        workspace_file_commands::create_workspace_directory,
+        workspace_file_commands::move_workspace_file,
+        workspace_file_commands::delete_workspace_file,
+        temp_note_commands::list_temp_notes,
+        temp_note_commands::read_temp_note,
+        temp_note_commands::write_temp_note,
+        temp_note_commands::delete_temp_note,
+        temp_note_commands::save_temp_note_as,
         file_view_commands::open_image_file,
         safepath_command::system_excluded_view_exts,
         workspace_connections::load_workspace_connections,
@@ -379,22 +391,6 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         git_branch_commands::git_rename_branch,
         git_branch_commands::git_set_upstream,
         git_branch_commands::git_add_worktree,
+        git_branch_commands::git_worktrees,
     ])
-}
-
-/// A second launch arrived. Its argv is untrusted — any local process can run
-/// `OmniTerm.exe --open-shell …` — so it goes through `parse_open_shell_args`, which allowlists the
-/// shell and caps every field. The first port emitted the raw argv array straight to the webview,
-/// which both broke the payload contract and let an arbitrary executable name through.
-fn handle_second_instance<R: tauri::Runtime>(app: &tauri::AppHandle<R>, argv: &[String]) {
-    if let Some(req) = openshell::parse_open_shell_args(argv) {
-        adhoc::open_adhoc_shell(app, req);
-    } else if argv.iter().any(|a| a == "--open-shell") {
-        log::warn!("[launcher] ignored an --open-shell request with an unsupported shell");
-    }
-
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
 }

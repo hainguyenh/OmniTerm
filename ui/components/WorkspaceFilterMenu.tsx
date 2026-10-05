@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Briefcase, ChevronsDownUp, ChevronsUpDown, Code2, Folder, GripHorizontal, Layers3, Server, Star, X,
+  Briefcase, ChevronsDownUp, ChevronsUpDown, Code2, FilePlus, Folder, GripHorizontal, Layers3, Server, Star, X,
 } from 'lucide-react'
 import type { WorkspaceEntry } from '@omniterm/contract'
 import type { WorkspaceColor, WorkspaceIcon } from '@omniterm/contract'
@@ -45,6 +45,7 @@ interface WorkspaceFilterMenuProps {
   hasProjectDefault?: boolean
   onSaveAsProjectDefault?: () => void
   onClearProjectDefault?: () => void
+  onNewFile?: () => void
 }
 
 const MENU_WIDTH = 288
@@ -60,7 +61,7 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
   appearanceOnly = false, appearanceColor, onAppearanceColorChange,
   appearanceIcon, onAppearanceIconChange,
   isProjectDefault = false, hasProjectDefault = false,
-  onSaveAsProjectDefault, onClearProjectDefault,
+  onSaveAsProjectDefault, onClearProjectDefault, onNewFile,
 }) => {
   const wrapRef = useRef<HTMLDivElement>(null)
   // Where the user dragged the dialog to; `null` = still where its trigger put it.
@@ -192,6 +193,20 @@ const WorkspaceFilterMenu: React.FC<WorkspaceFilterMenuProps> = ({
         <span className="flex-1 text-[10px] uppercase tracking-wider text-[var(--theme-dim)]">
           {title}
         </span>
+        {onNewFile && (
+          <button
+            type="button"
+            aria-label="New file in folder"
+            title="New file in this folder"
+            onClick={() => {
+              onClose()
+              onNewFile()
+            }}
+            className="flex-shrink-0 rounded p-0.5 text-[var(--theme-dim)] hover:bg-[var(--theme-hover-bg)] hover:text-[var(--theme-fg)]"
+          >
+            <FilePlus className="h-3 w-3" />
+          </button>
+        )}
         <button
           type="button"
           aria-label="Close filter"

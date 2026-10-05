@@ -3,7 +3,6 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { GitBranchTools } from '../GitBranchTools'
-import { GitBranchUpdateDialog } from '../GitBranchUpdateDialog'
 import type { GitBranchInfo } from '../gitTypes'
 import { useGitBranchOps } from '../useGitBranchOps'
 
@@ -33,33 +32,6 @@ function openTools(props: Partial<Parameters<typeof GitBranchTools>[0]> = {}) {
   fireEvent.click(screen.getByText('More branch tools'))
   return actions
 }
-
-describe('GitBranchUpdateDialog', () => {
-  it('updates the branch and closes on success', async () => {
-    const onUpdate = vi.fn().mockResolvedValue(null)
-    const onClose = vi.fn()
-    render(<GitBranchUpdateDialog branch={topic} currentBranch="main" onUpdate={onUpdate} onClose={onClose} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Update topic/ }))
-    await waitFor(() => expect(onClose).toHaveBeenCalled())
-    expect(onUpdate).toHaveBeenCalledWith('topic')
-  })
-
-  it('keeps the refusal visible and stays open', async () => {
-    const onClose = vi.fn()
-    render(<GitBranchUpdateDialog branch={topic} onUpdate={vi.fn().mockResolvedValue("'topic' has diverged")} onClose={onClose} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Update topic/ }))
-    expect(await screen.findByRole('alert')).toHaveTextContent("'topic' has diverged")
-    expect(onClose).not.toHaveBeenCalled()
-  })
-
-  it('cannot update a branch without an upstream', () => {
-    render(<GitBranchUpdateDialog branch={{ ...topic, upstream: undefined }} onUpdate={vi.fn()} onClose={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /Update topic/ })).toBeDisabled()
-    expect(screen.getByRole('note')).toHaveTextContent('No upstream')
-  })
-})
 
 describe('GitBranchTools', () => {
   it('renames the branch from an inline form', async () => {
@@ -117,8 +89,9 @@ describe('useGitBranchOps branch tools', () => {
     await waitFor(() => expect(result.current.branches).toHaveLength(1))
 
     let failure: string | null = null
-    await act(async () => { failure = await result.current.handleUpdateBranch('topic') })
-    expect(failure).toContain('diverged')
+    await act(async () => { await result.current.handlePullBranch('topic') })
+    expect(mockInvoke).toHaveBeenCalledWith('git_update_branch', { cwd: 'C:/repo', branch: 'topic' })
+    expect(result.current.actionNotice).toEqual({ text: expect.stringContaining('diverged'), isError: true })
 
     await act(async () => { failure = await result.current.handleAddWorktree('topic') })
     expect(failure).toBeNull()

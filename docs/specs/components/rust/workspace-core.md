@@ -56,6 +56,7 @@ On workspace load/import/move/pin/path resolution and scan/page requests.
 - `normalize_workspace_orders` — owned by this spec.
 - `set_entry_pinned` — owned by this spec.
 - `is_entry_pinned` — owned by this spec.
+- `move_entry_pin` / `remove_entry_pin` — owned by this spec.
 - `logical_target` — owned by this spec.
 - `namespace_path` — owned by this spec.
 - `scan_dir_excluding` — owned by this spec.
@@ -75,6 +76,8 @@ On workspace load/import/move/pin/path resolution and scan/page requests.
 | `normalize_workspace_orders` | Normalize all sibling order values. | Deterministic persistence/display. | Group by parent then rewrite dense order. | Migration/delete. |
 | `set_entry_pinned` | Add/remove pin identity. | Durable structural priority. | Normalize relative path and update pins. | Pin action. |
 | `is_entry_pinned` | Query pin identity. | Pinned-first sorting. | Compare normalized folder/path. | Tree derivation. |
+| `move_entry_pin` | Carry a pin to a file's new location. | Renamed or moved pinned files stay pinned. | Find the normalized source pin and rewrite folder/path. | After a tree rename/move. |
+| `remove_entry_pin` | Drop a deleted file's pin. | No dangling pins. | Retain every pin except the normalized target. | After a tree delete. |
 | `logical_target` | Resolve logical path to folder + relative path. | Explicit real-root selection. | Split first path segment and lookup folder ID. | Before IO/run. |
 | `namespace_path` | Build logical namespaced path. | Avoid cross-root collisions. | Join folder ID with relative path. | Scan result identity. |
 | `scan_dir_excluding` | Scan runnable scripts with exclusions. | Script discovery. | Walk root/classify/filter. | Script refresh. |

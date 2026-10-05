@@ -81,6 +81,22 @@ function parseReading(line: string, now: number): AgyReading | null {
   return { kind, model, usedPct, resetsAt }
 }
 
+export type AgyModelFamily = 'gemini' | 'claude'
+
+export function isAgyModelMatch(model: string, family: AgyModelFamily): boolean {
+  if (family === 'gemini') return /gemini|google/i.test(model)
+  return /claude|gpt|openai|anthropic/i.test(model)
+}
+
+function detectFamilyFromText(raw: string): AgyModelFamily | null {
+  const match = /(?:active\s+model|current\s+model|model\s+selection|model)\s*[:=]\s*([^\r\n]+)/i.exec(raw)
+  if (match) {
+    if (/gemini|google/i.test(match[1])) return 'gemini'
+    if (/claude|gpt|openai|anthropic/i.test(match[1])) return 'claude'
+  }
+  return null
+}
+
 /**
  * Parse `agy -p /usage` output.
  *
@@ -90,7 +106,11 @@ function parseReading(line: string, now: number): AgyReading | null {
  * `Gemini Models          Weekly Limit Remaining     55%   2026-10-02T08:47:03Z`
  * `Gemini Models          Five Hour Limit Remaining  82%   2026-09-28T07:11:00Z`
  */
-export function parseAgyUsage(raw: string, now: number = Date.now()): AgyUsageParse {
+export function parseAgyUsage(
+  raw: string,
+  now: number = Date.now(),
+  activeFamily?: AgyModelFamily | null,
+): AgyUsageParse {
   if (NOT_SIGNED_IN.test(raw)) {
     return { ok: false, error: 'not_signed_in', message: 'Antigravity CLI is not signed in.' }
   }
@@ -104,6 +124,7 @@ export function parseAgyUsage(raw: string, now: number = Date.now()): AgyUsagePa
     return { ok: false, error: 'parse_failed', message: 'The /usage output named no quota windows.' }
   }
 
+  const preferredFamily = activeFamily ?? detectFamilyFromText(raw)
   const windows: QuotaWindow[] = []
   const kinds: WindowKind[] = ['session', 'weekly', 'monthly']
 
@@ -111,7 +132,19 @@ export function parseAgyUsage(raw: string, now: number = Date.now()): AgyUsagePa
     const matching = readings.filter((r) => r.kind === kind)
     if (matching.length === 0) continue
 
-    const worst = matching.reduce((top, r) => (r.usedPct > top.usedPct ? r : top))
+    const byFamily = preferredFamily
+      ? matching.filter((r) => isAgyModelMatch(r.model, preferredFamily))
+      : []
+
+    // If preferred family matched readings, use the worst within that family;
+    // otherwise fallback to gemini if present, else worst overall reading.
+    const candidates = byFamily.length > 0
+      ? byFamily
+      : matching.filter((r) => isAgyModelMatch(r.model, 'gemini'))
+
+    const primary = (candidates.length > 0 ? candidates : matching)
+      .reduce((top, r) => (r.usedPct > top.usedPct ? r : top))
+
     const breakdown = matching.length > 1
       ? matching.map(({ model, usedPct }) => ({ label: model, usedPct }))
       : undefined
@@ -119,8 +152,8 @@ export function parseAgyUsage(raw: string, now: number = Date.now()): AgyUsagePa
     windows.push({
       kind,
       label: kind === 'session' ? 'Session (5h)' : kind === 'weekly' ? 'Weekly' : 'Monthly',
-      usedPct: worst.usedPct,
-      ...(worst.resetsAt !== undefined ? { resetsAt: worst.resetsAt } : {}),
+      usedPct: primary.usedPct,
+      ...(primary.resetsAt !== undefined ? { resetsAt: primary.resetsAt } : {}),
       ...(breakdown ? { breakdown } : {}),
     })
   }

@@ -41,7 +41,15 @@ function optionalLauncher(value: unknown, agent: AgentKind): string | null {
 export function parseFetchRequest(value: unknown): FetchUsageRequest {
   const record = (value ?? {}) as Record<string, unknown>
   if (!isAgent(record.agent)) throw new Error('Unknown agent')
-  return { agent: record.agent, profileDir: optionalDir(record.profileDir), launcher: optionalLauncher(record.launcher, record.agent) }
+  const modelFamily = record.modelFamily === 'gemini' || record.modelFamily === 'claude' || record.modelFamily === 'auto'
+    ? record.modelFamily
+    : null
+  return {
+    agent: record.agent,
+    profileDir: optionalDir(record.profileDir),
+    launcher: optionalLauncher(record.launcher, record.agent),
+    ...(modelFamily ? { modelFamily } : {}),
+  }
 }
 
 export function parseWakeRequest(value: unknown): WakeRequest {
@@ -56,8 +64,8 @@ export function parseWakeRequest(value: unknown): WakeRequest {
   }
 }
 
-const profileKey = (request: { agent: AgentKind; profileDir?: string | null; launcher?: string | null }) =>
-  `${request.agent}:${request.launcher ?? ''}:${(request.profileDir ?? '').toLowerCase()}`
+const profileKey = (request: { agent: AgentKind; profileDir?: string | null; launcher?: string | null; modelFamily?: string | null }) =>
+  `${request.agent}:${request.launcher ?? ''}:${request.modelFamily ?? ''}:${(request.profileDir ?? '').toLowerCase()}`
 
 /**
  * One probe per profile at a time. Two terminals on the same account ask together; the second

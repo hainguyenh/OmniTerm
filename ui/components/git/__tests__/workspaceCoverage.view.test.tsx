@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   push: vi.fn(),
   stage: vi.fn(),
   unstage: vi.fn(),
+  listWorktrees: vi.fn(),
 }))
 vi.mock('../../../gitAPI', () => ({ createGitAPI: () => api }))
 
@@ -37,6 +38,29 @@ vi.mock('../GitDiffViewer', () => ({
     >
       <button type="button" onClick={() => props.onSelectFile('picked.ts', true)}>stub pick file</button>
       <button type="button" onClick={props.onClose}>stub close diff</button>
+    </div>
+  ),
+}))
+
+vi.mock('../GitBranchQuickPopover', () => ({
+  GitBranchQuickPopover: (props: {
+    cwd: string
+    onClose: () => void
+    onExpand: () => void
+  }) => (
+    <div data-testid="branch-quick-popover" data-cwd={props.cwd}>
+      <button
+        type="button"
+        onClick={() => {
+          props.onClose()
+          props.onExpand()
+        }}
+      >
+        stub expand
+      </button>
+      <button type="button" onClick={props.onClose}>
+        stub close quick popover
+      </button>
     </div>
   ),
 }))
@@ -99,6 +123,7 @@ describe('GitWorkspaceView coverage', () => {
     api.commit.mockResolvedValue('ok')
     api.revert.mockResolvedValue(undefined)
     api.stage.mockResolvedValue(undefined)
+    api.listWorktrees.mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -268,6 +293,7 @@ describe('GitWorkspaceView coverage', () => {
     await screen.findByTestId('diff-viewer')
 
     fireEvent.click(screen.getByRole('button', { name: 'Current branch: main' }))
+    fireEvent.click(screen.getByRole('button', { name: 'stub expand' }))
     expect(screen.getByTestId('branch-popup')).toHaveAttribute('data-cwd', '/repo')
 
     fireEvent.click(within(nav()).getByRole('button', { name: 'Commit Graph' }))
@@ -286,6 +312,7 @@ describe('GitWorkspaceView coverage', () => {
     expect(screen.queryByTestId('branch-popup')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Current branch: main' }))
+    fireEvent.click(screen.getByRole('button', { name: 'stub expand' }))
     act(() => {
       window.dispatchEvent(new CustomEvent('omniterm:open-git-maintenance'))
     })
@@ -351,22 +378,29 @@ describe('GitWorkspaceView coverage', () => {
     window.removeEventListener('omniterm:git-refresh', refreshSpy)
   })
 
-  it('clamps the changes pane width while dragging the resizer', async () => {
+  it('resizes the changes pane relative to the grab point and keeps room for the diff', async () => {
     render(<GitWorkspaceView cwd="/repo" onClose={vi.fn()} />)
     await screen.findByTestId('diff-viewer')
     const pane = document.querySelector<HTMLElement>('.git-changes-pane')
     const width = () => pane?.style.getPropertyValue('--git-changes-width')
     expect(width()).toBe('380px')
 
-    fireEvent.mouseDown(screen.getByTitle('Drag to resize panes'))
-    fireEvent.mouseMove(window, { clientX: 500 })
+    const divider = screen.getByRole('separator', { name: 'Resize changes and diff panes' })
+    fireEvent.mouseDown(divider, { clientX: 400 })
+    fireEvent.mouseMove(window, { clientX: 472 })
     expect(width()).toBe('452px')
-    fireEvent.mouseMove(window, { clientX: 10 })
+    fireEvent.mouseMove(window, { clientX: -1000 })
     expect(width()).toBe('260px')
+    // jsdom lays out nothing, so the 1024px window bounds it: the diff keeps 320px.
     fireEvent.mouseMove(window, { clientX: 5000 })
-    expect(width()).toBe('700px')
+    expect(width()).toBe('704px')
     fireEvent.mouseUp(window)
     fireEvent.mouseMove(window, { clientX: 500 })
-    expect(width()).toBe('700px')
+    expect(width()).toBe('704px')
+    expect(localStorage.getItem('omniterm:git-changes-width')).toBe('704')
+
+    fireEvent.doubleClick(divider)
+    expect(width()).toBe('380px')
+    expect(localStorage.getItem('omniterm:git-changes-width')).toBeNull()
   })
 })

@@ -26,7 +26,7 @@ const tools = {
 }
 
 function renderInspector(info: GitBranchInfo | null, currentBranch?: string, busy = false) {
-  const onUpdate = vi.fn()
+  const onPull = vi.fn()
   render(
     <GitBranchInspector
       branch={info}
@@ -34,7 +34,7 @@ function renderInspector(info: GitBranchInfo | null, currentBranch?: string, bus
       busy={busy}
       remoteBranches={['origin/main']}
       tools={tools}
-      onUpdate={onUpdate}
+      onPull={onPull}
       onCheckout={vi.fn()}
       onMerge={vi.fn()}
       onRebase={vi.fn()}
@@ -43,7 +43,7 @@ function renderInspector(info: GitBranchInfo | null, currentBranch?: string, bus
       onDelete={vi.fn()}
     />,
   )
-  return { onUpdate }
+  return { onPull }
 }
 
 const syncStatus = () => screen.getByText('Sync status').nextElementSibling
@@ -56,18 +56,22 @@ describe('GitBranchInspector coverage', () => {
     expect(screen.queryByRole('complementary', { name: 'Selected branch details' })).not.toBeInTheDocument()
   })
 
-  it('describes an untracked local branch and offers an in-place update from HEAD', () => {
-    const info = branch()
-    const { onUpdate } = renderInspector(info)
+  it('describes an untracked local branch, which has nothing to pull', () => {
+    renderInspector(branch())
     expect(screen.getByText('LOCAL BRANCH')).toBeInTheDocument()
     expect(tracking()).toHaveTextContent('No upstream')
     expect(syncStatus()).toHaveTextContent('Not tracked')
     expect(screen.getByText('Commit details unavailable')).toBeInTheDocument()
-    expect(screen.getByText('STAY ON HEAD')).toBeInTheDocument()
+    expect(screen.queryByText('STAY ON HEAD')).not.toBeInTheDocument()
     expect(screen.queryByText('Checked out')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Pull/ })).not.toBeInTheDocument()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /Update branch/ }))
-    expect(onUpdate).toHaveBeenCalledWith(info)
+  it('pulls a tracked branch in place without a confirmation step', () => {
+    const { onPull } = renderInspector(branch({ upstream: 'origin/feat/x' }))
+    expect(screen.getByText('STAY ON HEAD')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Pull feat/x' }))
+    expect(onPull).toHaveBeenCalledWith('feat/x')
   })
 
   it('reports divergence and the last author for a tracked branch', () => {
@@ -77,7 +81,7 @@ describe('GitBranchInspector coverage', () => {
     expect(screen.getByText('Alice')).toBeInTheDocument()
     expect(screen.getByText('feat: y')).toBeInTheDocument()
     expect(screen.getByText('STAY ON main')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Update branch/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pull feat/x' })).toBeDisabled()
   })
 
   it('reports a behind-only tracking state', () => {
@@ -98,14 +102,14 @@ describe('GitBranchInspector coverage', () => {
   it('marks the checked-out branch and hides the in-place update', () => {
     renderInspector(branch({ name: 'dev' }), 'dev')
     expect(screen.getByText('Checked out')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Update branch/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pull/ })).not.toBeInTheDocument()
   })
 
   it('describes a remote branch without update actions', () => {
     renderInspector(branch({ name: 'origin/feat/x', is_remote: true }))
     expect(screen.getByText('REMOTE BRANCH')).toBeInTheDocument()
     expect(tracking()).toHaveTextContent('Remote reference')
-    expect(screen.queryByRole('button', { name: /Update branch/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Pull/ })).not.toBeInTheDocument()
   })
 })
 

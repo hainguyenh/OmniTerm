@@ -22,6 +22,7 @@ describe('createGitAPI', () => {
     await api.popStash('/r')
     await api.applyStash('/r')
     await api.addWorktree('/r', 'feat')
+    await api.listWorktrees('/r')
 
     expect(mockInvoke.mock.calls).toEqual([
       ['git_file_history', { cwd: '/r', filePath: 'a.ts', startLine: null, endLine: null, limit: null }],
@@ -31,6 +32,7 @@ describe('createGitAPI', () => {
       ['git_stash_pop', { cwd: '/r', index: null }],
       ['git_stash_apply', { cwd: '/r', index: null }],
       ['git_add_worktree', { cwd: '/r', branch: 'feat', path: null }],
+      ['git_worktrees', { cwd: '/r' }],
     ])
   })
 
@@ -57,6 +59,7 @@ describe('createGitAPI', () => {
   it('applies the default flags for branch deletion and remote operations', async () => {
     await api.deleteBranches('/r', ['a'])
     await api.deleteBranches('/r', ['b'], true)
+    await api.deleteBranches('/r', ['c'], false, true)
     await api.fetch('/r')
     await api.fetch('/r', false)
     await api.pull('/r')
@@ -65,8 +68,9 @@ describe('createGitAPI', () => {
     await api.push('/r', true)
 
     expect(mockInvoke.mock.calls).toEqual([
-      ['git_delete_branches', { cwd: '/r', branches: ['a'], force: false }],
-      ['git_delete_branches', { cwd: '/r', branches: ['b'], force: true }],
+      ['git_delete_branches', { cwd: '/r', branches: ['a'], force: false, removeWorktrees: false }],
+      ['git_delete_branches', { cwd: '/r', branches: ['b'], force: true, removeWorktrees: false }],
+      ['git_delete_branches', { cwd: '/r', branches: ['c'], force: false, removeWorktrees: true }],
       ['git_fetch', { cwd: '/r', prune: true }],
       ['git_fetch', { cwd: '/r', prune: false }],
       ['git_pull', { cwd: '/r', rebase: false }],

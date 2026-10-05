@@ -177,13 +177,14 @@ describe('GitBranchPopup', () => {
       )
     })
 
-    const updateBtn = screen.getByRole('button', { name: 'Pull current' })
+    const footer = document.querySelector('.git-branches-footer') as HTMLElement
+    const updateBtn = within(footer).getByRole('button', { name: 'Pull current' })
     await act(async () => {
       fireEvent.click(updateBtn)
     })
     expect(mockInvoke).toHaveBeenCalledWith('git_pull', expect.objectContaining({ cwd: '/repo' }))
 
-    const pushBtn = screen.getByRole('button', { name: 'Push current' })
+    const pushBtn = within(footer).getByRole('button', { name: 'Push current' })
     await act(async () => {
       fireEvent.click(pushBtn)
     })

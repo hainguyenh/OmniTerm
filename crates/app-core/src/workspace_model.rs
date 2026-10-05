@@ -253,6 +253,37 @@ pub fn is_entry_pinned(workspace: &Workspace, folder_id: &str, path: &str) -> bo
         .any(|pin| pin.folder_id == folder_id && pin.path == normalized)
 }
 
+/// Carry a pin along when its file is renamed or moved. Returns whether a pin changed.
+pub fn move_entry_pin(
+    workspace: &mut Workspace,
+    from_folder: &str,
+    from_path: &str,
+    to_folder: &str,
+    to_path: &str,
+) -> bool {
+    let from_path = from_path.trim_matches('/');
+    let Some(pin) = workspace
+        .pins
+        .iter_mut()
+        .find(|pin| pin.folder_id == from_folder && pin.path == from_path)
+    else {
+        return false;
+    };
+    pin.folder_id = to_folder.to_string();
+    pin.path = to_path.trim_matches('/').to_string();
+    true
+}
+
+/// Drop the pin of a file that no longer exists. Returns whether a pin was removed.
+pub fn remove_entry_pin(workspace: &mut Workspace, folder_id: &str, path: &str) -> bool {
+    let before = workspace.pins.len();
+    let path = path.trim_matches('/');
+    workspace
+        .pins
+        .retain(|pin| !(pin.folder_id == folder_id && pin.path == path));
+    workspace.pins.len() != before
+}
+
 pub fn logical_target<'a>(workspace: &'a Workspace, logical_path: &str) -> Result<LogicalTarget<'a>, String> {
     let trimmed = logical_path.trim_matches('/');
     let (folder_id, relative_path) = trimmed.split_once('/').unwrap_or((trimmed, ""));

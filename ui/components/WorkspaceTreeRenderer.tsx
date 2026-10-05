@@ -1,27 +1,24 @@
-import React, { useState } from 'react'
-import {
-  ChevronDown, ChevronRight, Filter, Loader2, Pencil, Pin, PinOff, Play, Terminal, Unlink,
-} from 'lucide-react'
+import React from 'react'
 import type {
   Connection,
   Workspace,
   WorkspaceEntry,
   WorkspaceScript,
 } from '@omniterm/contract'
+
 import { entryNode, type WorkspaceTreeNode } from '../utils/scriptTree'
-import { fileAppearance, folderAppearance } from '../utils/fileAppearance'
+import type { WorkspaceTreeTarget } from '../utils/workspaceFileEdits'
 import type { FolderPageInfo } from '../hooks/useWorkspaceScan'
 import {
   DEFAULT_FOLDER_FILTER,
   isDefaultFolderFilter,
   type TreeFilter,
 } from '../utils/workspaceFilter'
-import { WORKSPACE_COLOR_VALUES } from '../utils/workspaceAppearance'
 import WorkspaceConnectionRow from './WorkspaceConnectionRow'
 import WorkspaceShowMore from './WorkspaceShowMore'
 import type { WorkspacePanelView } from './workspacePanelView'
-import { Tooltip } from './Tooltip'
-import { FileTypeIcon } from './FileTypeIcon'
+import { WorkspaceFileRow } from './WorkspaceFileRow'
+import { WorkspaceFolderRow } from './WorkspaceFolderRow'
 import './workspace-file-tree.css'
 
 interface WorkspaceTreeRendererProps {
@@ -56,6 +53,13 @@ interface WorkspaceTreeRendererProps {
     anchor: DOMRect,
     folderPath?: string,
   ) => void
+  onNewFile?: (workspaceId: string, folderPath: string, folderName?: string) => void
+  onNewFolder?: (target: WorkspaceTreeTarget) => void
+  onRenameFile?: (target: WorkspaceTreeTarget, name: string) => void
+  onMoveFile?: (target: WorkspaceTreeTarget) => void
+  onDeleteFile?: (target: WorkspaceTreeTarget) => void
+  /** The file open in the active editor tab, marked until another tab takes focus. */
+  activeFile?: { workspaceId: string; path: string } | null
   renderConnectionAction: (workspace: Workspace, parentPath: string, parentLabel: string) => React.ReactNode
   onConnectWorkspaceConnection?: (connection: Connection, workspaceId: string) => void
   onEditWorkspaceConnection?: (workspace: Workspace, parentPath: string, connection: Connection) => void
@@ -90,6 +94,12 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
   onRenameFolder,
   onSetFolderPendingRemoval,
   onOpenFolderFilterMenu,
+  onNewFile,
+  onNewFolder,
+  onRenameFile,
+  onMoveFile,
+  onDeleteFile,
+  activeFile,
   renderConnectionAction,
   onConnectWorkspaceConnection,
   onEditWorkspaceConnection,
@@ -97,82 +107,27 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
   isHighlighted,
   registerRow,
 }) => {
-  // Inline alias editing for root workspace folders. One row at a time; the
-  // draft lives here because renderNode is a closure, not a component.
-  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null)
-  const [folderAliasDraft, setFolderAliasDraft] = useState('')
-
-  /** Absolute path tooltip: every segment dim, the real folder name bold. */
-  const pathTooltip = (path: string) => {
-    const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-    return (
-      <>
-        {cut >= 0 ? path.slice(0, cut + 1) : ''}
-        <strong>{cut >= 0 ? path.slice(cut + 1) : path}</strong>
-      </>
-    )
-  }
-
-  const submitFolderAlias = () => {
-    if (!renamingFolderId) return
-    const trimmed = folderAliasDraft.trim()
-    const folderId = renamingFolderId
-    setRenamingFolderId(null)
-    if (trimmed && onRenameFolder) onRenameFolder(workspace.id, folderId, trimmed)
-  }
+  const wsId = workspace.id
 
   const fileRow = (node: WorkspaceTreeNode, label: string, depth: number) => {
-    const wsId = workspace.id
-    const meta = fileAppearance(node.name, node.entry?.kind ?? '')
-    const { script, openable } = node
-    // Every openable file opens editable in the built-in editor; `editable` now only marks scripts.
-    const verb = openable ? 'Open' : ''
-    const title = verb ? `${verb} ${node.name}` : `${node.name} (${meta.label})`
-    const highlighted = isHighlighted(wsId, node.path)
+    const target = { workspaceId: wsId, path: node.path, name: node.name }
     return (
-      <div
+      <WorkspaceFileRow
         key={node.path}
-        ref={registerRow(wsId, node.path)}
-        className={`workspace-file-row group flex items-center gap-2 pr-1 h-7 rounded hover:bg-[var(--theme-hover-bg)] ${openable ? 'cursor-pointer' : 'cursor-default'} ${
-          highlighted
-            ? 'bg-[var(--theme-accent)]/20 ring-1 ring-[var(--theme-accent)]'
-            : ''
-        }`}
-        style={{ paddingLeft: 8 + depth * 12 }}
-        onClick={() => { if (openable) onOpenScript(wsId, openable) }}
-        title={title}
-      >
-        <FileTypeIcon name={node.name} kind={node.entry?.kind ?? ''} />
-        <span className={`workspace-file-name flex-1 min-w-0 truncate text-xs ${openable ? '' : 'text-[var(--theme-dim)]'}`} style={openable ? { color: `color-mix(in srgb, ${meta.color} 24%, var(--theme-fg))` } : undefined}>{label}</span>
-        <Tooltip content={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'} placement="bottom">
-          <button
-            type="button"
-            aria-label={isPinned(workspace, node.path) ? 'Unpin item' : 'Pin item'}
-            onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-            className={`flex-shrink-0 p-1 rounded hover:bg-[var(--theme-bg)] transition ${
-              isPinned(workspace, node.path)
-                ? 'text-[var(--theme-accent)]'
-                : 'hidden group-hover:inline-flex text-[var(--theme-dim)] hover:text-[var(--theme-accent)]'
-            }`}
-          >
-            {isPinned(workspace, node.path)
-              ? <PinOff className="w-3.5 h-3.5" />
-              : <Pin className="w-3.5 h-3.5" />}
-          </button>
-        </Tooltip>
-        {script && (
-          <Tooltip content={script.kind === 'rdp' ? 'Launch' : 'Run'} placement="bottom">
-            <button
-              type="button"
-              aria-label={script.kind === 'rdp' ? 'Launch' : 'Run'}
-              onClick={event => { event.stopPropagation(); onRunScript(wsId, script) }}
-              className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-            >
-              <Play className="w-3.5 h-3.5" />
-            </button>
-          </Tooltip>
-        )}
-      </div>
+        node={node}
+        label={label}
+        depth={depth}
+        pinned={isPinned(workspace, node.path)}
+        highlighted={isHighlighted(wsId, node.path)}
+        active={activeFile?.workspaceId === wsId && activeFile.path === node.path}
+        rowRef={registerRow(wsId, node.path)}
+        onOpen={script => onOpenScript(wsId, script)}
+        onRun={script => onRunScript(wsId, script)}
+        onTogglePinned={() => onTogglePinned(workspace, node.path)}
+        onRename={onRenameFile ? name => onRenameFile(target, name) : undefined}
+        onMove={onMoveFile ? () => onMoveFile(target) : undefined}
+        onDelete={onDeleteFile ? () => onDeleteFile(target) : undefined}
+      />
     )
   }
 
@@ -182,11 +137,11 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     if (filter.mode !== 'all' && filter.mode !== 'types') return null
     return (
       <WorkspaceShowMore
-        wsId={workspace.id}
+        wsId={wsId}
         total={info.total}
         loaded={filesByFolder[folder]?.length ?? 0}
-        loading={loadingMore?.wsId === workspace.id && loadingMore?.folder === folder}
-        onLoadMore={() => onLoadMore(workspace.id, folder)}
+        loading={loadingMore?.wsId === wsId && loadingMore?.folder === folder}
+        onLoadMore={() => onLoadMore(wsId, folder)}
       />
     )
   }
@@ -198,164 +153,49 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
           key={node.connection.id}
           connection={node.connection}
           depth={depth}
-          onConnect={(connection) => onConnectWorkspaceConnection?.(connection, workspace.id)}
+          onConnect={onConnectWorkspaceConnection
+            ? connection => onConnectWorkspaceConnection(connection, wsId)
+            : undefined}
           onEdit={onEditWorkspaceConnection
             ? (connection) => onEditWorkspaceConnection(workspace, parentPath, connection)
             : undefined}
-          onDelete={(connection) => onDeleteWorkspaceConnection(workspace.id, connection)}
+          onDelete={(connection) => onDeleteWorkspaceConnection(wsId, connection)}
         />
       )
     }
     if (!node.isDir) return fileRow(node, node.name, depth)
-    const key = `${workspace.id}:${node.path}`
+    const key = `${wsId}:${node.path}`
     const expanded = expandedDirs.has(key)
-    const folderMeta = folderAppearance(node.name, expanded)
-    const FolderIcon = folderMeta.icon
-    const Chevron = expanded && loadingFolders.has(key) ? Loader2 : expanded ? ChevronDown : ChevronRight
     const rootFolder = depth === 1 ? workspace.folders.find(folder => folder.id === node.path) : undefined
-    const pinned = isPinned(workspace, node.path)
+    const name = rootFolder?.name ?? node.name
     const folderFilter = rootFolder
       ? folderFilters[rootFolder.id] ?? DEFAULT_FOLDER_FILTER
       : DEFAULT_FOLDER_FILTER
-    const folderFilterActive = Boolean(rootFolder && !isDefaultFolderFilter(folderFilter))
     return (
-      <div key={key} className="workspace-folder-node" data-expanded={expanded} style={{ '--tree-guide-position': `${8 + depth * 12 + 7}px` } as React.CSSProperties}>
-        <div
-          className="workspace-folder-row group flex items-center gap-1 h-7 pr-1 rounded cursor-pointer hover:bg-[var(--theme-hover-bg)]"
-          style={{ paddingLeft: 8 + depth * 12 }}
-          onClick={() => onToggleDir(key)}
-          onContextMenu={event => {
-            if (!rootFolder) return
-            event.preventDefault()
-            onOpenFolderFilterMenu(
-              workspace.id,
-              rootFolder.id,
-              rootFolder.name,
-              new DOMRect(event.clientX, event.clientY, 0, 0),
-              rootFolder.path,
-            )
+      <div key={key} className="workspace-folder-node" data-expanded={expanded} data-root-folder={Boolean(rootFolder)} style={{ '--tree-depth': depth } as React.CSSProperties}>
+        <WorkspaceFolderRow
+          node={node}
+          expanded={expanded}
+          loading={loadingFolders.has(key)}
+          rootFolder={rootFolder}
+          filterActive={Boolean(rootFolder && !isDefaultFolderFilter(folderFilter))}
+          pinned={isPinned(workspace, node.path)}
+          connectionAction={renderConnectionAction(workspace, node.path, name)}
+          onToggle={() => onToggleDir(key)}
+          onOpenTerminal={() => onOpenTerminal(wsId, node.path)}
+          onTogglePinned={() => onTogglePinned(workspace, node.path)}
+          onNewFile={onNewFile ? () => onNewFile(wsId, node.path, name) : undefined}
+          onNewFolder={onNewFolder ? () => onNewFolder({ workspaceId: wsId, path: node.path, name }) : undefined}
+          onRenameAlias={rootFolder && onRenameFolder
+            ? alias => onRenameFolder(wsId, rootFolder.id, alias)
+            : undefined}
+          onOpenFilterMenu={anchor => {
+            if (rootFolder) onOpenFolderFilterMenu(wsId, rootFolder.id, rootFolder.name, anchor, rootFolder.path)
           }}
-        >
-          <Chevron className={`w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)] ${expanded && loadingFolders.has(key) ? 'animate-spin' : ''}`} />
-          {folderFilterActive && (
-            <Filter
-              className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-accent)]"
-              aria-label="Folder filter active"
-            />
-          )}
-          <FolderIcon
-            className="w-4 h-4 flex-shrink-0"
-            style={{ color: rootFolder?.color ? WORKSPACE_COLOR_VALUES[rootFolder.color] : folderMeta.color }}
-            aria-label={folderMeta.label}
-          />
-          {rootFolder && renamingFolderId === rootFolder.id ? (
-            <input
-              type="text"
-              autoFocus
-              value={folderAliasDraft}
-              onChange={event => setFolderAliasDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  submitFolderAlias()
-                } else if (event.key === 'Escape') {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  setRenamingFolderId(null)
-                }
-              }}
-              onBlur={submitFolderAlias}
-              onClick={event => event.stopPropagation()}
-              onDoubleClick={event => event.stopPropagation()}
-              aria-label="Folder alias"
-              className="flex-1 min-w-0 px-1 py-0.5 text-xs bg-[var(--theme-bg)] text-[var(--theme-fg)] border border-[var(--theme-accent)] rounded outline-none"
-            />
-          ) : (
-            <Tooltip content={rootFolder ? pathTooltip(node.path) : node.name} placement="top">
-              <span
-                className="flex-1 min-w-0 truncate text-xs"
-                onDoubleClick={event => {
-                  if (!rootFolder || !onRenameFolder) return
-                  event.stopPropagation()
-                  setRenamingFolderId(rootFolder.id)
-                  setFolderAliasDraft(rootFolder.name)
-                }}
-              >
-                {rootFolder?.name ?? node.name}
-              </span>
-            </Tooltip>
-          )}
-          {pinned ? (
-            <Tooltip content="Unpin item" placement="bottom">
-              <button
-                type="button"
-                aria-label="Unpin item"
-                onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-                className="flex-shrink-0 rounded p-1 text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-              >
-                <Pin className="w-3.5 h-3.5" aria-label="Pinned folder" />
-              </button>
-            </Tooltip>
-          ) : (
-            <Tooltip content="Pin item" placement="bottom">
-              <button
-                type="button"
-                aria-label="Pin item"
-                onClick={event => { event.stopPropagation(); onTogglePinned(workspace, node.path) }}
-                className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-              >
-                <Pin className="w-3.5 h-3.5" />
-              </button>
-            </Tooltip>
-          )}
-          {rootFolder && (
-            <>
-              <Tooltip content="Rename folder" placement="bottom">
-                <button
-                  type="button"
-                  aria-label="Rename folder"
-                  onClick={event => {
-                    event.stopPropagation()
-                    setRenamingFolderId(rootFolder.id)
-                    setFolderAliasDraft(rootFolder.name)
-                  }}
-                  className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-accent)] hover:bg-[var(--theme-bg)] transition"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip content="Unlink folder from workspace" placement="bottom">
-                <button
-                  type="button"
-                  aria-label="Unlink folder from workspace"
-                  onClick={event => {
-                    event.stopPropagation()
-                    onSetFolderPendingRemoval({
-                      workspaceId: workspace.id,
-                      folderId: rootFolder.id,
-                      name: rootFolder.name,
-                    })
-                  }}
-                  className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-red-400 hover:bg-[var(--theme-bg)] transition"
-                >
-                  <Unlink className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-            </>
-          )}
-          <Tooltip content="Open terminal here" placement="bottom">
-            <button
-              type="button"
-              aria-label="Open terminal here"
-              onClick={event => { event.stopPropagation(); onOpenTerminal(workspace.id, node.path) }}
-              className="flex-shrink-0 hidden group-hover:inline-flex p-1 rounded text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:bg-[var(--theme-bg)] transition"
-            >
-              <Terminal className="w-3.5 h-3.5" />
-            </button>
-          </Tooltip>
-          {renderConnectionAction(workspace, node.path, node.name)}
-        </div>
+          onUnlink={() => {
+            if (rootFolder) onSetFolderPendingRemoval({ workspaceId: wsId, folderId: rootFolder.id, name: rootFolder.name })
+          }}
+        />
         {expanded && <>
           {node.children.map((child) => renderNode(child, depth + 1, node.path))}
           {showMoreRow(node.path)}
@@ -368,7 +208,7 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     if (scanning || loadingAll) return null
     const empty = entries.length === 0 && connections.length === 0
     return (
-      <div className="px-2 py-1 text-xs text-[var(--theme-dim)] italic" style={{ paddingLeft: 20 }}>
+      <div className="workspace-tree-empty" role="status">
         {query.trim()
           ? 'Nothing matches your search.'
           : empty
@@ -378,18 +218,27 @@ const WorkspaceTreeRenderer: React.FC<WorkspaceTreeRendererProps> = ({
     )
   }
 
-  if (flatView) {
-    const needle = query.trim().toLowerCase()
-    const files = view.files
-      .filter((entry) => !needle || entry.id.toLowerCase().includes(needle))
-      .sort((left, right) => {
-        const la = left.id.toLowerCase()
-        const lb = right.id.toLowerCase()
-        return la < lb ? -1 : la > lb ? 1 : 0
-      })
-    return <>{files.map((entry) => fileRow(entryNode(entry), entry.id, 1))}</>
-  }
-
-  return <>{view.tree.map((node) => renderNode(node, 1, ''))}{showMoreRow('')}</>
+  return (
+    <>
+      {flatView ? (
+        (() => {
+          const needle = query.trim().toLowerCase()
+          const files = view.files
+            .filter((entry) => !needle || entry.id.toLowerCase().includes(needle))
+            .sort((left, right) => {
+              const la = left.id.toLowerCase()
+              const lb = right.id.toLowerCase()
+              return la < lb ? -1 : la > lb ? 1 : 0
+            })
+          return files.map((entry) => fileRow(entryNode(entry), entry.id, 1))
+        })()
+      ) : (
+        <>
+          {view.tree.map((node) => renderNode(node, 1, ''))}
+          {showMoreRow('')}
+        </>
+      )}
+    </>
+  )
 }
 export default WorkspaceTreeRenderer

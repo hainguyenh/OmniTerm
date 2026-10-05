@@ -22,6 +22,7 @@ import { createAgentQuotaAPI } from '../plugins/agent-quota/app/agentQuotaAPI'
 import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
 import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
+import { createTempNotesAPI } from './tempNotesAPI'
 import { createConnectAPI } from './omnitermAPIConnect'
 import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport } from './utils/attachmentTypes'
 import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
@@ -293,6 +294,7 @@ function createTauriAPI(): any {
     },
 
     workspace: createWorkspaceAPI(),
+    tempNotes: createTempNotesAPI(),
 
     updates,
 

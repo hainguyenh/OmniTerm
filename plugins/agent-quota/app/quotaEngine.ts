@@ -286,8 +286,7 @@ export class QuotaEngine {
   private configForProfile(profileKey: string): AgentConfig | undefined {
     const terminals = this.terminalsOf(profileKey)
     const state = getQuotaState()
-    const monitoring = terminals.find((terminal) => terminalConfig(state, terminal).enabled)
-    const terminal = monitoring ?? terminals[0]
+    const terminal = terminals.find((t) => terminalConfig(state, t).enabled) ?? terminals[0]
     return terminal ? terminalConfig(state, terminal) : undefined
   }
 
@@ -295,7 +294,13 @@ export class QuotaEngine {
     const profile = getQuotaState().profiles[key]
     if (!profile || !this.configsForProfile(key).some((config) => config.enabled)) return
     patchProfile(key, () => ({ fetching: true }))
-    const snapshot = await this.deps.api.fetchUsage({ agent: profile.agent, profileDir: profile.profileDir, launcher: profile.launcher })
+    const modelFamily = profile.agent === 'agy' ? (this.configForProfile(key)?.agyModelFamily ?? 'auto') : undefined
+    const snapshot = await this.deps.api.fetchUsage({
+      agent: profile.agent,
+      profileDir: profile.profileDir,
+      launcher: profile.launcher,
+      ...(modelFamily ? { modelFamily } : {}),
+    })
     await this.record(key, snapshot)
   }
 

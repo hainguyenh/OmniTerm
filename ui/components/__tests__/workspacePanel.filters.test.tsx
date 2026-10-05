@@ -140,8 +140,7 @@ describe('WorkspacePanel filters and connections', () => {
     fireEvent.click(screen.getByText('tools'))
     await screen.findByText('go.sh')
 
-    // Search is one icon on the header line until it is asked for; opening it swaps in the input.
-    fireEvent.click(screen.getByLabelText(/Search folders, files, connections/))
+    // Search is always available under the header, so typing filters the tree directly.
     fireEvent.change(screen.getByLabelText('Search workspace'), { target: { value: 'go.sh' } })
     expect(screen.getByText('tools')).toBeInTheDocument()
     expect(screen.getByText('go.sh')).toBeInTheDocument()
@@ -185,7 +184,9 @@ describe('WorkspacePanel filters and connections', () => {
     render(<WorkspacePanel hasConnectionProvider onOpenScript={vi.fn()} onAddWorkspaceConnection={onAdd} />)
     fireEvent.click(await screen.findByText('my-project'))
 
-    fireEvent.click(await screen.findByLabelText('Add connection in tools'))
+    // Adding a connection is grouped with the folder's other actions in its menu.
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for tools' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add connection in tools' }))
     expect(onAdd).toHaveBeenCalledWith({
       workspaceId: 'ws#1',
       parentPath: 'tools',
@@ -195,7 +196,8 @@ describe('WorkspacePanel filters and connections', () => {
 
     // The workspace row's own button files the connection at the root instead.
     onAdd.mockClear()
-    fireEvent.click(screen.getByLabelText('Add connection in my-project'))
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for my-project' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add connection in my-project' }))
     expect(onAdd.mock.calls[0][0]).toMatchObject({ parentPath: '', rootLabel: 'my-project' })
   })
 
@@ -204,6 +206,7 @@ describe('WorkspacePanel filters and connections', () => {
     render(<WorkspacePanel onOpenScript={vi.fn()} onAddWorkspaceConnection={vi.fn()} />)
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('tools')
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for tools' }))
     expect(screen.queryByLabelText('Add connection in tools')).not.toBeInTheDocument()
   })
 })

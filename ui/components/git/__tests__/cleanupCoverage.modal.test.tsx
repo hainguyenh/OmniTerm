@@ -207,6 +207,7 @@ describe('GitBranchCleanupModal coverage', () => {
       cwd: '/repo',
       branches: ['feat/merged', 'feat/gone', 'feat/stale'],
       force: true,
+      removeWorktrees: false,
     })
     expect(onRefreshBranches).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('alert')).toHaveTextContent('Deleted 1 branch(es). 1 failed: not fully merged')

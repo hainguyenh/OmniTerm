@@ -139,3 +139,9 @@ fn parse_carries_the_path_over_records_without_names() {
     assert_eq!(entries[0].commit.parents, vec!["p1", "p2"]);
     assert_eq!(entries[1].commit.timestamp, 9);
 }
+
+#[test]
+fn file_context_rejects_non_file_or_root_paths() {
+    assert!(file_context(Path::new("/")).is_err());
+    assert!(file_context(Path::new("")).is_err());
+}

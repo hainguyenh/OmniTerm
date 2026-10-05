@@ -11,8 +11,8 @@ interface GitBranchInspectorProps {
   busy: boolean
   remoteBranches: string[]
   tools: GitBranchToolActions
-  onUpdate: (branch: GitBranchInfo) => void
   onCheckout: (name: string) => void
+  onPull: (name: string) => void
   onMerge: (name: string) => void
   onRebase: (name: string) => void
   onCompare: (name: string) => void
@@ -20,7 +20,7 @@ interface GitBranchInspectorProps {
   onDelete: (name: string) => void
 }
 
-export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches, tools, onUpdate, ...actions }: GitBranchInspectorProps) {
+export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches, tools, ...actions }: GitBranchInspectorProps) {
   if (!branch) return <aside className="git-branch-inspector git-branch-empty">
     <GitBranch />
     <h2>Your branches, in focus</h2>
@@ -45,12 +45,12 @@ export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches
         <p><GitCommitHorizontal />{branch.last_commit_message ?? 'Commit details unavailable'}</p>
         {branch.last_commit_author && <small><UserRound />{branch.last_commit_author}</small>}
       </div>
-      {!branch.is_remote && !isCurrent && <div className="git-branch-update-card">
+      {!branch.is_remote && !isCurrent && branch.upstream && <div className="git-branch-update-card">
         <span className="git-branch-eyebrow">STAY ON {currentBranch ?? 'HEAD'}</span>
-        <h3>Update this branch in place</h3>
-        <p>Sync with its upstream while keeping your current checkout.</p>
-        <button type="button" className="git-control" disabled={busy} onClick={() => onUpdate(branch)}>
-          <ArrowDownToLine />Update branch…<ArrowRight />
+        <h3>Pull this branch in place</h3>
+        <p>Fast-forward to {branch.upstream} while keeping your current checkout. To bring it into {currentBranch ?? 'HEAD'}, merge it.</p>
+        <button type="button" className="git-control" disabled={busy} onClick={() => actions.onPull(branch.name)}>
+          <ArrowDownToLine />Pull {branch.name}<ArrowRight />
         </button>
       </div>}
       <div className="git-branch-action-heading"><span className="git-branch-eyebrow">BRANCH ACTIONS</span></div>

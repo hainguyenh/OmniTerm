@@ -83,8 +83,8 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
   const config = effectiveConfig(global, override)
   const customBadge = display.icons.overrideBadge && !!override
   const enableMonitoring = () => {
-    setOverride(terminal.instanceKey, pruneOverride(global, { ...override, enabled: true }))
     clearManualPause(terminal.instanceKey)
+    quotaCommands().refresh(terminal.profileKey)
   }
   if (!config.enabled) {
     return (

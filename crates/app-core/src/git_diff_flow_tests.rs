@@ -299,7 +299,7 @@ u UU short\0\
 fn branch_line_parser_filters_heads_and_reads_tracking() {
     assert!(parse_branch_line("").is_none());
     assert!(parse_branch_line("HEAD\t*").is_none());
-    assert!(parse_branch_line("origin/HEAD").is_none());
+    assert!(parse_branch_line("refs/remotes/origin/HEAD").is_none());
 
     let ahead = parse_branch_line("topic\t \torigin/topic\t[ahead 3]\tnot-a-number\t\t")
         .expect("ahead branch");
@@ -313,8 +313,9 @@ fn branch_line_parser_filters_heads_and_reads_tracking() {
     let gone = parse_branch_line("dead\t\torigin/dead\t[gone]").expect("gone");
     assert!(gone.is_gone);
 
-    let remote = parse_branch_line("remotes/upstream/x").expect("remote");
+    let remote = parse_branch_line("refs/remotes/upstream/x").expect("remote");
     assert!(remote.is_remote);
+    assert_eq!(remote.name, "upstream/x");
     assert!(!remote.is_current);
     assert_eq!(remote.upstream, None);
 }

@@ -7,6 +7,7 @@ import NewTerminalMenu from './NewTerminalMenu'
 import SettingsModal from './SettingsModal'
 import RenewSessionModal from './RenewSessionModal'
 import LargeTextPasteModalHost from './LargeTextPasteModalHost'
+import { StickyNoteHost } from './StickyNoteHost'
 // Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
 // parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
 const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
@@ -21,6 +22,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
   return (
     <>
           <LargeTextPasteModalHost />
+          <StickyNoteHost />
           <AgentQuotaRoot
             api={window.omnitermAPI.agentQuota}
             appSettings={appSettings}

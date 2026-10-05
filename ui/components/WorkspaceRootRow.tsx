@@ -1,11 +1,15 @@
 import { useState, type DragEventHandler, type KeyboardEvent } from 'react'
 import {
-  Briefcase, ChevronDown, ChevronRight, Code2, Folder, FolderGit2, FolderPlus, GripVertical, Layers3,
-  Pencil, Server, Star, Trash2,
+  ArrowDown, ArrowUp, Briefcase, ChevronDown, ChevronRight, Code2, Folder, FolderGit2, FolderPlus, Layers3,
+  Palette, Pencil, Server, Star, Trash2,
 } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
+
 import { WORKSPACE_COLOR_VALUES } from '../utils/workspaceAppearance'
+
 import { Tooltip } from './Tooltip'
+import { useRowContextMenu } from './useRowContextMenu'
+import { WorkspaceRowActions } from './WorkspaceRowActions'
 
 interface WorkspaceRootRowProps {
   workspace: Workspace
@@ -23,30 +27,33 @@ interface WorkspaceRootRowProps {
   onDragStart?: DragEventHandler<HTMLDivElement>
   onDragOver?: DragEventHandler<HTMLDivElement>
   onDrop?: DragEventHandler<HTMLDivElement>
-  onContextMenu?: React.MouseEventHandler<HTMLDivElement>
+  onAppearance?: (anchor: DOMRect) => void
 }
 
 export default function WorkspaceRootRow({
   workspace,
   expanded,
   depth = 0,
+  canMoveUp = false,
+  canMoveDown = false,
   connectionAction,
   onToggle,
   onAddFolder,
+  onMoveUp,
+  onMoveDown,
   onRemove,
   onRename,
   onDragStart,
   onDragOver,
   onDrop,
-  onContextMenu,
+  onAppearance,
 }: WorkspaceRootRowProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editingName, setEditingName] = useState(workspace.name)
-
+  const { actionsRef, onContextMenu } = useRowContextMenu()
   const title = workspace.folders.length === 1
     ? workspace.folders[0].path
     : `${workspace.folders.length} folders`
-  const actionClass = 'hidden group-hover:inline-flex flex-shrink-0 p-1 rounded hover:bg-[var(--theme-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)] transition disabled:opacity-20 disabled:pointer-events-none'
   const WorkspaceIcon = workspace.icon ? {
     folder: Folder,
     briefcase: Briefcase,
@@ -54,7 +61,7 @@ export default function WorkspaceRootRow({
     code: Code2,
     server: Server,
     star: Star,
-  }[workspace.icon] : null
+  }[workspace.icon] : FolderGit2
 
   const startRename = () => {
     setIsEditing(true)
@@ -64,14 +71,7 @@ export default function WorkspaceRootRow({
   const submitRename = () => {
     const trimmed = editingName.trim()
     setIsEditing(false)
-    if (trimmed && trimmed !== workspace.name) {
-      onRename?.(workspace.id, trimmed)
-    }
-  }
-
-  const cancelRename = () => {
-    setIsEditing(false)
-    setEditingName(workspace.name)
+    if (trimmed && trimmed !== workspace.name) onRename?.(workspace.id, trimmed)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -82,7 +82,8 @@ export default function WorkspaceRootRow({
     } else if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
-      cancelRename()
+      setIsEditing(false)
+      setEditingName(workspace.name)
     }
   }
 
@@ -90,8 +91,9 @@ export default function WorkspaceRootRow({
     <div
       draggable={!isEditing}
       data-workspace-id={workspace.id}
-      className="group sticky top-0 z-10 bg-[var(--theme-sidebar-bg)] flex items-center gap-1 h-8 pr-2 mx-1 rounded cursor-pointer hover:bg-[var(--theme-bg)]"
-      style={{ paddingLeft: 8 + depth * 12 }}
+      data-expanded={expanded}
+      className="workspace-root-row"
+      style={{ marginInlineStart: 6 + depth * 12 }}
       onClick={onToggle}
       onDragStart={isEditing ? undefined : onDragStart}
       onDragOver={isEditing ? undefined : onDragOver}
@@ -99,83 +101,80 @@ export default function WorkspaceRootRow({
       onContextMenu={isEditing ? undefined : onContextMenu}
       title={title}
     >
-      {WorkspaceIcon ? (
-        <WorkspaceIcon
-          className="h-4 w-4 flex-shrink-0"
-          style={{ color: workspace.color ? WORKSPACE_COLOR_VALUES[workspace.color] : 'var(--theme-accent)' }}
-          aria-label="Workspace custom icon"
-        />
-      ) : (
-        <GripVertical
-          className="h-3 w-3 flex-shrink-0 text-[var(--theme-dim)] opacity-50"
-          aria-label="Workspace drag handle"
-        />
-      )}
-      {expanded
-        ? <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />
-        : <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--theme-dim)]" />}
-      <FolderGit2 className="h-4 w-4 flex-shrink-0 text-[var(--theme-accent)]" aria-label="Workspace icon" />
       {isEditing ? (
         <input
           type="text"
           autoFocus
+          aria-label="Workspace name"
           value={editingName}
           onChange={event => setEditingName(event.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={submitRename}
           onClick={event => event.stopPropagation()}
           onDoubleClick={event => event.stopPropagation()}
-          className="flex-1 min-w-0 px-1 py-0.5 text-sm bg-[var(--theme-bg)] text-[var(--theme-fg)] border border-[var(--theme-accent)] rounded outline-none"
+          className="workspace-rename-input"
         />
       ) : (
-        <Tooltip content={title} placement="top">
-          <span
-            className="flex-1 min-w-0 truncate text-sm"
-            onDoubleClick={event => {
-              event.stopPropagation()
-              startRename()
-            }}
-          >
-            {workspace.name}
+        <button
+          type="button"
+          className="workspace-root-toggle"
+          aria-expanded={expanded}
+          onClick={event => {
+            event.stopPropagation()
+            onToggle()
+          }}
+          onDoubleClick={event => {
+            if (!onRename) return
+            event.stopPropagation()
+            startRename()
+          }}
+          onKeyDown={event => {
+            // Keyboard counterpart of drag-and-drop ordering among sibling workspaces.
+            if (!event.altKey || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
+            const move = event.key === 'ArrowUp'
+              ? canMoveUp ? onMoveUp : undefined
+              : canMoveDown ? onMoveDown : undefined
+            if (!move) return
+            event.preventDefault()
+            event.stopPropagation()
+            move()
+          }}
+        >
+          {expanded ? <ChevronDown className="workspace-chevron" /> : <ChevronRight className="workspace-chevron" />}
+          <WorkspaceIcon
+            className="workspace-root-icon"
+            style={{ color: workspace.color ? WORKSPACE_COLOR_VALUES[workspace.color] : 'var(--theme-accent)' }}
+            aria-label={workspace.icon ? 'Workspace custom icon' : 'Workspace icon'}
+          />
+          <span className="workspace-root-name">{workspace.name}</span>
+          <span className="workspace-folder-count" title={`${workspace.folders.length} folder(s)`}>
+            {workspace.folders.length}
           </span>
-        </Tooltip>
-      )}
-      {connectionAction}
-      {onRename && (
-        <Tooltip content="Rename workspace" placement="bottom">
-          <button
-            type="button"
-            aria-label="Rename workspace"
-            onClick={event => { event.stopPropagation(); startRename() }}
-            className={actionClass}
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-        </Tooltip>
+        </button>
       )}
       <Tooltip content="Add folder to workspace" placement="bottom">
         <button
           type="button"
           aria-label="Add folder to workspace"
-          onClick={event => { event.stopPropagation(); onAddFolder() }}
-          className={actionClass}
+          className="workspace-icon-button workspace-quick-action"
+          onClick={event => {
+            event.stopPropagation()
+            onAddFolder()
+          }}
         >
-          <FolderPlus className="w-3.5 h-3.5" />
+          <FolderPlus aria-hidden="true" />
         </button>
       </Tooltip>
-      <Tooltip content="Remove from workspaces" placement="bottom">
-        <button
-          type="button"
-          aria-label="Remove from workspaces"
-          onClick={event => { event.stopPropagation(); onRemove() }}
-          className={`${actionClass} hover:text-red-400`}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </Tooltip>
-      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-[var(--theme-dim)] font-mono font-medium flex-shrink-0" title={`${workspace.folders.length} folder(s)`}>
-        {workspace.folders.length}
-      </span>
+      <WorkspaceRowActions ref={actionsRef} label={`Actions for ${workspace.name}`} items={[
+        { label: 'Add folder to workspace', icon: FolderPlus, onSelect: onAddFolder },
+        ...(onRename ? [{ label: 'Rename workspace', icon: Pencil, onSelect: startRename }] : []),
+        ...(onAppearance ? [{ label: 'Workspace appearance…', icon: Palette, onSelect: onAppearance }] : []),
+        ...(canMoveUp && onMoveUp ? [{ label: 'Move workspace up', icon: ArrowUp, onSelect: onMoveUp }] : []),
+        ...(canMoveDown && onMoveDown ? [{ label: 'Move workspace down', icon: ArrowDown, onSelect: onMoveDown }] : []),
+        { label: 'Remove from workspaces', icon: Trash2, onSelect: onRemove, danger: true },
+      ]}>
+        {connectionAction}
+      </WorkspaceRowActions>
     </div>
   )
 }

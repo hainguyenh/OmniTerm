@@ -1,0 +1,337 @@
+.git-worktree-select {
+  min-width: 0;
+  max-width: 300px;
+}
+
+.git-checkout-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-bg);
+  color: var(--theme-fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.git-checkout-trigger strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-checkout-trigger svg,
+.git-checkout-repo-label svg,
+.git-checkout-back svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.git-checkout-trigger svg:last-child {
+  margin-inline-start: auto;
+}
+
+.git-checkout-trigger:hover,
+.git-checkout-option:hover:not(:disabled) {
+  background: var(--theme-hover-bg);
+}
+
+.git-checkout-trigger[aria-expanded='true'] {
+  border-color: var(--theme-accent);
+}
+
+.git-checkout-trigger-kind,
+.git-checkout-branch-label,
+.git-checkout-context-label,
+.git-checkout-repo-label {
+  color: color-mix(in srgb, var(--theme-fg) 75%, var(--theme-bg));
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.git-checkout-repo-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-checkout-repo-label svg {
+  color: var(--theme-accent);
+}
+
+.git-checkout-repo-name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.git-checkout-menu {
+  --git-checkout-muted: color-mix(in srgb, var(--theme-fg) 75%, var(--theme-bg));
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-popup-bg, var(--theme-bg));
+  color: var(--theme-fg);
+  box-shadow: 0 12px 32px var(--theme-overlay);
+  font-size: 12px;
+}
+
+.git-checkout-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 0 8px 8px;
+}
+
+.git-checkout-menu-header strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.git-checkout-options {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.git-checkout-option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 16px;
+  align-items: start;
+  gap: 9px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-fg);
+  text-align: start;
+  cursor: pointer;
+}
+
+.git-checkout-option > svg {
+  width: 16px;
+  height: 16px;
+  margin-block-start: 2px;
+  color: var(--git-checkout-muted);
+}
+
+.git-checkout-option[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--theme-accent) 16%, var(--theme-bg));
+}
+
+.git-checkout-option .git-checkout-selected {
+  color: var(--theme-accent);
+}
+
+.git-checkout-option:disabled {
+  color: var(--git-checkout-muted);
+  cursor: not-allowed;
+}
+
+.git-checkout-details {
+  min-width: 0;
+}
+
+.git-checkout-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.git-checkout-name strong {
+  font-weight: 600;
+}
+
+.git-checkout-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--theme-hover-bg);
+  color: color-mix(in srgb, var(--theme-fg) 75%, var(--theme-bg));
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.git-checkout-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-block-start: 5px;
+  overflow-wrap: anywhere;
+}
+
+.git-checkout-head svg,
+.git-checkout-tag svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.git-checkout-path {
+  display: block;
+  margin-block-start: 4px;
+  color: color-mix(in srgb, var(--theme-fg) 75%, var(--theme-bg));
+  font-family: var(--theme-font-mono, monospace);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.git-checkout-missing {
+  display: block;
+  margin-block-start: 4px;
+  color: var(--theme-warning);
+  font-size: 11px;
+}
+
+.git-checkout-group-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 8px 6px;
+  color: var(--git-checkout-muted);
+  font-size: 11px;
+}
+
+.git-checkout-linked {
+  margin-inline-start: 16px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--theme-border);
+}
+
+.git-checkout-menu-footer {
+  margin-block-start: 8px;
+  padding: 10px 8px 2px;
+  border-top: 1px solid var(--theme-border);
+  color: var(--git-checkout-muted);
+  font-size: 11px;
+}
+
+.git-checkout-context {
+  display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  min-width: 0;
+  gap: 6px 10px;
+  padding-block: 4px 0;
+  border-top: 1px solid var(--theme-border);
+  color: var(--theme-fg);
+  font-size: 11px;
+}
+
+.git-checkout-context > strong,
+.git-checkout-context-branch {
+  min-width: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-checkout-context-branch {
+  color: var(--theme-accent);
+  font-size: 11px;
+}
+
+.git-checkout-context .git-checkout-path {
+  flex: 1;
+  min-width: 0;
+  margin-block-start: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-checkout-context .git-checkout-back {
+  flex-shrink: 0;
+  margin-inline-start: 0;
+}
+
+.git-checkout-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: auto;
+  min-height: 28px;
+  color: var(--theme-accent);
+  cursor: pointer;
+}
+
+.git-checkout-back:hover {
+  text-decoration: underline;
+}
+
+.git-worktree-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 40%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--theme-accent) 12%, transparent);
+  color: var(--theme-accent);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.git-worktree-badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.git-worktree-badge.is-compact {
+  padding: 1px 4px;
+}
+
+.git-checkout-menu :where(button):focus-visible,
+.git-checkout-trigger:focus-visible,
+.git-checkout-back:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
+}
+
+@container git-workspace (max-width: 600px) {
+  .git-worktree-select {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .git-checkout-back {
+    margin-inline-start: 0;
+  }
+
+  .git-checkout-context {
+    flex-wrap: wrap;
+  }
+
+  .git-checkout-context .git-checkout-path {
+    flex-basis: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .git-checkout-trigger,
+  .git-checkout-back,
+  .git-checkout-menu button {
+    min-height: 44px;
+  }
+}

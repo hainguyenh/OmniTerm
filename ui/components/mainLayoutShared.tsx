@@ -52,6 +52,7 @@ export const shortcutLabels = {
   toggleAppFullscreen: 'Toggle Full Screen',
   agentQuota: 'Agent Quota Quick Settings',
   pasteScript: 'Paste Multi-line PowerShell Script',
+  newTempNote: 'New Sticky Note',
 } satisfies Record<keyof ShortcutBindings, string>
 export const DEFAULT_SHORTCUTS = {
   zoomIn: 'Ctrl+=',
@@ -75,6 +76,7 @@ export const DEFAULT_SHORTCUTS = {
   toggleAppFullscreen: 'F11',
   agentQuota: 'Ctrl+Alt+Q',
   pasteScript: 'Ctrl+Alt+V',
+  newTempNote: 'Ctrl+Shift+T',
 } satisfies ShortcutBindings
 
 export const CtxItem: React.FC<{ label: string; icon: React.ReactNode; color: string; onClick: () => void }> =

@@ -1,14 +1,20 @@
 import React from 'react'
+import { FolderPlus } from 'lucide-react'
 
 const WorkspaceEmptyState: React.FC<{ onAdd: () => void }> = ({ onAdd }) => (
-  <button
-    type="button"
-    onClick={onAdd}
-    className="mx-3 mt-2 w-[calc(100%-1.5rem)] rounded-md border border-dashed border-[var(--theme-border)] px-3 py-4 text-xs text-[var(--theme-dim)] hover:text-[var(--theme-fg)] hover:border-[var(--theme-accent)] transition-colors"
-  >
-    No workspaces yet.
-    <br />Add a folder or import a VS Code workspace.
-  </button>
+  <div className="workspace-empty-state">
+    <FolderPlus aria-hidden="true" />
+    <h3>Your projects, together</h3>
+    <p>Add a folder to browse files, run scripts and access project connections.</p>
+    <button
+      type="button"
+      onClick={onAdd}
+      className="workspace-empty-action"
+    >
+      Add workspace folder
+    </button>
+    <span>Or import a VS Code workspace from the options menu.</span>
+  </div>
 )
 
 export default WorkspaceEmptyState
