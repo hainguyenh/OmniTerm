@@ -45,6 +45,7 @@ export interface FetchUsageRequest {
   profileDir?: string | null
   /** Name of the profile launcher the user ran (e.g. `claude-th`), resolved by name only. */
   launcher?: string | null
+  modelFamily?: 'auto' | 'gemini' | 'claude' | null
 }
 
 export interface WakeRequest {

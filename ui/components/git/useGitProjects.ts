@@ -4,7 +4,8 @@ import type { GitProject } from './gitTypes'
 
 const STORAGE_KEY = 'omniterm:selected-git-project'
 
-function normalizePath(p: string): string {
+/** Forward-slashed, without a trailing slash; compare case-insensitively. */
+export function normalizePath(p: string): string {
   return p.trim().replace(/\\/g, '/').replace(/\/+$/, '')
 }
 

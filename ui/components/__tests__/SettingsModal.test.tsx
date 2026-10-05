@@ -35,6 +35,7 @@ const baseSettings: AppSettings = {
     toggleAppFullscreen: 'F11',
     agentQuota: 'Ctrl+Alt+Q',
     pasteScript: 'Ctrl+Alt+V',
+    newTempNote: 'Ctrl+Shift+T',
   },
   excludedViewableExts: ['log'],
 }

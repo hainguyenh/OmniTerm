@@ -97,9 +97,15 @@ pub async fn git_delete_branches(
     cwd: String,
     branches: Vec<String>,
     force: bool,
+    remove_worktrees: Option<bool>,
 ) -> Result<GitDeleteBranchesResult, String> {
     in_repo(cwd, move |repo_root| {
-        app_core::git_branch::delete_branches(repo_root, &branches, force)
+        app_core::git_branch::delete_branches(
+            repo_root,
+            &branches,
+            force,
+            remove_worktrees.unwrap_or(false),
+        )
     })
     .await
 }

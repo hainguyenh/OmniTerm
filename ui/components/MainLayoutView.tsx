@@ -119,6 +119,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
                 onEditWorkspaceConnection={(target, conn) => { setConnFormInitial(conn); openConnectionForm(target) }}
                 connectionsRevision={wsConnectionsRevision}
                 revealRequest={revealRequest}
+                activeFile={activeTabId && editorTabs[activeTabId] ? { workspaceId: editorTabs[activeTabId].workspaceId, path: editorTabs[activeTabId].script.id } : null}
                 onWorkspacesChanged={model.refreshWorkspaces}
               />
             ) : activeView === 'bookmarks' ? (

@@ -16,12 +16,12 @@ interface GitBranchSubmenuProps {
   inline?: boolean
   compact?: boolean
   onCheckout: (branch: string) => void
+  onPull?: (branch: string) => void
   onMerge: (branch: string) => void
   onRebase: (branch: string) => void
   onNewBranchFrom: (branch: string) => void
   onCompare?: (branch: string) => void
   onDelete?: (branch: string) => void
-  onUpdate?: () => void
   onClose: () => void
 }
 
@@ -31,12 +31,12 @@ export const GitBranchSubmenu: React.FC<GitBranchSubmenuProps> = ({
   inline = false,
   compact = false,
   onCheckout,
+  onPull,
   onMerge,
   onRebase,
   onNewBranchFrom,
   onCompare,
   onDelete,
-  onUpdate,
   onClose,
 }) => {
   const isCurrent = branch.is_current || branch.name === currentBranch
@@ -72,14 +72,20 @@ export const GitBranchSubmenu: React.FC<GitBranchSubmenuProps> = ({
         </button>
       )}
 
-      {!isCurrent && !branch.is_remote && onUpdate && <button
-        type="button"
-        className="git-branch-preview-action"
-        onClick={() => {
-          onUpdate()
-          onClose()
-        }}
-      ><ArrowDownToLine /><span>Update without checkout…</span></button>}
+      {!branch.is_remote && branch.upstream && onPull && (
+        <button
+          type="button"
+          onClick={() => {
+            onPull(branch.name)
+            onClose()
+          }}
+          title={isCurrent ? `Pull ${branch.upstream} into ${branch.name}` : `Fast-forward ${branch.name} to ${branch.upstream} without checking it out`}
+          className="w-full flex items-center gap-2 px-2.5 py-2 rounded hover:bg-theme-hover hover:text-theme-fg text-left transition-colors cursor-pointer"
+        >
+          <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+          <span className="break-words">{compact ? 'Pull' : `Pull '${branch.name}'`}</span>
+        </button>
+      )}
 
       <button
         type="button"

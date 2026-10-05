@@ -1,8 +1,13 @@
 /** @vitest-environment jsdom */
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { installCodeMirrorShims } from '../../editor/__tests__/cmShims'
 import { GitWorkspaceView } from '../GitWorkspaceView'
 import type { GitCommitSummary, GitFileDiff, GitRepoStatus } from '../gitTypes'
+
+// The real diff editor mounts here and scrolls to the first change, which measures text ranges.
+beforeAll(installCodeMirrorShims)
 
 const mockStatus: GitRepoStatus = {
   repo_root: '/repo',
@@ -54,6 +59,7 @@ vi.mock('../../../gitAPI', () => ({
     getLog: vi.fn().mockResolvedValue(mockCommits),
     getDiff: vi.fn().mockResolvedValue(mockDiff),
     getBranches: vi.fn().mockResolvedValue([]),
+    listWorktrees: vi.fn().mockResolvedValue([]),
     fetch: vi.fn().mockResolvedValue('Fetched origin'),
     pull: vi.fn().mockResolvedValue('Already up to date'),
     push: vi.fn().mockResolvedValue('Everything up to date'),

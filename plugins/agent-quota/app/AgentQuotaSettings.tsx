@@ -9,7 +9,7 @@ import { AgentSettingsCard } from './AgentSettingsCard'
 import { LoadingArtSettings } from './LoadingArtSettings'
 import { QuotaLinesSettings } from './QuotaLinesSettings'
 import { AGENT_KINDS } from './quotaConfig'
-import { clearOverrides, quotaCommands, useQuota } from './quotaStore'
+import { clearAllManualPauses, clearOverrides, quotaCommands, useQuota } from './quotaStore'
 import { CompactSwitch } from './settingsControls'
 
 type SettingsGroup = 'agents' | 'lines' | 'artwork'
@@ -59,11 +59,17 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: Agen
 
   const handleApply = () => {
     if (!canApply) return
+    if (draft.enabled && !committed.enabled) clearAllManualPauses()
+    for (const agent of AGENT_KINDS) {
+      if (draft.agents[agent].enabled && !committed.agents[agent].enabled) clearAllManualPauses(agent)
+      if (draft.agents[agent].suspendAtLimit && !committed.agents[agent].suspendAtLimit) clearAllManualPauses(agent)
+    }
     quotaCommands().saveConfig(draft)
     if (resetOverridesToo) clearOverrides()
     setResetOverridesToo(false)
     setApplied(true)
     appliedTimerRef.current = window.setTimeout(() => setApplied(false), 2000)
+    quotaCommands().refresh()
   }
   const handleReset = () => { setDraft(committed); setResetOverridesToo(false) }
 

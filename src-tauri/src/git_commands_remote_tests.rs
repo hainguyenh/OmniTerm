@@ -177,7 +177,7 @@ fn every_repository_command_rejects_a_missing_directory() {
         block_on(git_branches(s())).err(),
         block_on(git_checkout(s(), "main".into())).err(),
         block_on(git_create_branch(s(), "b".into(), None, false)).err(),
-        block_on(git_delete_branches(s(), vec!["b".into()], true)).err(),
+        block_on(git_delete_branches(s(), vec!["b".into()], true, None)).err(),
         block_on(git_fetch(s(), false)).err(),
         block_on(git_pull(s(), false)).err(),
         block_on(git_push(s(), false)).err(),

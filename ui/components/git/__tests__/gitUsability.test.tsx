@@ -62,6 +62,29 @@ describe('Git usability', () => {
     expect(onSelect).toHaveBeenCalledWith('src/main.ts', false)
   })
 
+  it('carries a one-letter status code for a narrow changes pane', () => {
+    render(
+      <GitFileRow
+        file={{ ...file, unstaged: 'untracked' }}
+        displayName="main.ts"
+        isChecked={false}
+        isSelected={false}
+        isStaged={false}
+        onSelect={vi.fn()}
+        onToggleCheck={vi.fn()}
+        onToggleStage={vi.fn()}
+        onContextMenu={vi.fn()}
+      />,
+    )
+    const badge = screen.getByTitle('Untracked')
+    expect(badge.querySelector('.git-status-long')).toHaveTextContent('Untracked')
+    const short = badge.querySelector('.git-status-short')
+    expect(short).toHaveTextContent('U')
+    expect(short).toHaveAttribute('aria-hidden', 'true')
+    // The stage button keeps its accessible name when only its + icon shows.
+    expect(screen.getByRole('button', { name: 'Stage src/main.ts' })).toHaveTextContent('Stage')
+  })
+
   it('labels conflicts and offers unstage for a staged file', () => {
     const onToggleStage = vi.fn()
     render(

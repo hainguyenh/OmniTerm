@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Loader2 } from 'lucide-react'
 
 import { createGitAPI } from '../../gitAPI'
-import type { TextEditorHandle } from '../editor/diffEditorModel'
+import type { ChangePosition, TextEditorHandle } from '../editor/diffEditorModel'
 import './git-ui.css'
 import './git-diff.css'
 import { EditorSurface } from '../editor/EditorSurface'
@@ -43,6 +43,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [staging, setStaging] = useState(false)
   const [viewMode, setViewMode] = useState<'diff' | 'full'>('diff')
+  const [change, setChange] = useState<ChangePosition | null>(null)
 
   const normalizedFiles = useMemo(() => {
     return allFiles.map((f) => (typeof f === 'string' ? { path: f, staged } : f))
@@ -73,6 +74,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
     let active = true
     setLoading(true)
     setError(null)
+    setChange(null)
     const api = createGitAPI()
 
     const diffPromise = targetBranch
@@ -135,8 +137,10 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
     }
   }
 
-  const keyActions = useRef({ handleSave, handlePrev, handleNext, onClose, hasUnsavedChanges })
-  keyActions.current = { handleSave, handlePrev, handleNext, onClose, hasUnsavedChanges }
+  const goToChange = (direction: 1 | -1) => editorRef.current?.goToChange?.(direction)
+
+  const keyActions = useRef({ handleSave, handlePrev, handleNext, goToChange, onClose, hasUnsavedChanges })
+  keyActions.current = { handleSave, handlePrev, handleNext, goToChange, onClose, hasUnsavedChanges }
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,6 +154,10 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
       if (e.defaultPrevented) return
       if (e.key === 'Escape') {
         if (!actions.hasUnsavedChanges) actions.onClose()
+      } else if (e.key === 'F7') {
+        // The editor handles F7 while it has focus; this covers the header and file list.
+        e.preventDefault()
+        actions.goToChange(e.shiftKey ? -1 : 1)
       } else if (e.key === 'ArrowLeft' && (e.altKey || e.ctrlKey)) {
         e.preventDefault()
         actions.handlePrev()
@@ -195,20 +203,21 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
   }, [diff])
 
   const innerContent = (
-    <div className={`w-full h-full bg-theme-bg flex flex-col overflow-hidden ${inline ? '' : 'max-w-6xl border border-theme-border rounded-xl shadow-2xl animate-in zoom-in-95 duration-150'}`}>
+    <div className={`git-diff-viewer w-full h-full bg-theme-bg flex flex-col overflow-hidden ${inline ? '' : 'max-w-6xl border border-theme-border rounded-xl shadow-2xl animate-in zoom-in-95 duration-150'}`}>
       <GitDiffHeader
         filePath={filePath} staged={staged} targetBranch={targetBranch}
         additions={totalAdditions} deletions={totalDeletions}
         dirty={hasUnsavedChanges} saving={saving} staging={staging} notice={saveNotice}
         viewMode={viewMode} index={currentIndex} count={normalizedFiles.length}
         hasPrev={hasPrev} hasNext={hasNext}
+        change={change} onPrevChange={() => goToChange(-1)} onNextChange={() => goToChange(1)}
         onPrev={handlePrev} onNext={handleNext} onSave={() => void handleSave()}
         onStage={() => void handleToggleStage()} onClose={onClose}
         onSelectVersion={(next) => onSelectFile?.(filePath, next)} onViewMode={setViewMode}
       />
 
       {/* ── Inline Diff / Conflict Editor Body ───────────────────────────── */}
-      <div className="flex-1 overflow-hidden font-mono text-xs select-text bg-theme-bg">
+      <div className="flex-1 min-h-0 overflow-hidden font-mono text-xs select-text bg-theme-bg">
         {loading ? (
           <div className="flex items-center justify-center p-12 text-theme-dim gap-2">
             <Loader2 className="w-4 h-4 animate-spin text-theme-accent" />
@@ -230,6 +239,7 @@ export const GitDiffViewer: React.FC<GitDiffViewerProps> = ({
               viewMode={viewMode}
               baseLabel={targetBranch ?? (staged ? 'HEAD' : 'Index · staged version')}
               onDirtyChange={setHasUnsavedChanges}
+              onChangePosition={setChange}
             />
           </EditorSurface>
         )}

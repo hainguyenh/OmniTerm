@@ -333,7 +333,7 @@
   border: 1px solid var(--theme-border);
   border-radius: 4px;
   background: var(--theme-bg);
-  color: var(--theme-warning);
+  color: var(--theme-fg);
   font-family: var(--theme-font-sans);
   font-size: 10px;
   cursor: pointer;

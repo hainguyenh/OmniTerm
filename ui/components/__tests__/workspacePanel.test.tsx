@@ -6,6 +6,12 @@ import { act, createEvent, fireEvent, render, screen, waitFor, within } from '@t
 import { mockOmnitermAPI } from '../../testUtils'
 import WorkspacePanel from '../WorkspacePanel'
 import { BAT, RDP, WS, dir, file, filterAs, mockScan, page, scriptOf } from './workspacePanelTestUtils'
+import { cssRule } from './workspaceTreeCss'
+
+const chooseAction = (row: string, action: string) => {
+  fireEvent.click(screen.getByRole('button', { name: `Actions for ${row}` }))
+  fireEvent.click(screen.getByRole('menuitem', { name: action }))
+}
 
 describe('WorkspacePanel', () => {
   beforeEach(() => localStorage.clear())
@@ -13,7 +19,8 @@ describe('WorkspacePanel', () => {
   it('shows the empty state when no workspaces exist', async () => {
     mockOmnitermAPI({ workspace: { list: async () => [] } })
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
-    await waitFor(() => expect(screen.getByText(/No workspaces yet/i)).toBeInTheDocument())
+    expect(await screen.findByRole('heading', { name: 'Your projects, together' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add workspace folder' })).toBeInTheDocument()
   })
 
   
@@ -34,8 +41,8 @@ it('suppresses the browser context menu outside supported workspace targets', as
     await screen.findByText('my-project')
     // Root row: the theme's sidebar background token.
     const root = container.querySelector('[data-workspace-id="ws#1"]') as HTMLElement
-    expect(root.className).toContain('bg-[var(--theme-sidebar-bg)]')
-    expect(root.className.split(/\s+/)).not.toContain('bg-[var(--theme-bg)]')
+    expect(root).toHaveClass('workspace-root-row')
+    expect(cssRule('.workspace-root-row')).toContain('background: var(--theme-sidebar-bg);')
 
     fireEvent.click(screen.getByText('my-project'))
     await screen.findByText('run.bat')
@@ -54,7 +61,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText('my-project')).toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
+    chooseAction('my-project', 'Remove from workspaces')
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Remove "my-project" from workspaces?')
     expect(remove).not.toHaveBeenCalled()
@@ -62,7 +69,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(remove).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from workspaces' }))
+    chooseAction('my-project', 'Remove from workspaces')
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(remove).toHaveBeenCalledWith('ws#1'))
   })
@@ -83,14 +90,14 @@ it('suppresses the browser context menu outside supported workspace targets', as
     fireEvent.click(await screen.findByText('my-project'))
     await screen.findByText('folder#1')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink folder from workspace' }))
+    chooseAction('folder#1', 'Unlink folder from workspace')
     expect(screen.getByRole('dialog')).toHaveTextContent('The folder will not be deleted.')
     expect(removeFolder).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(removeFolder).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unlink folder from workspace' }))
+    chooseAction('folder#1', 'Unlink folder from workspace')
     fireEvent.click(screen.getByRole('button', { name: 'Unlink' }))
     await waitFor(() => expect(removeFolder).toHaveBeenCalledWith('ws#1', 'folder#1'))
     await waitFor(() => expect(screen.queryByText('folder#1')).not.toBeInTheDocument())
@@ -116,12 +123,12 @@ it('suppresses the browser context menu outside supported workspace targets', as
     await screen.findByText('folder#1')
 
     expect(screen.getByLabelText('Pinned folder')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Unpin item' }))
+    chooseAction('folder#1', 'Unpin item')
     await waitFor(() => expect(setPinned).toHaveBeenCalledWith('ws#1', 'folder#1', '', false))
     await waitFor(() => expect(screen.queryByLabelText('Pinned folder')).not.toBeInTheDocument())
   })
 
-  it('filters a root folder from its context menu and marks the folder when narrowed', async () => {
+  it('filters a root folder from its right-click menu and marks the folder when narrowed', async () => {
     localStorage.setItem('cc.workspaceFilters', JSON.stringify({
       'ws#1': { mode: 'all', kinds: [], paths: [], showEmptyDirs: false },
     }))
@@ -132,6 +139,7 @@ it('suppresses the browser context menu outside supported workspace targets', as
     const folder = await screen.findByText('folder#1')
 
     fireEvent.contextMenu(folder)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder filter & appearance…' }))
     const menu = screen.getByRole('group', { name: 'Folder filter' })
     expect(menu).toHaveTextContent('FILTER folder#1 Folder')
     expect(within(menu).getByLabelText('Same as workspace')).toBeChecked()
@@ -140,11 +148,12 @@ it('suppresses the browser context menu outside supported workspace targets', as
     expect(screen.getByLabelText('Folder filter active')).toBeInTheDocument()
     fireEvent.click(within(menu).getByLabelText('Close filter'))
     fireEvent.contextMenu(folder)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder filter & appearance…' }))
     fireEvent.click(within(screen.getByRole('group', { name: 'Folder filter' })).getByLabelText('Same as workspace'))
     await waitFor(() => expect(screen.queryByLabelText('Folder filter active')).not.toBeInTheDocument())
   })
 
-  it('opens workspace appearance controls from the workspace context menu', async () => {
+  it('opens workspace appearance controls from the workspace right-click menu', async () => {
     const setAppearance = vi.fn(async (_id: string, color?: string, icon?: string) => ({
       ...WS,
       color,
@@ -155,6 +164,8 @@ it('suppresses the browser context menu outside supported workspace targets', as
     render(<WorkspacePanel onOpenScript={vi.fn()} />)
     const workspace = await screen.findByText('my-project')
     fireEvent.contextMenu(workspace)
+    expect(screen.getByRole('menu', { name: 'Actions for my-project' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Workspace appearance…' }))
 
     const menu = screen.getByRole('group', { name: 'Workspace filter' })
     expect(menu).toHaveTextContent('APPEARANCE my-project')

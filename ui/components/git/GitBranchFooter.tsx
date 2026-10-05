@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { ChevronDown, GitBranch } from 'lucide-react'
+import { ArrowDown, ArrowUp, ChevronDown, GitBranch } from 'lucide-react'
 import { createGitAPI } from '../../gitAPI'
 import type { GitRepoStatus } from './gitTypes'
 import { GitBranchPopup } from './GitBranchPopup'
+import { GitBranchQuickPopover } from './GitBranchQuickPopover'
+import { GitWorktreeBadge } from './GitWorktreeSelector'
 import { Tooltip } from '../Tooltip'
 
 interface GitBranchFooterProps {
@@ -17,7 +19,8 @@ export const GitBranchFooter: React.FC<GitBranchFooterProps> = ({
   onClick,
 }) => {
   const [status, setStatus] = useState<GitRepoStatus | null>(initialStatus ?? null)
-  const [popupOpen, setPopupOpen] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [fullOpen, setFullOpen] = useState(false)
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null)
 
   useEffect(() => {
@@ -60,11 +63,13 @@ export const GitBranchFooter: React.FC<GitBranchFooterProps> = ({
   const hasAhead = status.ahead > 0
   const hasBehind = status.behind > 0
   const effectiveCwd = status.repo_root || cwd
+  const mainWorktree = status.main_worktree
+  const worktreeStr = mainWorktree ? ` · linked worktree of ${mainWorktree}` : ''
 
   const aheadBehindStr = [
-    hasAhead ? `↑${status.ahead}` : null,
-    hasBehind ? `↓${status.behind}` : null,
-  ].filter(Boolean).join(' ')
+    hasAhead ? `${status.ahead} to push` : null,
+    hasBehind ? `${status.behind} to pull` : null,
+  ].filter(Boolean).join(', ')
 
   const handleBranchClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation()
@@ -72,13 +77,18 @@ export const GitBranchFooter: React.FC<GitBranchFooterProps> = ({
       onClick()
     } else {
       setAnchorRect(e.currentTarget.getBoundingClientRect())
-      setPopupOpen((prev) => !prev)
+      if (quickOpen || fullOpen) {
+        setQuickOpen(false)
+        setFullOpen(false)
+      } else {
+        setQuickOpen(true)
+      }
     }
   }
 
   return (
     <div className="relative flex items-center gap-1.5 flex-shrink-0 text-[10px]">
-      <Tooltip content={`Git branch: ${branchName}${aheadBehindStr ? ` (${aheadBehindStr})` : ''}`} placement="top">
+      <Tooltip content={`Git branch: ${branchName}${aheadBehindStr ? ` (${aheadBehindStr})` : ''}${worktreeStr}`} placement="top">
         <button
           type="button"
           onClick={handleBranchClick}
@@ -86,24 +96,56 @@ export const GitBranchFooter: React.FC<GitBranchFooterProps> = ({
             e.preventDefault()
             handleBranchClick(e)
           }}
-          aria-label={`Current branch: ${branchName}`}
+          aria-label={`Current branch: ${branchName}${mainWorktree ? ' (linked worktree)' : ''}`}
           className="inline-flex items-center gap-1.5 min-h-6 px-2 py-1 rounded text-theme-dim hover:text-theme-fg hover:bg-theme-bg/60 transition-colors font-mono cursor-pointer"
         >
           <GitBranch className="w-4 h-4 text-theme-accent" />
+          {mainWorktree && <GitWorktreeBadge mainWorktree={mainWorktree} compact />}
           <span className="font-semibold text-theme-fg">{branchName}</span>
           <ChevronDown className="w-3.5 h-3.5" />
-          {aheadBehindStr && (
-            <span className="text-theme-accent font-medium">{aheadBehindStr}</span>
+          {hasAhead && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1 rounded bg-theme-bg/60 text-[var(--theme-success)] font-semibold"
+              title={`${status.ahead} commits to push`}
+            >
+              <ArrowUp className="w-3.5 h-3.5" strokeWidth={2.75} aria-hidden="true" />
+              {status.ahead}
+            </span>
+          )}
+          {hasBehind && (
+            <span
+              className="inline-flex items-center gap-0.5 px-1 rounded bg-theme-bg/60 text-[var(--theme-warning)] font-semibold"
+              title={`${status.behind} commits to pull`}
+            >
+              <ArrowDown className="w-3.5 h-3.5" strokeWidth={2.75} aria-hidden="true" />
+              {status.behind}
+            </span>
           )}
         </button>
       </Tooltip>
 
-      {popupOpen && effectiveCwd && (
+      {quickOpen && effectiveCwd && (
+        <GitBranchQuickPopover
+          cwd={effectiveCwd}
+          currentBranch={branchName}
+          anchorRect={anchorRect}
+          onClose={() => setQuickOpen(false)}
+          onExpand={() => {
+            setQuickOpen(false)
+            setFullOpen(true)
+          }}
+          onBranchSwitched={() => {
+            window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
+          }}
+        />
+      )}
+
+      {fullOpen && effectiveCwd && (
         <GitBranchPopup
           cwd={effectiveCwd}
           currentBranch={branchName}
           anchorRect={anchorRect}
-          onClose={() => setPopupOpen(false)}
+          onClose={() => setFullOpen(false)}
           onOpenCommit={() => window.dispatchEvent(new CustomEvent('omniterm:open-git'))}
           onBranchSwitched={() => {
             window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))

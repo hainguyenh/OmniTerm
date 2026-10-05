@@ -27,6 +27,8 @@ export interface WorkspacePanelProps {
   connectionsRevision?: number
   /** Request expansion, scrolling, and highlighting for one workspace file. */
   revealRequest?: RevealRequest | null
+  /** The file behind the active editor tab, kept marked in the tree while that tab is active. */
+  activeFile?: { workspaceId: string; path: string } | null
   /** Notify the main layout so workspace selectors refresh immediately after adding a workspace. */
   onWorkspacesChanged?: () => void | Promise<void>
 }

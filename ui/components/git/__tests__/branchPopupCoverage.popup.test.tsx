@@ -224,22 +224,25 @@ describe('GitBranchPopup context menu', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
-  it('opens the update dialog from the menu and leaves popup keys to it', async () => {
+  it('pulls a branch from the menu without checkout or a confirmation dialog', async () => {
     answerInvoke([MAIN, TOPIC], { git_update_branch: () => 'Fast-forwarded' })
     const { onClose } = await renderPopup()
 
     fireEvent.contextMenu(within(browser()).getByRole('button', { name: 'Branch feature/topic' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Update without checkout…' }))
-    const dialog = screen.getByRole('dialog', { name: 'Update feature/topic without checkout' })
-    expect(screen.queryByRole('dialog', { name: 'Actions for feature/topic' })).not.toBeInTheDocument()
-
-    fireEvent.keyDown(dialog, { key: 'Enter' })
-    expect(dialog).toBeInTheDocument()
-    expect(onClose).not.toHaveBeenCalled()
-
-    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: /Update feature\/topic/ })) })
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog', { name: 'Actions for feature/topic' })).getByRole('button', { name: 'Pull' })) })
     expect(mockInvoke).toHaveBeenCalledWith('git_update_branch', { cwd: '/work/repo', branch: 'feature/topic' })
-    expect(screen.queryByRole('dialog', { name: /without checkout/ })).not.toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalledWith('git_checkout', expect.anything())
+    expect(screen.queryByRole('dialog', { name: 'Actions for feature/topic' })).not.toBeInTheDocument()
     expect(screen.getByText('Fast-forwarded')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('reports a refused pull instead of dropping it', async () => {
+    answerInvoke([MAIN, TOPIC], { git_update_branch: () => { throw "'feature/topic' has diverged from its upstream" } })
+    await renderPopup()
+
+    fireEvent.contextMenu(within(browser()).getByRole('button', { name: 'Branch feature/topic' }))
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog', { name: 'Actions for feature/topic' })).getByRole('button', { name: 'Pull' })) })
+    expect(screen.getByText("Pull failed: 'feature/topic' has diverged from its upstream")).toBeInTheDocument()
   })
 })

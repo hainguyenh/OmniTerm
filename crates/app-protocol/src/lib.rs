@@ -7,6 +7,7 @@ pub mod git;
 pub mod openshell;
 pub mod session_status;
 pub mod shell_spec;
+pub mod temp_note;
 pub mod text_file;
 pub mod workspace;
 

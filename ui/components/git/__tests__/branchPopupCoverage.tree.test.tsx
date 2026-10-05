@@ -99,9 +99,10 @@ describe('filterBranchTree', () => {
 describe('GitBranchSubmenu', () => {
   it('shows only the new-branch action for the current branch', () => {
     const actions = submenuActions()
-    render(<GitBranchSubmenu branch={branch('main', { is_current: true })} {...actions} onCompare={vi.fn()} onDelete={vi.fn()} onUpdate={vi.fn()} />)
+    render(<GitBranchSubmenu branch={branch('main', { is_current: true })} {...actions} onCompare={vi.fn()} onDelete={vi.fn()} onPull={vi.fn()} />)
 
     expect(screen.getByText('main')).toBeInTheDocument()
+    expect(screen.queryByText(/Pull/)).not.toBeInTheDocument()
     expect(screen.queryByText('Checkout')).not.toBeInTheDocument()
     expect(screen.queryByText(/Compare with/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Merge/)).not.toBeInTheDocument()
@@ -119,16 +120,18 @@ describe('GitBranchSubmenu', () => {
     const actions = submenuActions()
     const onCompare = vi.fn()
     const onDelete = vi.fn()
-    const onUpdate = vi.fn()
+    const onPull = vi.fn()
     const parentClick = vi.fn()
     render(
       <div onClick={parentClick}>
-        <GitBranchSubmenu branch={branch('topic')} {...actions} onCompare={onCompare} onDelete={onDelete} onUpdate={onUpdate} />
+        <GitBranchSubmenu branch={branch('topic', { upstream: 'origin/topic' })} {...actions} onCompare={onCompare} onDelete={onDelete} onPull={onPull} />
       </div>,
     )
 
-    fireEvent.click(screen.getByText('Update without checkout…'))
-    expect(onUpdate).toHaveBeenCalledTimes(1)
+    const pull = screen.getByText("Pull 'topic'")
+    expect(pull.closest('button')).toHaveAttribute('title', 'Fast-forward topic to origin/topic without checking it out')
+    fireEvent.click(pull)
+    expect(onPull).toHaveBeenCalledWith('topic')
     fireEvent.click(screen.getByText("Compare with 'HEAD'..."))
     expect(onCompare).toHaveBeenCalledWith('topic')
     fireEvent.click(screen.getByText("Merge 'topic' into 'HEAD'"))
@@ -139,6 +142,15 @@ describe('GitBranchSubmenu', () => {
     expect(onDelete).toHaveBeenCalledWith('topic')
     expect(actions.onClose).toHaveBeenCalledTimes(5)
     expect(parentClick).not.toHaveBeenCalled()
+  })
+
+  it('pulls the checked-out branch from its upstream', () => {
+    const onPull = vi.fn()
+    render(<GitBranchSubmenu branch={branch('main', { is_current: true, upstream: 'origin/main' })} inline compact {...submenuActions()} onPull={onPull} />)
+    const pull = screen.getByText('Pull')
+    expect(pull.closest('button')).toHaveAttribute('title', 'Pull origin/main into main')
+    fireEvent.click(pull)
+    expect(onPull).toHaveBeenCalledWith('main')
   })
 
   it('uses compact labels inline and names the current branch', () => {
@@ -153,10 +165,10 @@ describe('GitBranchSubmenu', () => {
 
   it('offers a local checkout for a remote branch but never deletion', () => {
     const actions = submenuActions()
-    render(<GitBranchSubmenu branch={branch('origin/topic', { is_remote: true })} currentBranch="main" {...actions} onDelete={vi.fn()} onUpdate={vi.fn()} />)
+    render(<GitBranchSubmenu branch={branch('origin/topic', { is_remote: true })} currentBranch="main" {...actions} onDelete={vi.fn()} onPull={vi.fn()} />)
 
     expect(screen.queryByText('Checkout')).not.toBeInTheDocument()
-    expect(screen.queryByText('Update without checkout…')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Pull/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Delete/)).not.toBeInTheDocument()
     expect(screen.getByText("Merge 'origin/topic' into 'main'")).toBeInTheDocument()
     fireEvent.click(screen.getByText('Checkout as New Local Branch'))

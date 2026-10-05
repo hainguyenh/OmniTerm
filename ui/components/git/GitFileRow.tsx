@@ -18,6 +18,20 @@ const STATUS_LABELS: Record<GitFileStatus, string> = {
   type_changed: 'Type changed',
 }
 
+/** One-letter codes, as `git status --short` prints them, for a narrow changes pane. */
+const STATUS_CODES: Record<GitFileStatus, string> = {
+  added: 'A',
+  deleted: 'D',
+  untracked: 'U',
+  renamed: 'R',
+  modified: 'M',
+  unmodified: '·',
+  copied: 'C',
+  conflicted: '!',
+  ignored: 'I',
+  type_changed: 'T',
+}
+
 interface GitFileRowProps {
   file: GitFileChange
   displayName: string
@@ -76,7 +90,8 @@ export const GitFileRow: React.FC<GitFileRowProps> = ({
       </button>
 
       <span className={`git-status-badge git-status-${status}`} title={STATUS_LABELS[status]}>
-        {STATUS_LABELS[status]}
+        <span className="git-status-long">{STATUS_LABELS[status]}</span>
+        <span className="git-status-short" aria-hidden="true">{STATUS_CODES[status]}</span>
       </span>
 
       {onToggleStage && (

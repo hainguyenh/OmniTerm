@@ -42,14 +42,18 @@ describe('GitBranchPopup branch actions', () => {
 
     selectTopic()
     await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Delete branch…' })) })
-    expect(mockInvoke).toHaveBeenCalledWith('git_delete_branches', { cwd: '/work/repo', branches: ['feature/topic'], force: false })
+    expect(mockInvoke).toHaveBeenCalledWith('git_delete_branches', { cwd: '/work/repo', branches: ['feature/topic'], force: false, removeWorktrees: false })
     expect(onRefresh).toHaveBeenCalledTimes(1)
     expect(within(inspector()).getByRole('heading', { name: 'main' })).toBeInTheDocument()
     window.removeEventListener('omniterm:git-refresh', onRefresh)
   })
 
-  it('keeps the selection when git refuses the delete', async () => {
-    answerInvoke([MAIN, TOPIC], { git_delete_branches: () => { throw new Error('not fully merged') } })
+  it('keeps the selection and shows why when git refuses the delete', async () => {
+    answerInvoke([MAIN, TOPIC], {
+      git_delete_branches: ({ force }) => force
+        ? { deleted: ['feature/topic'], failed: [] }
+        : { deleted: [], failed: [{ branch: 'feature/topic', reason: "The branch 'feature/topic' is not fully merged" }] },
+    })
     const onRefresh = vi.fn()
     window.addEventListener('omniterm:git-refresh', onRefresh)
     await renderPopup()
@@ -58,7 +62,39 @@ describe('GitBranchPopup branch actions', () => {
     await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Delete branch…' })) })
     expect(onRefresh).not.toHaveBeenCalled()
     expect(within(inspector()).getByRole('heading', { name: 'feature/topic' })).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Delete feature/topic' })
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('not fully merged')
+
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Force delete' })) })
+    expect(mockInvoke).toHaveBeenCalledWith('git_delete_branches', { cwd: '/work/repo', branches: ['feature/topic'], force: true, removeWorktrees: false })
+    expect(screen.queryByRole('dialog', { name: 'Delete feature/topic' })).not.toBeInTheDocument()
+    expect(onRefresh).toHaveBeenCalledTimes(1)
     window.removeEventListener('omniterm:git-refresh', onRefresh)
+  })
+
+  it('confirms before deleting a branch held by an agent worktree', async () => {
+    answerInvoke([MAIN, TOPIC], {
+      git_worktrees: () => [
+        { path: '/work/repo', branch: 'main', is_main: true, is_current: true, is_detached: false, is_bare: false, is_locked: false, is_prunable: false },
+        { path: '/work/repo/.claude/worktrees/topic', branch: 'feature/topic', is_main: false, is_current: false, is_detached: false, is_bare: false, is_locked: false, is_prunable: false },
+      ],
+      git_delete_branches: () => ({ deleted: ['feature/topic'], failed: [], removed_worktrees: ['/work/repo/.claude/worktrees/topic'] }),
+    })
+    await renderPopup()
+
+    selectTopic()
+    await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Delete branch…' })) })
+    const dialog = screen.getByRole('dialog', { name: 'Delete feature/topic' })
+    expect(within(dialog).getByRole('note')).toHaveTextContent('/work/repo/.claude/worktrees/topic')
+    expect(mockInvoke).not.toHaveBeenCalledWith('git_delete_branches', expect.anything())
+
+    fireEvent.keyDown(dialog, { key: 'Escape' })
+    expect(screen.queryByRole('dialog', { name: 'Delete feature/topic' })).not.toBeInTheDocument()
+
+    await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Delete branch…' })) })
+    await act(async () => { fireEvent.click(within(screen.getByRole('dialog', { name: 'Delete feature/topic' })).getByRole('button', { name: 'Delete' })) })
+    expect(mockInvoke).toHaveBeenCalledWith('git_delete_branches', { cwd: '/work/repo', branches: ['feature/topic'], force: false, removeWorktrees: true })
+    expect(screen.getByText("Deleted 'feature/topic' and its worktree")).toBeInTheDocument()
   })
 
   it('resets the selection after a rename and keeps it after a refusal', async () => {
@@ -107,15 +143,15 @@ describe('GitBranchPopup branch actions', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the update dialog from the inspector and closes it on cancel', async () => {
-    answerInvoke([MAIN, TOPIC])
+  it('pulls the selected branch in place straight from the inspector', async () => {
+    answerInvoke([MAIN, TOPIC], { git_update_branch: () => "Fast-forwarded 'feature/topic' to origin/topic" })
     await renderPopup()
 
     selectTopic()
-    fireEvent.click(within(inspector()).getByRole('button', { name: /Update branch…/ }))
-    const dialog = screen.getByRole('dialog', { name: 'Update feature/topic without checkout' })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: /without checkout/ })).not.toBeInTheDocument()
+    await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Pull feature/topic' })) })
+    expect(mockInvoke).toHaveBeenCalledWith('git_update_branch', { cwd: '/work/repo', branch: 'feature/topic' })
+    expect(mockInvoke).not.toHaveBeenCalledWith('git_checkout', expect.anything())
+    expect(screen.getByText("Fast-forwarded 'feature/topic' to origin/topic")).toBeInTheDocument()
   })
 
   it('starts a branch from a remote branch through the context menu', async () => {
@@ -141,10 +177,10 @@ describe('GitBranchPopup compare', () => {
     fireEvent.keyDown(screen.getByRole('dialog', { name: 'Git Branches' }), { key: 'Tab' })
     expect(onClose).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByText('src/app.ts'))
+    fireEvent.click(screen.getByRole('button', { name: 'View diff for src/app.ts' }))
     expect(onOpenFileDiff).toHaveBeenCalledWith('src/app.ts', 'feature/topic')
     expect(onClose).toHaveBeenCalledTimes(1)
-    expect(screen.queryByText('src/app.ts')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'View diff for src/app.ts' })).not.toBeInTheDocument()
   })
 
   it('parks the file diff for the Git view when no host handler is given', async () => {
@@ -156,7 +192,7 @@ describe('GitBranchPopup compare', () => {
     selectTopic()
     await act(async () => { fireEvent.click(within(inspector()).getByRole('button', { name: 'Compare…' })) })
     expect(mockInvoke).toHaveBeenCalledWith('git_compare_branches', { cwd: '/work/repo', baseBranch: 'HEAD', targetBranch: 'feature/topic' })
-    fireEvent.click(screen.getByText('src/app.ts'))
+    fireEvent.click(screen.getByRole('button', { name: 'View diff for src/app.ts' }))
     expect(openGit).toHaveBeenCalledTimes(1)
     expect(takePendingFileDiff()).toEqual({ path: 'src/app.ts', targetBranch: 'feature/topic' })
     window.removeEventListener('omniterm:open-git', openGit)

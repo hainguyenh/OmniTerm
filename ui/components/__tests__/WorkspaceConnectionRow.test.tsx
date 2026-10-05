@@ -16,6 +16,8 @@ const localConn: Connection = {
   id: 'c3', name: 'Local Dev', type: 'LOCAL', host: '', port: '', user: '',
 }
 
+const openActions = () => fireEvent.click(screen.getByRole('button', { name: 'Actions for Prod Box' }))
+
 describe('WorkspaceConnectionRow', () => {
   beforeEach(() => {})
 
@@ -44,7 +46,7 @@ describe('WorkspaceConnectionRow', () => {
   it('indents by depth', () => {
     const { container } = render(<WorkspaceConnectionRow connection={sshConn} depth={2} onDelete={vi.fn()} />)
     const row = container.firstChild as HTMLElement
-    expect(row.style.paddingLeft).toBe('32px')
+    expect(row.style.getPropertyValue('--tree-depth')).toBe('2')
   })
 
   it('double-click calls onConnect', () => {
@@ -61,25 +63,42 @@ describe('WorkspaceConnectionRow', () => {
     expect(onConnect).toHaveBeenCalledWith(sshConn)
   })
 
-  it('Connect button calls onConnect?.() safely when onConnect is absent', () => {
+  it('offers no connect action when onConnect is absent', () => {
     render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={vi.fn()} />)
-    expect(() => fireEvent.click(screen.getByRole('button', { name: 'Connect' }))).not.toThrow()
+    expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Prod Box' })).toBeDisabled()
+    openActions()
+    expect(screen.queryByRole('menuitem', { name: 'Connect' })).not.toBeInTheDocument()
   })
 
-  it('renders Edit button only when onEdit is present', () => {
+  it('lists Edit in the actions menu only when onEdit is present', () => {
     const { rerender } = render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: 'Edit connection' })).not.toBeInTheDocument()
+    openActions()
+    expect(screen.queryByRole('menuitem', { name: 'Edit connection' })).not.toBeInTheDocument()
     const onEdit = vi.fn()
     rerender(<WorkspaceConnectionRow connection={sshConn} depth={0} onEdit={onEdit} onDelete={vi.fn()} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Edit connection' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit connection' }))
     expect(onEdit).toHaveBeenCalledWith(sshConn)
   })
 
-  it('Delete button always renders and calls onDelete', () => {
+  it('always lists Delete last in the actions menu and calls onDelete', () => {
     const onDelete = vi.fn()
-    render(<WorkspaceConnectionRow connection={sshConn} depth={0} onDelete={onDelete} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Delete connection' }))
+    render(<WorkspaceConnectionRow connection={sshConn} depth={0} onConnect={vi.fn()} onEdit={vi.fn()} onDelete={onDelete} />)
+    openActions()
+    const items = screen.getAllByRole('menuitem').map(item => item.textContent)
+    expect(items).toEqual(['Connect', 'Edit connection', 'Delete connection'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete connection' }))
     expect(onDelete).toHaveBeenCalledWith(sshConn)
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+  })
+
+  it('opens the same actions menu at the pointer on right-click', () => {
+    const { container } = render(<WorkspaceConnectionRow connection={sshConn} depth={0} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    fireEvent.contextMenu(container.firstChild as HTMLElement, { clientX: 40, clientY: 50 })
+    const menu = screen.getByRole('menu', { name: 'Actions for Prod Box' })
+    expect(menu.style.left).toBe('40px')
+    expect(menu.style.top).toBe('54px')
+    expect(screen.getByRole('menuitem', { name: 'Edit connection' })).toHaveFocus()
   })
 
   it('renders a Monitor icon for RDP connection type', () => {
@@ -93,17 +112,11 @@ describe('WorkspaceConnectionRow', () => {
     expect(screen.getByText('LOCAL')).toBeInTheDocument()
   })
 
-  it('hides action buttons until hovered so the connection title gets full row width', () => {
-    render(<WorkspaceConnectionRow connection={sshConn} depth={0} onEdit={vi.fn()} onDelete={vi.fn()} />)
-    const connectBtn = screen.getByRole('button', { name: 'Connect' })
-    const editBtn = screen.getByRole('button', { name: 'Edit connection' })
-    const deleteBtn = screen.getByRole('button', { name: 'Delete connection' })
-
-    expect(connectBtn.className).toContain('hidden')
-    expect(connectBtn.className).toContain('group-hover:inline-flex')
-    expect(editBtn.className).toContain('hidden')
-    expect(editBtn.className).toContain('group-hover:inline-flex')
-    expect(deleteBtn.className).toContain('hidden')
-    expect(deleteBtn.className).toContain('group-hover:inline-flex')
+  it('keeps only quick connect inline so the connection title gets the row width', () => {
+    render(<WorkspaceConnectionRow connection={sshConn} depth={0} onConnect={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Connect' })).toHaveClass('workspace-run-action')
+    expect(screen.queryByRole('button', { name: 'Edit connection' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete connection' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Actions for Prod Box' })).toHaveAttribute('aria-haspopup', 'menu')
   })
 })

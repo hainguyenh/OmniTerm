@@ -19,12 +19,12 @@ interface WorkspaceShowMoreProps {
  * silent truncation. The scripts and selected-file views skip this row — they are fully loaded.
  */
 const WorkspaceShowMore: React.FC<WorkspaceShowMoreProps> = ({ wsId, total, loaded, loading, onLoadMore }) => (
-  <div className="px-2 py-1 bg-[var(--theme-bg)]">
+  <div className="workspace-show-more">
     <button
       type="button"
       disabled={loading}
       onClick={() => onLoadMore(wsId)}
-      className="w-full text-left text-[11px] text-[var(--theme-dim)] hover:text-[var(--theme-accent)] transition-colors"
+      className="workspace-row-label"
     >
       {loading ? 'Loading…' : `Show more (${total - loaded} remaining)`}
     </button>

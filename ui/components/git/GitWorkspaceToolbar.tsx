@@ -13,7 +13,8 @@ import {
 import { Tooltip } from '../Tooltip'
 import './git-ui.css'
 import { GitProjectSelector } from './GitProjectSelector'
-import type { GitProject, GitRepoStatus } from './gitTypes'
+import { GitWorktreeContext } from './GitWorktreeContext'
+import type { GitProject, GitRepoStatus, GitWorktreeInfo } from './gitTypes'
 
 interface GitWorkspaceToolbarProps {
   projects: GitProject[]
@@ -26,6 +27,9 @@ interface GitWorkspaceToolbarProps {
   activeTab: 'changes' | 'graph' | 'maintenance'
   showGraphTab?: boolean
   onSelectProject: (path: string) => void
+  worktrees?: GitWorktreeInfo[]
+  activeWorktreePath?: string | null
+  onSelectWorktree?: (path: string) => void
   onToggleBranchPopup: (anchorRect?: DOMRect) => void
   onSyncAction: (action: 'pull' | 'push' | 'fetch') => void
   onChangeTab: (tab: 'changes' | 'graph' | 'maintenance') => void
@@ -43,6 +47,9 @@ export const GitWorkspaceToolbar: React.FC<GitWorkspaceToolbarProps> = ({
   activeTab,
   showGraphTab = true,
   onSelectProject,
+  worktrees,
+  activeWorktreePath,
+  onSelectWorktree,
   onToggleBranchPopup,
   onSyncAction,
   onChangeTab,
@@ -56,9 +63,9 @@ export const GitWorkspaceToolbar: React.FC<GitWorkspaceToolbarProps> = ({
 
   return (
     <div className="git-toolbar">
-      <div className="git-toolbar-projects flex items-center gap-3 min-w-0 flex-wrap">
+      <div className="git-toolbar-projects">
         <Tooltip content="Return to terminal session" placement="bottom">
-          <button type="button" onClick={onClose} className="git-control">
+          <button type="button" onClick={onClose} aria-label="Terminal" className="git-control git-terminal-button">
             <ArrowLeft />
             <span>Terminal</span>
           </button>
@@ -71,6 +78,10 @@ export const GitWorkspaceToolbar: React.FC<GitWorkspaceToolbarProps> = ({
             isNotGit={isNotGit}
             onSelectProject={onSelectProject}
             onToggleBranchPopup={onToggleBranchPopup}
+            worktrees={worktrees}
+            activeWorktreePath={activeWorktreePath}
+            mainWorktree={repoStatus?.main_worktree}
+            onSelectWorktree={onSelectWorktree}
           />
         ) : (
           <div className="flex items-center gap-2 text-xs text-theme-dim">
@@ -79,7 +90,7 @@ export const GitWorkspaceToolbar: React.FC<GitWorkspaceToolbarProps> = ({
           </div>
         )}
       </div>
-      <div className="git-toolbar-actions flex items-center gap-2 flex-wrap">
+      <div className="git-toolbar-actions">
         {syncActions.map(({ action, label, hint, Icon }) => (
           <Tooltip key={action} content={hint} placement="bottom">
             <button
@@ -125,8 +136,9 @@ export const GitWorkspaceToolbar: React.FC<GitWorkspaceToolbarProps> = ({
           <span>Cleanup & Prune</span>
         </button>
       </nav>
+      {onSelectWorktree && <GitWorktreeContext worktrees={worktrees ?? []} activePath={activeWorktreePath ?? null} onSelectWorktree={onSelectWorktree} />}
       {(syncNotice || (repoStatus && (repoStatus.ahead > 0 || repoStatus.behind > 0 || repoStatus.conflict_count > 0))) && (
-        <div className="w-full flex items-center flex-wrap gap-2 text-xs" role="status">
+        <div className="git-toolbar-status" role="status">
           {repoStatus && repoStatus.ahead > 0 && <span className="git-status-badge git-status-modified">{repoStatus.ahead} ahead · ready to push</span>}
           {repoStatus && repoStatus.behind > 0 && <span className="git-status-badge git-status-untracked">{repoStatus.behind} behind · available to pull</span>}
           {repoStatus && repoStatus.conflict_count > 0 && <span className="git-status-badge git-status-conflicted">{repoStatus.conflict_count} conflict(s) · resolve before committing</span>}

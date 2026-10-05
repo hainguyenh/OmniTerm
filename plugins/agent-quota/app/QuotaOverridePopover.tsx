@@ -11,7 +11,7 @@ import { confirmDisableSuspend, confirmResumeNow } from './dangerConfirm'
 import { isSafePrompt } from '../src/prompt'
 import { AGENT_LABELS, clampLimit, effectiveConfig, pruneOverride, wakeConfigWithEnabled, WINDOW_LABELS } from './quotaConfig'
 import { isHeld } from './quotaGuard'
-import { clearManualPause, setEditing, setOverride, useQuota } from './quotaStore'
+import { clearManualPause, quotaCommands, setEditing, setOverride, useQuota } from './quotaStore'
 
 const WAKE_MODES: Array<{ id: WakeMode; label: string }> = [
   { id: 'off', label: 'Off' },
@@ -113,7 +113,10 @@ export function QuotaOverridePopover({
   const handleApply = () => {
     if (!promptValid) return
     setOverride(terminal.instanceKey, pruned)
-    if (!committedConfig.enabled && config.enabled) clearManualPause(terminal.instanceKey)
+    if (!committedConfig.enabled && config.enabled) {
+      clearManualPause(terminal.instanceKey)
+      quotaCommands().refresh(terminal.profileKey)
+    }
     setApplied(true)
     appliedTimerRef.current = window.setTimeout(() => setApplied(false), 2000)
   }
@@ -168,11 +171,35 @@ export function QuotaOverridePopover({
         />
       )}
 
+      {terminal.agent === 'agy' && (
+        <label className="flex items-center gap-2 text-theme-fg">
+          <span className="w-20 text-theme-dim">Model pool</span>
+          <select
+            value={draft?.agyModelFamily ?? global.agyModelFamily ?? 'auto'}
+            aria-label="Antigravity model quota pool"
+            className={`${FIELD} flex-1 min-w-0`}
+            onChange={(event) => apply({ agyModelFamily: event.target.value as 'auto' | 'gemini' | 'claude' })}
+          >
+            <option value="auto">Auto (from agy settings)</option>
+            <option value="gemini">Google (Gemini Models)</option>
+            <option value="claude">Claude & GPT models</option>
+          </select>
+        </label>
+      )}
+
       <ToggleRow
         label="Monitor this terminal"
         description={config.enabled ? 'Quota reads and guard actions are active for this agent process.' : 'Paused for this agent process until you enable it again.'}
         checked={config.enabled}
-        onChange={() => apply({ enabled: !config.enabled })}
+        onChange={() => {
+          const next = !config.enabled
+          if (next) {
+            clearManualPause(terminal.instanceKey)
+            apply({ enabled: true, suspendAtLimit: true })
+          } else {
+            apply({ enabled: false })
+          }
+        }}
         ariaLabel="Monitor this terminal's agent"
       />
 

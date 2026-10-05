@@ -178,4 +178,40 @@ describe('parseAgyUsage', () => {
     const weekly = result.windows.find((w) => w.kind === 'weekly')
     expect(weekly?.usedPct).toBe(51)
   })
+
+  it('selects active model family when one pool is exhausted', () => {
+    const exhaustedClaude = `Gemini Models          Five Hour Limit Remaining  39%   2026-09-28T07:11:00Z
+Gemini Models          Weekly Limit Remaining     60%   2026-10-02T08:47:03Z
+Claude and GPT models  Five Hour Limit Remaining  0%    2026-09-28T08:34:51Z
+Claude and GPT models  Weekly Limit Remaining     10%   2026-10-05T03:34:51Z`
+
+    // When active family is gemini, session usedPct should be 61% (100 - 39)
+    const geminiResult = parseAgyUsage(exhaustedClaude, undefined, 'gemini')
+    expect(geminiResult.ok).toBe(true)
+    if (geminiResult.ok) {
+      const session = geminiResult.windows.find((w) => w.kind === 'session')
+      expect(session?.usedPct).toBe(61)
+      expect(session?.breakdown).toEqual([
+        { label: 'Gemini Models', usedPct: 61 },
+        { label: 'Claude and GPT models', usedPct: 100 },
+      ])
+    }
+
+    // When active family is claude, session usedPct should be 100% (100 - 0)
+    const claudeResult = parseAgyUsage(exhaustedClaude, undefined, 'claude')
+    expect(claudeResult.ok).toBe(true)
+    if (claudeResult.ok) {
+      const session = claudeResult.windows.find((w) => w.kind === 'session')
+      expect(session?.usedPct).toBe(100)
+    }
+
+    // Default without active family prefers gemini (agy's default model provider)
+    const defaultResult = parseAgyUsage(exhaustedClaude, undefined)
+    expect(defaultResult.ok).toBe(true)
+    if (defaultResult.ok) {
+      const session = defaultResult.windows.find((w) => w.kind === 'session')
+      expect(session?.usedPct).toBe(61)
+    }
+  })
 })
+

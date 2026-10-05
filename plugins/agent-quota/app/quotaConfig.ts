@@ -44,6 +44,7 @@ export interface AgentConfig {
   hardStopAtPct: number | null
   wake: WakeConfig
   resumeRecovery: ResumeRecoveryConfig
+  agyModelFamily?: 'auto' | 'gemini' | 'claude'
 }
 
 export interface IconConfig {
@@ -104,6 +105,7 @@ export interface AgentOverride {
   showWeekly?: boolean
   /** Optional per-terminal resume recovery settings. */
   resumeRecovery?: Partial<ResumeRecoveryConfig>
+  agyModelFamily?: 'auto' | 'gemini' | 'claude'
 }
 
 const defaultAgent = (enabled: boolean, defaultRecovery = false): AgentConfig => ({
@@ -116,6 +118,7 @@ const defaultAgent = (enabled: boolean, defaultRecovery = false): AgentConfig =>
   hardStopAtPct: null,
   wake: { mode: 'off', time: '06:00', delayMinutes: 2, prompt: 'hi' },
   resumeRecovery: { enabled: defaultRecovery, delaySeconds: 3, prompt: 'continue' },
+  agyModelFamily: 'auto',
 })
 
 /** Turtle → rabbit → plane → superman, from calm to way over pace. Text glyphs: no bundled assets,
@@ -196,6 +199,7 @@ function parseAgent(value: unknown, fallback: AgentConfig): AgentConfig {
       delaySeconds: num(recovery.delaySeconds, fallback.resumeRecovery.delaySeconds, 1, 30),
       prompt: typeof recovery.prompt === 'string' && isSafePrompt(recovery.prompt.trim()) ? recovery.prompt.trim().slice(0, 120) : fallback.resumeRecovery.prompt,
     },
+    agyModelFamily: oneOf(source.agyModelFamily, ['auto', 'gemini', 'claude'] as const, fallback.agyModelFamily ?? 'auto'),
   }
 }
 
@@ -271,6 +275,7 @@ export function effectiveConfig(global: AgentConfig, override: AgentOverride | u
     autoResume: override.autoResume ?? global.autoResume,
     wake: override.wake ? { ...global.wake, ...override.wake } : global.wake,
     resumeRecovery: override.resumeRecovery ? { ...global.resumeRecovery, ...override.resumeRecovery } : global.resumeRecovery,
+    agyModelFamily: override.agyModelFamily ?? global.agyModelFamily,
   }
 }
 
@@ -304,6 +309,7 @@ export function pruneOverride(global: AgentConfig, override: AgentOverride): Age
     ...(override.autoResume !== undefined && override.autoResume !== global.autoResume ? { autoResume: override.autoResume } : {}),
     ...(override.wake && !sameWakeConfig(override.wake, global.wake) ? { wake: override.wake } : {}),
     ...(override.resumeRecovery && !sameRecoveryConfig(effectiveRecovery, global.resumeRecovery) ? { resumeRecovery: override.resumeRecovery } : {}),
+    ...(override.agyModelFamily && override.agyModelFamily !== global.agyModelFamily ? { agyModelFamily: override.agyModelFamily } : {}),
     // Display-only: there is no global counterpart, so only `true` is a difference worth keeping.
     ...(override.showWeekly ? { showWeekly: true } : {}),
   }

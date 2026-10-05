@@ -116,7 +116,7 @@ describe('QuotaPaneLines', () => {
     render(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByTestId('aq-monitor-paused')).toHaveTextContent('Monitoring paused for this terminal')
     fireEvent.click(screen.getByRole('button', { name: 'Enable monitoring' }))
-    expect(getQuotaState().overrides['s1:10:100']).toEqual({ suspendAtLimit: false })
+    expect(getQuotaState().overrides['s1:10:100']).toBeUndefined()
   })
 
   it('reports reading and error states, dimming stale lines', () => {

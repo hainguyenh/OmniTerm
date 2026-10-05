@@ -93,6 +93,8 @@ mod file_view_command_tests;
 mod text_file_command_tests;
 #[path = "command_workspace_tests.rs"]
 mod workspace_commands;
+#[path = "command_workspace_file_tests.rs"]
+mod workspace_file_commands;
 
 #[path = "command_plugin_tests.rs"]
 mod plugin_commands;
