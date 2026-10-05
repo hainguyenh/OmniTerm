@@ -38,6 +38,14 @@ fn temp_note_commands_lifecycle_and_validation() {
         .expect_err("invalid id");
     assert!(err.contains("invalid") || err.contains("characters"));
 
+    // Save temp note as with non-existent note returns error
+    assert!(block_on(save_temp_note_as(
+        app.clone(),
+        "missing-note".to_string(),
+        None,
+    ))
+    .is_err());
+
     // Delete note
     let deleted = block_on(delete_temp_note(app.clone(), "my-note".to_string())).expect("delete");
     assert!(deleted);

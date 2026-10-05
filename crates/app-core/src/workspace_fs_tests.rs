@@ -275,3 +275,10 @@ fn the_cross_drive_fallback_copies_then_removes_and_never_replaces() {
     assert!(error.starts_with("Could not move the file"), "{error}");
     assert!(!fx.other.join("gone.txt").exists());
 }
+
+#[test]
+fn missing_or_formats_unexpected_io_errors() {
+    let err = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+    let msg = missing_or(err, "Could not delete");
+    assert!(msg.starts_with("Could not delete:"));
+}

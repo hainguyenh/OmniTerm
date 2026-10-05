@@ -345,3 +345,11 @@ async fn update_activity_persists_a_busy_transition_and_skips_a_no_op_update() {
 
     manager.disconnect("s").expect("disconnect failed");
 }
+
+#[tokio::test]
+async fn manager_is_idle_and_client_disconnected_cover_lifecycle_checks() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = SessionManager::new(dir.path().to_path_buf()).unwrap();
+    assert!(manager.is_idle());
+    assert!(manager.client_disconnected("unknown"));
+}

@@ -147,6 +147,22 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
         "line one\nline two\n"
     );
 
+    let note_export = tools.path().join("saved-note.txt");
+    std::env::set_var("OMNITERM_ZENITY_SAVE", &note_export);
+    fixture.ok(
+        "write_temp_note",
+        json!({ "id": "dialog-note", "content": "note content" }),
+    );
+    let saved_path = fixture.ok(
+        "save_temp_note_as",
+        json!({ "id": "dialog-note", "suggestedName": "saved-note.txt" }),
+    );
+    assert_eq!(
+        saved_path,
+        json!(note_export.to_string_lossy().into_owned())
+    );
+    assert_eq!(fs::read_to_string(&note_export).unwrap(), "note content");
+
     let source_text = fs::read_to_string(&source).unwrap();
     assert_eq!(
         fixture.ok("import_json", json!({})).as_str(),
@@ -211,6 +227,17 @@ fn ipc_native_dialog_commands_cover_success_cancel_and_approval() {
     assert_eq!(fixture.ok("import_json", json!({})), Value::Null);
     assert_eq!(fixture.ok("import_file", json!({})), Value::Null);
     assert_eq!(fixture.ok("install_plugin_package", json!({})), Value::Null);
+    fixture.ok(
+        "write_temp_note",
+        json!({ "id": "cancel-note", "content": "cancel content" }),
+    );
+    assert_eq!(
+        fixture.ok(
+            "save_temp_note_as",
+            json!({ "id": "cancel-note", "suggestedName": "cancel.txt" }),
+        ),
+        Value::Null
+    );
 
     std::env::set_var("OMNITERM_ZENITY_CANCEL", "0");
     std::env::set_var("OMNITERM_ZENITY_APPROVE", "0");
