@@ -44,6 +44,9 @@ pub struct GitRepoStatus {
     pub is_detached: bool,
     pub files: Vec<GitFileChange>,
     pub conflict_count: usize,
+    /// Set only when `repo_root` is a linked worktree: the root of the main worktree it belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main_worktree: Option<String>,
 }
 
 /// Type of line in a unified diff chunk.
@@ -129,6 +132,9 @@ pub struct GitBranchDeleteFailure {
 pub struct GitDeleteBranchesResult {
     pub deleted: Vec<String>,
     pub failed: Vec<GitBranchDeleteFailure>,
+    /// Linked worktrees removed because they had a deleted branch checked out.
+    #[serde(default)]
+    pub removed_worktrees: Vec<String>,
 }
 
 /// A single line in git blame output.
@@ -170,6 +176,25 @@ pub struct GitFileContext {
     /// The checked-out branch; `None` when detached or before the first commit.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub branch: Option<String>,
+}
+
+/// One entry of `git worktree list`: the main worktree comes first, linked worktrees follow.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct GitWorktreeInfo {
+    pub path: String,
+    /// Short branch name; `None` when the worktree is detached or bare.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    pub is_main: bool,
+    /// The worktree the listing was requested from.
+    pub is_current: bool,
+    pub is_detached: bool,
+    pub is_bare: bool,
+    pub is_locked: bool,
+    /// Its directory is gone; `git worktree prune` would remove the entry.
+    pub is_prunable: bool,
 }
 
 /// One commit that touched a file (or a line range of it), with the file's path at that commit —
@@ -242,6 +267,7 @@ mod tests {
                 branch: "feat/active".into(),
                 reason: "branch is not fully merged".into(),
             }],
+            removed_worktrees: vec!["/repo/.claude/worktrees/old".into()],
         };
         let json = serde_json::to_string(&result).expect("serialization succeeds");
         let parsed: GitDeleteBranchesResult =
@@ -266,11 +292,39 @@ mod tests {
                 is_conflicted: false,
             }],
             conflict_count: 0,
+            main_worktree: None,
         };
 
         let json = serde_json::to_string(&status).expect("serialization succeeds");
+        assert!(
+            !json.contains("main_worktree"),
+            "absent main worktree is omitted: {json}"
+        );
         let parsed: GitRepoStatus = serde_json::from_str(&json).expect("deserialization succeeds");
         assert_eq!(status, parsed);
+
+        let linked = GitRepoStatus {
+            main_worktree: Some("/path/to/main".into()),
+            ..status
+        };
+        let json = serde_json::to_string(&linked).expect("serialization succeeds");
+        let parsed: GitRepoStatus = serde_json::from_str(&json).expect("deserialization succeeds");
+        assert_eq!(linked, parsed);
+    }
+
+    #[test]
+    fn test_git_worktree_info_serde_roundtrip() {
+        let worktree = GitWorktreeInfo {
+            path: "/repo/.claude/worktrees/topic".into(),
+            branch: Some("topic".into()),
+            head: Some("a".repeat(40)),
+            is_current: true,
+            ..GitWorktreeInfo::default()
+        };
+        let json = serde_json::to_string(&worktree).expect("serialization succeeds");
+        let parsed: GitWorktreeInfo =
+            serde_json::from_str(&json).expect("deserialization succeeds");
+        assert_eq!(worktree, parsed);
     }
 
     #[test]
@@ -329,7 +383,8 @@ mod tests {
             files: vec![],
         };
         let json = serde_json::to_string(&comp).expect("serialization succeeds");
-        let parsed: GitBranchComparison = serde_json::from_str(&json).expect("deserialization succeeds");
+        let parsed: GitBranchComparison =
+            serde_json::from_str(&json).expect("deserialization succeeds");
         assert_eq!(comp, parsed);
     }
 }

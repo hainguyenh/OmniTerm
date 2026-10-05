@@ -143,6 +143,15 @@ describe('overrides', () => {
     })
   })
 
+  it('layers and prunes agyModelFamily', () => {
+    const agyGlobal = DEFAULT_QUOTA_CONFIG.agents.agy
+    expect(agyGlobal.agyModelFamily).toBe('auto')
+    expect(effectiveConfig(agyGlobal, { agyModelFamily: 'gemini' }).agyModelFamily).toBe('gemini')
+    expect(effectiveConfig(agyGlobal, { agyModelFamily: 'claude' }).agyModelFamily).toBe('claude')
+    expect(pruneOverride(agyGlobal, { agyModelFamily: 'auto' })).toBeNull()
+    expect(pruneOverride(agyGlobal, { agyModelFamily: 'gemini' })).toEqual({ agyModelFamily: 'gemini' })
+  })
+
   it('clamps limits to 5–100', () => {
     expect(clampLimit(2)).toBe(5)
     expect(clampLimit(101)).toBe(100)

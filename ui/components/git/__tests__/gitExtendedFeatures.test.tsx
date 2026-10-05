@@ -134,10 +134,10 @@ describe('GitBranchDiffModal', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('src/lib.rs')).toBeDefined()
+      expect(screen.getByRole('button', { name: 'View diff for src/lib.rs' })).toBeDefined()
     })
 
-    fireEvent.click(screen.getByText('src/lib.rs'))
+    fireEvent.click(screen.getByRole('button', { name: 'View diff for src/lib.rs' }))
     expect(onOpenFileDiff).toHaveBeenCalledWith('src/lib.rs', 'feature/diff')
 
     const commitsTab = screen.getByRole('button', { name: /commits/i })
@@ -306,6 +306,26 @@ describe('Right click branch actions and GitGraphSection cherry pick', () => {
     // The native context menu is suppressed in favor of the branch menu.
     expect(notPrevented).toBe(false)
     expect(onClick).toHaveBeenCalled()
+  })
+
+  it('renders ahead and behind counts as distinct push and pull chips', () => {
+    render(
+      <GitBranchFooter
+        status={{
+          repo_root: '/test/repo',
+          branch: 'main',
+          ahead: 2,
+          behind: 1,
+          is_detached: false,
+          files: [],
+          conflict_count: 0,
+        }}
+      />,
+    )
+
+    expect(screen.getByTitle('2 commits to push')).toHaveTextContent('2')
+    expect(screen.getByTitle('1 commits to pull')).toHaveTextContent('1')
+    expect(screen.queryByText(/[↑↓]/)).not.toBeInTheDocument()
   })
 
   it('supports right-click on branch button in GitProjectSelector', async () => {

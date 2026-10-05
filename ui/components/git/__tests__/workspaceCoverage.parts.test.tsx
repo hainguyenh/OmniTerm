@@ -27,6 +27,22 @@ vi.mock('../GitBranchPopup', () => ({
   ),
 }))
 
+vi.mock('../GitBranchQuickPopover', () => ({
+  GitBranchQuickPopover: (props: {
+    cwd: string
+    currentBranch?: string
+    onClose: () => void
+    onExpand: () => void
+    onBranchSwitched?: () => void
+  }) => (
+    <div data-testid="branch-popup" data-cwd={props.cwd} data-branch={props.currentBranch ?? ''}>
+      <button type="button" onClick={() => props.onExpand()}>stub expand</button>
+      <button type="button" onClick={() => props.onBranchSwitched?.()}>stub switched</button>
+      <button type="button" onClick={props.onClose}>stub close popup</button>
+    </div>
+  ),
+}))
+
 const makeStatus = (extra: Partial<GitRepoStatus> = {}): GitRepoStatus => ({
   repo_root: '/repo',
   branch: 'main',
@@ -218,14 +234,14 @@ describe('GitBranchFooter', () => {
     invoke.mockResolvedValueOnce(makeStatus({ branch: 'dev', ahead: 1 }))
     render(<GitBranchFooter cwd="/repo" />)
     expect(await screen.findByText('dev')).toBeInTheDocument()
-    expect(screen.getByText('↑1')).toBeInTheDocument()
+    expect(screen.getByTitle('1 commits to push')).toHaveTextContent('1')
     expect(invoke).toHaveBeenCalledWith('git_status', { cwd: '/repo' })
 
     invoke.mockResolvedValueOnce(makeStatus({ branch: undefined, is_detached: true, behind: 4 }))
     await act(async () => {
       window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
     })
-    expect(button('Current branch: detached')).toHaveTextContent('↓4')
+    expect(button('Current branch: detached')).toContainElement(screen.getByTitle('4 commits to pull'))
 
     invoke.mockRejectedValueOnce(new Error('not a repo'))
     await act(async () => {
@@ -266,6 +282,7 @@ describe('GitBranchFooter', () => {
     fireEvent.click(branch)
     expect(screen.getByTestId('branch-popup')).toHaveAttribute('data-cwd', '/repo')
     expect(screen.getByTestId('branch-popup')).toHaveAttribute('data-branch', 'HEAD')
+    fireEvent.click(button('stub expand'))
     fireEvent.click(button('stub open commit'))
     fireEvent.click(button('stub switched'))
     expect(opened).toHaveBeenCalledTimes(1)

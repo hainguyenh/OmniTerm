@@ -284,3 +284,39 @@ fn rename_folder_sets_alias_and_rejects_blank_or_unknown_ids() {
     let err = rename_folder(&mut ws, "folder-missing", "X").expect_err("unknown folder is rejected");
     assert!(err.contains("Unknown workspace folder"));
 }
+
+#[test]
+fn entry_pins_follow_a_moved_file_and_go_with_a_deleted_one() {
+    let mut ws = workspace("a", None, 0);
+    ws.folders = vec![folder("root", "/repo"), folder("other", "/other")];
+    set_entry_pinned(&mut ws, "root", "src/lib.rs", true).expect("pin");
+    set_entry_pinned(&mut ws, "root", "src/keep.rs", true).expect("pin sibling");
+
+    assert!(!move_entry_pin(
+        &mut ws,
+        "root",
+        "src/missing.rs",
+        "root",
+        "src/x.rs"
+    ));
+    assert!(move_entry_pin(
+        &mut ws,
+        "root",
+        "/src/lib.rs/",
+        "other",
+        "/lib/core.rs/"
+    ));
+    assert!(is_entry_pinned(&ws, "other", "lib/core.rs"));
+    assert!(!is_entry_pinned(&ws, "root", "src/lib.rs"));
+    assert!(is_entry_pinned(&ws, "root", "src/keep.rs"));
+
+    assert!(!remove_entry_pin(&mut ws, "root", "src/lib.rs"));
+    assert!(remove_entry_pin(&mut ws, "other", "/lib/core.rs"));
+    assert_eq!(
+        ws.pins,
+        vec![WorkspacePin {
+            folder_id: "root".into(),
+            path: "src/keep.rs".into()
+        }]
+    );
+}

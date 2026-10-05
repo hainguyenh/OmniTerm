@@ -145,7 +145,8 @@ describe('GitBranchFooter', () => {
     render(<GitBranchFooter status={mockStatus} onClick={onClick} />)
 
     expect(screen.getByText('main')).toBeInTheDocument()
-    expect(screen.getByText('↑2 ↓1')).toBeInTheDocument()
+    expect(screen.getByTitle('2 commits to push')).toHaveTextContent('2')
+    expect(screen.getByTitle('1 commits to pull')).toHaveTextContent('1')
     expect(screen.queryByText('1 conflict')).toBeNull()
     expect(screen.queryByText('· clean')).toBeNull()
 

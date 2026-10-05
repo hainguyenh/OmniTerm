@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { AgentKind, QuotaSnapshot } from '../src/types'
 import type { SessionAgent } from './agentQuotaAPI'
 import type { AgentConfig, AgentOverride, QuotaConfig } from './quotaConfig'
 import type { GuardState } from './quotaGuard'
@@ -188,13 +188,36 @@ export function setOverride(instanceKey: string, override: AgentOverride | null)
   })
 }
 
-/** Clear the manual-resume bypass when the user explicitly enables monitoring again. */
+/** Clear the manual-resume bypass and pause overrides when the user explicitly enables monitoring again. */
 export function clearManualPause(instanceKey: string): void {
   updateQuota((current) => {
     const guard = current.guards[instanceKey]
-    if (!guard?.bypassUntil) return current
-    return { ...current, guards: { ...current.guards, [instanceKey]: { ...guard, bypassUntil: undefined } } }
+    const override = current.overrides[instanceKey]
+    const nextGuards = guard?.bypassUntil
+      ? { ...current.guards, [instanceKey]: { ...guard, bypassUntil: undefined } }
+      : current.guards
+    let nextOverrides = current.overrides
+    if (override && (override.enabled === false || override.suspendAtLimit === false)) {
+      const cleaned = { ...override }
+      delete cleaned.enabled
+      delete cleaned.suspendAtLimit
+      nextOverrides = { ...current.overrides }
+      if (Object.keys(cleaned).length > 0) nextOverrides[instanceKey] = cleaned
+      else delete nextOverrides[instanceKey]
+    }
+    if (nextGuards === current.guards && nextOverrides === current.overrides) return current
+    return { ...current, guards: nextGuards, overrides: nextOverrides }
   })
+}
+
+/** Clear manual pause bypass and pause overrides for all terminals (optionally filtered by agent). */
+export function clearAllManualPauses(agent?: AgentKind): void {
+  const current = getQuotaState()
+  for (const terminal of Object.values(current.terminals)) {
+    if (!agent || terminal.agent === agent) {
+      clearManualPause(terminal.instanceKey)
+    }
+  }
 }
 
 export function clearOverrides(): void {

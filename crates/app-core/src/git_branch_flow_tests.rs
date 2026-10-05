@@ -235,15 +235,60 @@ fn delete_branches_reports_each_outcome() {
         .iter()
         .map(|s| s.to_string())
         .collect();
-    let result = delete_branches(&repo.root, &names, false).expect("delete");
+    let result = delete_branches(&repo.root, &names, false, false).expect("delete");
     assert_eq!(result.deleted, vec!["merged"]);
     let failed: Vec<&str> = result.failed.iter().map(|f| f.branch.as_str()).collect();
     assert_eq!(failed, vec!["main", "unmerged", "ghost"]);
     assert!(result.failed[0].reason.contains("currently checked out"));
     assert!(result.failed[1].reason.contains("not fully merged"));
 
-    let forced = delete_branches(&repo.root, &["unmerged".to_string()], true).expect("force");
+    let forced =
+        delete_branches(&repo.root, &["unmerged".to_string()], true, false).expect("force");
     assert_eq!(forced.deleted, vec!["unmerged"]);
     assert!(forced.failed.is_empty());
     assert!(repo.git(&["branch", "--list", "unmerged"]).is_empty());
+}
+
+#[test]
+fn remote_branches_check_out_as_tracking_branches_whatever_the_remote_is_called() {
+    let repo = TestRepo::new();
+    let origin = repo.with_origin();
+    let other = repo.clone_origin(&origin);
+    git_in(&other, &["checkout", "-q", "-b", "feature/x"]);
+    commit_in(&other, "x.txt", "x\n", "feature work");
+    git_in(&other, &["push", "-q", "origin", "feature/x"]);
+    repo.git(&["remote", "rename", "origin", "upstream"]);
+    fetch_repo(&repo.root, false).expect("fetch");
+
+    let branches = get_branches(&repo.root).expect("branches");
+    assert!(find(&branches, "upstream/feature/x").is_remote);
+    assert!(!find(&branches, "main").is_remote);
+
+    checkout_branch(&repo.root, "upstream/feature/x").expect("checkout remote");
+    assert_eq!(current(&repo), "feature/x");
+    assert!(!get_repo_status(&repo.root).expect("status").is_detached);
+    assert_eq!(
+        repo.git(&["rev-parse", "--abbrev-ref", "feature/x@{upstream}"]),
+        "upstream/feature/x"
+    );
+
+    checkout_branch(&repo.root, "main").expect("back to main");
+    checkout_branch(&repo.root, "upstream/feature/x").expect("reuses the local branch");
+    assert_eq!(current(&repo), "feature/x");
+    assert!(checkout_branch(&repo.root, "--orphan").is_err());
+}
+
+#[test]
+fn branches_checked_out_in_another_worktree_still_count_as_merged() {
+    let repo = TestRepo::new();
+    repo.git(&[
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "claude/agent",
+        ".claude/worktrees/agent",
+    ]);
+    let branches = get_branches(&repo.root).expect("branches");
+    assert!(find(&branches, "claude/agent").is_merged);
 }

@@ -64,6 +64,8 @@ pub fn update_branch_without_checkout(repo_root: &Path, branch: &str) -> Result<
     run_git_cmd(repo_root, &["fetch", &remote, &refspec]).map_err(|err| {
         if err.contains("non-fast-forward") || err.contains("rejected") {
             format!("'{branch}' has diverged from its upstream; check it out to merge or rebase")
+        } else if err.contains("checked out at") {
+            format!("'{branch}' is checked out in another worktree; pull it from there")
         } else {
             err
         }

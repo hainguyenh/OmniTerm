@@ -2,16 +2,14 @@ import React from 'react'
 import {
   ChevronsDownUp, ChevronsUpDown, Filter, List, ListTree, RefreshCw,
 } from 'lucide-react'
+
 import { filterSummary, isDefaultFilter, type TreeFilter } from '../utils/workspaceFilter'
 import { Tooltip } from './Tooltip'
 
 /**
  * The row of controls above one expanded workspace's tree.
  *
- * The left-hand label states what the tree is currently showing — a filter you can only infer from a
- * tinted funnel is a filter users forget is on — and doubles as a second trigger for the same
- * popover. Everything on the right is `flex-shrink-0` so the label, not the controls, is what gives
- * way in a narrow sidebar.
+ * Keep view controls together and give the active filter one clearly labelled trigger.
  */
 interface WorkspaceTreeToolbarProps {
   filter: TreeFilter
@@ -32,31 +30,35 @@ interface WorkspaceTreeToolbarProps {
   onRescan: () => void
 }
 
-const iconButton = 'flex-shrink-0 p-0.5 rounded hover:bg-[var(--theme-hover-bg)] text-[var(--theme-dim)] hover:text-[var(--theme-fg)]'
+const iconButton = 'workspace-icon-button'
 
 const WorkspaceTreeToolbar: React.FC<WorkspaceTreeToolbarProps> = ({
   filter, fileCount, onOpenFilterMenu, filterMenuOpen,
   allCollapsed, onToggleCollapseAll, flatView, onToggleFlatView, scanning, onRescan,
 }) => {
-  // Both filter triggers share this tint, so an active filter is visible without opening anything.
+  // Keep the active filter visible without requiring the popover to be opened.
   const filterTint = isDefaultFilter(filter)
     ? 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)]'
     : 'text-[var(--theme-accent)]'
 
   return (
-    <div className="flex items-center justify-between gap-1 px-2 py-0.5">
+    <div className="workspace-tree-toolbar" role="group" aria-label="Workspace tree controls">
       <Tooltip content="Filter what this workspace shows" placement="bottom">
         <button
           type="button"
           data-filter-trigger
+          aria-label="Filter what this workspace shows"
+          aria-expanded={filterMenuOpen}
           onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
-          className={`min-w-0 truncate rounded px-1 text-[10px] uppercase tracking-wider hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
+          className={`workspace-filter-trigger ${filterTint}`}
+          data-active={!isDefaultFilter(filter)}
         >
-          {filterSummary(filter, fileCount)}
+          <Filter aria-hidden="true" />
+          <span>{filterSummary(filter, fileCount)}</span>
         </button>
       </Tooltip>
 
-      <div className="flex flex-shrink-0 items-center gap-0.5">
+      <div className="workspace-view-actions">
         {allCollapsed !== null && (
           <Tooltip content={allCollapsed ? 'Expand all' : 'Collapse all'} placement="bottom">
             <button
@@ -71,22 +73,11 @@ const WorkspaceTreeToolbar: React.FC<WorkspaceTreeToolbarProps> = ({
             </button>
           </Tooltip>
         )}
-        <Tooltip content="Filter what this workspace shows" placement="bottom">
-          <button
-            type="button"
-            data-filter-trigger
-            aria-label="Filter what this workspace shows"
-            aria-expanded={filterMenuOpen}
-            onClick={(e) => onOpenFilterMenu(e.currentTarget.getBoundingClientRect())}
-            className={`flex-shrink-0 p-0.5 rounded hover:bg-[var(--theme-hover-bg)] ${filterTint}`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-          </button>
-        </Tooltip>
         <Tooltip content={flatView ? 'Show as tree' : 'Flatten'} placement="bottom">
           <button
             type="button"
             aria-label={flatView ? 'Show as tree' : 'Flatten'}
+            aria-pressed={flatView}
             onClick={onToggleFlatView}
             className={iconButton}
           >
@@ -94,7 +85,7 @@ const WorkspaceTreeToolbar: React.FC<WorkspaceTreeToolbarProps> = ({
           </button>
         </Tooltip>
         <Tooltip content="Rescan" placement="bottom">
-          <button type="button" aria-label="Rescan" onClick={onRescan} className={iconButton}>
+          <button type="button" aria-label="Rescan" disabled={scanning} aria-busy={scanning} onClick={onRescan} className={iconButton}>
             <RefreshCw className={`w-3 h-3 ${scanning ? 'animate-spin' : ''}`} />
           </button>
         </Tooltip>

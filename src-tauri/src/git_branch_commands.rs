@@ -1,6 +1,8 @@
 //! Tauri endpoints for branch maintenance that leaves the working tree alone: update without
-//! checkout, rename, upstream changes and worktrees. Thin wrappers over `app_core::git_branch_tools`.
+//! checkout, rename, upstream changes and worktrees. Thin wrappers over `app_core::git_branch_tools`
+//! and `app_core::git_worktree`.
 
+use app_protocol::git::GitWorktreeInfo;
 use std::path::{Path, PathBuf};
 
 /// Runs `op` on the blocking pool — git is a child process, and the IPC thread must not wait on it.
@@ -71,6 +73,11 @@ pub async fn git_add_worktree(
     .await
 }
 
+#[tauri::command]
+pub async fn git_worktrees(cwd: String) -> Result<Vec<GitWorktreeInfo>, String> {
+    in_repo(cwd, app_core::git::list_worktrees).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,6 +104,10 @@ mod tests {
             None,
         ));
         assert!(worktree.unwrap_err().contains("Unknown branch"));
+        let listed = block_on(git_worktrees(env!("CARGO_MANIFEST_DIR").to_string()))
+            .expect("the source checkout lists its worktrees");
+        assert!(listed.first().is_some_and(|main| main.is_main));
+        assert_eq!(listed.iter().filter(|wt| wt.is_current).count(), 1);
 
         let outside = tempfile::tempdir().expect("temp dir");
         let not_repo = block_on(git_update_branch(
@@ -104,5 +115,7 @@ mod tests {
             "main".into(),
         ));
         assert!(not_repo.is_err());
+        let no_worktrees = block_on(git_worktrees(outside.path().to_string_lossy().into_owned()));
+        assert!(no_worktrees.is_err());
     }
 }

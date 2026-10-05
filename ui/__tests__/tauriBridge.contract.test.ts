@@ -183,6 +183,25 @@ describe('workspace', () => {
     await expect(api.workspace.openTextFile('ws#1', 'folder#1/app.ts')).rejects.toThrow('Invalid text file reply')
   })
 
+  it('sends tree edits scoped by workspace id and validates the returned paths', async () => {
+    invokeMock.mockResolvedValueOnce('folder#1/docs')
+    await expect(api.workspace.createDirectory('ws#1', 'folder#1/docs')).resolves.toBe('folder#1/docs')
+    expect(lastInvoke()).toEqual(['create_workspace_directory', { workspaceId: 'ws#1', path: 'folder#1/docs' }])
+
+    invokeMock.mockResolvedValueOnce('folder#2/b.txt')
+    await expect(api.workspace.moveFile('ws#1', 'folder#1/a.txt', 'folder#2/b.txt')).resolves.toBe('folder#2/b.txt')
+    expect(lastInvoke()).toEqual([
+      'move_workspace_file', { workspaceId: 'ws#1', from: 'folder#1/a.txt', to: 'folder#2/b.txt' },
+    ])
+
+    invokeMock.mockResolvedValueOnce(null)
+    await expect(api.workspace.deleteFile('ws#1', 'folder#2/b.txt')).resolves.toBeNull()
+    expect(lastInvoke()).toEqual(['delete_workspace_file', { workspaceId: 'ws#1', path: 'folder#2/b.txt' }])
+
+    invokeMock.mockResolvedValueOnce(42)
+    await expect(api.workspace.moveFile('ws#1', 'folder#1/a.txt', 'folder#1/c.txt')).rejects.toThrow('unexpected response')
+  })
+
   it('reads image bytes as a binary reply and refuses anything else', async () => {
     invokeMock.mockResolvedValueOnce(new Uint8Array([1, 2]).buffer)
     await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).resolves.toEqual(new Uint8Array([1, 2]))

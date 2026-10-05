@@ -186,6 +186,7 @@ pub fn parse_porcelain_v2(stdout: &[u8], repo_root: &str) -> GitRepoStatus {
         is_detached,
         files,
         conflict_count,
+        main_worktree: None,
     }
 }
 
@@ -193,5 +194,7 @@ pub fn parse_porcelain_v2(stdout: &[u8], repo_root: &str) -> GitRepoStatus {
 pub fn get_repo_status(repo_root: &Path) -> Result<GitRepoStatus, String> {
     let stdout = run_git_cmd(repo_root, &["status", "--porcelain=v2", "-z", "-b"])?;
     let root_str = repo_root.to_string_lossy().to_string();
-    Ok(parse_porcelain_v2(&stdout, &root_str))
+    let mut status = parse_porcelain_v2(&stdout, &root_str);
+    status.main_worktree = crate::git_worktree::main_worktree_of(repo_root);
+    Ok(status)
 }

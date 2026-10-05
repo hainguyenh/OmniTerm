@@ -47,7 +47,8 @@ const defaultSettings: AppSettings = {
     closeTab: "Ctrl+W",
     toggleAppFullscreen: "F11",
     agentQuota: "Ctrl+Alt+Q",
-    pasteScript: "Ctrl+Alt+V"
+    pasteScript: "Ctrl+Alt+V",
+    newTempNote: "Ctrl+Shift+T"
   },
 };
 
@@ -175,6 +176,10 @@ const defaults: Api = {
     }),
     saveTextFile: async () => ({ status: 'saved' as const, size: 0, mtimeMs: 0 }),
     openImageFile: async () => new Uint8Array(),
+    createTextFile: async (_wsId: string, path: string) => path,
+    createDirectory: async (_wsId: string, path: string) => path,
+    moveFile: async (_wsId: string, _from: string, to: string) => to,
+    deleteFile: async () => {},
     loadConnections: async () => [],
     saveConnections: async () => {},
     deleteConnection: async () => {},
@@ -310,6 +315,13 @@ const defaults: Api = {
     // overrides `app.platform` gets that platform's shells, as the real backend would.
     list: async () => staticShellOptions(window.omnitermAPI?.app?.platform ?? 'win32'),
     onOpen: noopSub,
+  },
+  tempNotes: {
+    list: async () => [],
+    read: async () => '',
+    write: async () => ({ id: 'note', title: '', mtime_ms: 0, size: 0 }),
+    delete: async () => true,
+    saveAs: async () => null,
   },
 };
 

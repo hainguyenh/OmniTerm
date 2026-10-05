@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
+
 import { areFiltersEqual, useWorkspaceFilters } from '../hooks/useWorkspaceFilters'
 import { diag } from '../diag'
 import { useTreeReveal } from '../hooks/useTreeReveal'
 import { useWorkspaceScan } from '../hooks/useWorkspaceScan'
 import { useWorkspaceMutations } from '../hooks/useWorkspaceMutations'
+import { useWorkspaceFileActions } from '../hooks/useWorkspaceFileActions'
 import WorkspaceFilterMenu from './WorkspaceFilterMenu'
 import WorkspaceTreeToolbar from './WorkspaceTreeToolbar'
 import WorkspacePanelHeader from './WorkspacePanelHeader'
@@ -13,6 +15,7 @@ import WorkspaceAddConnectionButton from './WorkspaceAddConnectionButton'
 import WorkspaceContainerList from './WorkspaceContainerList'
 import WorkspaceTreeRenderer from './WorkspaceTreeRenderer'
 import ConfirmDialog from './ConfirmDialog'
+import { WorkspaceFileDialogs } from './WorkspaceFileDialogs'
 import { buildWorkspacePanelView, collectDirKeys } from './workspacePanelView'
 import type { WorkspaceConnectionTarget, WorkspacePanelProps } from './workspacePanelTypes'
 export type { WorkspaceConnectionTarget } from './workspacePanelTypes'
@@ -29,6 +32,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   hasConnectionProvider = false,
   connectionsRevision,
   revealRequest,
+  activeFile,
   onWorkspacesChanged,
 }) => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -121,6 +125,8 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
     if (showAlert) void showAlert(message, { title, tone: 'error' })
     else diag.error(`[WorkspacePanel] ${title}`, err)
   }, [showAlert])
+
+  const fileActions = useWorkspaceFileActions({ refresh, rescan, reportFailure, onOpenScript, setExpandedDirs })
 
   const {
     addFolderToWorkspace,
@@ -266,7 +272,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
   return (
     <>
       <div
-        className="flex flex-col h-full text-[var(--theme-fg)] select-none"
+        className="workspace-panel flex flex-col h-full text-[var(--theme-fg)] select-none"
         onContextMenu={event => event.preventDefault()}
       >
       <WorkspacePanelHeader
@@ -277,7 +283,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
         onAdd={() => { void addWorkspace().catch(error => reportFailure(error, 'Could not add workspace')) }}
       />
 
-      <div className="flex-1 overflow-y-auto py-1">
+      <div className="workspace-panel-scroll flex-1 overflow-y-auto">
         {workspaces.length === 0 && (
           <WorkspaceEmptyState
             onAdd={() => { void addWorkspace().catch(error => reportFailure(error, 'Could not add workspace')) }}
@@ -288,10 +294,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           workspaces={workspaces}
           expandedId={expandedId}
           renderConnectionAction={ws => addConnectionButton(ws, '', ws.name)}
-          onContextMenu={(id, event) => {
-            event.preventDefault()
-            openWorkspaceAppearanceMenu(id, new DOMRect(event.clientX, event.clientY, 0, 0))
-          }}
+          onAppearance={openWorkspaceAppearanceMenu}
           onToggle={toggle}
           onAddFolder={id => {
             void addFolderToWorkspace(id).catch(error => reportFailure(error, 'Could not add folder'))
@@ -306,7 +309,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           renderExpanded={ws => {
             const view = viewOf(ws.id)
             return (
-              <div className="ml-3 mr-1 mb-1">
+              <div className="workspace-tree-content">
                 <WorkspaceTreeToolbar
                   filter={filterOf(ws.id)}
                   fileCount={view.files.length}
@@ -345,6 +348,13 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
                   onRenameFolder={renameFolder}
                   onSetFolderPendingRemoval={setFolderPendingRemoval}
                   onOpenFolderFilterMenu={openFolderFilterMenu}
+                  onNewFile={(wsId, folderPath, folderName) =>
+                    fileActions.openNewFile({ workspaceId: wsId, folderPath, folderName })}
+                  onNewFolder={fileActions.openNewFolder}
+                  onRenameFile={fileActions.renameFile}
+                  onMoveFile={fileActions.openMoveFile}
+                  onDeleteFile={fileActions.requestDeleteFile}
+                  activeFile={activeFile}
                   renderConnectionAction={addConnectionButton}
                   onConnectWorkspaceConnection={onConnectWorkspaceConnection}
                   onEditWorkspaceConnection={(workspace, parentPath, conn) =>
@@ -420,6 +430,11 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
             onAppearanceIconChange={filterMenu.appearanceOnly
               ? icon => { void setWorkspaceAppearance(filterMenu.workspaceId, workspaces.find(workspace => workspace.id === filterMenu.workspaceId)?.color, icon) }
               : undefined}
+            onNewFile={filterMenu.folderId ? () => fileActions.openNewFile({
+              workspaceId: filterMenu.workspaceId,
+              folderPath: filterMenu.folderId!,
+              folderName: filterMenu.folderName,
+            }) : undefined}
           />
         )
       })()}
@@ -444,6 +459,7 @@ const WorkspacePanel: React.FC<WorkspacePanelProps> = ({
           onCancel={() => setFolderPendingRemoval(null)}
         />
       )}
+      <WorkspaceFileDialogs actions={fileActions} workspaces={workspaces} entriesOf={entriesOf} />
     </>
   )
 }

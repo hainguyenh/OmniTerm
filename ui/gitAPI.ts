@@ -11,6 +11,7 @@ import type {
   GitLineRange,
   GitRepoStatus,
   GitStashEntry,
+  GitWorktreeInfo,
 } from './components/git/gitTypes'
 
 /** Thin renderer adapter for Git IPC commands. */
@@ -53,8 +54,9 @@ export function createGitAPI() {
       invoke<string>('git_checkout', { cwd, branch }),
     createBranch: (cwd: string, name: string, startPoint?: string, checkout = true) =>
       invoke<string>('git_create_branch', { cwd, name, startPoint: startPoint ?? null, checkout }),
-    deleteBranches: (cwd: string, branches: string[], force = false) =>
-      invoke<GitDeleteBranchesResult>('git_delete_branches', { cwd, branches, force }),
+    /** With `removeWorktrees`, a branch checked out in a linked worktree takes the worktree with it. */
+    deleteBranches: (cwd: string, branches: string[], force = false, removeWorktrees = false) =>
+      invoke<GitDeleteBranchesResult>('git_delete_branches', { cwd, branches, force, removeWorktrees }),
     fetch: (cwd: string, prune = true) =>
       invoke<string>('git_fetch', { cwd, prune }),
     pull: (cwd: string, rebase = false) =>
@@ -106,5 +108,8 @@ export function createGitAPI() {
     /** Check `branch` out into a new worktree; resolves to the worktree path. */
     addWorktree: (cwd: string, branch: string, path?: string) =>
       invoke<string>('git_add_worktree', { cwd, branch, path: path ?? null }),
+    /** Every worktree of the repository containing `cwd`, the main worktree first. */
+    listWorktrees: (cwd: string) =>
+      invoke<GitWorktreeInfo[]>('git_worktrees', { cwd }),
   }
 }

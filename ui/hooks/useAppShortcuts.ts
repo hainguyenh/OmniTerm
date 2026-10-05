@@ -166,6 +166,12 @@ export function useAppShortcuts({
         window.dispatchEvent(new CustomEvent('omniterm:agent-quota'))
         return
       }
+
+      if (matches('newTempNote')) {
+        e.preventDefault()
+        window.dispatchEvent(new CustomEvent('omniterm:new-temp-note'))
+        return
+      }
     }
 
     const handleWheel = (e: WheelEvent) => {

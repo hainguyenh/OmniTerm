@@ -2,38 +2,46 @@ import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, ChevronsDownUp, ChevronsU
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import { createGitAPI } from '../../gitAPI'
 import { GitBranchContextMenu } from './GitBranchContextMenu'
+import { GitBranchDeleteDialog } from './GitBranchDeleteDialog'
 import { GitBranchDiffModal } from './GitBranchDiffModal'
 import { GitBranchInspector } from './GitBranchInspector'
 import { GitBranchSubmenu } from './GitBranchSubmenu'
 import { GitBranchTreeView } from './GitBranchTreeView'
-import { GitBranchUpdateDialog } from './GitBranchUpdateDialog'
+import { GitResizeGrip } from './GitResizeGrip'
 import { requestFileDiff } from './gitFileDiffRequest'
 import type { MenuPoint } from './gitMenuPlacement'
+import type { AnchorRect } from './gitPopoverPlacement'
 import { buildBranchTree, type GitBranchTreeNode } from './gitBranchTreeUtils'
 import type { GitBranchInfo } from './gitTypes'
 import { useGitBranchOps } from './useGitBranchOps'
+import { useResizablePanel } from './useResizablePanel'
 import './git-ui.css'
 import './git-branches.css'
 
 interface GitBranchPopupProps {
   cwd: string
   currentBranch?: string
-  anchorRect?: DOMRect | { top: number; left: number; bottom: number; right: number } | null
+  anchorRect?: AnchorRect | null
   onClose: () => void
   onOpenCommit?: () => void
   onBranchSwitched?: () => void
   onOpenFileDiff?: (filePath: string, targetBranch: string) => void
 }
 
+const DIALOG_MIN_SIZE = { width: 520, height: 400 }
+
 export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBranchSwitched, onOpenFileDiff }: GitBranchPopupProps) {
-  const popupRef = useRef<HTMLDivElement>(null)
+  // The dialog is centered, so it grows on both sides of the grip.
+  const { panelRef: popupRef, size, startResize, resizeWithKeyboard, resetSize } = useResizablePanel<HTMLDivElement>({
+    storageKey: 'omniterm:git-branch-dialog-size',
+    minSize: DIALOG_MIN_SIZE,
+    growth: { x: 2, y: 2 },
+  })
   const contextReturnFocus = useRef<HTMLElement | null>(null)
   const [search, setSearch] = useState('')
   const [selectedBranch, setSelectedBranch] = useState<GitBranchInfo | null>(null)
   const [comparingBranch, setComparingBranch] = useState<string | null>(null)
-  const [updateBranch, setUpdateBranch] = useState<GitBranchInfo | null>(null)
   const [contextBranch, setContextBranch] = useState<{ branch: GitBranchInfo; point: MenuPoint } | null>(null)
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree')
   const [collapsed, setCollapsed] = useState(false)
@@ -44,8 +52,9 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
     branches, loading, busyAction, actionNotice, creatingBranch, setCreatingBranch,
     newBranchName, setNewBranchName, startPoint, setStartPoint, notRepo, loadBranches,
     handleUpdateProject, handleFetch, handlePush, handleCheckout, handleMerge, handleRebase,
-    handleCreateBranch, handleInitRepo, handleUpdateBranch, handleRenameBranch, handleSetUpstream, handleAddWorktree,
-  } = useGitBranchOps({ cwd, currentBranch, onClose, onBranchSwitched })
+    handleCreateBranch, handleInitRepo, handlePullBranch, handleDeleteBranch, pendingDelete, confirmDelete, cancelDelete,
+    handleRenameBranch, handleSetUpstream, handleAddWorktree,
+  } = useGitBranchOps({ cwd, currentBranch, onClose, onBranchSwitched, onBranchDeleted: () => setSelectedBranch(null) })
 
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -67,23 +76,14 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
     setCreatingBranch(true)
     setStartPoint(name)
   }
-  const deleteBranch = async (name: string) => {
-    try {
-      await createGitAPI().deleteBranches(cwd, [name], false)
-      await loadBranches()
-      setSelectedBranch(null)
-      window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
-    } catch {
-      // Preserve the existing adapter's safe-delete behavior.
-    }
-  }
   const branchActions = {
     onCheckout: handleCheckout,
+    onPull: handlePullBranch,
     onMerge: handleMerge,
     onRebase: handleRebase,
     onCompare: setComparingBranch,
     onNewBranchFrom: newBranchFrom,
-    onDelete: (name: string) => void deleteBranch(name),
+    onDelete: (name: string) => void handleDeleteBranch(name),
   }
   const remoteNames = branches.filter((branch) => branch.is_remote).map((branch) => branch.name)
   const branchTools = {
@@ -121,13 +121,14 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
     }}>
       <div
         ref={popupRef}
-        className="git-branches-dialog git-menu"
+        className={`git-branches-dialog git-menu ${size ? 'is-resized' : ''}`}
+        style={size ? { width: size.width, height: size.height } : undefined}
         role="dialog"
         aria-modal="true"
         aria-label="Git Branches"
         aria-describedby="git-branches-description"
         onKeyDown={(event) => {
-          if (comparingBranch || updateBranch) return
+          if (comparingBranch || pendingDelete) return
           if (event.key === 'Escape') {
             event.preventDefault()
             event.stopPropagation()
@@ -156,7 +157,7 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
           <span className="git-branches-repo" title={cwd}><FolderGit2 />{repoName}</span>
           <button type="button" className="git-icon-button" aria-label="Close branch menu" onClick={onClose}><X /></button>
         </header>
-        <div className="git-branches-checkout"><Radio /><span>Working on <strong>{currentBranch ?? 'HEAD'}</strong></span><span>Checkout stays here until you switch branches.</span></div>
+        <div className="git-branches-checkout"><Radio /><span title={currentBranch ?? 'HEAD'}>Working on <strong>{currentBranch ?? 'HEAD'}</strong></span><span>Checkout stays here until you switch branches.</span></div>
         <div className="git-branches-toolbar">
           <label className="git-search"><Search /><input type="search" value={search} onChange={(event) => {
             setSearch(event.target.value)
@@ -195,7 +196,7 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
               </div>
               <div className="git-branches-browser-hint">Select to inspect · Right-click or <kbd>Shift F10</kbd> for actions</div>
             </section>
-            <GitBranchInspector branch={shownBranch} currentBranch={currentBranch} busy={!!busyAction} remoteBranches={remoteNames} tools={branchTools} onUpdate={setUpdateBranch} {...branchActions} />
+            <GitBranchInspector branch={shownBranch} currentBranch={currentBranch} busy={!!busyAction} remoteBranches={remoteNames} tools={branchTools} {...branchActions} />
           </div>
         )}
         <footer className="git-branches-footer">
@@ -212,10 +213,11 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
             onClose()
           }}><Sparkles />Cleanup & prune</button>
         </footer>
+        <GitResizeGrip label="Resize branch manager" corner="bottom-right" onResizeStart={startResize} onResizeKey={resizeWithKeyboard} onReset={resetSize} />
         {contextBranch && <GitBranchContextMenu title={contextBranch.branch.name} point={contextBranch.point} containerRef={popupRef} onClose={closeContext}>
-          <fieldset disabled={!!busyAction}><GitBranchSubmenu branch={contextBranch.branch} currentBranch={currentBranch} inline compact {...branchActions} onUpdate={() => setUpdateBranch(contextBranch.branch)} onClose={closeContext} /></fieldset>
+          <fieldset disabled={!!busyAction}><GitBranchSubmenu branch={contextBranch.branch} currentBranch={currentBranch} inline compact {...branchActions} onClose={closeContext} /></fieldset>
         </GitBranchContextMenu>}
-        {updateBranch && <GitBranchUpdateDialog branch={updateBranch} currentBranch={currentBranch} onUpdate={handleUpdateBranch} onClose={() => setUpdateBranch(null)} />}
+        {pendingDelete && <GitBranchDeleteDialog pending={pendingDelete} busy={!!busyAction} onConfirm={confirmDelete} onClose={cancelDelete} />}
       </div>
       {comparingBranch && <GitBranchDiffModal
         cwd={cwd}

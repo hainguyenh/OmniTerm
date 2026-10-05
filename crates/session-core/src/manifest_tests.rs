@@ -173,3 +173,12 @@ fn atomic_write_reports_a_commit_failure_when_target_is_a_directory() {
         .expect_err("committing over a directory must fail");
     assert!(error.contains("commit"), "unexpected error: {error}");
 }
+
+#[test]
+fn atomic_write_reports_a_creation_failure_when_parent_is_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing_parent = dir.path().join("missing_dir/target");
+    let error = atomic_write(&missing_parent, b"payload", "session manifest")
+        .expect_err("creating file in missing parent must fail");
+    assert!(error.contains("create"), "unexpected error: {error}");
+}

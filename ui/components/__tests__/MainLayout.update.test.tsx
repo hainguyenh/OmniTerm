@@ -34,7 +34,8 @@ const baseSettings: AppSettings = {
     closeTab: "Ctrl+W",
     toggleAppFullscreen: "F11",
     agentQuota: "Ctrl+Alt+Q",
-    pasteScript: "Ctrl+Alt+V"
+    pasteScript: "Ctrl+Alt+V",
+    newTempNote: "Ctrl+Shift+T"
   },
 };
 

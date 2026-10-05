@@ -11,7 +11,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::workspace::{excluded_viewable_exts, find_workspace, max_open_bytes};
 
-async fn blocking<T: Send + 'static>(
+pub(crate) async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(work)
@@ -55,6 +55,25 @@ pub async fn save_text_file<R: Runtime>(
             max_open_bytes(&app),
             &excluded_viewable_exts(&app),
         )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn create_text_file<R: Runtime>(
+    app: AppHandle<R>,
+    workspace_id: String,
+    path: String,
+) -> Result<String, String> {
+    blocking(move || {
+        let workspace = find_workspace(&app, &workspace_id)?;
+        let target = logical_target(&workspace, &path)?;
+        let rel = text_file::create_text_file(
+            &target.folder.path,
+            &target.relative_path,
+            &excluded_viewable_exts(&app),
+        )?;
+        Ok(format!("{}/{}", target.folder.id, rel))
     })
     .await
 }

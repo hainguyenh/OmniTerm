@@ -34,7 +34,7 @@ const settings: AppSettings = {
     layout1: 'Ctrl+1', layout2: 'Ctrl+2', layout3: 'Ctrl+3', layout4: 'Ctrl+4',
     layout5: 'Ctrl+5', layout6: 'Ctrl+6', layout7: 'Ctrl+7', layout8: 'Ctrl+8', toggleSidebar: 'Ctrl+B',
     commandPalette: 'Ctrl+P', closeTab: 'Ctrl+W', toggleAppFullscreen: 'F11', agentQuota: 'Ctrl+Alt+Q',
-    pasteScript: 'Ctrl+Alt+V',
+    pasteScript: 'Ctrl+Alt+V', newTempNote: 'Ctrl+Shift+T',
   },
 }
 

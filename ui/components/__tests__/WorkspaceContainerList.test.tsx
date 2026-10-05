@@ -41,7 +41,50 @@ describe('WorkspaceContainerList', () => {
     const rows = screen.getAllByText(/Parent|Child|Sibling/).map(node => node.textContent)
     expect(rows).toEqual(['Parent', 'Child', 'Sibling'])
     const childRow = screen.getByText('Child').closest('[data-workspace-id="child"]')
-    expect(childRow).toHaveStyle({ paddingLeft: '20px' })
+    expect((childRow as HTMLElement).style.marginInlineStart).toBe('18px')
+  })
+
+  it('moves siblings with Alt+Arrow keys and the menu, never past either end', () => {
+    const onMove = renderList([
+      workspace('a', 'Alpha', 0),
+      workspace('b', 'Beta', 1),
+      workspace('child', 'Child', 0, 'a'),
+    ])
+    const toggle = (id: string) => document.querySelector(`[data-workspace-id="${id}"] .workspace-root-toggle`) as HTMLElement
+
+    fireEvent.keyDown(toggle('a'), { key: 'ArrowUp', altKey: true })
+    fireEvent.keyDown(toggle('child'), { key: 'ArrowDown', altKey: true })
+    expect(onMove).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(toggle('a'), { key: 'ArrowDown', altKey: true })
+    expect(onMove).toHaveBeenLastCalledWith('a', null, 1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Beta' }))
+    expect(screen.queryByRole('menuitem', { name: 'Move workspace down' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move workspace up' }))
+    expect(onMove).toHaveBeenLastCalledWith('b', null, 0)
+  })
+
+  it('returns focus to a moved workspace when the reorder drops it', () => {
+    const onMove = vi.fn()
+    const list = (workspaces: Workspace[]) => (
+      <WorkspaceContainerList
+        workspaces={workspaces}
+        expandedId={null}
+        onToggle={vi.fn()}
+        onAddFolder={vi.fn()}
+        onRemove={vi.fn()}
+        onMove={onMove}
+        renderExpanded={() => null}
+      />
+    )
+    const { rerender } = render(list([workspace('a', 'Alpha', 0), workspace('b', 'Beta', 1)]))
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Alpha' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move workspace down' }))
+    expect(document.activeElement).toBe(document.body)
+
+    rerender(list([workspace('b', 'Beta', 0), workspace('a', 'Alpha', 1)]))
+    expect(document.activeElement).toBe(document.querySelector('[data-workspace-id="a"] .workspace-root-toggle'))
   })
 
   it('reorders siblings via drag and drop', () => {

@@ -5,6 +5,7 @@ import { GitBranch } from 'lucide-react'
 import { createGitAPI } from '../../gitAPI'
 import { GitBranchMaintenance } from './GitBranchMaintenance'
 import { GitBranchPopup } from './GitBranchPopup'
+import { GitBranchQuickPopover } from './GitBranchQuickPopover'
 import { GitCommitSection } from './GitCommitSection'
 import { takePendingFileDiff, type FileDiffRequest } from './gitFileDiffRequest'
 import { GitDiffViewer } from './GitDiffViewer'
@@ -12,6 +13,13 @@ import { GitGraphSection } from './GitGraphSection'
 import { GitWorkspaceToolbar } from './GitWorkspaceToolbar'
 import type { GitCommitSummary, GitRepoStatus } from './gitTypes'
 import { useGitProjects } from './useGitProjects'
+import { usePaneSplit } from './usePaneSplit'
+import { useGitWorktrees } from './useGitWorktrees'
+
+const CHANGES_PANE_DEFAULT = 380
+const CHANGES_PANE_MIN = 260
+/** The diff keeps at least this much room, however far the changes pane is dragged. */
+const DIFF_PANE_MIN = 320
 
 interface GitWorkspaceViewProps {
   cwd?: string
@@ -30,12 +38,16 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
 }) => {
   const gitAPI = useRef(createGitAPI()).current
   const { projects, activePath, selectProject } = useGitProjects(workspaces, cwd, savedConnections)
+  const projectPath = activePath ?? cwd
+  // The view works on the chosen worktree of the project, e.g. one an agent is editing in.
+  const { worktrees, activePath: worktreePath, selectWorktree } = useGitWorktrees(projectPath)
 
   const [repoStatus, setRepoStatus] = useState<GitRepoStatus | null>(null)
   const [commits, setCommits] = useState<GitCommitSummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [branchPopupOpen, setBranchPopupOpen] = useState(false)
+  const [branchQuickOpen, setBranchQuickOpen] = useState(false)
+  const [branchFullOpen, setBranchFullOpen] = useState(false)
   const [branchPopupAnchor, setBranchPopupAnchor] = useState<DOMRect | null>(null)
   const [syncing, setSyncing] = useState<'pull' | 'push' | 'fetch' | null>(null)
   const [syncNotice, setSyncNotice] = useState<string | null>(null)
@@ -50,10 +62,19 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
   })
 
   const [diffTarget, setDiffTarget] = useState<{ path: string; staged: boolean; targetBranch?: string } | null>(null)
-  const [leftWidth, setLeftWidth] = useState(380)
-  const isResizingLeft = useRef(false)
+  const changesLayoutRef = useRef<HTMLDivElement>(null)
+  const changesSplit = usePaneSplit({
+    storageKey: 'omniterm:git-changes-width',
+    defaultValue: CHANGES_PANE_DEFAULT,
+    bounds: () => ({
+      min: CHANGES_PANE_MIN,
+      max: (changesLayoutRef.current?.clientWidth || window.innerWidth) - DIFF_PANE_MIN,
+    }),
+    unitsPerPixel: () => 1,
+    step: 24,
+  })
 
-  const effectiveCwd = activePath ?? cwd
+  const effectiveCwd = worktreePath ?? projectPath
   const currentTab = !gitGraphEnabled && activeTab === 'graph' ? 'changes' : activeTab
 
   const handleTabChange = (tab: 'changes' | 'graph' | 'maintenance') => {
@@ -128,7 +149,8 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
     // A diff requested while this view was closed (see requestFileDiff).
     showFileDiff(takePendingFileDiff())
     const handleMaintenance = () => {
-      setBranchPopupOpen(false)
+      setBranchQuickOpen(false)
+      setBranchFullOpen(false)
       setActiveTab('maintenance')
     }
     window.addEventListener('omniterm:open-git-maintenance', handleMaintenance)
@@ -178,22 +200,6 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
     }
   }
 
-  const startResizeLeft = (e: React.MouseEvent) => {
-    e.preventDefault()
-    isResizingLeft.current = true
-    const onMouseMove = (ev: MouseEvent) => {
-      if (!isResizingLeft.current) return
-      setLeftWidth(Math.max(260, Math.min(ev.clientX - 48, 700)))
-    }
-    const onMouseUp = () => {
-      isResizingLeft.current = false
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-  }
-
   const allChangedFiles = useMemo(() => {
     if (!repoStatus) return []
     const list: Array<{ path: string; staged: boolean }> = []
@@ -212,7 +218,7 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
     <div className="git-workspace h-full w-full flex flex-col bg-theme-bg overflow-hidden select-none">
       <GitWorkspaceToolbar
         projects={projects}
-        selectedPath={effectiveCwd ?? null}
+        selectedPath={projectPath ?? null}
         currentBranch={repoStatus?.branch ?? undefined}
         isNotGit={Boolean(effectiveCwd && repoStatus === null && !loading)}
         repoStatus={repoStatus}
@@ -221,21 +227,43 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
         activeTab={currentTab}
         showGraphTab={gitGraphEnabled}
         onSelectProject={selectProject}
+        worktrees={worktrees}
+        activeWorktreePath={effectiveCwd ?? null}
+        onSelectWorktree={selectWorktree}
         onToggleBranchPopup={(rect) => {
           setBranchPopupAnchor(rect ?? null)
-          setBranchPopupOpen(true)
+          setBranchQuickOpen(true)
+          setBranchFullOpen(false)
         }}
         onSyncAction={handleSyncAction}
         onChangeTab={handleTabChange}
         onClose={onClose}
       />
 
-      {branchPopupOpen && effectiveCwd && (
+      {branchQuickOpen && effectiveCwd && (
+        <GitBranchQuickPopover
+          cwd={effectiveCwd}
+          currentBranch={repoStatus?.branch ?? undefined}
+          anchorRect={branchPopupAnchor}
+          onClose={() => setBranchQuickOpen(false)}
+          onExpand={() => setBranchFullOpen(true)}
+          onOpenFileDiff={(path, targetBranch) => {
+            setActiveTab('changes')
+            setDiffTarget({ path, staged: false, targetBranch })
+          }}
+          onBranchSwitched={() => {
+            void fetchGitData()
+            window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
+          }}
+        />
+      )}
+
+      {branchFullOpen && effectiveCwd && (
         <GitBranchPopup
           cwd={effectiveCwd}
           currentBranch={repoStatus?.branch ?? undefined}
           anchorRect={branchPopupAnchor}
-          onClose={() => setBranchPopupOpen(false)}
+          onClose={() => setBranchFullOpen(false)}
           onOpenFileDiff={(path, targetBranch) => {
             setActiveTab('changes')
             setDiffTarget({ path, staged: false, targetBranch })
@@ -265,9 +293,9 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
 
         {/* ── DEFAULT 2-PANEL LAYOUT: Local Changes (Left) + Diff View (Right) ── */}
         {currentTab === 'changes' && (
-          <div className="git-changes-layout flex-1 flex min-h-0">
+          <div ref={changesLayoutRef} className={`git-changes-layout flex-1 flex min-h-0 ${changesSplit.dragging ? 'is-resizing' : ''}`}>
             <div
-              style={{ '--git-changes-width': `${leftWidth}px` } as React.CSSProperties}
+              style={{ '--git-changes-width': `${changesSplit.value}px` } as React.CSSProperties}
               className="git-changes-pane flex flex-col flex-shrink-0 min-w-[260px] overflow-hidden border-r border-theme-border"
             >
               <GitCommitSection
@@ -286,9 +314,11 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
             </div>
 
             <div
-              onMouseDown={startResizeLeft}
-              className="git-pane-resizer w-1.5 flex-shrink-0 cursor-col-resize hover:bg-theme-accent transition-colors bg-theme-border/30 active:bg-theme-accent z-10"
-              title="Drag to resize panes"
+              {...changesSplit.separatorProps}
+              aria-label="Resize changes and diff panes"
+              aria-valuemin={CHANGES_PANE_MIN}
+              className="git-pane-resizer"
+              title="Drag to resize panes · double-click to reset"
             />
 
             <div className="git-diff-pane flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-theme-bg">

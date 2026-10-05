@@ -30,6 +30,16 @@ export function getFileExtension(path: string): string {
 }
 
 /**
+ * The last path segment. Git lists a wholly untracked directory as `dir/`; it stays one entry,
+ * named `dir/`, in its parent folder rather than becoming a folder holding a nameless file.
+ */
+function leafName(path: string): string {
+  const isDirectory = path.endsWith('/')
+  const base = path.replace(/\/+$/, '').split('/').pop() ?? path
+  return isDirectory ? `${base}/` : base
+}
+
+/**
  * Recursively builds a directory tree structure from a flat list of GitFileChanges.
  * Automatically compacts single-child folder chains (e.g. `crates/app-core/src`).
  */
@@ -47,7 +57,7 @@ export function buildGitTree(files: GitFileChange[]): GitTreeNode[] {
   }
 
   for (const file of files) {
-    const parts = file.path.split('/')
+    const parts = file.path.replace(/\/+$/, '').split('/')
     let current = root
 
     for (let i = 0; i < parts.length - 1; i++) {
@@ -98,14 +108,10 @@ export function buildGitTree(files: GitFileChange[]): GitTreeNode[] {
     }
 
     // Sort files alphabetically
-    const sortedFiles = [...folder.files].sort((a, b) => {
-      const aName = a.path.split('/').pop() ?? a.path
-      const bName = b.path.split('/').pop() ?? b.path
-      return aName.localeCompare(bName)
-    })
+    const sortedFiles = [...folder.files].sort((a, b) => leafName(a.path).localeCompare(leafName(b.path)))
 
     for (const file of sortedFiles) {
-      const name = file.path.split('/').pop() ?? file.path
+      const name = leafName(file.path)
       nodes.push({
         type: 'file',
         name,

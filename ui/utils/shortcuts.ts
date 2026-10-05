@@ -32,6 +32,7 @@ export const FALLBACK_SHORTCUTS: ShortcutBindings = {
   toggleAppFullscreen: 'F11',
   agentQuota: 'Ctrl+Alt+Q',
   pasteScript: 'Ctrl+Alt+V',
+  newTempNote: 'Ctrl+Shift+T',
 }
 
 /** Layered so a saved-but-stale `shortcuts` object (missing a binding added since) still resolves. */

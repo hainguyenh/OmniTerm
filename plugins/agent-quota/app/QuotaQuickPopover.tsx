@@ -9,7 +9,7 @@ import { AgentIcon } from './QuotaLine'
 import { AGENT_KINDS, AGENT_LABELS } from './quotaConfig'
 import { setDashboardOpen } from './profileDashboard'
 import { isHeld } from './quotaGuard'
-import { quotaCommands, setQuickOpen, useQuota } from './quotaStore'
+import { clearAllManualPauses, quotaCommands, setQuickOpen, useQuota } from './quotaStore'
 
 function Switch({ checked, label, onChange }: { checked: boolean; label: string; onChange: () => void }) {
   return (
@@ -38,16 +38,24 @@ export function QuotaQuickPopover() {
   }, [])
 
   const save = (next: QuotaConfig) => quotaCommands().saveConfig(next)
-  const setAgent = (agent: AgentKind, enabled: boolean) =>
+  const setAgent = (agent: AgentKind, enabled: boolean) => {
+    if (enabled) clearAllManualPauses(agent)
     save({ ...config, agents: { ...config.agents, [agent]: { ...config.agents[agent], enabled } } })
+    if (enabled) quotaCommands().refresh()
+  }
   const toggleGlobalSuspend = () => {
     const allOn = AGENT_KINDS.every((agent) => config.agents[agent].suspendAtLimit)
     const next = (value: boolean): QuotaConfig => ({
       ...config,
       agents: Object.fromEntries(AGENT_KINDS.map((agent) => [agent, { ...config.agents[agent], suspendAtLimit: value }])) as QuotaConfig['agents'],
     })
-    if (allOn) confirmDisableSuspend('Every agent', () => save(next(false)))
-    else save(next(true))
+    if (allOn) {
+      confirmDisableSuspend('Every agent', () => save(next(false)))
+    } else {
+      clearAllManualPauses()
+      save(next(true))
+      quotaCommands().refresh()
+    }
   }
   const rows = Object.values(terminals)
   const anyHeld = rows.some((terminal) => isHeld(guards[terminal.instanceKey]))
@@ -59,7 +67,16 @@ export function QuotaQuickPopover() {
       <div className="flex items-center gap-2">
         <Gauge className="w-4 h-4 text-theme-accent" />
         <span className="flex-1 font-bold tracking-wide">Agent Quota</span>
-        <Switch checked={config.enabled} label="Agent Quota on" onChange={() => save({ ...config, enabled: !config.enabled })} />
+        <Switch
+          checked={config.enabled}
+          label="Agent Quota on"
+          onChange={() => {
+            const next = !config.enabled
+            if (next) clearAllManualPauses()
+            save({ ...config, enabled: next })
+            if (next) quotaCommands().refresh()
+          }}
+        />
         <button type="button" aria-label={config.pinned ? 'Unpin from activity bar' : 'Pin to activity bar'} title={config.pinned ? 'Unpin from activity bar' : 'Pin to activity bar'}
           className="aq-icon-button" onClick={() => save({ ...config, pinned: !config.pinned })}
         >

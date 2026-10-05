@@ -47,6 +47,7 @@ Every renderer workspace IPC call and persisted workspace load/save.
 - Mutation response follows successful persistence.
 - Legacy load rewrites current schema.
 - Composite container is never used as fake filesystem root.
+- Tree edits answer with the entry's new logical path; a rename, move or delete updates the stored pin after the filesystem change and says so if only the pin update failed.
 
 ## Functionalities
 
@@ -64,6 +65,7 @@ Every renderer workspace IPC call and persisted workspace load/save.
 - `run_script` — owned by this spec.
 - `read_script` — owned by this spec.
 - `write_script` — owned by this spec.
+- `create_workspace_directory` / `move_workspace_file` / `delete_workspace_file` — owned by this spec.
 - `read_workspaces` / `write_workspaces` — owned by this spec.
 - `load/save/delete_workspace_connection` — owned by this spec.
 
@@ -85,6 +87,9 @@ Every renderer workspace IPC call and persisted workspace load/save.
 | `run_script` | Run script/RDP or open folder terminal. | Workspace execution. | Resolve safe target/cwd and invoke launch. | Run/Open Terminal. |
 | `read_script` | Read viewable logical file. | Viewer/editor. | Resolve target and bounded safe read. | Open. |
 | `write_script` | Write editable logical file. | Editor save. | Resolve target and safe write. | Save. |
+| `create_workspace_directory` | Create a subfolder at a logical path. | Tree New folder. | Resolve target, delegate `workspace_fs::create_directory` on the blocking pool, namespace the result. | New folder. |
+| `move_workspace_file` | Rename/move a file between logical paths. | Tree rename and Move to. | Resolve both targets in one workspace, delegate `workspace_fs::move_file`, carry the pin. | Rename/move. |
+| `delete_workspace_file` | Delete a file at a logical path. | Tree Delete. | Resolve target, delegate `workspace_fs::delete_file`, drop the pin. | Delete after confirmation. |
 | `read_workspaces` / `write_workspaces` | Persist validated workspace state. | One durable source. | Decode/migrate or validate/serialize app data. | Any load/mutation. |
 | `load/save/delete_workspace_connection` | Manage project connections. | Workspace-scoped profile portability. | Resolve real folder `.omniterm` storage. | Workspace connection action. |
 
@@ -110,6 +115,7 @@ Every renderer workspace IPC call and persisted workspace load/save.
 ## Verification
 
 - workspace command/IPC/persistence/connection tests
+- command_workspace_file_tests and the tree-edit IPC round trip
 - scripts/__tests__/rust-crate-imports.test.mjs
 
 ## Source map
@@ -117,3 +123,4 @@ Every renderer workspace IPC call and persisted workspace load/save.
 - `src-tauri/src/workspace.rs`
 - `src-tauri/src/workspace_persistence.rs`
 - `src-tauri/src/workspace_connections.rs`
+- `src-tauri/src/workspace_file_commands.rs`

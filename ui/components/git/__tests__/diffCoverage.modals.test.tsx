@@ -191,14 +191,15 @@ describe('GitBranchDiffModal branches', () => {
     }))
     const { onOpenFileDiff } = renderModal()
     await screen.findByText('a.ts')
-    const label = (path: string) => screen.getByText(path).previousElementSibling
+    const label = (path: string) => screen.getByText(path).nextElementSibling
     expect(label('a.ts')).toHaveTextContent('A')
-    expect(label('a.ts')).toHaveClass('text-emerald-400')
+    expect(label('a.ts')).toHaveClass('git-status-added')
     expect(label('d.ts')).toHaveTextContent('D')
-    expect(label('d.ts')).toHaveClass('text-rose-400')
+    expect(label('d.ts')).toHaveClass('git-status-deleted')
     expect(label('r.ts')).toHaveTextContent('R')
-    expect(label('r.ts')).toHaveClass('text-blue-400')
+    expect(label('r.ts')).toHaveClass('git-status-renamed')
     expect(label('m.ts')).toHaveTextContent('M')
+    expect(label('m.ts')).toHaveClass('git-status-modified')
     expect(screen.getByText('4 file(s) changed')).toBeInTheDocument()
     fireEvent.click(screen.getByText('d.ts'))
     expect(onOpenFileDiff).toHaveBeenCalledWith('d.ts', 'topic')
@@ -220,6 +221,22 @@ describe('GitBranchDiffModal branches', () => {
     expect(await screen.findByText('No differences found between topic and main')).toBeInTheDocument()
     expect(mockInvoke).toHaveBeenLastCalledWith('git_compare_branches', { cwd: '/repo', baseBranch: 'topic', targetBranch: 'main' })
     expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Compare topic with main')
+  })
+
+  it('still diffs a file against the other branch after a swap, not the checked-out one', async () => {
+    mockInvoke.mockResolvedValue(comparison({ files: [change('src/a.ts', 'modified')] }))
+    const { onOpenFileDiff } = renderModal()
+    fireEvent.click(await screen.findByTitle('Swap branch comparison direction'))
+    await screen.findByRole('dialog', { name: 'Compare topic with main' })
+    fireEvent.click(await screen.findByRole('button', { name: 'View diff for src/a.ts' }))
+    expect(onOpenFileDiff).toHaveBeenCalledWith('src/a.ts', 'topic')
+  })
+
+  it('stacks above the branch popovers that open it', async () => {
+    mockInvoke.mockResolvedValue(comparison())
+    renderModal()
+    await screen.findByText(/No differences found/)
+    expect(screen.getByRole('dialog')).toHaveClass('z-[10000]')
   })
 
   it('shows no commits ahead and hides the behind section when both are empty', async () => {
