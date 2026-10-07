@@ -8,7 +8,11 @@ import type { GitCommitSummary } from '../gitTypes'
 const mockInvoke = vi.fn()
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: (...args: unknown[]) => mockInvoke(...args),
+  invoke: (cmd: string, args?: unknown) => {
+    if (cmd === 'git_commit_details') return Promise.resolve(null)
+    if (cmd === 'git_branches') return Promise.resolve([])
+    return mockInvoke(cmd, args)
+  },
 }))
 
 const nowSec = () => Math.floor(Date.now() / 1000)

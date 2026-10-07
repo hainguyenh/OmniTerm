@@ -101,6 +101,7 @@ interface AppSettings {
   gitUtilEnabled?: boolean
   /** Whether the Git Graph tab is enabled in Git Workspace view. */
   gitGraphEnabled?: boolean
+  // Editor Shortcuts settings are declared alongside, in editorSettings.d.ts (interface merging).
 }
 
 interface SessionMetrics {
@@ -131,7 +132,6 @@ interface PluginDescriptor {
 }
 
 type ConnectionProviderCapabilities = import('@omniterm/contract').ConnectionProviderCapabilities
-
 /** Update-checker state pushed from main via 'updates:state'. */
 interface UpdateState {
   current: string

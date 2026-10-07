@@ -42,10 +42,46 @@ mod tests {
     fn test_git_log_command() {
         let _guard = test_support::lock();
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let result = block_on(git_log(manifest_dir.to_string(), Some(5)));
+        let result = block_on(git_log(manifest_dir.to_string(), Some(5), None));
         assert!(result.is_ok(), "git_log failed: {:?}", result.err());
         let log = result.unwrap();
         assert!(!log.is_empty());
+    }
+
+    #[test]
+    fn test_git_commit_details_command() {
+        let _guard = test_support::lock();
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let log = block_on(git_log(manifest_dir.to_string(), Some(1), None)).expect("log");
+        assert!(!log.is_empty());
+        let details = block_on(git_commit_details(
+            manifest_dir.to_string(),
+            log[0].id.clone(),
+        ));
+        assert!(
+            details.is_ok(),
+            "git_commit_details failed: {:?}",
+            details.err()
+        );
+    }
+
+    #[test]
+    fn test_git_commit_file_diff_command() {
+        let _guard = test_support::lock();
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let log = block_on(git_log(manifest_dir.to_string(), Some(1), None)).expect("log");
+        assert!(!log.is_empty());
+        let diff = block_on(git_commit_file_diff(
+            manifest_dir.to_string(),
+            log[0].id.clone(),
+            "Cargo.toml".to_string(),
+            None,
+        ));
+        assert!(
+            diff.is_ok(),
+            "git_commit_file_diff failed: {:?}",
+            diff.err()
+        );
     }
 
     #[test]

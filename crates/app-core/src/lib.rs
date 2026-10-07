@@ -13,6 +13,7 @@ pub mod git_branch;
 pub mod git_branch_compare;
 pub mod git_branch_delete;
 pub mod git_branch_tools;
+pub mod git_commit_details;
 pub mod git_diff;
 pub mod git_history;
 pub mod git_stash;

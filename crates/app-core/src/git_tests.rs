@@ -82,12 +82,15 @@ mod tests {
         let _guard = crate::test_support::lock();
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let root = find_repo_root(manifest_dir).expect("repo root exists");
-        let log = get_commit_log(&root, 5);
+        let log = get_commit_log(&root, 5, None);
         assert!(log.is_ok(), "Expected git log to succeed");
         let entries = log.unwrap();
         assert!(!entries.is_empty(), "Expected at least 1 commit in log");
         assert!(!entries[0].id.is_empty());
         assert!(!entries[0].short_id.is_empty());
+
+        let all_log = get_commit_log(&root, 5, Some("--all"));
+        assert!(all_log.is_ok(), "Expected git log --all to succeed");
     }
 
     #[test]
@@ -150,18 +153,33 @@ u UU N... 100644 100644 100644 100644 5555 6666 7777 conflict/test.ts\0\
 
         // Entry 1: Type 1 ordinary modified
         assert_eq!(st.files[0].path, "apps/server/src/jobs/route.test.ts");
-        assert_eq!(st.files[0].staged, app_protocol::git::GitFileStatus::Unmodified);
-        assert_eq!(st.files[0].unstaged, app_protocol::git::GitFileStatus::Modified);
+        assert_eq!(
+            st.files[0].staged,
+            app_protocol::git::GitFileStatus::Unmodified
+        );
+        assert_eq!(
+            st.files[0].unstaged,
+            app_protocol::git::GitFileStatus::Modified
+        );
 
         // Entry 2: Type 1 with space in path
         assert_eq!(st.files[1].path, "path with spaces/my file.rs");
-        assert_eq!(st.files[1].staged, app_protocol::git::GitFileStatus::Modified);
-        assert_eq!(st.files[1].unstaged, app_protocol::git::GitFileStatus::Unmodified);
+        assert_eq!(
+            st.files[1].staged,
+            app_protocol::git::GitFileStatus::Modified
+        );
+        assert_eq!(
+            st.files[1].unstaged,
+            app_protocol::git::GitFileStatus::Unmodified
+        );
 
         // Entry 3: Type 2 renamed
         assert_eq!(st.files[2].path, "new/renamed_file.txt");
         assert_eq!(st.files[2].orig_path.as_deref(), Some("old/orig_file.txt"));
-        assert_eq!(st.files[2].staged, app_protocol::git::GitFileStatus::Renamed);
+        assert_eq!(
+            st.files[2].staged,
+            app_protocol::git::GitFileStatus::Renamed
+        );
 
         // Entry 4: Conflicted
         assert_eq!(st.files[3].path, "conflict/test.ts");
@@ -170,7 +188,10 @@ u UU N... 100644 100644 100644 100644 5555 6666 7777 conflict/test.ts\0\
 
         // Entry 5: Untracked
         assert_eq!(st.files[4].path, "untracked_file.rs");
-        assert_eq!(st.files[4].unstaged, app_protocol::git::GitFileStatus::Untracked);
+        assert_eq!(
+            st.files[4].unstaged,
+            app_protocol::git::GitFileStatus::Untracked
+        );
     }
 
     #[test]

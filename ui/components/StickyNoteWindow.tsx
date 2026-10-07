@@ -1,5 +1,5 @@
 import { Maximize2, Save, StickyNote, Trash2, X } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import './sticky-notes.css'
 
@@ -28,6 +28,17 @@ export const StickyNoteWindow: React.FC<StickyNoteWindowProps> = ({
   const contentRef = useRef(content)
   contentRef.current = content
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const gutterRef = useRef<HTMLDivElement>(null)
+
+  const lineCount = Math.max(1, content.split('\n').length)
+  const lineNumbers = useMemo(() => Array.from({ length: lineCount }, (_, i) => i + 1), [lineCount])
+
+  const handleScroll = () => {
+    if (gutterRef.current && textareaRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -178,18 +189,27 @@ export const StickyNoteWindow: React.FC<StickyNoteWindowProps> = ({
         {loading ? (
           <div className="sticky-notes-empty">Loading…</div>
         ) : (
-          <textarea
-            autoFocus
-            value={content}
-            onChange={(e) => {
-              const val = e.target.value
-              setContent(val)
-              scheduleSave(val)
-            }}
-            placeholder="Type or paste note here…"
-            aria-label="Note content"
-            className="sticky-note-editor"
-          />
+          <div className="sticky-note-editor-wrapper">
+            <div ref={gutterRef} className="sticky-note-linenos" aria-hidden="true">
+              {lineNumbers.map((num) => (
+                <div key={num} className="sticky-note-lineno">{num}</div>
+              ))}
+            </div>
+            <textarea
+              ref={textareaRef}
+              autoFocus
+              value={content}
+              onScroll={handleScroll}
+              onChange={(e) => {
+                const val = e.target.value
+                setContent(val)
+                scheduleSave(val)
+              }}
+              placeholder="Type or paste note here…"
+              aria-label="Note content"
+              className="sticky-note-editor"
+            />
+          </div>
         )}
       </div>
     </div>

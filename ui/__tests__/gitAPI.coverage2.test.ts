@@ -26,7 +26,7 @@ describe('createGitAPI', () => {
 
     expect(mockInvoke.mock.calls).toEqual([
       ['git_file_history', { cwd: '/r', filePath: 'a.ts', startLine: null, endLine: null, limit: null }],
-      ['git_log', { cwd: '/r', limit: null }],
+      ['git_log', { cwd: '/r', limit: null, branch: null }],
       ['git_create_branch', { cwd: '/r', name: 'feat', startPoint: null, checkout: true }],
       ['git_stash_save', { cwd: '/r', message: null, keepIndex: false }],
       ['git_stash_pop', { cwd: '/r', index: null }],
@@ -38,7 +38,7 @@ describe('createGitAPI', () => {
 
   it('forwards provided optional arguments unchanged', async () => {
     await api.getFileHistory('/r', 'a.ts', { start: 3, end: 9 }, 20)
-    await api.getLog('/r', 50)
+    await api.getLog('/r', 50, 'feat')
     await api.createBranch('/r', 'feat', 'main', false)
     await api.saveStash('/r', 'wip', true)
     await api.popStash('/r', 2)
@@ -47,7 +47,7 @@ describe('createGitAPI', () => {
 
     expect(mockInvoke.mock.calls).toEqual([
       ['git_file_history', { cwd: '/r', filePath: 'a.ts', startLine: 3, endLine: 9, limit: 20 }],
-      ['git_log', { cwd: '/r', limit: 50 }],
+      ['git_log', { cwd: '/r', limit: 50, branch: 'feat' }],
       ['git_create_branch', { cwd: '/r', name: 'feat', startPoint: 'main', checkout: false }],
       ['git_stash_save', { cwd: '/r', message: 'wip', keepIndex: true }],
       ['git_stash_pop', { cwd: '/r', index: 2 }],
@@ -91,6 +91,7 @@ describe('createGitAPI', () => {
     await api.unstage('/r', ['f'])
     await api.revert('/r', ['f'])
     await api.commit('/r', 'msg', false)
+    await api.getCommitDetails('/r', 'c1')
     await api.getBranches('/r')
     await api.checkout('/r', 'main')
     await api.merge('/r', 'dev')
@@ -109,12 +110,13 @@ describe('createGitAPI', () => {
 
     expect(mockInvoke.mock.calls.map(([command]) => command)).toEqual([
       'git_status', 'git_diff', 'git_diff_branch', 'git_file_context', 'git_blame', 'git_delete_file',
-      'git_stage', 'git_unstage', 'git_revert', 'git_commit', 'git_branches', 'git_checkout', 'git_merge',
+      'git_stage', 'git_unstage', 'git_revert', 'git_commit', 'git_commit_details', 'git_branches', 'git_checkout', 'git_merge',
       'git_rebase', 'git_init', 'git_read_file', 'git_read_file_revision', 'git_write_file',
       'git_compare_branches', 'git_stash_list', 'git_stash_drop', 'git_cherry_pick', 'git_update_branch',
       'git_rename_branch', 'git_set_upstream',
     ])
     expect(mockInvoke).toHaveBeenCalledWith('git_file_context', { workspaceId: 'ws', path: 'f' })
+    expect(mockInvoke).toHaveBeenCalledWith('git_commit_details', { cwd: '/r', commitId: 'c1' })
     expect(mockInvoke).toHaveBeenCalledWith('git_set_upstream', { cwd: '/r', branch: 'dev', upstream: null })
   })
 

@@ -1,7 +1,8 @@
-import { Suspense, lazy, useMemo } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Trash2, X, XCircle } from 'lucide-react'
 import CloseConfirmModal from './CloseConfirmModal'
 import { CommandPalette } from './CommandPalette'
+import { ProjectSearchModal } from './editor/ProjectSearchModal'
 import DialogHost from './DialogHost'
 import NewTerminalMenu from './NewTerminalMenu'
 import SettingsModal from './SettingsModal'
@@ -14,11 +15,27 @@ const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/Alway
 import { AgentQuotaRoot } from '../../plugins/agent-quota/app/AgentQuotaRoot'
 import { CtxItem } from './mainLayoutShared'
 import { pickShell } from '../shellOptions'
+import { useEditorShortcuts } from '../hooks/useEditorShortcuts'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
   const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, activity = {} } = model
   const sessionIds = useMemo(() => activeTabs.map((tab) => tab.id), [activeTabs])
+  const [projectSearchOpen, setProjectSearchOpen] = useState(false)
+
+  useEffect(() => {
+    const handleOpenSearch = () => {
+      setProjectSearchOpen(true)
+    }
+    window.addEventListener('omniterm:search-everywhere', handleOpenSearch)
+    return () => {
+      window.removeEventListener('omniterm:search-everywhere', handleOpenSearch)
+    }
+  }, [])
+
+  const activeEditor = model.activeTabId ? model.editorTabs?.[model.activeTabId] : undefined
+  const activeWorkspaceId = activeEditor ? activeEditor.workspaceId : selectedWorkspaceId
+  useEditorShortcuts({ appSettings, editorActive: !!activeEditor })
   return (
     <>
           <LargeTextPasteModalHost />
@@ -162,6 +179,13 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             onClose={() => setCommandPaletteOpen(false)} 
             connections={savedConnections}
             onConnect={(conn) => handleConnect(conn)} 
+          />
+          <ProjectSearchModal
+            isOpen={projectSearchOpen}
+            onClose={() => setProjectSearchOpen(false)}
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onOpenScript={model.openEditor}
           />
     </>
   )

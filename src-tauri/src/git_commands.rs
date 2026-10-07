@@ -3,8 +3,8 @@
 //! Provides async wrappers connecting the React UI to Git core domain operations.
 
 use app_protocol::git::{
-    GitBlameLine, GitBranchComparison, GitBranchInfo, GitCommitSummary, GitDeleteBranchesResult,
-    GitFileDiff, GitFileHistoryEntry, GitRepoStatus, GitStashEntry,
+    GitBlameLine, GitBranchComparison, GitBranchInfo, GitCommitDetails, GitCommitSummary,
+    GitDeleteBranchesResult, GitFileDiff, GitFileHistoryEntry, GitRepoStatus, GitStashEntry,
 };
 use std::path::PathBuf;
 
@@ -59,9 +59,42 @@ pub async fn git_commit(cwd: String, message: String, amend: bool) -> Result<Str
 }
 
 #[tauri::command]
-pub async fn git_log(cwd: String, limit: Option<usize>) -> Result<Vec<GitCommitSummary>, String> {
+pub async fn git_log(
+    cwd: String,
+    limit: Option<usize>,
+    branch: Option<String>,
+) -> Result<Vec<GitCommitSummary>, String> {
     in_repo(cwd, move |repo_root| {
-        app_core::git::get_commit_log(repo_root, limit.unwrap_or(50))
+        app_core::git::get_commit_log(repo_root, limit.unwrap_or(50), branch.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_commit_details(
+    cwd: String,
+    commit_id: String,
+) -> Result<GitCommitDetails, String> {
+    in_repo(cwd, move |repo_root| {
+        app_core::git_commit_details::get_commit_details(repo_root, &commit_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn git_commit_file_diff(
+    cwd: String,
+    commit_id: String,
+    file_path: String,
+    old_path: Option<String>,
+) -> Result<GitFileDiff, String> {
+    in_repo(cwd, move |repo_root| {
+        app_core::git_commit_details::get_commit_file_diff(
+            repo_root,
+            &commit_id,
+            &file_path,
+            old_path.as_deref(),
+        )
     })
     .await
 }

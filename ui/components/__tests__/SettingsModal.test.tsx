@@ -117,20 +117,26 @@ describe('SettingsModal', () => {
     expect(screen.getByText('General Preferences')).toBeInTheDocument()
 
     // Switch to Shortcuts
-    fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
     expect(screen.getByText('Keyboard Shortcuts')).toBeInTheDocument()
     expect(screen.getByText('Reset')).toBeInTheDocument()
 
+    // Switch to Editor Shortcuts
+    fireEvent.click(screen.getByRole('button', { name: 'Editor Shortcuts' }))
+    expect(screen.getAllByText('Editor Shortcuts').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Code Folding')).toBeInTheDocument()
+    expect(screen.getByText('Search & Navigation')).toBeInTheDocument()
+
     // Switch to Plugins
-    fireEvent.click(screen.getByRole('button', { name: /plugins/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
     expect(screen.getByText('Install ZIP')).toBeInTheDocument()
 
     // Switch to Artwork
-    fireEvent.click(screen.getByRole('button', { name: /artwork/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Artwork' }))
     expect(screen.getByText('Custom Pane Art')).toBeInTheDocument()
 
     // Switch to About & Updates
-    fireEvent.click(screen.getByRole('button', { name: /about & updates/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'About & Updates' }))
     expect(screen.getByText('OmniTerm')).toBeInTheDocument()
     expect(screen.getByText('Check for updates')).toBeInTheDocument()
   }, 15000)
@@ -143,10 +149,11 @@ describe('SettingsModal', () => {
 
   it('allows recording a shortcut and resetting defaults in Shortcuts tab', () => {
     const { setRecordingAction, setAppSettings } = renderModal()
-    fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
+    expect(screen.getByText('Keyboard Shortcuts')).toBeInTheDocument()
 
-    // Click Edit on New Session shortcut
-    const editButtons = screen.getAllByRole('button', { name: /edit/i })
+    // Click Edit on first shortcut
+    const editButtons = screen.getAllByRole('button', { name: /^edit$/i })
     expect(editButtons.length).toBeGreaterThan(0)
     fireEvent.click(editButtons[0])
     expect(setRecordingAction).toHaveBeenCalled()
@@ -158,7 +165,7 @@ describe('SettingsModal', () => {
 
   it('lists Ctrl+Alt+V and explains what the script paste does', () => {
     renderModal()
-    fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
 
     expect(screen.getByText('Paste Multi-line PowerShell Script')).toBeInTheDocument()
     const description = screen.getByTestId('shortcut-description-pasteScript')

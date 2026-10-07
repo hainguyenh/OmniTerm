@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, ChevronsDownUp, ChevronsUpDown, ChevronDown, ChevronRight, FolderGit2, FolderTree, GitBranch, GitCommitHorizontal, List, Loader2, Plus, Radio, RotateCw, Search, Sparkles, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, ChevronsDownUp, ChevronsUpDown, ChevronDown, ChevronRight, FolderGit2, FolderTree, GitBranch, GitCommitHorizontal, List, Loader2, Plus, Radio, RotateCw, Search, Sparkles, Star, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -15,6 +15,7 @@ import type { AnchorRect } from './gitPopoverPlacement'
 import { buildBranchTree, type GitBranchTreeNode } from './gitBranchTreeUtils'
 import type { GitBranchInfo } from './gitTypes'
 import { useGitBranchOps } from './useGitBranchOps'
+import { useGitFavorites } from './useGitFavorites'
 import { useResizablePanel } from './useResizablePanel'
 import './git-ui.css'
 import './git-branches.css'
@@ -46,8 +47,10 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
   const [viewMode, setViewMode] = useState<'tree' | 'flat'>('tree')
   const [collapsed, setCollapsed] = useState(false)
   const [treeRevision, setTreeRevision] = useState(0)
+  const [favoriteOpen, setFavoriteOpen] = useState(true)
   const [localOpen, setLocalOpen] = useState(true)
   const [remoteOpen, setRemoteOpen] = useState(true)
+  const { favorites, isFavorite, toggleFavorite } = useGitFavorites(cwd)
   const {
     branches, loading, busyAction, actionNotice, creatingBranch, setCreatingBranch,
     newBranchName, setNewBranchName, startPoint, setStartPoint, notRepo, loadBranches,
@@ -63,11 +66,13 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
   }, [])
 
   const query = search.toLowerCase().trim()
+  const favoriteBranches = branches.filter((branch) => favorites.includes(branch.name) && (!query || branch.name.toLowerCase().includes(query)))
   const localBranches = branches.filter((branch) => !branch.is_remote && (!query || branch.name.toLowerCase().includes(query)))
   const remoteBranches = branches.filter((branch) => branch.is_remote && (!query || branch.name.toLowerCase().includes(query)))
   const shownBranch = selectedBranch
     ? branches.find((branch) => branch.name === selectedBranch.name && branch.is_remote === selectedBranch.is_remote) ?? null
     : branches.find((branch) => branch.is_current || branch.name === currentBranch) ?? null
+  const favoriteNodes = nodesFor(favoriteBranches, viewMode)
   const localNodes = nodesFor(localBranches, viewMode)
   const remoteNodes = nodesFor(remoteBranches, viewMode)
   const repoName = cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd
@@ -186,17 +191,21 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
               </div>
               <div className="git-branches-tree-scroll">
                 {loading && branches.length === 0 ? <div className="git-branch-empty"><Loader2 className="animate-spin" /><p>Loading branches…</p></div> : localBranches.length + remoteBranches.length === 0 ? <div className="git-branch-empty"><Search /><h2>{query ? 'No matching branches' : 'No branches yet'}</h2><p>{query ? 'Try another name or clear your search.' : 'Create a branch after your first commit.'}</p></div> : <>
+                  {favoriteBranches.length > 0 && <>
+                    <button type="button" className="git-branch-group" aria-expanded={favoriteOpen} onClick={() => setFavoriteOpen((open) => !open)}>{favoriteOpen ? <ChevronDown /> : <ChevronRight />}<Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" /><span>Favorites</span><small>{favoriteBranches.length}</small></button>
+                    {favoriteOpen && <GitBranchTreeView key={`favorite-${treeRevision}-${query}`} nodes={favoriteNodes} currentBranch={currentBranch} selectedBranch={shownBranch} collapsed={collapsed && !query} isFavorite={isFavorite} onToggleFavorite={toggleFavorite} onSelectBranch={setSelectedBranch} onContextBranch={openContext} />}
+                  </>}
                   <button type="button" className="git-branch-group" aria-expanded={localOpen} onClick={() => setLocalOpen((open) => !open)}>{localOpen ? <ChevronDown /> : <ChevronRight />}<span>Local branches</span><small>{localBranches.length}</small></button>
-                  {localOpen && <GitBranchTreeView key={`local-${treeRevision}-${query}`} nodes={localNodes} currentBranch={currentBranch} selectedBranch={shownBranch} collapsed={collapsed && !query} onSelectBranch={setSelectedBranch} onContextBranch={openContext} />}
+                  {localOpen && <GitBranchTreeView key={`local-${treeRevision}-${query}`} nodes={localNodes} currentBranch={currentBranch} selectedBranch={shownBranch} collapsed={collapsed && !query} isFavorite={isFavorite} onToggleFavorite={toggleFavorite} onSelectBranch={setSelectedBranch} onContextBranch={openContext} />}
                   {remoteBranches.length > 0 && <>
                     <button type="button" className="git-branch-group" aria-expanded={remoteOpen} onClick={() => setRemoteOpen((open) => !open)}>{remoteOpen ? <ChevronDown /> : <ChevronRight />}<span>Remote branches</span><small>{remoteBranches.length}</small></button>
-                    {remoteOpen && <GitBranchTreeView key={`remote-${treeRevision}-${query}`} nodes={remoteNodes} currentBranch={currentBranch} selectedBranch={shownBranch} collapsed={collapsed && !query} onSelectBranch={setSelectedBranch} onContextBranch={openContext} />}
+                    {remoteOpen && <GitBranchTreeView key={`remote-${treeRevision}-${query}`} nodes={remoteNodes} currentBranch={currentBranch} selectedBranch={shownBranch} collapsed={collapsed && !query} isFavorite={isFavorite} onToggleFavorite={toggleFavorite} onSelectBranch={setSelectedBranch} onContextBranch={openContext} />}
                   </>}
                 </>}
               </div>
               <div className="git-branches-browser-hint">Select to inspect · Right-click or <kbd>Shift F10</kbd> for actions</div>
             </section>
-            <GitBranchInspector branch={shownBranch} currentBranch={currentBranch} busy={!!busyAction} remoteBranches={remoteNames} tools={branchTools} {...branchActions} />
+            <GitBranchInspector branch={shownBranch} currentBranch={currentBranch} busy={!!busyAction} remoteBranches={remoteNames} tools={branchTools} isFavorite={shownBranch ? isFavorite(shownBranch.name) : false} onToggleFavorite={toggleFavorite} {...branchActions} />
           </div>
         )}
         <footer className="git-branches-footer">
@@ -215,7 +224,7 @@ export function GitBranchPopup({ cwd, currentBranch, onClose, onOpenCommit, onBr
         </footer>
         <GitResizeGrip label="Resize branch manager" corner="bottom-right" onResizeStart={startResize} onResizeKey={resizeWithKeyboard} onReset={resetSize} />
         {contextBranch && <GitBranchContextMenu title={contextBranch.branch.name} point={contextBranch.point} containerRef={popupRef} onClose={closeContext}>
-          <fieldset disabled={!!busyAction}><GitBranchSubmenu branch={contextBranch.branch} currentBranch={currentBranch} inline compact {...branchActions} onClose={closeContext} /></fieldset>
+          <fieldset disabled={!!busyAction}><GitBranchSubmenu branch={contextBranch.branch} currentBranch={currentBranch} inline compact isFavorite={isFavorite(contextBranch.branch.name)} onToggleFavorite={toggleFavorite} {...branchActions} onClose={closeContext} /></fieldset>
         </GitBranchContextMenu>}
         {pendingDelete && <GitBranchDeleteDialog pending={pendingDelete} busy={!!busyAction} onConfirm={confirmDelete} onClose={cancelDelete} />}
       </div>

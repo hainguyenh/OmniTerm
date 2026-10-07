@@ -269,12 +269,19 @@
   color: var(--theme-dim);
 }
 
+.git-branch-star,
 .git-branch-more {
   opacity: 0.35;
-  margin-inline-end: 4px;
+  margin-inline-end: 2px;
 }
 
+.git-branch-star.is-favorite {
+  opacity: 1;
+}
+
+.git-branch-leaf:hover .git-branch-star,
 .git-branch-leaf:hover .git-branch-more,
+.git-branch-leaf:focus-within .git-branch-star,
 .git-branch-leaf:focus-within .git-branch-more {
   opacity: 1;
 }
