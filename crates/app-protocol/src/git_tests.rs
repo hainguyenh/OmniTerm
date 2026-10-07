@@ -18,6 +18,8 @@ fn test_git_file_history_entry_serde_roundtrip() {
     let parsed: GitFileHistoryEntry =
         serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(entry, parsed);
+    assert_eq!(entry.clone(), parsed);
+    assert!(!format!("{:?}", entry).is_empty());
 
     let context = GitFileContext {
         repo_root: "D:/repo".into(),
@@ -28,6 +30,8 @@ fn test_git_file_history_entry_serde_roundtrip() {
     assert!(!json.contains("branch"), "absent branch is omitted: {json}");
     let parsed: GitFileContext = serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(context, parsed);
+    assert_eq!(context.clone(), parsed);
+    assert!(!format!("{:?}", context).is_empty());
 }
 
 #[test]
@@ -48,6 +52,8 @@ fn test_git_branch_info_serde_roundtrip() {
     let json = serde_json::to_string(&branch).expect("serialization succeeds");
     let parsed: GitBranchInfo = serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(branch, parsed);
+    assert_eq!(branch.clone(), parsed);
+    assert!(!format!("{:?}", branch).is_empty());
 }
 
 #[test]
@@ -64,6 +70,9 @@ fn test_git_delete_branches_result_serde_roundtrip() {
     let parsed: GitDeleteBranchesResult =
         serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(result, parsed);
+    assert_eq!(result.clone(), parsed);
+    assert!(!format!("{:?}", result).is_empty());
+    assert_eq!(GitDeleteBranchesResult::default(), GitDeleteBranchesResult::default());
 }
 
 #[test]

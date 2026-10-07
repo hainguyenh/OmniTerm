@@ -46,6 +46,10 @@ mod tests {
         assert!(result.is_ok(), "git_log failed: {:?}", result.err());
         let log = result.unwrap();
         assert!(!log.is_empty());
+        let all_res = block_on(git_log(manifest_dir.to_string(), Some(5), Some("--all".into())));
+        assert!(all_res.is_ok());
+        let head_res = block_on(git_log(manifest_dir.to_string(), Some(5), Some("HEAD".into())));
+        assert!(head_res.is_ok());
     }
 
     #[test]
@@ -63,6 +67,11 @@ mod tests {
             "git_commit_details failed: {:?}",
             details.err()
         );
+        let err_details = block_on(git_commit_details(
+            manifest_dir.to_string(),
+            "--invalid".into(),
+        ));
+        assert!(err_details.is_err());
     }
 
     #[test]
@@ -82,6 +91,20 @@ mod tests {
             "git_commit_file_diff failed: {:?}",
             diff.err()
         );
+        let diff_old = block_on(git_commit_file_diff(
+            manifest_dir.to_string(),
+            log[0].id.clone(),
+            "Cargo.toml".to_string(),
+            Some("Cargo.toml".to_string()),
+        ));
+        assert!(diff_old.is_ok());
+        let err_diff = block_on(git_commit_file_diff(
+            manifest_dir.to_string(),
+            "--invalid".into(),
+            "Cargo.toml".to_string(),
+            None,
+        ));
+        assert!(err_diff.is_err());
     }
 
     #[test]
