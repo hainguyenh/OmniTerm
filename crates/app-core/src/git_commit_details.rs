@@ -338,6 +338,31 @@ mod tests {
         assert!(!diff.is_binary);
         assert!(!diff.hunks.is_empty());
         assert!(diff.hunks[0].lines.iter().any(|l| l.content == "one"));
+
+        let diff_with_old = get_commit_file_diff(&repo.root, &head, "a.txt", Some("a.txt")).expect("diff with old");
+        assert_eq!(diff_with_old.path, "a.txt");
+
+        let p1 = normalize_path(&repo.root, &repo.root.join("a.txt").to_string_lossy());
+        assert_eq!(p1, "a.txt");
+        let p2 = normalize_path(&repo.root, "./dir/file.txt");
+        assert_eq!(p2, "dir/file.txt");
+
+        assert!(parse_commit_header_and_message("").is_none());
+        assert!(parse_commit_header_and_message("a\x1fb").is_none());
+
+        let (files, adds, dels) = parse_name_status(
+            "R100\told.txt\tnew.txt\nC100\tsrc.txt\tdst.txt\nD\tdel.txt\nT\ttype.txt\ninvalid\n",
+            HashMap::new(),
+        );
+        assert_eq!(files.len(), 4);
+        assert_eq!(adds, 0);
+        assert_eq!(dels, 0);
+        assert_eq!(files[0].status, GitFileStatus::Renamed);
+        assert_eq!(files[1].status, GitFileStatus::Copied);
+        assert_eq!(files[2].status, GitFileStatus::Deleted);
+        assert_eq!(files[3].status, GitFileStatus::TypeChanged);
+
+        assert!(get_commit_details(&repo.root, "0000000000000000000000000000000000000000").is_err());
     }
 }
 

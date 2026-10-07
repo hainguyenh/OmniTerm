@@ -216,4 +216,64 @@ fn test_git_commit_details_serde_roundtrip() {
     let json = serde_json::to_string(&details).expect("serialization succeeds");
     let parsed: GitCommitDetails = serde_json::from_str(&json).expect("deserialization succeeds");
     assert_eq!(details, parsed);
+    assert_eq!(details.clone(), parsed);
+    assert!(!format!("{:?}", details).is_empty());
+    assert!(!format!("{:?}", details.files[0]).is_empty());
+    assert_eq!(details.files[0].clone(), details.files[0]);
+}
+
+#[test]
+fn test_git_blame_line_serde_and_traits() {
+    let line = GitBlameLine {
+        commit: "abcdef1234567890".into(),
+        author: "Dev User".into(),
+        date: "2026-10-07".into(),
+        line_no: 42,
+        content: "let x = 1;".into(),
+    };
+    let json = serde_json::to_string(&line).expect("serialization succeeds");
+    let parsed: GitBlameLine = serde_json::from_str(&json).expect("deserialization succeeds");
+    assert_eq!(line, parsed);
+    assert_eq!(line.clone(), parsed);
+    assert!(!format!("{:?}", line).is_empty());
+}
+
+#[test]
+fn test_git_file_status_variants_and_traits() {
+    let variants = [
+        GitFileStatus::Unmodified,
+        GitFileStatus::Modified,
+        GitFileStatus::Added,
+        GitFileStatus::Deleted,
+        GitFileStatus::Renamed,
+        GitFileStatus::Copied,
+        GitFileStatus::Untracked,
+        GitFileStatus::Ignored,
+        GitFileStatus::Conflicted,
+        GitFileStatus::TypeChanged,
+    ];
+    for v in variants {
+        assert_eq!(v.clone(), v);
+        assert!(!format!("{:?}", v).is_empty());
+    }
+    assert_eq!(GitFileStatus::default(), GitFileStatus::Unmodified);
+}
+
+#[test]
+fn test_git_diff_types_and_failures() {
+    let types = [
+        GitDiffLineType::Context,
+        GitDiffLineType::Addition,
+        GitDiffLineType::Deletion,
+    ];
+    for t in types {
+        assert_eq!(t.clone(), t);
+        assert!(!format!("{:?}", t).is_empty());
+    }
+    let failure = GitBranchDeleteFailure {
+        branch: "test".into(),
+        reason: "failed".into(),
+    };
+    assert_eq!(failure.clone(), failure);
+    assert!(!format!("{:?}", failure).is_empty());
 }
