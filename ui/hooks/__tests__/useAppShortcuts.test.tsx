@@ -293,6 +293,19 @@ describe('useAppShortcuts', () => {
     cleanup()
   })
 
+  // Regression: the app-wide handler opened Search Everywhere on Shift from any tab. That hotkey is
+  // now owned by useEditorShortcuts and only listens while an editor tab is active.
+  it('does not dispatch omniterm:search-everywhere on Shift presses', () => {
+    const { cleanup } = setup('chrome')
+    const onSearch = vi.fn()
+    window.addEventListener('omniterm:search-everywhere', onSearch)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true, cancelable: true }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', bubbles: true, cancelable: true }))
+    expect(onSearch).not.toHaveBeenCalled()
+    window.removeEventListener('omniterm:search-everywhere', onSearch)
+    cleanup()
+  })
+
   it('Ctrl+wheel up zooms in', () => {
     const { persistZoom, cleanup } = setup('chrome')
     window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true }))

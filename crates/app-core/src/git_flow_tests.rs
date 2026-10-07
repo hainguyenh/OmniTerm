@@ -36,7 +36,7 @@ fn services_reject_missing_and_non_repository_directories() {
     let err = get_repo_status(&plain).unwrap_err();
     assert!(err.contains("not a git repository"), "{err}");
     assert!(find_repo_root(&plain).is_err());
-    assert!(get_commit_log(&plain, 5).is_err());
+    assert!(get_commit_log(&plain, 5, None).is_err());
 }
 
 #[test]
@@ -114,7 +114,10 @@ fn status_reports_detached_head_unborn_branch_and_conflicts() {
     let unborn = get_repo_status(&empty.root).expect("unborn status");
     assert_eq!(unborn.branch.as_deref(), Some("main"));
     assert!(unborn.files.is_empty());
-    assert!(get_commit_log(&empty.root, 5).is_err(), "no commits yet");
+    assert!(
+        get_commit_log(&empty.root, 5, None).is_err(),
+        "no commits yet"
+    );
     drop(empty);
 
     let repo = TestRepo::new();
@@ -212,7 +215,7 @@ fn commit_validates_message_creates_and_amends() {
     assert!(out.contains("add b"), "{out}");
 
     commit(&repo.root, "add b, reworded", true).expect("amend");
-    let log = get_commit_log(&repo.root, 10).expect("log");
+    let log = get_commit_log(&repo.root, 10, None).expect("log");
     let summaries: Vec<&str> = log.iter().map(|c| c.summary.as_str()).collect();
     assert_eq!(summaries, vec!["add b, reworded", "initial"]);
     assert_eq!(log[0].parents, vec![log[1].id.clone()]);
@@ -222,7 +225,10 @@ fn commit_validates_message_creates_and_amends() {
     assert_eq!(log[0].author_email, "dev@example.test");
     assert!(log[0].timestamp > 0);
 
-    assert_eq!(get_commit_log(&repo.root, 1).expect("limited").len(), 1);
+    assert_eq!(
+        get_commit_log(&repo.root, 1, None).expect("limited").len(),
+        1
+    );
 }
 
 #[test]
@@ -234,7 +240,7 @@ fn commit_log_lists_merge_parents() {
     repo.commit_file("m.txt", "m\n", "main work");
     repo.git(&["merge", "-q", "--no-edit", "topic"]);
 
-    let log = get_commit_log(&repo.root, 1).expect("log");
+    let log = get_commit_log(&repo.root, 1, None).expect("log");
     assert_eq!(log[0].parents.len(), 2);
 }
 

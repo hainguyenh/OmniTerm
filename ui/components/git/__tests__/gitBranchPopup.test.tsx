@@ -244,4 +244,27 @@ describe('GitBranchPopup', () => {
     })
     expect(mockInvoke).toHaveBeenCalledWith('git_init', { cwd: '/not-git' })
   })
+
+  it('toggles favorites and displays the Favorites group section', async () => {
+    localStorage.setItem('omniterm:git-favorites:/repo', JSON.stringify(['features/smart-merge']))
+    await act(async () => {
+      render(
+        <GitBranchPopup
+          cwd="/repo"
+          currentBranch="main"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    expect(screen.getByRole('button', { name: /Favorites/ })).toBeInTheDocument()
+    const favBtn = screen.getAllByRole('button', { name: 'Remove features/smart-merge from favorites' })[0]
+    expect(favBtn).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(favBtn)
+    })
+
+    expect(screen.queryByRole('button', { name: /Favorites/ })).not.toBeInTheDocument()
+  })
 })
