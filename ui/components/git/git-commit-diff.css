@@ -1,0 +1,236 @@
+.git-commit-file-item.is-selected {
+  background: color-mix(in srgb, var(--theme-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-accent) 40%, transparent);
+}
+
+.git-commit-inspector-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--theme-sidebar-bg);
+}
+
+.git-commit-inspector-top {
+  display: flex;
+  flex-direction: row;
+  border-bottom: 1px solid var(--theme-border);
+  height: 220px;
+  min-height: 180px;
+  max-height: 280px;
+  flex-shrink: 0;
+  background: var(--theme-sidebar-bg);
+  overflow: hidden;
+}
+
+.git-commit-meta-col {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border-right: 1px solid var(--theme-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-commit-meta-col h2 {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.git-commit-files-col {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-commit-inspector-diff-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--theme-bg);
+}
+
+.git-commit-diff-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--theme-dim);
+  font-size: 11px;
+}
+
+.git-commit-diff-preview {
+  margin-top: 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 6px;
+  background: var(--theme-bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-commit-inspector-diff-section .git-commit-diff-preview {
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  height: 100%;
+  flex: 1;
+}
+
+.git-commit-inspector-diff-section .git-commit-diff-body {
+  flex: 1;
+  max-height: none;
+  height: 100%;
+}
+
+.git-commit-diff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--theme-sidebar-bg);
+  border-bottom: 1px solid var(--theme-border);
+  font-size: 11px;
+}
+
+.git-commit-diff-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.git-commit-diff-filename {
+  font-family: var(--theme-font-mono, monospace);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-commit-diff-badges {
+  display: inline-flex;
+  gap: 4px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.git-commit-diff-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.git-commit-diff-body {
+  max-height: 280px;
+  overflow: auto;
+  font-family: var(--theme-font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.git-commit-diff-loading,
+.git-commit-diff-error,
+.git-commit-diff-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 12px;
+  color: var(--theme-dim);
+  font-size: 11px;
+}
+
+.git-commit-diff-error {
+  color: var(--theme-error);
+}
+
+.git-commit-diff-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-diff-hunk-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-diff-hunk-header {
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--theme-accent) 8%, var(--theme-bg));
+  color: var(--theme-dim);
+  font-size: 10px;
+  user-select: none;
+  border-top: 1px solid color-mix(in srgb, var(--theme-border) 40%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--theme-border) 40%, transparent);
+}
+
+.git-diff-row {
+  display: flex;
+  align-items: baseline;
+  width: 100%;
+  white-space: pre;
+}
+
+.git-diff-row.is-addition {
+  background: color-mix(in srgb, var(--theme-success) 12%, transparent);
+  color: var(--theme-success);
+}
+
+.git-diff-row.is-deletion {
+  background: color-mix(in srgb, var(--theme-error) 12%, transparent);
+  color: var(--theme-error);
+}
+
+.git-diff-lineno {
+  display: inline-block;
+  width: 32px;
+  padding: 0 4px;
+  text-align: right;
+  color: var(--theme-dim);
+  opacity: 0.6;
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.git-diff-prefix {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  user-select: none;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.git-diff-text {
+  flex: 1;
+  padding-right: 8px;
+  color: var(--theme-fg);
+}
+
+.git-diff-row.is-addition .git-diff-text {
+  color: var(--theme-success);
+}
+
+.git-diff-row.is-deletion .git-diff-text {
+  color: var(--theme-error);
+}

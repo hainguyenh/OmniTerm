@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, GitFork, MoreHorizontal } from 'lucide-react'
+import { ChevronDown, ChevronRight, Folder, FolderOpen, GitBranch, GitFork, MoreHorizontal, Star } from 'lucide-react'
 import { useState } from 'react'
 
 import { pointBelow, type MenuPoint } from './gitMenuPlacement'
@@ -12,10 +12,13 @@ interface GitBranchTreeViewProps {
   selectedBranch: GitBranchInfo | null
   depth?: number
   collapsed?: boolean
+  isFavorite?: (branchName: string) => boolean
+  onToggleFavorite?: (branchName: string) => void
   onSelectBranch: (branch: GitBranchInfo | null) => void
   /** Open the actions menu for `branch` at `point` (where the user right-clicked). */
   onContextBranch?: (branch: GitBranchInfo, point: MenuPoint) => void
   onCheckout?: (branch: string) => void
+  onPull?: (branch: string) => void
   onMerge?: (branch: string) => void
   onRebase?: (branch: string) => void
   onCompare?: (branch: string) => void
@@ -24,7 +27,9 @@ interface GitBranchTreeViewProps {
 }
 
 export function GitBranchTreeView({
-  nodes, currentBranch, selectedBranch, depth = 0, collapsed = false, onSelectBranch, onContextBranch, ...legacyActions
+  nodes, currentBranch, selectedBranch, depth = 0, collapsed = false,
+  isFavorite, onToggleFavorite,
+  onSelectBranch, onContextBranch, ...legacyActions
 }: GitBranchTreeViewProps) {
   const [folderOverrides, setFolderOverrides] = useState<Record<string, boolean>>({})
 
@@ -55,6 +60,8 @@ export function GitBranchTreeView({
                 selectedBranch={selectedBranch}
                 depth={depth + 1}
                 collapsed={collapsed}
+                isFavorite={isFavorite}
+                onToggleFavorite={onToggleFavorite}
                 onSelectBranch={onSelectBranch}
                 onContextBranch={onContextBranch}
                 {...legacyActions}
@@ -66,9 +73,24 @@ export function GitBranchTreeView({
         const branch = node.branch
         const isCurrent = branch.name === currentBranch || branch.is_current
         const isSelected = selectedBranch?.name === branch.name && selectedBranch.is_remote === branch.is_remote
+        const isFav = isFavorite?.(branch.name) ?? false
         return (
           <div key={branch.name}>
           <div className={`git-branch-leaf ${isSelected ? 'is-selected' : ''}`}>
+            {onToggleFavorite && (
+              <button
+                type="button"
+                className={`git-branch-star git-icon-button ${isFav ? 'is-favorite' : ''}`}
+                aria-label={isFav ? `Remove ${branch.name} from favorites` : `Add ${branch.name} to favorites`}
+                title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleFavorite(branch.name)
+                }}
+              >
+                <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-theme-dim'}`} />
+              </button>
+            )}
             <button
               type="button"
               className="git-branch-select"
@@ -111,7 +133,10 @@ export function GitBranchTreeView({
             branch={branch}
             currentBranch={currentBranch}
             inline
+            isFavorite={isFav}
+            onToggleFavorite={onToggleFavorite}
             onCheckout={legacyActions.onCheckout}
+            onPull={legacyActions.onPull}
             onMerge={legacyActions.onMerge}
             onRebase={legacyActions.onRebase}
             onCompare={legacyActions.onCompare}

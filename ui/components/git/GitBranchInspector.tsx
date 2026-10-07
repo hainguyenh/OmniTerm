@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowRight, GitBranch, GitCommitHorizontal, Radio, UserRound } from 'lucide-react'
+import { ArrowDownToLine, ArrowRight, GitBranch, GitCommitHorizontal, Radio, Star, UserRound } from 'lucide-react'
 
 import { GitBranchSubmenu } from './GitBranchSubmenu'
 import { GitBranchTools, type GitBranchToolActions } from './GitBranchTools'
@@ -11,6 +11,8 @@ interface GitBranchInspectorProps {
   busy: boolean
   remoteBranches: string[]
   tools: GitBranchToolActions
+  isFavorite?: boolean
+  onToggleFavorite?: (name: string) => void
   onCheckout: (name: string) => void
   onPull: (name: string) => void
   onMerge: (name: string) => void
@@ -20,7 +22,16 @@ interface GitBranchInspectorProps {
   onDelete: (name: string) => void
 }
 
-export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches, tools, ...actions }: GitBranchInspectorProps) {
+export function GitBranchInspector({
+  branch,
+  currentBranch,
+  busy,
+  remoteBranches,
+  tools,
+  isFavorite,
+  onToggleFavorite,
+  ...actions
+}: GitBranchInspectorProps) {
   if (!branch) return <aside className="git-branch-inspector git-branch-empty">
     <GitBranch />
     <h2>Your branches, in focus</h2>
@@ -33,7 +44,20 @@ export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches
     <aside className="git-branch-inspector" aria-label="Selected branch details">
       <div className="git-branch-detail-heading">
         <span className="git-branch-eyebrow">{branch.is_remote ? 'REMOTE BRANCH' : 'LOCAL BRANCH'}</span>
-        <h2><GitBranch />{branch.name}</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2><GitBranch />{branch.name}</h2>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              className={`git-icon-button ${isFavorite ? 'text-amber-400' : 'text-theme-dim hover:text-amber-400'}`}
+              aria-label={isFavorite ? `Remove ${branch.name} from favorites` : `Add ${branch.name} to favorites`}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              onClick={() => onToggleFavorite(branch.name)}
+            >
+              <Star className={`w-4 h-4 ${isFavorite ? 'fill-amber-400' : ''}`} />
+            </button>
+          )}
+        </div>
         {isCurrent && <span className="git-branch-current"><Radio />Checked out</span>}
       </div>
       <dl className="git-branch-tracking">
@@ -47,15 +71,30 @@ export function GitBranchInspector({ branch, currentBranch, busy, remoteBranches
       </div>
       {!branch.is_remote && !isCurrent && branch.upstream && <div className="git-branch-update-card">
         <span className="git-branch-eyebrow">STAY ON {currentBranch ?? 'HEAD'}</span>
-        <h3>Pull this branch in place</h3>
-        <p>Fast-forward to {branch.upstream} while keeping your current checkout. To bring it into {currentBranch ?? 'HEAD'}, merge it.</p>
-        <button type="button" className="git-control" disabled={busy} onClick={() => actions.onPull(branch.name)}>
+        <h3>Pull without checkout</h3>
+        <p>Fast-forward {branch.name} to {branch.upstream} while keeping your current checkout. To bring it into {currentBranch ?? 'HEAD'}, merge it.</p>
+        <button
+          type="button"
+          className="git-control"
+          disabled={busy}
+          onClick={() => actions.onPull(branch.name)}
+          aria-label={`Pull ${branch.name}`}
+        >
           <ArrowDownToLine />Pull {branch.name}<ArrowRight />
         </button>
       </div>}
       <div className="git-branch-action-heading"><span className="git-branch-eyebrow">BRANCH ACTIONS</span></div>
       <fieldset className="git-branch-actions" disabled={busy}>
-        <GitBranchSubmenu branch={branch} currentBranch={currentBranch} inline compact {...actions} onClose={() => { /* Inspector stays open between actions. */ }} />
+        <GitBranchSubmenu
+          branch={branch}
+          currentBranch={currentBranch}
+          inline
+          compact
+          isFavorite={isFavorite}
+          onToggleFavorite={onToggleFavorite}
+          {...actions}
+          onClose={() => { /* Inspector stays open between actions. */ }}
+        />
       </fieldset>
       <GitBranchTools key={`${branch.is_remote}:${branch.name}`} branch={branch} isCurrent={isCurrent} remoteBranches={remoteBranches} busy={busy} {...tools} />
     </aside>

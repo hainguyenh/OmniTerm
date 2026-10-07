@@ -10,6 +10,7 @@ use std::process::Command;
 
 pub use crate::git_branch::*;
 pub use crate::git_branch_tools::*;
+pub use crate::git_commit_details::*;
 pub use crate::git_diff::*;
 pub use crate::git_history::*;
 pub use crate::git_stash::*;
@@ -174,10 +175,25 @@ pub fn commit(repo_root: &Path, message: &str, amend: bool) -> Result<String, St
 }
 
 /// Fetches recent commit log entries formatted for visual graph rendering.
-pub fn get_commit_log(repo_root: &Path, limit: usize) -> Result<Vec<GitCommitSummary>, String> {
+pub fn get_commit_log(
+    repo_root: &Path,
+    limit: usize,
+    branch: Option<&str>,
+) -> Result<Vec<GitCommitSummary>, String> {
     let limit_str = limit.to_string();
     let format_arg = "--format=%H\x1f%h\x1f%s\x1f%an\x1f%ae\x1f%at\x1f%P\x1e";
-    let stdout = run_git_cmd(repo_root, &["log", "-n", &limit_str, format_arg])?;
+    let mut args = vec!["log", "-n", &limit_str, format_arg];
+    let branch_str;
+    if let Some(b) = branch {
+        let trimmed = b.trim();
+        if trimmed == "--all" || trimmed.eq_ignore_ascii_case("all") {
+            args.push("--all");
+        } else if !trimmed.is_empty() && !trimmed.starts_with('-') {
+            branch_str = trimmed;
+            args.push(branch_str);
+        }
+    }
+    let stdout = run_git_cmd(repo_root, &args)?;
     let text = String::from_utf8_lossy(&stdout);
 
     let mut list = Vec::new();
@@ -265,9 +281,11 @@ pub fn delete_file(repo_root: &Path, file_path: &str) -> Result<(), String> {
     let git_rm = run_git_cmd(repo_root, &["rm", "-f", "--", &normalized_path]);
     if git_rm.is_err() && full_path.exists() {
         if full_path.is_file() {
-            std::fs::remove_file(&full_path).map_err(|e| format!("Failed to delete file: {}", e))?;
+            std::fs::remove_file(&full_path)
+                .map_err(|e| format!("Failed to delete file: {}", e))?;
         } else if full_path.is_dir() {
-            std::fs::remove_dir_all(&full_path).map_err(|e| format!("Failed to delete directory: {}", e))?;
+            std::fs::remove_dir_all(&full_path)
+                .map_err(|e| format!("Failed to delete directory: {}", e))?;
         }
     }
     Ok(())
@@ -291,7 +309,8 @@ pub fn write_file_content(repo_root: &Path, file_path: &str, content: &str) -> R
     }
     let full = repo_root.join(&clean_path);
     if let Some(parent) = full.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent dirs: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create parent dirs: {}", e))?;
     }
     std::fs::write(&full, content).map_err(|e| format!("Failed to write file: {}", e))
 }
@@ -310,4 +329,3 @@ pub fn read_file_revision(
     let stdout = run_git_cmd(repo_root, &["show", &target])?;
     Ok(String::from_utf8_lossy(&stdout).to_string())
 }
-

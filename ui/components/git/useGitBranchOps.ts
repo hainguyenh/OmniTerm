@@ -65,6 +65,7 @@ export function useGitBranchOps({
       notify(res || 'Update complete')
       void loadBranches()
       onBranchSwitched?.()
+      window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
     } catch (err) {
       notify(`Update failed: ${String(err)}`, true)
     } finally {
@@ -78,6 +79,7 @@ export function useGitBranchOps({
       const res = await api.fetch(cwd, true)
       notify(res || 'Fetch complete')
       void loadBranches()
+      window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
     } catch (err) {
       notify(`Fetch failed: ${String(err)}`, true)
     } finally {
@@ -91,6 +93,7 @@ export function useGitBranchOps({
       const res = await api.push(cwd, true)
       notify(res || 'Push complete')
       void loadBranches()
+      window.dispatchEvent(new CustomEvent('omniterm:git-refresh'))
     } catch (err) {
       notify(`Push failed: ${String(err)}`, true)
     } finally {
@@ -189,7 +192,7 @@ export function useGitBranchOps({
       await handleUpdateProject()
       return
     }
-    const failure = await runBranchTool(`Pulling ${branchName}...`, () => api.updateBranch(cwd, branchName))
+    const failure = await runBranchTool(`Pulling ${branchName} without checkout...`, () => api.updateBranch(cwd, branchName))
     if (failure) notify(`Pull failed: ${failure}`, true)
   }
 

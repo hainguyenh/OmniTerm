@@ -249,3 +249,115 @@ fn ipc_workspace_mutations_and_connection_scoping_edge_cases() {
         .to_string()
         .contains("Choose a workspace folder"));
 }
+
+#[test]
+fn ipc_workspace_appearance_and_folder_lifecycle() {
+    let fixture = IpcApp::new();
+    let root = tempfile::tempdir().unwrap();
+    let sub = root.path().join("subfolder");
+    fs::create_dir_all(&sub).unwrap();
+
+    let workspace = fixture.ok(
+        "add_workspace",
+        json!({ "path": root.path().to_string_lossy() }),
+    );
+    let ws_id = workspace["id"].as_str().unwrap();
+    let f1_id = workspace["folders"][0]["id"].as_str().unwrap().to_string();
+
+    let updated = fixture.ok(
+        "set_workspace_appearance",
+        json!({
+            "workspaceId": ws_id,
+            "color": "blue",
+            "icon": "folder"
+        }),
+    );
+    assert_eq!(updated["color"], "blue");
+    assert_eq!(updated["icon"], "folder");
+
+    let cleared = fixture.ok(
+        "set_workspace_appearance",
+        json!({
+            "workspaceId": ws_id,
+            "color": null,
+            "icon": null
+        }),
+    );
+    assert!(cleared["color"].is_null());
+    assert!(cleared["icon"].is_null());
+
+    assert!(fixture
+        .invoke(
+            "set_workspace_appearance",
+            json!({ "workspaceId": ws_id, "color": "neon", "icon": null })
+        )
+        .is_err());
+    assert!(fixture
+        .invoke(
+            "set_workspace_appearance",
+            json!({ "workspaceId": ws_id, "color": null, "icon": "ghost" })
+        )
+        .is_err());
+    assert!(fixture
+        .invoke(
+            "set_workspace_appearance",
+            json!({ "workspaceId": "unknown", "color": "blue", "icon": null })
+        )
+        .is_err());
+
+    let with_color = fixture.ok(
+        "set_workspace_folder_color",
+        json!({
+            "workspaceId": ws_id,
+            "folderId": &f1_id,
+            "color": "red"
+        }),
+    );
+    assert_eq!(with_color["folders"][0]["color"], "red");
+
+    assert!(fixture
+        .invoke(
+            "set_workspace_folder_color",
+            json!({ "workspaceId": ws_id, "folderId": &f1_id, "color": "invalid" })
+        )
+        .is_err());
+    assert!(fixture
+        .invoke(
+            "set_workspace_folder_color",
+            json!({ "workspaceId": ws_id, "folderId": "missing", "color": "red" })
+        )
+        .is_err());
+
+    let with_two = fixture.ok(
+        "add_workspace_folder",
+        json!({ "workspaceId": ws_id, "path": sub.to_string_lossy() }),
+    );
+    assert_eq!(with_two["folders"].as_array().unwrap().len(), 2);
+    let f2_id = with_two["folders"][1]["id"].as_str().unwrap().to_string();
+
+    let renamed = fixture.ok(
+        "rename_workspace_folder",
+        json!({
+            "workspaceId": ws_id,
+            "folderId": &f2_id,
+            "name": "Custom Subfolder"
+        }),
+    );
+    assert_eq!(renamed["folders"][1]["name"], "Custom Subfolder");
+
+    let removed = fixture.ok(
+        "remove_workspace_folder",
+        json!({
+            "workspaceId": ws_id,
+            "folderId": &f2_id
+        }),
+    );
+    assert_eq!(removed["folders"].as_array().unwrap().len(), 1);
+
+    assert!(fixture
+        .invoke(
+            "remove_workspace_folder",
+            json!({ "workspaceId": ws_id, "folderId": "missing" })
+        )
+        .is_err());
+}

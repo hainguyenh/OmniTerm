@@ -59,7 +59,7 @@ fn working_tree_commands_stage_unstage_commit_and_revert() {
 
     block_on(git_stage(dir.clone(), paths.clone())).expect("stage again");
     block_on(git_commit(dir.clone(), "  add notes  ".into(), false)).expect("commit");
-    let log = block_on(git_log(dir.clone(), None)).expect("log");
+    let log = block_on(git_log(dir.clone(), None, None)).expect("log");
     assert_eq!(log.len(), 2);
     assert_eq!(log[0].summary, "add notes");
     assert_eq!(log[0].parents, vec![log[1].id.clone()]);
@@ -68,11 +68,11 @@ fn working_tree_commands_stage_unstage_commit_and_revert() {
     let empty = block_on(git_commit(dir.clone(), "   ".into(), false));
     assert!(empty.is_err_and(|error| error.contains("empty")));
     block_on(git_commit(dir.clone(), "add notes, amended".into(), true)).expect("amend");
-    let log = block_on(git_log(dir.clone(), Some(1))).expect("log after amend");
+    let log = block_on(git_log(dir.clone(), Some(1), None)).expect("log after amend");
     assert_eq!(log.len(), 1);
     assert_eq!(log[0].summary, "add notes, amended");
     assert_eq!(
-        block_on(git_log(dir.clone(), None))
+        block_on(git_log(dir.clone(), None, None))
             .expect("full log")
             .len(),
         2
@@ -308,7 +308,7 @@ fn rebase_and_cherry_pick_replay_commits_onto_the_current_branch() {
     git(&root, &["checkout", "-q", "side"]);
 
     block_on(git_rebase(dir.clone(), "main".into())).expect("rebase side onto main");
-    let log = block_on(git_log(dir.clone(), Some(2))).expect("log after rebase");
+    let log = block_on(git_log(dir.clone(), Some(2), None)).expect("log after rebase");
     assert_eq!(log[0].summary, "side work");
     assert_eq!(log[0].parents, vec![main_tip.clone()]);
     assert_eq!(read(&root, "main.txt"), "main\n");
@@ -320,7 +320,7 @@ fn rebase_and_cherry_pick_replay_commits_onto_the_current_branch() {
         .expect("cherry-pick onto main");
     assert!(!message.is_empty());
     assert_eq!(read(&root, "extra.txt"), "extra\n");
-    let log = block_on(git_log(dir.clone(), Some(1))).expect("log after cherry-pick");
+    let log = block_on(git_log(dir.clone(), Some(1), None)).expect("log after cherry-pick");
     assert_eq!(log[0].summary, "extra work");
     assert_eq!(log[0].parents, vec![main_tip]);
 

@@ -24,6 +24,10 @@
   border-inline-start: 1px solid var(--theme-border);
 }
 
+.git-conflict-panes > div:last-child {
+  border-inline-end: 1px solid var(--theme-border);
+}
+
 .git-conflict-pane-heading {
   display: flex;
   flex-shrink: 0;

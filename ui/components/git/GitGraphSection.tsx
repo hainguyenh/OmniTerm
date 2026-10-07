@@ -1,23 +1,21 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Check,
-  Copy,
+  GitBranch,
   GitCommit,
   GitGraph,
-  Loader2,
+  GitMerge,
   RefreshCw,
   Search,
-  GitMerge,
-  UserRound,
-  Clock3,
   X,
 } from 'lucide-react'
 
 import { createGitAPI } from '../../gitAPI'
+import { GitCommitInspector } from './GitCommitInspector'
 import { GitGraphLanes } from './GitGraphLanes'
 import { layoutGraph } from './gitGraphLayout'
+import { usePaneSplit } from './usePaneSplit'
 import './git-graph.css'
-import type { GitCommitSummary } from './gitTypes'
+import type { GitBranchInfo, GitCommitDetails, GitCommitSummary } from './gitTypes'
 
 interface GitGraphSectionProps {
   cwd?: string
@@ -25,6 +23,7 @@ interface GitGraphSectionProps {
   loading: boolean
   onRefresh: () => void
   onSelectCommit?: (commit: GitCommitSummary) => void
+  initialBranch?: string
 }
 
 function formatRelativeTime(timestampSec: number): string {
@@ -46,17 +45,75 @@ export const GitGraphSection: React.FC<GitGraphSectionProps> = ({
   loading,
   onRefresh,
   onSelectCommit,
+  initialBranch = 'all',
 }) => {
   const [selected, setSelected] = useState<GitCommitSummary | null>(null)
-  const [copied, setCopied] = useState(false)
+  const [search, setSearch] = useState('')
+  const [filterBranch, setFilterBranch] = useState(initialBranch)
+  const [branches, setBranches] = useState<GitBranchInfo[]>([])
+  const [activeCommits, setActiveCommits] = useState<GitCommitSummary[]>(commits)
+  const [internalLoading, setInternalLoading] = useState(false)
   const [cherryPicking, setCherryPicking] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const graph = useMemo(() => layoutGraph(commits), [commits])
-  const query = search.trim().toLowerCase()
-  const matching = commits.filter((commit) => `${commit.summary} ${commit.author_name} ${commit.id}`.toLowerCase().includes(query))
+  const [details, setDetails] = useState<GitCommitDetails | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
-  const api = createGitAPI()
+  const api = useMemo(() => createGitAPI(), [])
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  const split = usePaneSplit({
+    storageKey: 'omniterm:git-graph-inspector-width',
+    defaultValue: 520,
+    bounds: () => ({
+      min: 300,
+      max: Math.max(300, (bodyRef.current?.clientWidth ?? 900) - 280),
+    }),
+    unitsPerPixel: () => -1,
+    step: 24,
+  })
+
+  // Synchronize commits prop if filter is at default and no branch switch made
+  useEffect(() => {
+    if (commits.length > 0 && filterBranch === 'all') {
+      setActiveCommits(commits)
+    }
+  }, [commits, filterBranch])
+
+  const loadBranches = useCallback(async () => {
+    if (!cwd) return
+    try {
+      const list = await api.getBranches(cwd)
+      if (Array.isArray(list)) {
+        setBranches(list)
+      }
+    } catch {
+      // branches query unavailable
+    }
+  }, [cwd, api])
+
+  const loadGraphCommits = useCallback(
+    async (branch: string) => {
+      if (!cwd) return
+      setInternalLoading(true)
+      try {
+        const branchArg = branch === 'all' ? '--all' : branch
+        const res = await api.getLog(cwd, 150, branchArg)
+        if (Array.isArray(res)) {
+          setActiveCommits(res)
+        }
+      } catch (err: unknown) {
+        setNotice(`Failed to load commits: ${String(err)}`)
+      } finally {
+        setInternalLoading(false)
+      }
+    },
+    [cwd, api],
+  )
+
+  const handleBranchChange = (nextBranch: string) => {
+    setFilterBranch(nextBranch)
+    void loadGraphCommits(nextBranch)
+  }
 
   const handleCherryPick = async (commitId: string) => {
     if (!cwd || cherryPicking) return
@@ -74,21 +131,60 @@ export const GitGraphSection: React.FC<GitGraphSectionProps> = ({
     }
   }
 
+  const handleRefresh = () => {
+    onRefresh()
+    void loadBranches()
+    void loadGraphCommits(filterBranch)
+  }
+
+  // Load commit point details when selection changes
+  useEffect(() => {
+    if (!selected || !cwd) {
+      setDetails(null)
+      return
+    }
+    let active = true
+    setLoadingDetails(true)
+    try {
+      const promise =
+        typeof api?.getCommitDetails === 'function'
+          ? api.getCommitDetails(cwd, selected.id)
+          : null
+      if (promise && typeof promise.then === 'function') {
+        promise
+          .then((res) => {
+            if (active && res && typeof res === 'object') setDetails(res)
+          })
+          .catch(() => {
+            if (active) setDetails(null)
+          })
+          .finally(() => {
+            if (active) setLoadingDetails(false)
+          })
+      } else {
+        setLoadingDetails(false)
+      }
+    } catch {
+      setLoadingDetails(false)
+    }
+    return () => {
+      active = false
+    }
+  }, [selected?.id, cwd, api])
+
+  const displayCommits = activeCommits.length > 0 ? activeCommits : commits
+  const graph = useMemo(() => layoutGraph(displayCommits), [displayCommits])
+  const query = search.trim().toLowerCase()
+  const matching = displayCommits.filter((commit) =>
+    `${commit.summary} ${commit.author_name} ${commit.id}`.toLowerCase().includes(query),
+  )
+
   const handleSelect = (commit: GitCommitSummary) => {
     setSelected(commit.id === selected?.id ? null : commit)
     onSelectCommit?.(commit)
   }
 
-  const handleCopyId = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    try {
-      await navigator.clipboard.writeText(id)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // clipboard unavailable
-    }
-  }
+  const isSpinning = loading || internalLoading
 
   return (
     <section className="git-history git-menu" aria-label="Commit graph">
@@ -100,6 +196,32 @@ export const GitGraphSection: React.FC<GitGraphSectionProps> = ({
             <p>A continuous view of your repository’s history.</p>
           </div>
         </div>
+
+        {/* ── Branch Filter ────────────────────────────────────────────── */}
+        <div className="git-graph-branch-filter" title="Filter commits by branch or show all">
+          <GitBranch className="w-3.5 h-3.5 text-theme-dim shrink-0" />
+          <select
+            value={filterBranch}
+            onFocus={() => void loadBranches()}
+            onClick={() => void loadBranches()}
+            onChange={(e) => handleBranchChange(e.target.value)}
+            className="git-graph-branch-select"
+            aria-label="Filter graph by branch"
+          >
+            <option value="all">All Branches (--all)</option>
+            {Array.isArray(branches) && branches.length > 0 && (
+              <optgroup label="Branches">
+                {branches.map((b) => (
+                  <option key={b.name} value={b.name}>
+                    {b.name}
+                    {b.is_current ? ' (HEAD)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        </div>
+
         <label className="git-search">
           <Search className="w-4 h-4 text-theme-dim" />
           <input
@@ -112,26 +234,40 @@ export const GitGraphSection: React.FC<GitGraphSectionProps> = ({
         </label>
         <button
           type="button"
-          onClick={onRefresh}
-          disabled={loading}
+          onClick={handleRefresh}
+          disabled={isSpinning}
           className="git-control"
           aria-label="Refresh commit history"
-        ><RefreshCw className={loading ? 'animate-spin' : ''} />Refresh</button>
-      </header>
-      {notice && <div className="git-history-notice" role="status">
-        <span>{notice}</span>
-        <button
-          type="button"
-          className="git-icon-button"
-          aria-label="Dismiss commit notice"
-          onClick={() => setNotice(null)}
         >
-          <X />
+          <RefreshCw className={isSpinning ? 'animate-spin' : ''} />
+          Refresh
         </button>
-      </div>}
-      <div className="git-history-body">
+      </header>
+
+      {notice && (
+        <div className="git-history-notice" role="status">
+          <span>{notice}</span>
+          <button
+            type="button"
+            className="git-icon-button"
+            aria-label="Dismiss commit notice"
+            onClick={() => setNotice(null)}
+          >
+            <X />
+          </button>
+        </div>
+      )}
+
+      {/* ── Resizable 2-Panel Layout: Graph/Table (Left) + Inspector (Right) ── */}
+      <div
+        ref={bodyRef}
+        className={`git-history-body ${split.dragging ? 'is-resizing' : ''}`}
+      >
         <div className="git-history-scroll">
-          <div className="git-history-table" style={{ '--graph-width': `${graph.width}px` } as React.CSSProperties}>
+          <div
+            className="git-history-table"
+            style={{ '--graph-width': `${graph.width}px` } as React.CSSProperties}
+          >
             <div className="git-history-columns">
               <span>TREE</span>
               <span>COMMIT</span>
@@ -140,113 +276,105 @@ export const GitGraphSection: React.FC<GitGraphSectionProps> = ({
               <span>SHA</span>
             </div>
             <div className="git-history-entries">
-            {commits.length > 0 && matching.length > 0 && <div className="git-history-graph" aria-hidden="true">
-              <GitGraphLanes
-                rows={graph.rows}
-                width={graph.width}
-                selectedIndex={commits.findIndex((commit) => commit.id === selected?.id)}
-                merges={commits.map((commit) => commit.parents.length > 1)}
-              />
-            </div>}
-            {commits.length === 0 ? <div className="git-maintenance-empty">
-              <GitCommit />
-              <strong>{loading ? 'Loading history…' : 'No commits found'}</strong>
-            </div> : matching.length === 0 ? <div className="git-maintenance-empty">
-              <Search />
-              <strong>No matching commits</strong>
-              <p>Try another message, author or SHA.</p>
-            </div> : commits.map((commit, index) => {
-              const isSelected = selected?.id === commit.id
-              const isMatch = !query || matching.includes(commit)
-              return (
-                <button
-                  key={commit.id}
-                  type="button"
-                  className={`git-history-row ${isSelected ? 'is-selected' : ''} ${isMatch ? '' : 'is-muted'}`}
-                  aria-pressed={isSelected}
-                  onClick={() => handleSelect(commit)}
-                  onContextMenu={(event) => {
-                    event.preventDefault()
-                    setSelected(commit)
-                  }}
-                >
-                  <span className="git-history-graph-cell" aria-hidden="true" />
-                  <span className="git-history-message">
-                    {commit.parents.length > 1 && <GitMerge className="git-history-merge" />}
-                    <strong title={commit.summary}>{commit.summary}</strong>
-                    {index === 0 && <span className="git-head-label">Latest</span>}
-                  </span>
-                  <span className="git-history-author" title={commit.author_name}>{commit.author_name}</span>
-                  <span className="git-history-time">{formatRelativeTime(commit.timestamp)}</span>
-                  <span className="git-history-sha">{commit.short_id}</span>
-                </button>
-              )
-            })}
+              {displayCommits.length > 0 && matching.length > 0 && (
+                <div className="git-history-graph" aria-hidden="true">
+                  <GitGraphLanes
+                    rows={graph.rows}
+                    width={graph.width}
+                    selectedIndex={displayCommits.findIndex((c) => c.id === selected?.id)}
+                    merges={displayCommits.map((c) => c.parents.length > 1)}
+                  />
+                </div>
+              )}
+              {displayCommits.length === 0 ? (
+                <div className="git-maintenance-empty">
+                  <GitCommit />
+                  <strong>{isSpinning ? 'Loading history…' : 'No commits found'}</strong>
+                </div>
+              ) : matching.length === 0 ? (
+                <div className="git-maintenance-empty">
+                  <Search />
+                  <strong>No matching commits</strong>
+                  <p>Try another message, author or SHA.</p>
+                </div>
+              ) : (
+                displayCommits.map((commit, index) => {
+                  const isSelected = selected?.id === commit.id
+                  const isMatch = !query || matching.includes(commit)
+                  return (
+                    <button
+                      key={commit.id}
+                      type="button"
+                      className={`git-history-row ${isSelected ? 'is-selected' : ''} ${isMatch ? '' : 'is-muted'}`}
+                      aria-pressed={isSelected}
+                      onClick={() => handleSelect(commit)}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        setSelected(commit)
+                      }}
+                    >
+                      <span className="git-history-graph-cell" aria-hidden="true" />
+                      <span className="git-history-message">
+                        {commit.parents.length > 1 && <GitMerge className="git-history-merge" />}
+                        <strong title={commit.summary}>{commit.summary}</strong>
+                        {index === 0 && <span className="git-head-label">Latest</span>}
+                      </span>
+                      <span className="git-history-author" title={commit.author_name}>
+                        {commit.author_name}
+                      </span>
+                      <span className="git-history-time">
+                        {formatRelativeTime(commit.timestamp)}
+                      </span>
+                      <span className="git-history-sha">{commit.short_id}</span>
+                    </button>
+                  )
+                })
+              )}
             </div>
           </div>
         </div>
-        <aside className={`git-commit-inspector ${selected ? '' : 'is-empty'}`} aria-label="Commit details">
-          {selected ? (
-            <>
-              <div className="git-commit-inspector-heading">
-                <span>COMMIT DETAILS</span>
-                <button
-                  type="button"
-                  className="git-icon-button"
-                  aria-label="Close commit details"
-                  onClick={() => setSelected(null)}
-                >
-                  <X />
-                </button>
-              </div>
-              <div className="git-commit-inspector-content">
-                <div className="git-commit-id">
-                  <GitCommit />
-                  <code>{selected.short_id}</code>
-                  <button
-                    type="button"
-                    className="git-icon-button"
-                    aria-label="Copy full commit SHA"
-                    title="Copy full commit SHA"
-                    onClick={(event) => void handleCopyId(selected.id, event)}
-                  >{copied ? <Check /> : <Copy />}</button>
-                </div>
-                <h2>{selected.summary}</h2>
-                <div className="git-commit-metadata">
-                  <UserRound />
-                  <div>
-                    <strong>{selected.author_name}</strong>
-                    <span>{selected.author_email}</span>
-                  </div>
-                </div>
-                <div className="git-commit-metadata">
-                  <Clock3 />
-                  <span>{new Date(selected.timestamp * 1000).toLocaleString()}</span>
-                </div>
-                <div className="git-commit-parent-list">
-                  <span>PARENTS</span>
-                  {selected.parents.length === 0 ? <p>Root commit</p> : selected.parents.map((parent) => <code key={parent}>{parent.slice(0, 12)}</code>)}
-                </div>
-                {cwd && <button
-                  type="button"
-                  className="git-control"
-                  disabled={cherryPicking}
-                  title="Cherry-pick this commit into the current branch"
-                  onClick={() => void handleCherryPick(selected.id)}
-                >{cherryPicking ? <Loader2 className="animate-spin" /> : <GitCommit />}Cherry-pick commit</button>}
-                <p className="git-commit-action-hint">Apply this commit’s changes to your current branch.</p>
-              </div>
-            </>
-          ) : <div className="git-maintenance-empty">
-            <GitCommit />
-            <strong>Inspect a commit</strong>
-            <p>Select a row to see its author, parents and available actions.</p>
-          </div>}
+
+        {/* ── Vertical Resizer Between Graph Table and Details Inspector ── */}
+        <div
+          {...split.separatorProps}
+          aria-label="Resize commit graph and details panes"
+          className="git-pane-resizer"
+          title="Drag to resize panes · double-click to reset"
+        />
+
+        <aside
+          className={`git-commit-inspector ${selected ? '' : 'is-empty'}`}
+          style={{ width: `${split.value}px`, flex: `0 0 ${split.value}px` }}
+          aria-label="Commit details"
+        >
+          <GitCommitInspector
+            cwd={cwd}
+            selected={selected}
+            details={details}
+            loadingDetails={loadingDetails}
+            cherryPicking={cherryPicking}
+            onClose={() => setSelected(null)}
+            onCherryPick={handleCherryPick}
+            onOpenFileDiff={(filePath, commitId) => {
+              window.dispatchEvent(
+                new CustomEvent('omniterm:open-file-diff', {
+                  detail: { path: filePath, targetBranch: commitId },
+                }),
+              )
+            }}
+          />
         </aside>
       </div>
+
       <footer className="git-history-footer">
-        <span>{commits.length} commits loaded{query ? ` · ${matching.length} matching` : ''}</span>
-        <span><GitMerge />Merge commit</span>
+        <span>
+          {displayCommits.length} commits loaded
+          {query ? ` · ${matching.length} matching` : ''}
+        </span>
+        <span>
+          <GitMerge />
+          Merge commit
+        </span>
         <span>Newest first</span>
       </footer>
     </section>

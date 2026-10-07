@@ -205,186 +205,29 @@ pub struct GitFileHistoryEntry {
     pub path: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_git_file_history_entry_serde_roundtrip() {
-        let entry = GitFileHistoryEntry {
-            commit: GitCommitSummary {
-                id: "a".repeat(40),
-                short_id: "aaaaaaa".into(),
-                summary: "feat: rename".into(),
-                author_name: "Dev".into(),
-                author_email: "dev@example.test".into(),
-                timestamp: 1_786_026_782,
-                parents: vec!["b".repeat(40)],
-            },
-            path: "src/old_name.rs".into(),
-        };
-        let json = serde_json::to_string(&entry).expect("serialization succeeds");
-        let parsed: GitFileHistoryEntry =
-            serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(entry, parsed);
-
-        let context = GitFileContext {
-            repo_root: "D:/repo".into(),
-            relative_path: "src/app.ts".into(),
-            branch: None,
-        };
-        let json = serde_json::to_string(&context).expect("serialization succeeds");
-        assert!(!json.contains("branch"), "absent branch is omitted: {json}");
-        let parsed: GitFileContext = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(context, parsed);
-    }
-
-    #[test]
-    fn test_git_branch_info_serde_roundtrip() {
-        let branch = GitBranchInfo {
-            name: "features/test-branch".into(),
-            is_current: true,
-            is_remote: false,
-            upstream: Some("origin/features/test-branch".into()),
-            ahead: 1,
-            behind: 2,
-            is_gone: false,
-            last_commit_timestamp: Some(1786026782),
-            last_commit_message: Some("feat: add something".into()),
-            last_commit_author: Some("Dev User".into()),
-            is_merged: true,
-        };
-        let json = serde_json::to_string(&branch).expect("serialization succeeds");
-        let parsed: GitBranchInfo = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(branch, parsed);
-    }
-
-    #[test]
-    fn test_git_delete_branches_result_serde_roundtrip() {
-        let result = GitDeleteBranchesResult {
-            deleted: vec!["feat/old-branch".into()],
-            failed: vec![GitBranchDeleteFailure {
-                branch: "feat/active".into(),
-                reason: "branch is not fully merged".into(),
-            }],
-            removed_worktrees: vec!["/repo/.claude/worktrees/old".into()],
-        };
-        let json = serde_json::to_string(&result).expect("serialization succeeds");
-        let parsed: GitDeleteBranchesResult =
-            serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(result, parsed);
-    }
-
-    #[test]
-    fn test_git_repo_status_serde_roundtrip() {
-        let status = GitRepoStatus {
-            repo_root: "/path/to/repo".into(),
-            branch: Some("main".into()),
-            upstream: Some("origin/main".into()),
-            ahead: 1,
-            behind: 2,
-            is_detached: false,
-            files: vec![GitFileChange {
-                path: "src/main.rs".into(),
-                orig_path: None,
-                staged: GitFileStatus::Modified,
-                unstaged: GitFileStatus::Unmodified,
-                is_conflicted: false,
-            }],
-            conflict_count: 0,
-            main_worktree: None,
-        };
-
-        let json = serde_json::to_string(&status).expect("serialization succeeds");
-        assert!(
-            !json.contains("main_worktree"),
-            "absent main worktree is omitted: {json}"
-        );
-        let parsed: GitRepoStatus = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(status, parsed);
-
-        let linked = GitRepoStatus {
-            main_worktree: Some("/path/to/main".into()),
-            ..status
-        };
-        let json = serde_json::to_string(&linked).expect("serialization succeeds");
-        let parsed: GitRepoStatus = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(linked, parsed);
-    }
-
-    #[test]
-    fn test_git_worktree_info_serde_roundtrip() {
-        let worktree = GitWorktreeInfo {
-            path: "/repo/.claude/worktrees/topic".into(),
-            branch: Some("topic".into()),
-            head: Some("a".repeat(40)),
-            is_current: true,
-            ..GitWorktreeInfo::default()
-        };
-        let json = serde_json::to_string(&worktree).expect("serialization succeeds");
-        let parsed: GitWorktreeInfo =
-            serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(worktree, parsed);
-    }
-
-    #[test]
-    fn test_git_file_diff_serde_roundtrip() {
-        let diff = GitFileDiff {
-            path: "README.md".into(),
-            is_binary: false,
-            hunks: vec![GitDiffHunk {
-                old_start: 1,
-                old_lines: 1,
-                new_start: 1,
-                new_lines: 2,
-                header: "@@ -1,1 +1,2 @@".into(),
-                lines: vec![
-                    GitDiffLine {
-                        line_type: GitDiffLineType::Deletion,
-                        old_lineno: Some(1),
-                        new_lineno: None,
-                        content: "old".into(),
-                    },
-                    GitDiffLine {
-                        line_type: GitDiffLineType::Addition,
-                        old_lineno: None,
-                        new_lineno: Some(1),
-                        content: "new".into(),
-                    },
-                ],
-            }],
-        };
-
-        let json = serde_json::to_string(&diff).expect("serialization succeeds");
-        let parsed: GitFileDiff = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(diff, parsed);
-    }
-
-    #[test]
-    fn test_git_stash_entry_serde_roundtrip() {
-        let entry = GitStashEntry {
-            index: 0,
-            name: "stash@{0}".into(),
-            message: "WIP on main".into(),
-            timestamp: Some("2 hours ago".into()),
-        };
-        let json = serde_json::to_string(&entry).expect("serialization succeeds");
-        let parsed: GitStashEntry = serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(entry, parsed);
-    }
-
-    #[test]
-    fn test_git_branch_comparison_serde_roundtrip() {
-        let comp = GitBranchComparison {
-            base_branch: "main".into(),
-            target_branch: "feature".into(),
-            commits_ahead: vec![],
-            commits_behind: vec![],
-            files: vec![],
-        };
-        let json = serde_json::to_string(&comp).expect("serialization succeeds");
-        let parsed: GitBranchComparison =
-            serde_json::from_str(&json).expect("deserialization succeeds");
-        assert_eq!(comp, parsed);
-    }
+/// File update detail within a specific commit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitCommitFileChange {
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    pub status: GitFileStatus,
+    pub additions: u32,
+    pub deletions: u32,
+    pub is_binary: bool,
 }
+
+/// Comprehensive details of a single commit point.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GitCommitDetails {
+    pub commit: GitCommitSummary,
+    pub full_message: String,
+    pub files: Vec<GitCommitFileChange>,
+    pub total_additions: u32,
+    pub total_deletions: u32,
+    pub total_files: usize,
+}
+
+#[cfg(test)]
+#[path = "git_tests.rs"]
+mod tests;

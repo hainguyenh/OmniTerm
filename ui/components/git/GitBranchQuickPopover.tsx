@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, ChevronDown, ChevronRight, FolderGit2, GitBranch, Loader2, Maximize2, Plus, Radio, RotateCw, Search, X } from 'lucide-react'
+import { ArrowDownLeft, ArrowDownToLine, ArrowUpRight, ChevronDown, ChevronRight, FolderGit2, GitBranch, Loader2, Maximize2, Plus, Radio, RotateCw, Search, Star, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -14,6 +14,7 @@ import { computePopoverStyle, opensUpward, type AnchorRect } from './gitPopoverP
 import { buildBranchTree } from './gitBranchTreeUtils'
 import type { GitBranchInfo } from './gitTypes'
 import { useGitBranchOps } from './useGitBranchOps'
+import { useGitFavorites } from './useGitFavorites'
 import { useResizablePanel } from './useResizablePanel'
 import './git-ui.css'
 import './git-branches.css'
@@ -50,8 +51,10 @@ export function GitBranchQuickPopover({
   const [selectedBranch, setSelectedBranch] = useState<GitBranchInfo | null>(null)
   const [comparingBranch, setComparingBranch] = useState<string | null>(null)
   const [contextBranch, setContextBranch] = useState<{ branch: GitBranchInfo; point: MenuPoint } | null>(null)
+  const [favoriteOpen, setFavoriteOpen] = useState(true)
   const [localOpen, setLocalOpen] = useState(true)
   const [remoteOpen, setRemoteOpen] = useState(true)
+  const { favorites, isFavorite, toggleFavorite } = useGitFavorites(cwd)
 
   const {
     branches, loading, busyAction, actionNotice, creatingBranch, setCreatingBranch,
@@ -69,11 +72,13 @@ export function GitBranchQuickPopover({
 
   const query = search.toLowerCase().trim()
   const branchList = branches ?? []
+  const favoriteBranches = branchList.filter((branch) => favorites.includes(branch.name) && (!query || branch.name.toLowerCase().includes(query)))
   const localBranches = branchList.filter((branch) => !branch.is_remote && (!query || branch.name.toLowerCase().includes(query)))
   const remoteBranches = branchList.filter((branch) => branch.is_remote && (!query || branch.name.toLowerCase().includes(query)))
   const shownBranch = selectedBranch
     ? branchList.find((branch) => branch.name === selectedBranch.name && branch.is_remote === selectedBranch.is_remote) ?? null
     : branchList.find((branch) => branch.is_current || branch.name === currentBranch) ?? null
+  const favoriteNodes = buildBranchTree(favoriteBranches)
   const localNodes = buildBranchTree(localBranches)
   const remoteNodes = buildBranchTree(remoteBranches)
   const repoName = cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd
@@ -267,6 +272,32 @@ export function GitBranchQuickPopover({
               </div>
             ) : (
               <>
+                {favoriteBranches.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
+                      aria-expanded={favoriteOpen}
+                      onClick={() => setFavoriteOpen((open) => !open)}
+                    >
+                      {favoriteOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                      <Star className="w-3 h-3 text-amber-400 fill-amber-400 flex-shrink-0" />
+                      <span>Favorites</span>
+                      <small className="ml-auto opacity-70">{favoriteBranches.length}</small>
+                    </button>
+                    {favoriteOpen && (
+                      <GitBranchTreeView
+                        nodes={favoriteNodes}
+                        currentBranch={currentBranch}
+                        selectedBranch={shownBranch}
+                        isFavorite={isFavorite}
+                        onToggleFavorite={toggleFavorite}
+                        onSelectBranch={setSelectedBranch}
+                        onContextBranch={openContext}
+                      />
+                    )}
+                  </>
+                )}
                 <button
                   type="button"
                   className="w-full flex items-center gap-1 px-1.5 py-1 text-[11px] font-semibold text-[var(--theme-dim)] hover:text-[var(--theme-fg)]"
@@ -282,6 +313,8 @@ export function GitBranchQuickPopover({
                     nodes={localNodes}
                     currentBranch={currentBranch}
                     selectedBranch={shownBranch}
+                    isFavorite={isFavorite}
+                    onToggleFavorite={toggleFavorite}
                     onSelectBranch={setSelectedBranch}
                     onContextBranch={openContext}
                   />
@@ -303,6 +336,8 @@ export function GitBranchQuickPopover({
                         nodes={remoteNodes}
                         currentBranch={currentBranch}
                         selectedBranch={shownBranch}
+                        isFavorite={isFavorite}
+                        onToggleFavorite={toggleFavorite}
                         onSelectBranch={setSelectedBranch}
                         onContextBranch={openContext}
                       />
@@ -372,6 +407,8 @@ export function GitBranchQuickPopover({
                 currentBranch={currentBranch}
                 inline
                 compact
+                isFavorite={isFavorite(contextBranch.branch.name)}
+                onToggleFavorite={toggleFavorite}
                 {...branchActions}
                 onClose={closeContext}
               />

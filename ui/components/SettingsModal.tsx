@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
+import { Code2, Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
 import type { ConnectionProviderCapabilities, Workspace } from '@omniterm/contract'
 import type { UseDialogReturn } from '../hooks/useDialog'
 import { useDialogDrag } from '../utils/dialogDrag'
 import GeneralSettings from './GeneralSettings'
+import EditorShortcutsSettings from './EditorShortcutsSettings'
 import PluginManager from './PluginManager'
 import CustomArtSettings from './CustomArtSettings'
 import UpdateSettings from './UpdateSettings'
@@ -18,7 +19,7 @@ import AgentQuotaSettings from '../../plugins/agent-quota/app/AgentQuotaSettings
 import { SETTINGS_TAB_EVENT } from '../../plugins/agent-quota/app/AgentQuotaRoot'
 import { useQuota } from '../../plugins/agent-quota/app/quotaStore'
 
-export type SettingsTabId = 'general' | 'shortcuts' | 'plugins' | 'quota' | 'artwork' | 'about'
+export type SettingsTabId = 'general' | 'shortcuts' | 'editorShortcuts' | 'plugins' | 'quota' | 'artwork' | 'about'
 
 export interface SettingsModalProps {
   isOpen: boolean
@@ -55,6 +56,7 @@ export interface SettingsModalProps {
 const TABS: Array<{ id: SettingsTabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: 'general', label: 'General', icon: Sliders },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
+  { id: 'editorShortcuts', label: 'Editor Shortcuts', icon: Code2 },
   { id: 'plugins', label: 'Plugins', icon: Package },
   { id: 'quota', label: 'Agent Quota', icon: Gauge },
   { id: 'artwork', label: 'Artwork', icon: Palette },
@@ -247,6 +249,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   })}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'editorShortcuts' && (
+              <EditorShortcutsSettings
+                appSettings={appSettings}
+                setAppSettings={setAppSettings}
+                showAlert={showAlert}
+              />
             )}
 
             {activeTab === 'plugins' && (

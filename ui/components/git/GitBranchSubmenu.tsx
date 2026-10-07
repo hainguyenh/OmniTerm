@@ -6,6 +6,7 @@ import {
   GitCompare,
   GitMerge,
   Plus,
+  Star,
   Trash2,
 } from 'lucide-react'
 import type { GitBranchInfo } from './gitTypes'
@@ -15,6 +16,8 @@ interface GitBranchSubmenuProps {
   currentBranch?: string
   inline?: boolean
   compact?: boolean
+  isFavorite?: boolean
+  onToggleFavorite?: (branch: string) => void
   onCheckout: (branch: string) => void
   onPull?: (branch: string) => void
   onMerge: (branch: string) => void
@@ -30,6 +33,8 @@ export const GitBranchSubmenu: React.FC<GitBranchSubmenuProps> = ({
   currentBranch,
   inline = false,
   compact = false,
+  isFavorite,
+  onToggleFavorite,
   onCheckout,
   onPull,
   onMerge,
@@ -58,6 +63,20 @@ export const GitBranchSubmenu: React.FC<GitBranchSubmenuProps> = ({
         </div>
       )}
 
+      {onToggleFavorite && (
+        <button
+          type="button"
+          onClick={() => {
+            onToggleFavorite(branch.name)
+            onClose()
+          }}
+          className="w-full flex items-center gap-2 px-2.5 py-2 rounded hover:bg-theme-hover hover:text-theme-fg text-left transition-colors cursor-pointer"
+        >
+          <Star className={`w-3.5 h-3.5 flex-shrink-0 ${isFavorite ? 'text-amber-400 fill-amber-400' : 'text-theme-dim'}`} />
+          <span>{isFavorite ? 'Remove from favorites' : 'Add to favorites'}</span>
+        </button>
+      )}
+
       {!isCurrent && !branch.is_remote && (
         <button
           type="button"
@@ -80,10 +99,16 @@ export const GitBranchSubmenu: React.FC<GitBranchSubmenuProps> = ({
             onClose()
           }}
           title={isCurrent ? `Pull ${branch.upstream} into ${branch.name}` : `Fast-forward ${branch.name} to ${branch.upstream} without checking it out`}
-          className="w-full flex items-center gap-2 px-2.5 py-2 rounded hover:bg-theme-hover hover:text-theme-fg text-left transition-colors cursor-pointer"
+          aria-label={compact ? 'Pull' : `Pull '${branch.name}'`}
+          className="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded hover:bg-theme-hover hover:text-theme-fg text-left transition-colors cursor-pointer"
         >
-          <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
-          <span className="break-words">{compact ? 'Pull' : `Pull '${branch.name}'`}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <ArrowDownToLine className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+            <span className="break-words">{compact ? 'Pull' : `Pull '${branch.name}'`}</span>
+          </div>
+          {!isCurrent && (
+            <span className="text-[10px] text-theme-dim flex-shrink-0 font-normal">without checkout</span>
+          )}
         </button>
       )}
 

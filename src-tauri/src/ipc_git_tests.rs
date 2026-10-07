@@ -62,6 +62,20 @@ fn ipc_git_working_tree_file_and_branch_commands() {
         2
     );
 
+    let head_sha = log[0]["id"].as_str().expect("head sha");
+    let details = fixture.ok(
+        "git_commit_details",
+        json!({ "cwd": &dir, "commitId": head_sha }),
+    );
+    assert_eq!(details["commit"]["summary"], "add a");
+    assert_eq!(details["files"][0]["path"], "a.txt");
+
+    let file_diff = fixture.ok(
+        "git_commit_file_diff",
+        json!({ "cwd": &dir, "commitId": head_sha, "filePath": "a.txt", "oldPath": null }),
+    );
+    assert_eq!(file_diff["path"], "a.txt");
+
     assert_eq!(
         fixture.ok(
             "git_read_file_revision",

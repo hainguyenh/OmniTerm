@@ -214,6 +214,7 @@ export function checkRepository(root = process.cwd()) {
       'ui/testSetup.ts',
       'ui/testUtils.tsx',
       'ui/vite-env.d.ts',
+      'ui/editorSettings.d.ts',
       'contract/index.ts',
       ...pluginEntries,
     ],
