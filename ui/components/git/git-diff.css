@@ -191,6 +191,7 @@
 
 .git-diff-split .cm-mergeViewEditor:last-child {
   flex: 1 1 0;
+  border-inline-end: 1px solid var(--theme-border);
 }
 
 .git-diff-split-handle {
@@ -282,6 +283,7 @@
 
 .git-diff-column.is-editable {
   box-shadow: inset 0 2px var(--theme-success);
+  border-inline-end: 1px solid var(--theme-border);
 }
 
 .git-diff-column.is-base {

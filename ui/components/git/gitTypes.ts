@@ -80,6 +80,24 @@ export interface GitCommitSummary {
   parents: string[]
 }
 
+export interface GitCommitFileChange {
+  path: string
+  old_path?: string
+  status: GitFileStatus
+  additions: number
+  deletions: number
+  is_binary: boolean
+}
+
+export interface GitCommitDetails {
+  commit: GitCommitSummary
+  full_message: string
+  files: GitCommitFileChange[]
+  total_additions: number
+  total_deletions: number
+  total_files: number
+}
+
 export interface GitProject {
   id: string
   name: string

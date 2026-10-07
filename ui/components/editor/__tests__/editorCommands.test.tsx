@@ -64,6 +64,8 @@ describe('editor commands', () => {
     await runEditorCommand('find', view)
     expect(searchPanelOpen(view.state)).toBe(true)
     await expect(runEditorCommand('fold', view)).resolves.toBeUndefined()
+    await expect(runEditorCommand('foldAll', view)).resolves.toBeUndefined()
+    await expect(runEditorCommand('unfoldAll', view)).resolves.toBeUndefined()
   })
 
   it('disables edits on read-only text and selection actions without a selection', () => {

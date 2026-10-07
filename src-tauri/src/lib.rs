@@ -31,15 +31,11 @@ mod test_support;
 mod text_file_commands;
 mod workspace_file_commands;
 
-// Public so the integration tests under tests/ can drive the real launch and command paths.
+// Public so integration tests under tests/ can drive launch and command paths.
 pub mod adhoc;
 pub mod connections;
-// Re-exported from the shared protocol crate so every intra‑crate
-// `crate::shell_spec::*` / `crate::openshell::*` path keeps resolving unchanged.
 pub use app_protocol::{openshell, session_status, shell_spec};
 
-// Re-exported from the core crate so every intra‑crate
-// `crate::launch::*` / `crate::tree_validate::*` / `crate::workspace_launch::*` path keeps resolving.
 #[cfg(windows)]
 pub use app_core::win_job;
 pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
@@ -362,6 +358,8 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         git_commands::git_revert,
         git_commands::git_commit,
         git_commands::git_log,
+        git_commands::git_commit_details,
+        git_commands::git_commit_file_diff,
         git_commands::git_branches,
         git_commands::git_checkout,
         git_commands::git_create_branch,

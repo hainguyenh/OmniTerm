@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.1.14] — 2026-10-07
+
+### Added
+- feat: add git commit inspector, diff preview modal, and editor shortcuts (@Hai Nguyen)
+- **Git Commit Inspector & Diff Preview**: View commit metadata, changed files, and inline diff previews directly from the Git graph.
+- **Git Favorites**: Bookmark and quickly navigate favorite repositories and branches.
+- **Double Shift / Project Search**: Quickly search and open project files with Double Shift or `Ctrl+P`.
+- **Editor Shortcuts & Customization**: Configure editor keymaps, code folding, and column ruler in the built-in editor.
+
 ## [Unreleased]
 
 ### Agent Quota (new bundled plugin)

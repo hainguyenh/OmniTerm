@@ -1,5 +1,5 @@
 import { Check, Loader2, Save, StickyNote, Trash2, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Tooltip } from '../Tooltip'
 
 export interface TempNoteEditorTabProps {
@@ -136,6 +136,15 @@ export function TempNoteEditorTab({ noteId, visible, onClose }: TempNoteEditorTa
   const chars = content.length
   const preview = content.split('\n').find((l) => l.trim().length > 0)?.trim() || 'Untitled Note'
 
+  const gutterRef = useRef<HTMLDivElement>(null)
+  const lineNumbers = useMemo(() => Array.from({ length: lines }, (_, i) => i + 1), [lines])
+
+  const handleScroll = () => {
+    if (gutterRef.current && textareaRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop
+    }
+  }
+
   if (!visible) return null
 
   return (
@@ -184,26 +193,38 @@ export function TempNoteEditorTab({ noteId, visible, onClose }: TempNoteEditorTa
       </div>
 
       {/* Editor Body */}
-      <div className="flex-1 min-h-0 p-3">
+      <div className="flex-1 min-h-0 p-3 flex overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-full text-xs text-[var(--theme-dim)]">
+          <div className="flex items-center justify-center h-full w-full text-xs text-[var(--theme-dim)]">
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
             Loading note…
           </div>
         ) : (
-          <textarea
-            ref={textareaRef}
-            value={content}
-            onChange={(e) => {
-              const val = e.target.value
-              setContent(val)
-              scheduleSave(val)
-            }}
-            onKeyDown={onKeyDown}
-            placeholder="Type or paste temporary text here… (auto-saves to _temp)"
-            className="w-full h-full resize-none bg-transparent outline-none font-mono text-xs leading-relaxed placeholder:text-[var(--theme-dim)]/50"
-            spellCheck={false}
-          />
+          <div className="flex flex-1 min-h-0 w-full h-full overflow-hidden">
+            <div
+              ref={gutterRef}
+              className="flex flex-col flex-shrink-0 min-w-[28px] pr-2 mr-2 border-r border-[var(--theme-border)] text-right select-none overflow-hidden font-mono text-xs leading-relaxed text-[var(--theme-dim)] opacity-60"
+              aria-hidden="true"
+            >
+              {lineNumbers.map((num) => (
+                <div key={num} className="leading-relaxed">{num}</div>
+              ))}
+            </div>
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onScroll={handleScroll}
+              onChange={(e) => {
+                const val = e.target.value
+                setContent(val)
+                scheduleSave(val)
+              }}
+              onKeyDown={onKeyDown}
+              placeholder="Type or paste temporary text here… (auto-saves to _temp)"
+              className="flex-1 w-full h-full resize-none bg-transparent outline-none font-mono text-xs leading-relaxed placeholder:text-[var(--theme-dim)]/50"
+              spellCheck={false}
+            />
+          </div>
         )}
       </div>
 

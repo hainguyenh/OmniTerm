@@ -1,11 +1,11 @@
 import { undo, undoDepth } from '@codemirror/commands'
-import { foldCode } from '@codemirror/language'
+import { foldAll, foldCode, unfoldAll } from '@codemirror/language'
 import { openSearchPanel } from '@codemirror/search'
 import { Compartment, StateEffect, type EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 
 /** The actions the editor surface's right-click panel offers. */
-export type EditorCommandId = 'undo' | 'cut' | 'copy' | 'paste' | 'find' | 'fold' | 'wrap'
+export type EditorCommandId = 'undo' | 'cut' | 'copy' | 'paste' | 'find' | 'fold' | 'foldAll' | 'unfoldAll' | 'wrap'
 
 // Added on first toggle rather than in every extension set, so any CodeMirror view the surface
 // wraps (file editor, diff, conflict result, branch viewer) can wrap without being built for it.
@@ -56,6 +56,12 @@ export async function runEditorCommand(id: EditorCommandId, view: EditorView): P
       return
     case 'fold':
       foldCode(view)
+      break
+    case 'foldAll':
+      foldAll(view)
+      break
+    case 'unfoldAll':
+      unfoldAll(view)
       break
     case 'wrap': {
       const next = isWrapping(view.state) ? [] : EditorView.lineWrapping

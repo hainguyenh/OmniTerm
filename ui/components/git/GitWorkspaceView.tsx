@@ -321,7 +321,7 @@ export const GitWorkspaceView: React.FC<GitWorkspaceViewProps> = ({
               title="Drag to resize panes · double-click to reset"
             />
 
-            <div className="git-diff-pane flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-theme-bg">
+            <div className="git-diff-pane flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-theme-bg border-r border-theme-border">
               {diffTarget && effectiveCwd ? (
                 <GitDiffViewer
                   cwd={effectiveCwd}

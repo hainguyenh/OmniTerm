@@ -3,6 +3,7 @@ import type {
   GitBlameLine,
   GitBranchComparison,
   GitBranchInfo,
+  GitCommitDetails,
   GitCommitSummary,
   GitDeleteBranchesResult,
   GitFileContext,
@@ -46,8 +47,12 @@ export function createGitAPI() {
       invoke<void>('git_revert', { cwd, paths }),
     commit: (cwd: string, message: string, amend: boolean) =>
       invoke<string>('git_commit', { cwd, message, amend }),
-    getLog: (cwd: string, limit?: number) =>
-      invoke<GitCommitSummary[]>('git_log', { cwd, limit: limit ?? null }),
+    getLog: (cwd: string, limit?: number, branch?: string | null) =>
+      invoke<GitCommitSummary[]>('git_log', { cwd, limit: limit ?? null, branch: branch ?? null }),
+    getCommitDetails: (cwd: string, commitId: string) =>
+      invoke<GitCommitDetails>('git_commit_details', { cwd, commitId }),
+    getCommitFileDiff: (cwd: string, commitId: string, filePath: string, oldPath?: string | null) =>
+      invoke<GitFileDiff>('git_commit_file_diff', { cwd, commitId, filePath, oldPath: oldPath ?? null }),
     getBranches: (cwd: string) =>
       invoke<GitBranchInfo[]>('git_branches', { cwd }),
     checkout: (cwd: string, branch: string) =>
