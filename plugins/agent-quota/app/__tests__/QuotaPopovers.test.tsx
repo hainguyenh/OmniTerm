@@ -16,6 +16,7 @@ import { NOW, profile, reading, seed, terminal } from './quotaFixtures'
 beforeEach(() => resetQuotaStore())
 afterEach(() => {
   resetQuotaStore()
+  vi.clearAllTimers()
   vi.useRealTimers()
 })
 

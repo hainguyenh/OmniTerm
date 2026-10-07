@@ -43,8 +43,15 @@ export function QuotaOverridePopover({
   const [applied, setApplied] = useState(false)
   const [position, setPosition] = useState<{ top?: number; bottom?: number; right: number; maxHeight?: string } | null>(null)
   const appliedTimerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
   const rootRef = useRef<HTMLDivElement>(null)
-  useEffect(() => () => { if (appliedTimerRef.current !== null) window.clearTimeout(appliedTimerRef.current) }, [])
+  useEffect(() => () => {
+    mountedRef.current = false
+    if (appliedTimerRef.current !== null) {
+      window.clearTimeout(appliedTimerRef.current)
+      appliedTimerRef.current = null
+    }
+  }, [])
   useEffect(() => {
     const updatePosition = () => {
       if (!anchorRef?.current) return
@@ -118,7 +125,15 @@ export function QuotaOverridePopover({
       quotaCommands().refresh(terminal.profileKey)
     }
     setApplied(true)
-    appliedTimerRef.current = window.setTimeout(() => setApplied(false), 2000)
+    if (appliedTimerRef.current !== null) {
+      window.clearTimeout(appliedTimerRef.current)
+    }
+    appliedTimerRef.current = window.setTimeout(() => {
+      appliedTimerRef.current = null
+      if (mountedRef.current) {
+        setApplied(false)
+      }
+    }, 2000)
   }
 
   const handleReset = () => setDraft(committed)
