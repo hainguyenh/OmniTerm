@@ -142,11 +142,10 @@ describe('PaneHeader remaining behavior', () => {
     expect(screen.queryByRole('button', { name: 'Clear terminal' })).not.toBeInTheDocument()
   })
 
-  it('opens a new local pane at the current directory from the header overflow menu', () => {
+  it('opens a new local pane at the current directory directly when width allows', () => {
     const onOpenCurrentDirectory = vi.fn()
     setup({ conn: { ...ssh, type: 'LOCAL' }, sessionId: 's1', onOpenCurrentDirectory })
-    fireEvent.click(screen.getByRole('button', { name: 'More terminal actions' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open new pane with current directory' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open new pane with current directory' }))
     expect(onOpenCurrentDirectory).toHaveBeenCalledOnce()
   })
 

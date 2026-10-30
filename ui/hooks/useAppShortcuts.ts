@@ -130,7 +130,7 @@ export function useAppShortcuts({
 
       // This pane action has a fixed shortcut by design. It must keep working even if the user
       // customizes the unrelated New Folder binding in Settings.
-      if (inPane && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'n') {
+      if (inPane && e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n' && ((e.altKey && !e.shiftKey) || (e.shiftKey && !e.altKey))) {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:new-pane-current-directory'))
         return

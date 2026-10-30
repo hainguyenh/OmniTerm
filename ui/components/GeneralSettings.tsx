@@ -94,10 +94,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-[1_1_15rem]">
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">General Preferences</h3>
-          <p className="text-[11px] text-theme-dim leading-relaxed mt-0.5">
+          <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
             Configure terminal defaults, agent behavior, file attachments, and backups.
           </p>
         </div>
@@ -106,7 +106,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             <button
               type="button"
               onClick={() => { onCloseSettings(); window.omnitermAPI.app.revealLog() }}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-fg hover:text-theme-warning bg-theme-bg border border-theme-border rounded-lg transition-colors"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[10px] text-theme-fg hover:text-theme-warning bg-theme-bg border border-theme-border rounded-lg transition-colors"
             >
               <FileText className="w-3 h-3 text-theme-warning" />
               Open log
