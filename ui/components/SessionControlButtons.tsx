@@ -123,8 +123,9 @@ export default function SessionControlButtons({
   const availableControls = selectedActions
     .filter(action => supportedActions.includes(action))
     .map(action => actionToControl[action])
-  if (resolvedSurface === 'legacy' && onOpenCurrentDirectory) availableControls.push('currentDir')
-  const overflowOnlyControls: ControlKey[] = resolvedSurface === 'header' && onOpenCurrentDirectory ? ['currentDir'] : []
+  if (resolvedSurface !== 'footer' && conn.type === 'LOCAL' && onOpenCurrentDirectory) {
+    availableControls.unshift('currentDir')
+  }
 
   const sendInput = (data: string) => {
     const api = window.omnitermAPI?.connect
@@ -160,7 +161,7 @@ export default function SessionControlButtons({
         return
       }
       if (resolvedSurface === 'header' && measurement.scrollWidth > 0) {
-        const needed = measurement.scrollWidth + (overflowOnlyControls.length > 0 ? MORE_BUTTON_WIDTH + 2 : 0)
+        const needed = measurement.scrollWidth
         setNeededWidth(needed)
       }
       if (!availableWidth) {
@@ -178,9 +179,9 @@ export default function SessionControlButtons({
       const hidden: ControlKey[] = []
       let used = 0
       for (const key of availableControls) {
-        const width = measured.get(key) ?? 0
+        const width = measured.get(key) || (key === 'currentDir' ? 20 : key === 'font' ? 60 : 16)
         const next = used + (used ? 2 : 0) + width
-        if (next + MORE_BUTTON_WIDTH + 2 <= availableWidth) used = next
+        if (hidden.length === 0 && next + MORE_BUTTON_WIDTH + 2 <= availableWidth) used = next
         else hidden.push(key)
       }
       setHiddenControls(previous => previous.length === hidden.length && previous.every((key, index) => key === hidden[index]) ? previous : hidden)
@@ -195,7 +196,7 @@ export default function SessionControlButtons({
     const slot = root.parentElement
     if (slot && slot !== root) observer.observe(slot)
     return () => observer.disconnect()
-  }, [availableControls.join('|'), resolvedSurface, overflowOnlyControls.length])
+  }, [availableControls.join('|'), resolvedSurface])
 
   useEffect(() => {
     if (!menuOpen && !customizeOpen) return
@@ -245,8 +246,8 @@ export default function SessionControlButtons({
       compact
     />
   )
-  const currentDirectoryControl = onOpenCurrentDirectory && (
-    <Tooltip content="Open new pane with current directory" shortcut="Ctrl+Shift+N" placement={tooltipPlacement}>
+  const currentDirectoryControl = conn.type === 'LOCAL' && onOpenCurrentDirectory && (
+    <Tooltip content="Open new pane with current directory" shortcut="Ctrl+Alt+N" placement={tooltipPlacement}>
       <button type="button" onClick={openCurrentDirectory} className="w-5 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors" aria-label="Open new pane with current directory">
         <svg viewBox="0 0 25 25" fill="none" className="w-5 h-5" aria-hidden="true">
           <path d="M8.5 9.5L11.5 12.5L8.5 15.5M13 15.5H17M5.5 6.5H19.5V18.5H5.5V6.5Z" stroke="currentColor" strokeWidth="1.2" />
@@ -287,7 +288,7 @@ export default function SessionControlButtons({
       </button>
     </Tooltip>
   )
-  const menuControls = [...hiddenControls, ...overflowOnlyControls.filter(key => !hiddenControls.includes(key))]
+  const menuControls = hiddenControls
   const menuItemClass = 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover disabled:opacity-40'
   const headerActions = toolbarActionsFor({ header: appearance?.headerActions ? [...appearance.headerActions] : undefined }, 'header')
   const footerActions = toolbarActionsFor({ footer: appearance?.footerActions ? [...appearance.footerActions] : undefined }, 'footer')
@@ -316,8 +317,8 @@ export default function SessionControlButtons({
       className={`relative flex min-w-[18px] ${resolvedSurface === 'header' ? 'flex-initial' : 'flex-1'} items-center justify-end gap-0.5 ${className}`}
       style={resolvedSurface === 'header' && neededWidth !== undefined ? { width: neededWidth } : undefined}
     >
-      <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
-        {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
+      <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex w-max shrink-0 items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
+        {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'currentDir' ? 'h-4 w-5' : key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
       </span>
       {availableControls.map(renderControl)}
       {appearance?.onToolbarActionsChange && resolvedSurface === 'footer' && (

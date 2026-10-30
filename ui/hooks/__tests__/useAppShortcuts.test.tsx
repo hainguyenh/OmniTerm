@@ -415,6 +415,26 @@ describe('useAppShortcuts', () => {
       window.removeEventListener('omniterm:new-folder', onFolder)
       cleanup()
     })
+    it('opens a current-directory pane on Ctrl+Alt+N only with pane focus', () => {
+      const { cleanup } = setup('xterm')
+      const onPane = vi.fn()
+      const onFolder = vi.fn()
+      window.addEventListener('omniterm:new-pane-current-directory', onPane)
+      window.addEventListener('omniterm:new-folder', onFolder)
+      const shortcut = ctrlKey('n', { altKey: true })
+      window.dispatchEvent(shortcut)
+      expect(shortcut.defaultPrevented).toBe(true)
+      expect(onPane).toHaveBeenCalledOnce()
+      expect(onFolder).not.toHaveBeenCalled()
+
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+      window.dispatchEvent(ctrlKey('n', { altKey: true }))
+      expect(onPane).toHaveBeenCalledOnce()
+      window.removeEventListener('omniterm:new-pane-current-directory', onPane)
+      window.removeEventListener('omniterm:new-folder', onFolder)
+      cleanup()
+    })
+
     it('keeps Ctrl+Shift+N fixed for panes even when New Folder is rebound', () => {
       const rebound = {
         ...appSettings,

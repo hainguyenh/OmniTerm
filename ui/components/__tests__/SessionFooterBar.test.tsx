@@ -64,8 +64,14 @@ describe('SessionFooterBar controls', () => {
     expect(screen.getByText('F:/repo')).toBeInTheDocument()
   })
 
-  it('hides the copy output control unless the footer actions opt into it', () => {
-    renderFooter({ appearance: { fontSize: 14, onFontSizeChange: vi.fn(), onToolbarActionsChange: vi.fn() } })
+  it('shows Copy by default but respects a saved footer action list without it', () => {
+    const appearance = { fontSize: 14, onFontSizeChange: vi.fn(), onToolbarActionsChange: vi.fn() }
+    const { rerender, props } = renderFooter({ appearance })
+    expect(screen.getByRole('button', { name: 'Copy terminal output' })).toBeInTheDocument()
+    rerender(<SessionFooterBar {...props} appearance={{
+      ...appearance,
+      footerActions: ['fontSize', 'stop', 'clear', 'save'],
+    }} />)
     expect(screen.queryByRole('button', { name: 'Copy terminal output' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save terminal output to file' })).toBeInTheDocument()
   })

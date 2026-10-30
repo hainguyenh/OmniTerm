@@ -16,6 +16,18 @@ beforeEach(() => {
 })
 
 describe('GeneralSettings', () => {
+  it('keeps the compact description separate from the Open log button on narrow settings views', () => {
+    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const title = screen.getByText('General Preferences')
+    expect(title.parentElement?.parentElement).toHaveClass('flex-wrap', 'gap-x-3')
+    expect(title.parentElement).toHaveClass('min-w-0')
+    expect(screen.getByText('Configure terminal defaults, agent behavior, file attachments, and backups.'))
+      .toHaveClass('max-w-[19rem]', 'text-[10px]')
+    const openLog = screen.queryByRole('button', { name: 'Open log' })
+    if (openLog) expect(openLog).toHaveClass('shrink-0', 'whitespace-nowrap')
+  })
+
+
   it('persists shell and clamps file-size values', async () => {
     const setAppSettings = vi.fn()
     const settings = { defaultShell: 'missing', maxOpenFileMb: 3, excludedViewableExts: [] }
@@ -249,11 +261,44 @@ describe('GeneralSettings', () => {
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalCloseConfirm: false })
   })
 
+  it('starts with every configurable toolbar action switched on by default', () => {
+    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
+    expect(toolbar.getAllByRole('switch')).toHaveLength(8)
+    expect(toolbar.getByRole('switch', { name: 'Theme' })).toHaveClass('h-3.5', 'w-6', 'rounded-md')
+    expect(toolbar.getByRole('switch', { name: 'Theme' }).parentElement).toHaveClass('py-1', 'text-xs')
+    expect(toolbar.getByRole('switch', { name: 'Theme' }).firstElementChild).toHaveClass('rounded-sm')
+    const toolbarDescription = toolbar.getByText(/Choose the default actions and their order/)
+    expect(toolbarDescription).toHaveClass('w-full')
+    expect(toolbarDescription).not.toHaveClass('max-w-[45ch]')
+    for (const action of toolbar.getAllByRole('switch')) {
+      expect(action).toHaveAttribute('aria-checked', 'true')
+    }
+    expect(toolbar.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('keeps general preferences description clear of the log action', () => {
+    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const description = screen.getByText('Configure terminal defaults, agent behavior, file attachments, and backups.')
+    expect(description).toHaveClass('max-w-[19rem]')
+    expect(description.parentElement).toHaveClass('min-w-0', 'flex-[1_1_15rem]')
+    const logButton = screen.queryByRole('button', { name: /Open log/i })
+    if (logButton) expect(logButton).toHaveClass('shrink-0')
+  })
+
+  it('respects explicit user-disabled actions rather than resetting them', () => {
+    render(<GeneralSettings appSettings={{ toolbarActions: { header: ['theme'], footer: ['clear'] } }} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
+    expect(toolbar.getByRole('switch', { name: 'Theme' })).toHaveAttribute('aria-checked', 'true')
+    expect(toolbar.getByRole('switch', { name: 'Detach terminal' })).toHaveAttribute('aria-checked', 'false')
+    expect(toolbar.getByRole('switch', { name: 'Copy terminal output' })).toHaveAttribute('aria-checked', 'false')
+  })
+
   it('applies global toolbar visibility and order to every connection', () => {
     const setAppSettings = vi.fn()
     render(<GeneralSettings appSettings={{ perConn: { saved: { toolbarActions: { footer: ['clear'] } } } }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
     const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
-    fireEvent.click(toolbar.getByRole('checkbox', { name: 'Stop current process' }))
+    fireEvent.click(toolbar.getByRole('switch', { name: 'Stop current process' }))
     fireEvent.click(toolbar.getByRole('button', { name: 'Move Save output to file up' }))
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith(expect.objectContaining({
       toolbarActions: expect.objectContaining({ footer: expect.arrayContaining(['save']) }),
