@@ -341,7 +341,8 @@ interface Window {
       skip: (version: string | null) => Promise<UpdateState>
       getVersion: () => Promise<string>
       showSaveDialog: (defaultName: string) => Promise<string | null>
-      downloadPortable: (savePath: string) => Promise<void>
+      downloadPortable: () => Promise<void>
+      openReleasePage: () => Promise<void>
       downloadInstaller: (installNow: boolean) => Promise<void>
       onState: (cb: (s: UpdateState) => void) => () => void
       /** Native signed-update path; unavailable in unsigned dev builds. */
