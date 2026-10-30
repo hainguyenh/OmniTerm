@@ -21,7 +21,7 @@ interface ThemeRemixModalProps {
   currentTheme: AppTheme
 }
 
-const isCustom = (theme: AppTheme) => theme.id.startsWith('theme-')
+const isCustom = (theme: AppTheme) => theme.id.startsWith('theme-') || ['compact', 'clickhouse', 'click-house', 'volt-agent'].includes(theme.id)
 
 export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
   isOpen,
@@ -261,7 +261,7 @@ export const ThemeRemixModal: React.FC<ThemeRemixModalProps> = ({
                       <span className="flex items-center gap-1 truncate text-xs font-semibold">
                         {t.name}
                         {t.id === appSettings.themeId && (
-                          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--theme-success)' }} title="Active theme" />
+                          <span className="h-1.5 w-1.5 rounded-full semantic-status-dot" style={{ backgroundColor: 'var(--theme-success)' }} title="Active theme" />
                         )}
                       </span>
                       <span className="block text-[10px] text-theme-dim">{isCustom(t) ? 'Custom' : 'Built-in'}</span>

@@ -51,8 +51,14 @@ fn merge_theme_roots(
     builtin: Vec<serde_json::Value>,
     user: Vec<serde_json::Value>,
 ) -> Vec<serde_json::Value> {
-    let mut themes = builtin;
+    // Retired themes are hidden even if a user override remains in app data.
+    // Do not delete those files: switching back to an older release can still recover them.
+    let retired = |theme: &serde_json::Value| {
+        matches!(theme_id(theme), Some("compact" | "clickhouse" | "click-house" | "volt-agent"))
+    };
+    let mut themes: Vec<_> = builtin.into_iter().filter(|theme| !retired(theme)).collect();
     for theme in user {
+        if retired(&theme) { continue; }
         let existing = theme_id(&theme)
             .and_then(|id| themes.iter().position(|other| theme_id(other) == Some(id)));
         match existing {
@@ -188,7 +194,7 @@ mod tests {
             "tokyo-night",
             "tokyo_hot",
             "claude",
-            "voltAgent",
+            "terminal-paper",
             "theme.v2",
             "a",
         ] {

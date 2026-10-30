@@ -12,6 +12,7 @@ import { useBlurPlugin } from './hooks/useBlurPlugin'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
 import type { TerminalToolbarActions } from './terminalToolbar'
+import { migrateThemeSettings, visibleThemes } from './utils/themeMigration'
 
 interface AppSettings {
   themeId: string
@@ -115,30 +116,34 @@ function App() {
       .catch((error: unknown) => diag.warn('[updates] startup check failed', error))
   }, [appSettings.checkUpdatesOnStartup])
 
-  // Settings can be saved from any window (a popped-out terminal writes the connection's
-  // appearance). The backend broadcasts each save, so re-read here and both windows stay in sync
-  // live — a change in the detached window shows up in the main window's footer/title bar and
-  // vice versa, without waiting for a re-attach.
-  useEffect(() => {
-    return window.omnitermAPI.settings.onChanged(() => {
-      window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
-    })
+  // Reconcile persisted theme IDs only against the actual catalog, so saved custom
+  // overrides are never replaced by a migration for the deleted built-in themes.
+  const refreshSettingsAndThemes = useCallback(async () => {
+    const [settings, available] = await Promise.all([
+      window.omnitermAPI.settings.get(),
+      window.omnitermAPI.themes.list(),
+    ])
+    const selectable = visibleThemes(available)
+    const migrated = migrateThemeSettings(settings as AppSettings, selectable)
+    setThemes(selectable)
+    setAppSettings(migrated)
+    if (migrated !== settings) {
+      void window.omnitermAPI.settings.save(migrated).catch((error: unknown) =>
+        diag.warn('[themes] failed to save migrated theme selection', error))
+    }
   }, [])
 
   // Read at paste time by every pane in this window (main or detached).
   useEffect(() => setLargePasteThresholds(appSettings.largePaste), [appSettings.largePaste])
 
+  // Detached windows share the same settings and reload after any save.
+  useEffect(() => window.omnitermAPI.settings.onChanged(() => {
+    void refreshSettingsAndThemes()
+  }), [refreshSettingsAndThemes])
+
   const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? themes[0] ?? TOKYO_NIGHT
 
-  // Load settings and themes on mount.
-  const reloadSettingsAndThemes = () => {
-    window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
-    window.omnitermAPI.themes.list().then((t: any) => setThemes(t))
-  }
-
-  useEffect(() => {
-    reloadSettingsAndThemes()
-  }, [])
+  useEffect(() => { void refreshSettingsAndThemes() }, [refreshSettingsAndThemes])
 
   // One-time cleanup for settings saved before ad-hoc appearance stopped persisting: an ad-hoc
   // shell's id is never seen again, so a stale `adhoc-*` entry can only ever be dead weight.
@@ -299,7 +304,7 @@ function App() {
   // overrides back in by re-reading settings and dropping the tab's in-memory layer so the reloaded
   // per-connection defaults (not a stale override) win.
   const handleSettingsReload = useCallback((tabId?: string) => {
-    window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
+    void refreshSettingsAndThemes()
     if (tabId) {
       setTabAppearance(prev => {
         if (!(tabId in prev)) return prev
@@ -308,7 +313,7 @@ function App() {
         return next
       })
     }
-  }, [])
+  }, [refreshSettingsAndThemes])
 
 
   // Dynamically update document CSS variables when the current theme changes. The mapping itself lives
@@ -319,6 +324,8 @@ function App() {
     // Zero-radius themes also flatten the rounded-full shapes that bypass --theme-rounded-*
     // (see .theme-square in index.css). Detached windows share this document, so one toggle covers them.
     document.documentElement.classList.toggle('theme-square', isSquareTheme(currentTheme))
+    document.documentElement.classList.toggle('theme-terminal-paper', currentTheme.id === 'terminal-paper')
+    document.documentElement.classList.toggle('theme-terminal-paper-dark', currentTheme.id === 'compact' && appSettings.darkMode)
   }, [currentTheme, appSettings.darkMode])
 
   // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the
@@ -346,7 +353,7 @@ function App() {
   }
 
   return (
-    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
+    <div className={`terminal-paper-surface h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       {!chromeFullscreen && (
         <TitleBar
           appSettings={appSettings}
