@@ -36,8 +36,6 @@ export default function UpdateSettings({
   setAppSettings,
   updateState,
   updateChecking,
-  installerChoiceOpen,
-  setInstallerChoiceOpen,
   checkForUpdates,
   skipThisVersion,
   clearSkippedVersion,
@@ -48,6 +46,7 @@ export default function UpdateSettings({
   // manual download flow below stays the only path, exactly as before.
   const [nativeReady, setNativeReady] = useState(false)
   const [nativeInstalling, setNativeInstalling] = useState(false)
+  const [nativeError, setNativeError] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
     window.omnitermAPI?.updates?.nativeCheck?.()
@@ -57,14 +56,19 @@ export default function UpdateSettings({
   }, [])
   const runNativeInstall = async () => {
     setNativeInstalling(true)
-    try { await window.omnitermAPI.updates.nativeInstall() } finally { setNativeInstalling(false) }
+    try {
+      setNativeError(null)
+      await window.omnitermAPI.updates.nativeInstall()
+    } catch (error) {
+      setNativeError(error instanceof Error ? error.message : String(error))
+    } finally { setNativeInstalling(false) }
   }
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Application Updates</h3>
-          <p className="text-[11px] text-theme-dim mt-0.5 leading-relaxed">
+          <p className="max-w-[42ch] text-[11px] text-theme-dim mt-0.5 leading-relaxed">
             Opt-in only — OmniTerm never contacts a server for updates unless you ask it to here, or switch on the startup check below.
           </p>
         </div>
@@ -86,7 +90,7 @@ export default function UpdateSettings({
                 </span>
               </div>
               <p className="text-[11px] text-theme-fg leading-relaxed">
-                You're on v{updateState.current}. {updateState.isPortable ? 'Download the portable update.' : 'Download the installer.'}
+                You're on v{updateState.current}. Downloads are sourced from the published GitHub release.
               </p>
 
               {updateState.downloadStatus && (
@@ -95,74 +99,65 @@ export default function UpdateSettings({
                 </div>
               )}
 
-              {installerChoiceOpen ? (
-                <div className="flex flex-col gap-2 p-2 bg-theme-bg rounded-lg border border-theme-border mt-1.5">
-                  <p className="text-[10px] text-theme-fg font-semibold">How would you like to install the update?</p>
-                  <div className="flex gap-2">
-                    <Tooltip content="Download update and launch installer immediately" placement="bottom">
-                      <button
-                        type="button"
-                        disabled={updateChecking}
-                        onClick={() => handleDownloadInstaller(true)}
-                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
-                      >
-                        Install now
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="Download update in background and install upon exiting" placement="bottom">
-                      <button
-                        type="button"
-                        disabled={updateChecking}
-                        onClick={() => handleDownloadInstaller(false)}
-                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60 transition-colors"
-                      >
-                        On exit
-                      </button>
-                    </Tooltip>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 mt-0.5">
-                  {nativeReady ? (
-                    /* Signed build: the updater verifies and installs natively, then relaunches. */
-                    <Tooltip content="Verify, install and relaunch — no manual download" placement="bottom">
-                      <button
-                        type="button"
-                        disabled={nativeInstalling || updateChecking}
-                        onClick={() => void runNativeInstall()}
-                        className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
-                      >
-                        {nativeInstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        Download & install
-                      </button>
-                    </Tooltip>
-                  ) : (
-                    <>
-                  <Tooltip content={updateState.isPortable ? 'Download portable zip archive' : 'Install latest update'} placement="bottom">
+              {nativeError && <p role="alert" className="max-w-[45ch] text-[11px] text-theme-error">{nativeError}</p>}
+              <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                {nativeReady && (
+                  <Tooltip content="Install the signed update and relaunch OmniTerm" placement="bottom">
                     <button
                       type="button"
-                      disabled={updateChecking}
-                      onClick={updateState.isPortable ? handleDownloadPortable : () => setInstallerChoiceOpen(true)}
-                      className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                      disabled={nativeInstalling || updateChecking}
+                      onClick={() => void runNativeInstall()}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg disabled:opacity-60"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      {updateState.isPortable ? 'Download update' : 'Install update'}
-                      <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-[#9ece6a]" />
+                      {nativeInstalling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                      Download & install
                     </button>
                   </Tooltip>
-                  <Tooltip content={`Ignore notification for version ${updateState.latest}`} placement="bottom">
+                )}
+                {updateState.installerAssetUrl && (
+                  <Tooltip content="Open the official installer download in your browser" placement="bottom">
                     <button
                       type="button"
-                      disabled={updateChecking}
-                      onClick={skipThisVersion}
-                      className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent disabled:opacity-60 transition-colors"
+                      disabled={updateChecking || nativeInstalling}
+                      onClick={() => handleDownloadInstaller(false)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60"
                     >
-                      Skip v{updateState.latest}
+                      <Download className="w-3 h-3" />
+                      Download installer
                     </button>
                   </Tooltip>
-                    </>
-                  )}
-                </div>
+                )}
+                {updateState.portableAssetUrl && (
+                  <Tooltip content="Open the official portable download in your browser" placement="bottom">
+                    <button
+                      type="button"
+                      disabled={updateChecking || nativeInstalling}
+                      onClick={handleDownloadPortable}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60"
+                    >
+                      <Download className="w-3 h-3" />
+                      Download portable
+                    </button>
+                  </Tooltip>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void window.omnitermAPI.updates.openReleasePage()}
+                  className="text-[11px] text-theme-accent underline underline-offset-2 hover:text-theme-fg"
+                >
+                  View on GitHub
+                </button>
+                <button
+                  type="button"
+                  onClick={skipThisVersion}
+                  disabled={updateChecking || nativeInstalling}
+                  className="text-[11px] text-theme-dim hover:text-theme-accent disabled:opacity-60"
+                >
+                  Skip v{updateState.latest}
+                </button>
+              </div>
+              {!nativeReady && !updateState.installerAssetUrl && !updateState.portableAssetUrl && (
+                <p className="max-w-[45ch] text-[11px] text-theme-dim">No platform download was attached to this release. Open its GitHub page to review the available files.</p>
               )}
             </div>
           ) : updateState?.error ? (

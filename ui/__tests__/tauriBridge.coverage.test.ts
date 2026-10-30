@@ -283,8 +283,8 @@ describe('complete Tauri bridge behavior', () => {
     vi.unstubAllGlobals()
     await api.updates.getVersion()
     await expect(api.updates.showSaveDialog('x')).resolves.toBeNull()
-    await expect(api.updates.downloadPortable('/x')).resolves.toBeUndefined()
-    await expect(api.updates.downloadInstaller(true)).resolves.toBeUndefined()
+    await expect(api.updates.downloadPortable()).rejects.toThrow('No portable download')
+    await expect(api.updates.downloadInstaller(true)).rejects.toThrow('No Windows installer')
     expect(api.updates.onState(vi.fn())()).toBeUndefined()
 
     await api.themes.list()

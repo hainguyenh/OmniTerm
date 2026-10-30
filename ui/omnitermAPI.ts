@@ -94,7 +94,7 @@ function createTauriAPI(): any {
   let zoomFactor = 1
 
   const updates = {
-    ...createUpdateAPI(() => invoke<string>('get_version')),
+    ...createUpdateAPI(() => invoke<string>('get_version'), url => invoke<void>('open_update_release_link', { url })),
     // Native signed-update path (tauri-plugin-updater). Absent config in dev builds resolves to
     // `{ available: false, reason: 'updater-disabled' }` instead of an error.
     nativeCheck: () => invoke<{ available: boolean; reason?: string; version?: string }>('check_for_native_update'),

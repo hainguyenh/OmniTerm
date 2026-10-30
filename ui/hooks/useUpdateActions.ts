@@ -35,13 +35,9 @@ export function useUpdateActions({ updateState, setUpdateState, showAlert }: Upd
   const handleDownloadPortable = async () => {
     if (!updateState?.latest)
       return
-    const defaultName = `OmniTerm-Portable-${updateState.latest}.exe`
-    const savePath = await window.omnitermAPI.updates.showSaveDialog(defaultName)
-    if (!savePath)
-      return
     try {
       setUpdateChecking(true)
-      await window.omnitermAPI.updates.downloadPortable(savePath)
+      await window.omnitermAPI.updates.downloadPortable()
     } catch (err) {
       showAlert(`Download failed: ${err instanceof Error ? err.message : String(err)}`, { title: 'Download Error', tone: 'error' })
     } finally {
