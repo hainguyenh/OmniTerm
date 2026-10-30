@@ -45,6 +45,7 @@ Whenever the main OmniTerm window mounts, navigation changes, a pane/view-group 
 - Navigation does not restart sessions.
 - Overlay state does not replace persistent pane state.
 - Window controls are routed through Tauri.
+- The custom 28px native-style TitleBar centers zoom reset, theme selection, a 24px font-size rail, and dark/light mode with 24px-high native window buttons. Its controls are explicitly non-draggable; the remaining title surface stays draggable.
 - Generated Windows icons use the full logo at normal sizes and a simplified front-terminal composition at 16–48 px so small OS icon slots remain legible.
 
 ## Functionalities
@@ -65,7 +66,7 @@ Whenever the main OmniTerm window mounts, navigation changes, a pane/view-group 
 | `MainLayoutView` | Render stable visual shell. | Keep JSX presentational. | Compose activity/sidebar/panes/content from props. | Normal render. |
 | `MainLayoutOverlays` | Render transient dialogs/menus. | Isolate modal lifecycle/z-order. | Conditionally mount overlays from controller state. | Overlay active. |
 | `CommandPalette` | Search and execute registered UI commands. | Fast keyboard navigation/actions. | Filter command model and call selected action. | Palette invoked. |
-| `TitleBar` | Render desktop title/window controls. | Custom desktop chrome. | Bind native window-control actions. | Main window visible. |
+| `TitleBar` | Render aligned desktop title/window controls. | Keep appearance and native actions visually centered without sacrificing drag or click targets. | Use a 28px drag region, 24px control rail, and 32px-wide no-drag window buttons; invoke native window-control callbacks. | Main window visible, including detached title bars using the shared component. |
 | `PaneResizers` | Resize split panes. | User-controlled layout. | Pointer deltas update bounded split ratios. | Split layout active. |
 | `generateAppAssets` | Generate renderer and desktop logo derivatives from the single original asset. | Avoid hand-maintained/stale binary derivatives. | Build WebP, PNG and multi-resolution ICO outputs before dev/build/test flows. | Asset generation runs before repository frontend/build gates. |
 | `iconSourceLayout` | Choose full or compact source composition for each icon size. | The full glowing three-window mark loses edge clarity at tiny Windows icon sizes. | Use the front terminal crop through 48 px; keep the complete logo above 48 px. | Every generated PNG/ICO frame. |

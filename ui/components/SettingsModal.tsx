@@ -191,10 +191,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'shortcuts' && (
               <div className="p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+                  <div className="min-w-0 flex-[1_1_15rem]">
                     <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Keyboard Shortcuts</h3>
-                    <p className="text-[11px] text-theme-dim leading-relaxed mt-0.5">
+                    <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
                       Click a binding to record a new shortcut. Modifiers will combine automatically.
                     </p>
                   </div>
@@ -202,7 +202,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleResetShortcuts}
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-theme-dim hover:text-theme-accent bg-theme-bg border border-theme-border rounded-lg transition-colors"
+                      className="flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 py-1 text-[10px] text-theme-dim hover:text-theme-accent bg-theme-bg border border-theme-border rounded-lg transition-colors"
                     >
                       <RotateCcw className="w-3 h-3" />
                       Reset

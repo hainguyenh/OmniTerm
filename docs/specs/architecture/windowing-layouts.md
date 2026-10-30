@@ -50,6 +50,7 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 - Pane area and pane frames clip overflow (`overflow-hidden`) — an oversized xterm canvas never scrolls or paints outside the desktop.
 - 1 to 8 pane layouts are selectable via shortcuts (`Ctrl+1` to `Ctrl+8`) or UI buttons. Modes 2, 3, 5, 7 support orientation rotation on repeat clicks.
 - Window rounding applies an 8px border radius on supported platforms when not maximized.
+- The custom title bar aligns its 24px-high appearance/zoom controls and minimize/maximize/close buttons along a single centerline within a 28px drag region; only non-interactive title space is draggable. The three native window buttons use fixed 32px slots.
 - App fullscreen (`F11`, rebindable) toggles native OS fullscreen together with chrome hiding; the pane grid and status footer remain visible.
 - On Windows, entering fullscreen first normalizes frame geometry through a maximize/unmaximize cycle — frameless transparent windows otherwise keep the client area at work-area height and leave the taskbar visible below.
 - App fullscreen is not persisted — a fresh launch always starts windowed. Escape also exits it, per-pane fullscreen stays orthogonal, detached windows are unaffected, and corner rounding is suppressed while active.
@@ -116,4 +117,6 @@ On layout changes, resize, fullscreen/maximize, orientation cycle, detach/reatta
 - `ui/paneLayout.ts`
 - `ui/components/useMainLayoutSessions.tsx`
 - `src-tauri/src/terminal_window.rs`
+- `ui/components/TitleBar.tsx`
+- `ui/components/AppearanceMenu.tsx`
 - `src-tauri/src/window_control.rs`

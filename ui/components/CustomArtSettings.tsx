@@ -72,16 +72,16 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
 
   return (
     <div className="p-4 flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+        <div className="min-w-0 flex-[1_1_15rem]">
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Custom Pane Art</h3>
-          <p className="text-[11px] text-theme-dim leading-relaxed mt-0.5">
+          <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
             Upload custom images or GIFs for idle and connecting panes in Light and Dark modes (max 2 MB). Busy agent session art is configured in Agent Quota.
           </p>
         </div>
 
         {/* Info icon with tooltip */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <Tooltip content="Upload custom images (max 2 MB) for idle and loading panes" placement="bottom">
             <button
               type="button"

@@ -87,7 +87,7 @@ describe('TitleBar complete behavior', () => {
     const onApplyToAll = vi.fn()
     const remix = vi.fn()
     renderBar({ onThemeApply, onApplyToAll, setThemeRemixOpen: remix })
-    expect(appearance).toMatchObject({ themeId: TOKYO_NIGHT.id, fontSize: 14, darkMode: true, scopeLabel: 'all terminals' })
+    expect(appearance).toMatchObject({ themeId: TOKYO_NIGHT.id, fontSize: 14, darkMode: true, scopeLabel: 'all terminals', titleBar: true })
     fireEvent.click(screen.getByText('theme'))
     fireEvent.click(screen.getByText('font-up'))
     fireEvent.click(screen.getByText('font-down'))
