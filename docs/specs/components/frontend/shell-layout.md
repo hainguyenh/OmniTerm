@@ -44,6 +44,8 @@ Whenever the main renderer mounts or navigation/layout/overlay/window state chan
 ## Behavior
 
 - Presentational shell components do not directly read/write native files.
+- The shared TitleBar centers the 24px zoom, theme, global font-size, display-mode and native window controls within the 28px title row. The font-size stepper uses the title-bar size only in that context; pane-level controls retain compact sizing.
+- The appearance icon trigger uses a 24px-high `flex` wrapper inside the no-drag action rail (not an inline-flex button inside a block parent), avoiding baseline descender space and one-pixel border offsets at 80% app zoom. All native title-bar controls share the same vertical centerline.
 - Pane/layout changes preserve unrelated sessions/workspaces.
 - In chrome-hidden app fullscreen, `MainLayoutView` renders only the pane grid and status footer; hidden regions unmount and restore cleanly.
 
@@ -68,7 +70,7 @@ Whenever the main renderer mounts or navigation/layout/overlay/window state chan
 | Component | What | Why | How | When |
 |---|---|---|---|---|
 | `ActivityBar` | Render primary activity navigation. | Stable route switching. | Buttons update selected activity. | Main shell visible. |
-| `TitleBar` | Render custom title/window controls. | Desktop chrome. | Invoke native window-control callbacks. | Primary window. |
+| `TitleBar` | Render aligned custom title/window controls. | Consistent desktop chrome and reliable click/drag targets. | Render 24px-height appearance controls and 32px native button slots in a no-drag region; invoke Tauri window-control callbacks. | Main and detached windows. |
 | `CommandPalette` | Search/execute app commands. | Keyboard-first control. | Filter registered commands and call action. | Palette invoked. |
 | `MainLayoutView` | Render persistent layout. | Separate presentation from controller logic. | Compose sidebar/panes/content from props. | Normal render. |
 | `MainLayoutOverlays` | Render transient dialogs/menus. | Isolate modal lifecycle. | Conditionally mount overlays. | Overlay active. |
@@ -110,6 +112,7 @@ Whenever the main renderer mounts or navigation/layout/overlay/window state chan
 
 - `ui/components/ActivityBar.tsx`
 - `ui/components/TitleBar.tsx`
+- `ui/components/AppearanceMenu.tsx`
 - `ui/components/CommandPalette.tsx`
 - `ui/components/MainLayoutView.tsx`
 - `ui/components/MainLayoutOverlays.tsx`

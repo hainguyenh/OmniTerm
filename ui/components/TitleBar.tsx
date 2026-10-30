@@ -91,7 +91,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
   return (
     <div
-      className="h-7 flex items-center justify-between select-none border-b flex-shrink-0"
+      className="h-7 flex items-center justify-between select-none border-b flex-shrink-0" data-testid="native-titlebar"
       data-tauri-drag-region
       style={{
         backgroundColor: 'var(--theme-sidebar-bg)',
@@ -101,7 +101,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       } as React.CSSProperties}
     >
       {/* Left: App Logo & Title */}
-      <div className="flex items-center gap-2 pl-3 select-none pointer-events-none">
+      <div className="flex min-w-0 items-center gap-2 pl-3 select-none pointer-events-none">
         <img src={appLogo} alt="Logo" className="w-4 h-4 object-cover" />
         <span className="text-[11px] font-bold tracking-wide uppercase opacity-90">OmniTerm</span>
         {appVersion && (
@@ -111,7 +111,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
       {/* Right: controls — no-drag zone */}
       <div
-        className="flex h-full items-center pr-1 gap-1"
+        className="flex h-full shrink-0 items-center gap-1 pr-1" data-testid="titlebar-actions"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         {/* Zoom level — click to reset to 100% (same as Ctrl+0). */}
@@ -120,7 +120,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <button
               type="button"
               onClick={onZoomReset}
-              className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+              className="inline-flex h-6 shrink-0 items-center justify-center px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
             >
               {Math.round(zoomFactor * 100)}%
             </button>
@@ -138,6 +138,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           onThemeApply={applyTheme}
           onFontSizeChange={updateFontSize}
           onRemix={() => setThemeRemixOpen(true)}
+          titleBar
         />
 
         {/* Mode Toggle */}
@@ -146,7 +147,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             type="button"
             onClick={handleToggleMode}
             aria-label={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
           >
             {isLightMode ? (
               <Moon className="w-3.5 h-3.5" />
@@ -156,45 +157,47 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </button>
         </Tooltip>
 
-        {/* Minimize */}
-        <Tooltip content="Minimize" placement="bottom">
-          <button
-            type="button"
-            onClick={handleMinimize}
-            aria-label="Minimize"
-            className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-        </Tooltip>
+        <div className="flex h-6 shrink-0 items-center gap-0.5 border-l border-theme-border pl-1" data-testid="titlebar-window-controls">
+          {/* Minimize */}
+          <Tooltip content="Minimize" placement="bottom">
+            <button
+              type="button"
+              onClick={handleMinimize}
+              aria-label="Minimize"
+              className="flex h-6 w-8 shrink-0 items-center justify-center rounded hover:bg-white/10 text-inherit transition-colors"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
 
-        {/* Maximize / Restore */}
-        <Tooltip content={isMaximized ? 'Restore Down' : 'Maximize'} placement="bottom">
-          <button
-            type="button"
-            onClick={handleToggleMaximize}
-            aria-label={isMaximized ? 'Restore Down' : 'Maximize'}
-            className="w-9 h-full flex items-center justify-center hover:bg-white/10 text-inherit transition-colors"
-          >
-            {isMaximized ? (
-              <Copy className="w-3 h-3 rotate-180" />
-            ) : (
-              <Square className="w-3 h-3" />
-            )}
-          </button>
-        </Tooltip>
+          {/* Maximize / Restore */}
+          <Tooltip content={isMaximized ? 'Restore Down' : 'Maximize'} placement="bottom">
+            <button
+              type="button"
+              onClick={handleToggleMaximize}
+              aria-label={isMaximized ? 'Restore Down' : 'Maximize'}
+              className="flex h-6 w-8 shrink-0 items-center justify-center rounded hover:bg-white/10 text-inherit transition-colors"
+            >
+              {isMaximized ? (
+                <Copy className="w-3 h-3 rotate-180" />
+              ) : (
+                <Square className="w-3 h-3" />
+              )}
+            </button>
+          </Tooltip>
 
-        {/* Close */}
-        <Tooltip content="Close" placement="bottom">
-          <button
-            type="button"
-            onClick={handleClose}
-            aria-label="Close"
-            className="w-9 h-full flex items-center justify-center hover:bg-red-600 hover:text-white text-inherit transition-colors"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </Tooltip>
+          {/* Close */}
+          <Tooltip content="Close" placement="bottom">
+            <button
+              type="button"
+              onClick={handleClose}
+              aria-label="Close"
+              className="flex h-6 w-8 shrink-0 items-center justify-center rounded hover:bg-red-600 hover:text-white text-inherit transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
     </div>
   )
