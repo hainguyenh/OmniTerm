@@ -46,6 +46,7 @@ From terminal start through live IO, pane changes, close/disconnect, app shutdow
 - Terminal processes do not intentionally outlive OmniTerm. Every new native PTY uses close-with-app lifetime.
 - Losing the owning GUI lease terminates all PTYs owned by that GUI. When no owned sessions remain, the session daemon exits.
 - Restart reconstruction never attaches to a process from the previous app run. Any stale daemon session with the same stable ID is disconnected before a fresh PTY is created.
+- On launch, restored panes start a plain shell in the saved cwd: they never execute an AI agent resume command, even when another pane in that folder previously ran an agent. Interrupted agent sessions remain available through an explicit user-triggered Resume action.
 - Snapshot version 4 stores only restart reconstruction metadata: tab identity, connection launch metadata, view groups/panes, focused pane, and cwd/shell context.
 - Legacy v1-v3 snapshots are migrated by extracting layout/cwd/shell metadata and dropping process-persistence policy, generation, scrollback key, and persisted command fields.
 - The latest cwd reported by the terminal wins over the connection launch directory. If no live cwd was reported, the saved launch directory is used.

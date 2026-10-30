@@ -25,12 +25,9 @@ export function shouldAutoRestoreTab(tab: PersistedTab): boolean {
   // A process-tree scan may have captured the agent before its terminal title changed back to a
   // shell title. The persisted session binding is stronger evidence than that transient title.
   if (findSessionByTabId(tab.id)) return true
-  if (tab.recovery.cwd) {
-    const cwd = tab.recovery.cwd.toLowerCase()
-    if (loadStoredSessions().some(item => (item.state === 'interrupted' || item.state === 'active') && item.cwd && item.cwd.toLowerCase() === cwd)) {
-      return true
-    }
-  }
+  // Another pane may run an agent in this same folder: cwd is not an agent identity.
+  if (tab.recovery.agentSessionId && loadStoredSessions().some(item => item.sessionId === tab.recovery.agentSessionId)) return true
+  if (tab.recovery.agent) return true
   if (parseAgentTitle(tab.name)) return true
   const title = tab.name.trim().toLowerCase().replace(/^\/\/\s*/, '')
   const shellTitle = title.split(/\s+\/\/\s+/).at(-1) ?? title
