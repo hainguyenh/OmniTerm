@@ -1,0 +1,94 @@
+/* Technical-paper texture for the built-in Terminal Paper theme. */
+.theme-terminal-paper {
+  --paper-grid-line: rgba(23, 23, 22, 0.035);
+  --paper-ambient: rgba(169, 111, 40, 0.07);
+}
+
+.theme-terminal-paper-dark {
+  --paper-grid-line: rgba(233, 229, 221, 0.025);
+  --paper-ambient: rgba(213, 164, 95, 0.055);
+}
+
+.theme-terminal-paper .terminal-paper-surface,
+.theme-terminal-paper.terminal-paper-surface,
+.theme-terminal-paper .bg-theme-sidebar {
+  background-image:
+    radial-gradient(ellipse at 85% 0%, var(--paper-ambient), transparent 45%),
+    linear-gradient(to right, var(--paper-grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--paper-grid-line) 1px, transparent 1px);
+  background-size: auto, 64px 64px, 64px 64px;
+}
+
+.theme-terminal-paper [data-pane-header] {
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.theme-terminal-paper [data-pane-header] button:not([aria-label='Close pane']):hover {
+  background-color: var(--theme-hover-bg);
+}
+
+.theme-terminal-paper :is(button, [role='button'], input, select, textarea):focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: 3px;
+}
+
+.theme-terminal-paper .nc-dialog-title {
+  font-family: 'Orbitron', 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.theme-terminal-paper .nc-dialog-panel {
+  box-shadow: 0 8px 24px rgba(23, 23, 22, 0.12);
+}
+
+.theme-terminal-paper .nc-dialog-btn-primary {
+  background: #242321;
+  border-color: #242321;
+  color: #E9E5DD;
+}
+
+.theme-terminal-paper-dark .nc-dialog-btn-primary {
+  background: #D5A45F;
+  border-color: #D5A45F;
+  color: #171716;
+}
+
+.theme-terminal-paper .nc-dialog-btn-primary:hover {
+  background: #7B4B16;
+  border-color: #7B4B16;
+  color: #E9E5DD;
+}
+
+.theme-terminal-paper .nc-dialog-btn-primary:active {
+  transform: translateY(1px);
+}
+
+@media (max-width: 767px) {
+  .theme-terminal-paper .terminal-paper-surface,
+  .theme-terminal-paper.terminal-paper-surface,
+  .theme-terminal-paper .bg-theme-sidebar {
+    background-size: auto, 44px 44px, 44px 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-terminal-paper .nc-dialog-btn-primary,
+  .theme-terminal-paper .nc-dialog-panel {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Semantic status indicators and the native Windows shell are not box-shaped controls. */
+.theme-square .semantic-status-dot,
+.theme-square .semantic-status-dot .rounded-full {
+  border-radius: 9999px !important;
+}
+
+html.win-window.theme-square .app-window-rounded {
+  border-radius: 8px !important;
+}
+
+/* Toolbar switches use theme radius variables (rounded-md/sm).
+   Do not exempt them from .theme-square: TLR deliberately has square corners. */
