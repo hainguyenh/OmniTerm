@@ -108,6 +108,22 @@ describe('useSessionRecoveryState', () => {
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'Claude Code - project' })).toBe(true)
   })
 
+  it('does not associate a plain shell in folder X with another pane\'s agent session', () => {
+    upsertSession({
+      id: 'claude:33333333-3333-4333-8333-333333333333',
+      tabId: 'tab-a',
+      agent: 'claude',
+      profileName: 'work',
+      sessionId: '33333333-3333-4333-8333-333333333333',
+      cwd: 'F:/a',
+      state: 'interrupted',
+      updatedAt: Date.now(),
+    })
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'PowerShell', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
+    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'project X // PowerShell 7', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
+    expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
+  })
+
   it('auto-restores a pane with a persisted agent session after its title fell back to the shell', () => {
     upsertSession({
       id: 'claude:22222222-2222-4222-8222-222222222222',
