@@ -7,12 +7,7 @@ import { type PersistedConn, type PersistedTab, type SessionSnapshot } from '../
 import { selectPendingSnapshotTabs } from '../utils/sessionCheckpoint'
 import { diag } from '../diag'
 import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
-import { formatAgentResumeCommand } from '../utils/agentRegistry'
-import { parseAgentTitle } from '../utils/agentTitle'
-import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
 import { whenAgentSessionsHydrated } from '../utils/agentSessionDurable'
-import { markRestoredPane } from '../utils/agentPresenceStore'
-import { agentLaunchedBy, noteAgentLaunch } from '../utils/agentLaunchSignal'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
@@ -58,41 +53,6 @@ function groupsForSnapshot(snapshot: SessionSnapshot): ViewGroup[] {
   }))
 }
 
-const AGENT_DISPLAY_NAMES: Record<string, string> = {
-  claude: 'Claude Code',
-  codex: 'Codex',
-  opencode: 'OpenCode',
-  agy: 'Antigravity CLI',
-  copilot: 'Copilot CLI',
-  gemini: 'Gemini CLI',
-}
-
-function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
-  const stored = findSessionByTabId(tab.id)
-    ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
-    ?? loadStoredSessions().find(item => item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
-  const rawAgent = stored?.agent ?? tab.recovery.agent
-  const agentName = parseAgentTitle(tab.name)?.agentName
-    ?? parseAgentTitle(savedConn?.name)?.agentName
-    ?? (rawAgent ? (AGENT_DISPLAY_NAMES[rawAgent] ?? rawAgent) : undefined)
-  const sessionId = stored?.sessionId ?? tab.recovery.agentSessionId
-  const candidateLauncher = stored?.launcher ?? tab.recovery.launcher
-  const candidateProfile = stored?.profileName ?? tab.recovery.profileName
-  const launcher = candidateLauncher === 'agy-gemini' ? undefined : (candidateLauncher ?? (
-    candidateProfile
-      ? candidateProfile.startsWith('claude-') || candidateProfile.startsWith('codex-') || candidateProfile.startsWith('opencode-') || (candidateProfile.startsWith('agy-') && candidateProfile !== 'agy-gemini')
-        ? candidateProfile
-        : candidateProfile !== 'claude' && candidateProfile !== 'codex' && candidateProfile !== 'opencode' && candidateProfile !== 'agy' && candidateProfile !== 'gemini' && !(rawAgent === 'agy' && candidateProfile === 'gemini')
-          ? `${rawAgent}-${candidateProfile}`
-          : undefined
-      : undefined
-  ))
-  const cleanProfile = candidateProfile === 'agy-gemini' || (rawAgent === 'agy' && candidateProfile === 'gemini')
-    ? undefined
-    : candidateProfile
-  return formatAgentResumeCommand(agentName, sessionId, launcher, cleanProfile)
-}
-
 export function useSessionRestore(input: SessionRestoreInput): void {
   const latestInput = useRef(input)
   latestInput.current = input
@@ -104,7 +64,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
     let cancelled = false
 
     void (async () => {
-      // The resume command comes from stored sessions, whose crash-safe copy may still be loading.
+      // Wait for durable session metadata before deciding which panes are eligible to restore.
       await whenAgentSessionsHydrated()
       if (cancelled) return
 
@@ -142,32 +102,17 @@ export function useSessionRestore(input: SessionRestoreInput): void {
 
         if ((savedConn?.type ?? conn?.type) === 'LOCAL' && savedConn) {
           try {
-            const resumeCommand = resumeCommandForTab(tab, savedConn)
+            // Restore the pane's shell and working folder only. A prior agent, including one
+            // in another pane with the same cwd, is never launched without a user action.
+            // The interrupted agent session remains available through explicit Resume.
             const opened = await window.omnitermAPI.shells.open(
               savedConn.shell ?? tab.recovery.shell,
               savedConn.workspaceId ?? null,
               undefined,
               tab.recovery.cwd ?? savedConn.localCwd ?? null,
-              resumeCommand,
+              null,
             ) as Connection | null
-            if (opened) {
-              conn = opened
-              if (resumeCommand) {
-                // Freeze the pane before its agent draws anything: every restored agent gets its
-                // folder-trust answer and `/usage` read without the user typing into it first.
-                const agent = agentLaunchedBy(resumeCommand)
-                if (agent) noteAgentLaunch(tab.id, agent)
-                const stored = findSessionByTabId(tab.id)
-                  ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
-                  ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
-                if (stored) {
-                  upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })
-                  markRestoredPane(tab.id)
-                }
-              }
-            } else {
-              conn = undefined
-            }
+            conn = opened ?? undefined
           } catch (error) {
             diag.warn('[useSessionRestore] fresh shell registration failed', error)
             conn = undefined
@@ -192,7 +137,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
         }
 
         restoredConns.set(conn.id, conn)
-        restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
+        restoredTabs.push({ id: tab.id, connId: conn.id, name: conn.name })
         outcomes[tab.id] = {
           phase: 'recovering',
           message: 'Starting a fresh terminal in the saved folder.',

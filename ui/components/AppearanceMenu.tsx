@@ -36,6 +36,8 @@ interface AppearanceMenuProps {
   hideFontSize?: boolean
   /** Render a full menu row instead of compact terminal chrome. */
   menuItem?: boolean
+  /** Align the font stepper with 24px desktop title-bar buttons. */
+  titleBar?: boolean
 }
 
 export const FontSizeControl: React.FC<{
@@ -44,7 +46,8 @@ export const FontSizeControl: React.FC<{
   onFontSizeChange: (delta: number) => void
   compact?: boolean
   fullWidth?: boolean
-}> = ({ fontSize, scopeLabel, onFontSizeChange, compact, fullWidth }) => {
+  titleBar?: boolean
+}> = ({ fontSize, scopeLabel, onFontSizeChange, compact, fullWidth, titleBar }) => {
   const stepSize = compact ? 'w-4 h-4' : 'w-5 h-5'
   if (fullWidth) {
     return (
@@ -60,7 +63,7 @@ export const FontSizeControl: React.FC<{
     )
   }
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
+    <div className={`flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10 ${titleBar ? 'h-6 shrink-0' : ''}`}>
       <Tooltip content="Decrease font size" placement="bottom">
         <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
       </Tooltip>
@@ -119,7 +122,7 @@ const computeMenuPlacement = (
  */
 const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   themes, themeId, fontSize, darkMode, scopeLabel, buttonTitle,
-  onThemeApply, onFontSizeChange, onApplyToAll, onRemix, compact, hideFontSize, menuItem,
+  onThemeApply, onFontSizeChange, onApplyToAll, onRemix, compact, hideFontSize, menuItem, titleBar,
 }) => {
   const [open, setOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
@@ -165,7 +168,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
 
   return (
     <>
-      <div className={`relative ${menuItem ? 'w-full' : 'flex-shrink-0'}`}>
+      <div className={`relative ${menuItem ? 'w-full' : titleBar ? 'flex h-6 shrink-0 items-center' : 'flex-shrink-0'}`}>
         <Tooltip content={triggerLabel} placement="bottom">
           <button
             ref={btnRef}
@@ -261,7 +264,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
           </div>
         )}
       </div>
-      {!hideFontSize && <FontSizeControl fontSize={fontSize} scopeLabel={scopeLabel} onFontSizeChange={onFontSizeChange} compact={compact} />}
+      {!hideFontSize && <FontSizeControl fontSize={fontSize} scopeLabel={scopeLabel} onFontSizeChange={onFontSizeChange} compact={compact} titleBar={titleBar} />}
     </>
   )
 }

@@ -54,6 +54,33 @@ describe('update checker', () => {
     await expect(fetchLatestRelease(failed)).rejects.toThrow('HTTP 503')
   })
 
+  it('downloads exactly the assets returned by the checked GitHub release', async () => {
+    const openLink = vi.fn(async (_url: string) => {})
+    const assetBase = 'https://github.com/hainguyenh/OmniTerm/releases/download/v0.2.0/'
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      tag_name: 'v0.2.0', html_url: 'https://github.com/hainguyenh/OmniTerm/releases/tag/v0.2.0',
+      assets: [
+        { name: 'OmniTerm_0.2.0_x64-portable.exe', browser_download_url: assetBase + 'OmniTerm_0.2.0_x64-portable.exe' },
+        { name: 'OmniTerm_0.2.0_x64-setup.exe', browser_download_url: assetBase + 'OmniTerm_0.2.0_x64-setup.exe' },
+      ],
+    }), { status: 200 })))
+    try {
+      const api = createUpdateAPI(async () => '0.1.14', openLink)
+      await expect(api.downloadPortable()).rejects.toThrow('No portable download')
+      await api.check()
+      await api.downloadPortable()
+      await api.downloadInstaller(false)
+      await api.openReleasePage()
+      expect(openLink.mock.calls.map(([url]) => url)).toEqual([
+        assetBase + 'OmniTerm_0.2.0_x64-portable.exe',
+        assetBase + 'OmniTerm_0.2.0_x64-setup.exe',
+        'https://github.com/hainguyenh/OmniTerm/releases/tag/v0.2.0',
+      ])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('reports a newer release and keeps an error state when the check fails', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       tag_name: 'v0.2.0', html_url: 'https://example.test/release', assets: [],

@@ -35,7 +35,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   if (status === 'connected' && busy && runningStyle === 'oscillate') {
     return (
       <span
-        className={`relative w-10 h-2 flex-shrink-0 ${className}`}
+        className={`relative w-10 h-2 flex-shrink-0 semantic-status-dot ${className}`}
         aria-label={isAgent ? 'AI agent running' : 'Running process'}
         role="status"
       >
@@ -50,7 +50,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   if (status === 'connected' && busy) {
     return (
       <span
-        className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 ${className}`}
+        className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 semantic-status-dot ${className}`}
         aria-label={isAgent ? 'AI agent running' : 'Running command'}
       >
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-theme-accent opacity-75 duration-1000" />
@@ -63,7 +63,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   if (status === 'connecting') {
     return (
       <span
-        className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 ${className}`}
+        className={`relative flex h-2 w-2 items-center justify-center flex-shrink-0 semantic-status-dot ${className}`}
         aria-label="Connecting…"
       >
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-theme-warning opacity-60 duration-1000" />
@@ -76,7 +76,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   if (status === 'connected' && busy === false) {
     return (
       <span
-        className={`w-1.5 h-1.5 rounded-full border border-theme-dim bg-transparent flex-shrink-0 ${className}`}
+        className={`w-1.5 h-1.5 rounded-full border border-theme-dim bg-transparent flex-shrink-0 semantic-status-dot ${className}`}
         aria-label="Idle"
       />
     )
@@ -86,7 +86,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   if (status === 'connected') {
     return (
       <span
-        className={`w-1.5 h-1.5 rounded-full bg-theme-accent flex-shrink-0 ${className}`}
+        className={`w-1.5 h-1.5 rounded-full bg-theme-accent flex-shrink-0 semantic-status-dot ${className}`}
         aria-label="Connected"
       />
     )
@@ -95,7 +95,7 @@ export const SessionStatusIndicator: React.FC<SessionStatusIndicatorProps> = ({
   // Disconnected / Error
   return (
     <span
-      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]} ${className}`}
+      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 semantic-status-dot ${STATUS_DOT[status]} ${className}`}
       aria-label={STATUS_LABEL[status]}
     />
   )

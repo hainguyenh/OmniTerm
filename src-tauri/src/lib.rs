@@ -249,6 +249,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         // Native updater
         update_manager::check_for_native_update,
         update_manager::download_and_install_update,
+        update_manager::open_update_release_link,
         // Themes
         themes::list_themes,
         themes::save_theme,

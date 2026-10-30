@@ -118,15 +118,12 @@ describe("MainLayout update UI", () => {
     expect(screen.getByText(/network down/i)).toBeInTheDocument();
   });
 
-  it("offers installer choices and downloads on-exit installer", async () => {
+  it("opens the official installer asset without a fake install-on-exit choice", async () => {
     const downloadInstaller = vi.fn().mockResolvedValue(undefined);
     renderLayout({}, { updates: { downloadInstaller } });
 
     fireEvent.click(screen.getByRole("button", { name: /about & updates/i }));
-    fireEvent.click(screen.getByRole("button", { name: /install update/i }));
-    expect(screen.getByText(/how would you like to install the update/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /on exit/i }));
+    fireEvent.click(screen.getByRole("button", { name: /download installer/i }));
 
     await waitFor(() => {
       expect(downloadInstaller).toHaveBeenCalledWith(false);
@@ -139,7 +136,7 @@ describe("MainLayout update UI", () => {
     await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole("button", { name: /about & updates/i }));
-    expect(screen.getByRole("button", { name: /install update/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /download installer/i })).toBeInTheDocument();
     expect(screen.getByText(/check on startup/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Advanced$/ })).toBeNull();
   });

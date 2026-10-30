@@ -52,6 +52,15 @@ describe('SessionStatusIndicator', () => {
     expect(indicator.querySelector('.animate-ping')).toBeInTheDocument()
   })
 
+  it('marks semantic status dots for rounded rendering in square themes', () => {
+    const { rerender } = render(<SessionStatusIndicator status="connected" busy />)
+    expect(screen.getByLabelText('Running command')).toHaveClass('semantic-status-dot')
+    rerender(<SessionStatusIndicator status="connected" busy={false} />)
+    expect(screen.getByLabelText('Idle')).toHaveClass('semantic-status-dot')
+    rerender(<SessionStatusIndicator status="error" />)
+    expect(screen.getByLabelText('Error')).toHaveClass('semantic-status-dot')
+  })
+
   it('renders idle indicator when connected and not busy', () => {
     render(<SessionStatusIndicator status="connected" busy={false} />)
     const indicator = screen.getByLabelText('Idle')

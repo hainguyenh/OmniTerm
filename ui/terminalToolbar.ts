@@ -19,11 +19,12 @@ export const DEFAULT_HEADER_ACTIONS: readonly TerminalToolbarAction[] = [
   'fullscreen',
 ]
 
-/** Copy stays opt-in (Customize terminal actions): Save covers exporting output by default. */
+/** All available actions start enabled; explicit saved visibility and ordering take precedence. */
 export const DEFAULT_FOOTER_ACTIONS: readonly TerminalToolbarAction[] = [
   'fontSize',
   'stop',
   'clear',
+  'copy',
   'save',
 ]
 

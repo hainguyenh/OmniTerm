@@ -5,6 +5,7 @@ import { GlobalButtonTooltips } from './components/Tooltip.tsx'
 import { initTauriBridge } from './omnitermAPI'
 import { silenceConsole } from './diag'
 import './index.css'
+import './terminalPaper.css'
 
 // A packaged (release or portable) build reports nothing about itself. App code routes diagnostics
 // through `diag` (no-ops there), but dependencies write to the console directly, so the console is

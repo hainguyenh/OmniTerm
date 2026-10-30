@@ -287,6 +287,7 @@ const defaults: Api = {
     showSaveDialog: async () => null,
     downloadPortable: async () => {},
     downloadInstaller: async () => {},
+    openReleasePage: async () => {},
     nativeCheck: async () => ({ available: false, reason: 'updater-disabled' }),
     nativeInstall: async () => {},
     onState: noopSub,

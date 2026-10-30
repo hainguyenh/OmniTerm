@@ -77,7 +77,12 @@ export async function fetchLatestRelease(
 
 export const UPDATE_RELEASES_URL = RELEASES_URL
 
-export function createUpdateAPI(getVersion: () => Promise<string>) {
+export function createUpdateAPI(
+  getVersion: () => Promise<string>,
+  openReleaseLink: (url: string) => Promise<void> = async () => {
+    throw new Error('Opening release assets requires the OmniTerm desktop app')
+  },
+) {
   let state: UpdateState | null = null
   const listeners = new Set<(next: UpdateState) => void>()
   const skippedVersionKey = 'omniterm:skipped-update-version'
@@ -135,8 +140,23 @@ export function createUpdateAPI(getVersion: () => Promise<string>) {
     },
     getVersion,
     showSaveDialog: (_defaultName: string) => Promise.resolve(null),
-    downloadPortable: (_savePath: string) => Promise.resolve(),
-    downloadInstaller: (_installNow: boolean) => Promise.resolve(),
+    downloadPortable: () => {
+      if (!state?.updateAvailable || !state.portableAssetUrl) {
+        return Promise.reject(new Error('No portable download is attached to the checked GitHub release'))
+      }
+      return openReleaseLink(state.portableAssetUrl)
+    },
+    downloadInstaller: (_installNow: boolean) => {
+      if (!state?.updateAvailable || !state.installerAssetUrl) {
+        return Promise.reject(new Error('No Windows installer is attached to the checked GitHub release'))
+      }
+      // Browser-based downloads cannot silently install now or on exit.
+      return openReleaseLink(state.installerAssetUrl)
+    },
+    openReleasePage: () => {
+      if (!state?.htmlUrl) return Promise.reject(new Error('Check for updates first'))
+      return openReleaseLink(state.htmlUrl)
+    },
     onState: (listener: (next: UpdateState) => void) => {
       listeners.add(listener)
       return () => { listeners.delete(listener) }

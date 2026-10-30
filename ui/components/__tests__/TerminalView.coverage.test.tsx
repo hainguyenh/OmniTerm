@@ -202,6 +202,7 @@ describe('TerminalView full lifecycle', () => {
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true }))).toBe(true)
     // Ctrl+Shift+N can't collide with a bare-Ctrl shell default, so it still bubbles to the app.
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, shiftKey: true }))).toBe(false)
+    expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, altKey: true }))).toBe(false)
     expect(term.keyHandler?.(key('KeyC', { ctrlKey: true, shiftKey: true }))).toBe(false)
 
     // Every clipboard combo must preventDefault, or Chromium's native paste fires on top of ours and
