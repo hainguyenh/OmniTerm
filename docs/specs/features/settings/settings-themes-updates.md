@@ -45,7 +45,10 @@ At app startup, settings load/save, appearance changes, theme remix, custom-art/
 
 - Missing settings fall back to defaults.
 - Theme identifiers validate before file operations.
+- Terminal toolbar actions default to all supported header/footer options enabled, including Copy output. Per-pane customization and global settings use accessible switches (role=switch, aria-checked); saved per-connection selections and action order remain authoritative.
 - Theme/update state have separate persistence concerns.
+- The Compact built-in is replaced by **TLR** (`terminal-paper` ID) with ivory/graphite/amber light mode and designed warm graphite dark mode. The renderer migrates `compact` and legacy ClickHouse selections to Terminal Paper, and obsolete `volt-agent` selections to Tokyo Night, including per-connection overrides. A saved user theme with an old ID is never overwritten or automatically reselected.
+- ClickHouse was previously renamed to Compact, and Volt Agent is removed from bundled themes. Old user-authored overrides with those retired IDs remain on disk but are not shown in the theme picker; their active selections migrate to TLR or Tokyo Night.
 - General settings persist the default-workspace preference (`unset`/home/workspace/folder) consumed by the new-terminal targeting chain.
 
 ## Functionalities
@@ -100,3 +103,10 @@ At app startup, settings load/save, appearance changes, theme remix, custom-art/
 - `ui/components/GeneralSettings.tsx`
 - `ui/components/ThemeRemixModal.tsx`
 - `ui/components/UpdateSettings.tsx`
+- `src-tauri/builtinThemes/terminalPaper.json`
+- `ui/terminalPaper.css`
+- `ui/utils/themeMigration.ts`
+- `ui/components/themeRemix/ThemePreview.tsx`
+
+- Manual update checks use the official `hainguyenh/OmniTerm` latest GitHub Release API. Manual installer/portable actions open the specific asset from that checked release in the system browser, without pretending to install silently. Native signed updates remain separate; release-link validation is enforced by Rust. The update summary is constrained to a readable text width.
+- Terminal toolbar switch tracks use `rounded-md` (`--theme-rounded-md`) and thumbs use `rounded-sm` (`--theme-rounded-sm`): they follow the current theme, including square corners in TLR. No hardcoded pill-radius exception is allowed for toolbar switches; only semantic status dots retain their circular shape. Compact layout prevents switch/label/reorder overlap in the scrollable customization popup.
