@@ -155,3 +155,18 @@ fn clear_user_themes_handles_missing_dir_and_filters_non_json_files() {
 
     let _ = fs::remove_dir_all(&themes_dir);
 }
+
+#[test]
+fn retired_themes_do_not_appear_even_from_saved_theme_overrides() {
+    let builtin = vec![
+        serde_json::json!({"id": "terminal-paper", "name": "TLR"}),
+        serde_json::json!({"id": "compact", "name": "Compact"}),
+    ];
+    let user = vec![
+        serde_json::json!({"id": "volt-agent", "name": "Volt Agent"}),
+        serde_json::json!({"id": "theme-custom", "name": "My Custom"}),
+    ];
+    let merged = merge_theme_roots(builtin, user);
+    let ids: Vec<_> = merged.iter().filter_map(theme_id).collect();
+    assert_eq!(ids, ["terminal-paper", "theme-custom"]);
+}

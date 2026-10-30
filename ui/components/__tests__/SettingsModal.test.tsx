@@ -141,6 +141,16 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Check for updates')).toBeInTheDocument()
   }, 15000)
 
+  it('keeps the shortcuts description narrow without overlapping Reset', () => {
+    renderModal()
+    fireEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
+    const title = screen.getByText('Keyboard Shortcuts')
+    expect(title.parentElement?.parentElement).toHaveClass('flex-wrap', 'gap-x-3')
+    expect(screen.getByText('Click a binding to record a new shortcut. Modifiers will combine automatically.'))
+      .toHaveClass('max-w-[19rem]', 'text-[10px]')
+    expect(screen.getByRole('button', { name: 'Reset' })).toHaveClass('whitespace-nowrap', 'shrink-0')
+  })
+
   it('invokes onClose when clicking close button', () => {
     const { onClose } = renderModal()
     fireEvent.click(screen.getByRole('button', { name: /close settings/i }))

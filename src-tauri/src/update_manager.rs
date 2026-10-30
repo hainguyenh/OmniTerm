@@ -71,3 +71,58 @@ pub async fn download_and_install_update<R: Runtime>(app: AppHandle<R>) -> Resul
         .map_err(|e| e.to_string())?;
     app.restart();
 }
+
+/** Restrict browser downloads to official GitHub release pages and their assets. */
+fn valid_release_url(url: &str) -> bool {
+    const BASE: &str = "https://github.com/hainguyenh/OmniTerm/releases/";
+    let Some(path) = url.strip_prefix(BASE) else { return false; };
+    if path == "latest" { return true; }
+    let mut parts = path.split('/');
+    let Some(kind) = parts.next() else { return false; };
+    let Some(tag) = parts.next() else { return false; };
+    if !tag.starts_with('v') || !tag[1..].chars().all(|c| c.is_ascii_digit() || c == '.')
+        || tag[1..].is_empty() { return false; }
+    match kind {
+        "tag" => parts.next().is_none(),
+        "download" => {
+            let Some(filename) = parts.next() else { return false; };
+            !filename.is_empty() && filename != ".."
+                && filename.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+                && [".exe", ".msi", ".zip", ".dmg", ".deb", ".AppImage"]
+                    .iter().any(|ext| filename.ends_with(ext))
+                && parts.next().is_none()
+        }
+        _ => false,
+    }
+}
+
+/// For unsigned builds, ask the system browser to fetch the exact official release asset.
+/// This never executes downloads or writes a binary inside OmniTerm.
+#[tauri::command]
+pub async fn open_update_release_link(url: String) -> Result<(), String> {
+    if !valid_release_url(&url) {
+        return Err("Update link must be an official OmniTerm GitHub release URL.".into());
+    }
+    opener::open(&url).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod manual_release_tests {
+    use super::valid_release_url;
+
+    #[test]
+    fn allows_only_official_release_assets_and_pages() {
+        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/latest"));
+        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/tag/v0.1.14"));
+        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/OmniTerm_0.1.14_x64-setup.exe"));
+        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/OmniTerm_0.1.14_x64-portable.zip"));
+        for invalid in [
+            "https://github.com@evil.test/hainguyenh/OmniTerm/releases/latest",
+            "https://github.com/hainguyenh/Other/releases/latest",
+            "http://github.com/hainguyenh/OmniTerm/releases/latest",
+            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/a.exe?evil=1",
+            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/../a.exe",
+            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/a.exe/extra",
+        ] { assert!(!valid_release_url(invalid), "{invalid}"); }
+    }
+}

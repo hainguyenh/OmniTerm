@@ -18,7 +18,7 @@ interface TerminalActionsCustomizeProps {
   placement: 'top' | 'bottom'
 }
 
-const menuClass = 'absolute right-0 z-[100] min-w-64 rounded-lg border border-theme-border bg-theme-popup p-3 shadow-2xl'
+const menuClass = 'absolute right-0 z-[100] w-[min(19rem,calc(100vw-1.5rem))] max-h-[min(33rem,calc(100vh-2.5rem))] overflow-y-auto overscroll-contain rounded-lg border border-theme-border bg-theme-popup p-2 shadow-2xl'
 
 function toggle(
   current: readonly TerminalToolbarAction[],
@@ -77,25 +77,29 @@ export default function TerminalActionsCustomize({
     return (
       <fieldset className="mt-2 first:mt-0">
         <legend className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-theme-dim">{title}</legend>
-        <div className="grid gap-1">
+        <div className="grid min-w-0 gap-0.5">
           {ordered.map(action => {
             const supported = available.includes(action)
             return (
-              <div key={action} className={`flex items-center gap-2 rounded px-1.5 py-1 text-xs ${supported ? 'text-theme-fg hover:bg-theme-bg' : 'text-theme-dim/50'}`}>
-                <label className="flex min-w-0 flex-1 items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(action)}
-                    disabled={!supported}
-                    onChange={event => onChange({
-                      header: surface === 'header' ? toggle(headerActions, action, event.target.checked) : [...headerActions],
-                      footer: surface === 'footer' ? toggle(footerActions, action, event.target.checked) : [...footerActions],
-                    })}
-                  />
-                  <span className="min-w-0 flex-1 truncate">{TERMINAL_ACTION_LABELS[action]}</span>
-                </label>
+              <div key={action} className={`flex min-w-0 items-center gap-1.5 rounded px-1.5 py-1 text-xs ${supported ? 'text-theme-fg hover:bg-theme-bg' : 'text-theme-dim/50'}`}>
+                <span className="min-w-0 flex-1 truncate">{TERMINAL_ACTION_LABELS[action]}</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={selected.includes(action)}
+                  aria-label={TERMINAL_ACTION_LABELS[action]}
+                  data-terminal-toolbar-switch
+                  disabled={!supported}
+                  onClick={() => onChange({
+                    header: surface === 'header' ? toggle(headerActions, action, !selected.includes(action)) : [...headerActions],
+                    footer: surface === 'footer' ? toggle(footerActions, action, !selected.includes(action)) : [...footerActions],
+                  })}
+                  className={`relative h-3.5 w-6 shrink-0 rounded-md transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-theme-accent disabled:cursor-not-allowed disabled:opacity-40 ${selected.includes(action) ? 'bg-theme-accent' : 'bg-theme-border'}`}
+                >
+                  <span aria-hidden="true" className={`absolute top-0.5 h-2.5 w-2.5 rounded-sm bg-white shadow-sm transition-all ${selected.includes(action) ? 'left-3' : 'left-0.5'}`} />
+                </button>
                 {selected.includes(action) && (
-                  <span className="flex items-center gap-0.5">
+                  <span className="flex shrink-0 items-center gap-0.5">
                     <button type="button" disabled={selected.indexOf(action) === 0} aria-label={`Move ${TERMINAL_ACTION_LABELS[action]} up`} className="p-0.5 text-theme-dim hover:text-theme-accent disabled:opacity-30" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onChange({ header: surface === 'header' ? move(headerActions, headerActions.indexOf(action), -1) : [...headerActions], footer: surface === 'footer' ? move(footerActions, footerActions.indexOf(action), -1) : [...footerActions] }) }}>
                       ↑
                     </button>
@@ -123,7 +127,7 @@ export default function TerminalActionsCustomize({
         <Settings2 className="h-3.5 w-3.5 text-theme-accent" />
         Customize terminal actions
       </div>
-      <p className="mt-2 text-[10px] leading-4 text-theme-dim">Choose which actions stay visible for this terminal. Customize is always available.</p>
+      <p className="mt-2 max-w-[34ch] text-[10px] leading-4 text-theme-dim">Switch actions on or off and adjust their order. Unavailable actions cannot be enabled.</p>
       {renderGroup('Header', HEADER_ACTION_OPTIONS, headerActions, availableHeaderActions, 'header')}
       {renderGroup('Footer', FOOTER_ACTION_OPTIONS, footerActions, availableFooterActions, 'footer')}
     </div>

@@ -62,27 +62,33 @@ describe('UpdateSettings', () => {
   })
 
   it('downloads portable updates and skips versions', () => {
-    const p = props({ updateState: state({ updateAvailable: true, latest: '2.0.0', isPortable: true, downloadStatus: 'Downloading 50%' }) })
+    const p = props({ updateState: state({ updateAvailable: true, latest: '2.0.0', isPortable: true, portableAssetUrl: 'https://github.com/hainguyenh/OmniTerm/releases/download/v2.0.0/OmniTerm_2.0.0_x64-portable.exe', downloadStatus: 'Downloading 50%' }) })
     render(<UpdateSettings {...p} />)
     expect(screen.getByText('Update available — v2.0.0')).toBeInTheDocument()
     expect(screen.getByText('Downloading 50%')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Download update'))
+    fireEvent.click(screen.getByText('Download portable'))
     fireEvent.click(screen.getByText('Skip v2.0.0'))
     expect(p.handleDownloadPortable).toHaveBeenCalled()
     expect(p.skipThisVersion).toHaveBeenCalled()
   })
 
-  it('opens installer choices and runs immediate or on-exit install', () => {
-    const closed = props({ updateState: state({ updateAvailable: true, latest: '2.0.0', isPortable: false }) })
-    const { rerender } = render(<UpdateSettings {...closed} />)
-    fireEvent.click(screen.getByText('Install update'))
-    expect(closed.setInstallerChoiceOpen).toHaveBeenCalledWith(true)
-
-    const open = props({ updateState: state({ updateAvailable: true, latest: '2.0.0' }), installerChoiceOpen: true })
-    rerender(<UpdateSettings {...open} />)
-    fireEvent.click(screen.getByText('Install now'))
-    fireEvent.click(screen.getByText('On exit'))
-    expect(open.handleDownloadInstaller).toHaveBeenNthCalledWith(1, true)
-    expect(open.handleDownloadInstaller).toHaveBeenNthCalledWith(2, false)
+  it('offers official installer and portable assets without claiming automatic installation', () => {
+    const openReleasePage = vi.fn(async () => {})
+    mockOmnitermAPI({ updates: { openReleasePage } })
+    const p = props({ updateState: state({
+      updateAvailable: true, latest: '2.0.0',
+      htmlUrl: 'https://github.com/hainguyenh/OmniTerm/releases/tag/v2.0.0',
+      installerAssetUrl: 'https://github.com/hainguyenh/OmniTerm/releases/download/v2.0.0/setup.exe',
+      portableAssetUrl: 'https://github.com/hainguyenh/OmniTerm/releases/download/v2.0.0/portable.exe',
+    }) })
+    render(<UpdateSettings {...p} />)
+    fireEvent.click(screen.getByText('Download installer'))
+    fireEvent.click(screen.getByText('Download portable'))
+    fireEvent.click(screen.getByText('View on GitHub'))
+    expect(p.handleDownloadInstaller).toHaveBeenCalledWith(false)
+    expect(p.handleDownloadPortable).toHaveBeenCalledOnce()
+    expect(openReleasePage).toHaveBeenCalledOnce()
+    expect(screen.queryByText('Install now')).not.toBeInTheDocument()
+    expect(screen.queryByText('On exit')).not.toBeInTheDocument()
   })
 })

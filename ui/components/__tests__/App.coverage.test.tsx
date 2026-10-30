@@ -75,6 +75,32 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+describe('legacy theme settings migration', () => {
+  it('migrates removed built-in IDs and saves the migrated selections', async () => {
+    install({
+      ...settings, themeId: 'compact',
+      perConn: { 'conn-1': { themeId: 'volt-agent', fontSize: 19 } },
+    }, { themes: [TOKYO_NIGHT, { ...themeB, id: 'terminal-paper' }] })
+    render(<App />)
+    await waitFor(() => expect(captured.title?.appSettings.themeId).toBe('terminal-paper'))
+    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({
+      themeId: 'terminal-paper',
+      perConn: { 'conn-1': { themeId: 'tokyo-night', fontSize: 19 } },
+    })))
+  })
+
+  it('hides retired Compact overrides and migrates their active selection to TLR', async () => {
+    install({ ...settings, themeId: 'compact' }, {
+      themes: [TOKYO_NIGHT, { ...themeB, id: 'compact', name: 'My Compact' }, { ...themeB, id: 'terminal-paper' }],
+    })
+    render(<App />)
+    await waitFor(() => expect(captured.title?.appSettings.themeId).toBe('terminal-paper'))
+    expect(captured.title.themes.some((theme: { id: string }) => theme.id === 'compact')).toBe(false)
+    expect(captured.title.themes.some((theme: { id: string }) => theme.id === 'terminal-paper')).toBe(true)
+    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'terminal-paper' })))
+  })
+})
+
 describe('App orchestration', () => {
   it('loads state and drives global and focused appearance actions', async () => {
     install(settings)

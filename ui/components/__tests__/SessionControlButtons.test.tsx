@@ -138,11 +138,12 @@ describe('SessionControlButtons', () => {
       expect(header.style.width).toBe('100px')
       unmount()
 
-      // The header's "open here" action lives only in More, so its button is part of the width.
+      // The current-directory action is included in the measured header width when inline.
       const { unmount: unmountWithMore } = render(
         <SessionControlButtons conn={local} sessionId="s1" detach="detach" onToggleDetach={vi.fn()} onOpenCurrentDirectory={vi.fn()} surface="header" />,
       )
-      expect(screen.getByTestId('session-control-root').style.width).toBe('120px')
+      expect(screen.getByTestId('session-control-root').style.width).toBe('100px')
+      expect(screen.getByRole('button', { name: 'Open new pane with current directory' })).toBeInTheDocument()
       unmountWithMore()
 
       render(<SessionControlButtons conn={local} sessionId="s1" detach="detach" onToggleDetach={vi.fn()} surface="footer" />)

@@ -41,7 +41,7 @@ export const ThemePreview: React.FC<{ theme: AppTheme; mode: ThemeMode }> = ({ t
   return (
     <div
       data-testid={`theme-preview-${mode}`}
-      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border${isSquareTheme(theme) ? ' theme-square' : ''}`}
+      className={`terminal-paper-surface flex min-h-0 flex-col overflow-hidden rounded-xl border${isSquareTheme(theme) ? ' theme-square' : ''}${theme.id === 'terminal-paper' ? ' theme-terminal-paper' : ''}${theme.id === 'compact' && mode === 'dark' ? ' theme-terminal-paper-dark' : ''}`}
       style={{
         ...(vars as React.CSSProperties),
         backgroundColor: 'var(--theme-bg)',

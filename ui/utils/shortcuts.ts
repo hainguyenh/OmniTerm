@@ -80,6 +80,7 @@ export const matchesChromeShortcut = (
   shortcuts: ShortcutBindings,
   opts: { inTerminal: boolean },
 ): boolean => {
+  if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey && e.key.toLowerCase() === 'n') return true
   for (const key of Object.keys(shortcuts) as (keyof ShortcutBindings)[]) {
     const combo = shortcuts[key]
     if (!combo || !matchShortcut(e, combo)) continue
