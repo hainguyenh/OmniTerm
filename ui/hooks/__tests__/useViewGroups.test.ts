@@ -223,4 +223,38 @@ describe('useViewGroups', () => {
     expect(result.current.activeGroupId).toBe(DEFAULT_VIEW_GROUP_ID)
     expect(result.current.layoutMode).toBe(1)
   })
+
+  it('moves a tab from active group to target group and updates target panes', () => {
+    const { result } = renderHook(() => useHarness())
+    let targetGroupId = ''
+    act(() => { targetGroupId = result.current.createNewViewGroup('target-tab', false) })
+    act(() => { result.current.setPanes(['moving-tab', 'staying-tab', ...Array(6).fill(null)]) })
+    act(() => { result.current.setLayoutMode(2) })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('omniterm:move-tab-to-group', {
+        detail: { tabId: 'moving-tab', groupId: targetGroupId, sourcePaneIndex: 0 },
+      }))
+    })
+
+    expect(result.current.panes[0]).toBeNull()
+    expect(result.current.panes[1]).toBe('staying-tab')
+    expect(result.current.tabGroups['moving-tab']).toBe(targetGroupId)
+    const targetGroup = result.current.viewGroups.find(g => g.id === targetGroupId)
+    expect(targetGroup?.panes).toContain('moving-tab')
+  })
+
+  it('moves a tab from an explicit group to ungrouped', () => {
+    const { result } = renderHook(() => useHarness())
+    act(() => { result.current.setPanes(['pane-1', ...Array(7).fill(null)]) })
+    act(() => { result.current.setLayoutMode(2) })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('omniterm:move-tab-to-group', {
+        detail: { tabId: 'pane-1', groupId: DEFAULT_VIEW_GROUP_ID, sourcePaneIndex: 0 },
+      }))
+    })
+
+    expect(result.current.tabGroups['pane-1']).toBeUndefined()
+  })
 })

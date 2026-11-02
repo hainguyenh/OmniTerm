@@ -27,6 +27,14 @@ export function notifyViewGroupUngroup(groupId: string): void {
   window.dispatchEvent(new CustomEvent('omniterm:ungroup-view-group', { detail: { groupId } }))
 }
 
+export function notifyMoveTabToGroup(tabId: string, groupId: string, sourcePaneIndex?: number): void {
+  window.dispatchEvent(new CustomEvent('omniterm:move-tab-to-group', { detail: { tabId, groupId, sourcePaneIndex } }))
+}
+
+export function notifyCreateViewGroup(): void {
+  window.dispatchEvent(new CustomEvent('omniterm:create-view-group'))
+}
+
 export function createViewGroup(id: string, index: number, layoutMode: LayoutMode = 1): ViewGroup {
   return {
     id,

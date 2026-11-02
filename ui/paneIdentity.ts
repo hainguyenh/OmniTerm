@@ -35,15 +35,35 @@ export const PANE_IDENTITY: readonly PaneIdentity[] = [
  * Identity of a pane index. Wraps rather than throwing so a stale index from a shrinking layout can
  * never blank out a tab; callers should only ever pass a real pane index (0 … MAX_PLANES-1).
  */
+let differentPaneColorsEnabled = true
+
+export function setDifferentPaneColors(enabled: boolean): void {
+  differentPaneColorsEnabled = enabled
+}
+
+export function isDifferentPaneColors(): boolean {
+  return differentPaneColorsEnabled
+}
+
 export function paneIdentity(index: number): PaneIdentity {
   const n = PANE_IDENTITY.length
-  return PANE_IDENTITY[((Math.trunc(index) % n) + n) % n]
+  const identity = PANE_IDENTITY[((Math.trunc(index) % n) + n) % n]
+  if (!differentPaneColorsEnabled) {
+    return {
+      ...identity,
+      color: 'var(--theme-accent)',
+    }
+  }
+  return identity
 }
 
 /** `hex` at `alpha` (0–1) as an 8-digit hex, for the softer stripe/border of an unfocused pane. */
-export function withAlpha(hex: string, alpha: number): string {
+export function withAlpha(color: string, alpha: number): string {
+  if (color.startsWith('var(')) {
+    return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`
+  }
   const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-  return `${hex}${a.toString(16).padStart(2, '0')}`
+  return `${color}${a.toString(16).padStart(2, '0')}`
 }
 
 /** Shared pane-title surface, reused by pane headers and their matching session tabs. */

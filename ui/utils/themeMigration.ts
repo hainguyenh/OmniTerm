@@ -1,7 +1,7 @@
 import type { AppTheme } from '../themes'
 import { DEFAULT_THEME_ID } from '../themes'
 
-const RETIRED_THEME_IDS = new Set(['compact', 'clickhouse', 'click-house', 'volt-agent'])
+const RETIRED_THEME_IDS = new Set(['compact', 'clickhouse', 'click-house', 'volt-agent', 'mac-novel', 'novel'])
 
 /** Keep legacy files untouched on disk; only omit the retired themes from the catalog. */
 export function visibleThemes<T extends Pick<AppTheme, 'id'>>(themes: readonly T[]): T[] {
@@ -22,7 +22,7 @@ export const migrateThemeSettings = <T extends ThemeSelectionSettings>(
   const mapId = (id: string): string => {
     // Retired built-ins are never selectable, even if a saved override still exists on disk.
     if (['compact', 'clickhouse', 'click-house'].includes(id) && available.has('terminal-paper')) return 'terminal-paper'
-    if (id === 'volt-agent' && available.has(DEFAULT_THEME_ID)) return DEFAULT_THEME_ID
+    if (['volt-agent', 'mac-novel', 'novel'].includes(id) && available.has(DEFAULT_THEME_ID)) return DEFAULT_THEME_ID
     if (available.has(id)) return id
     return id
   }

@@ -16,7 +16,16 @@ function pluginFeatureSummary(plugin: PluginDescriptor): string[] {
   if (plugin.id === '@omniterm/native-batch-connections') {
     return ['Windows OpenSSH', 'Native mstsc', 'BAT launchers', 'Passwords never stored']
   }
+  if (plugin.id === '@omniterm/vscode-launch') {
+    return ['VS Code launch.json (>=0.2.0)', 'Multi-launch & compounds', 'VSCodium + netcoredbg', 'Launch Console']
+  }
   return plugin.permissions.map(permission => permission.replace(/([A-Z])/g, ' $1').trim())
+}
+
+interface ReleasePluginAsset {
+  name: string
+  downloadUrl: string
+  size: number
 }
 
 export default function PluginManager({
@@ -29,6 +38,8 @@ export default function PluginManager({
   const [busyId, setBusyId] = useState<string | null>(null)
   const [capabilities, setCapabilities] = useState<ConnectionProviderCapabilities | null>(null)
   const [restartRequired, setRestartRequired] = useState(false)
+  const [releasePlugins, setReleasePlugins] = useState<ReleasePluginAsset[]>([])
+  const [releaseTag, setReleaseTag] = useState('')
   const providerStatusChangedRef = useRef(onProviderStatusChanged)
   providerStatusChangedRef.current = onProviderStatusChanged
 
@@ -50,6 +61,46 @@ export default function PluginManager({
     void refresh()
   }, [refresh])
 
+  useEffect(() => {
+    let active = true
+    async function loadReleasePlugins() {
+      try {
+        const ver = await window.omnitermAPI.updates?.getVersion?.().catch(() => '')
+        const tag = ver ? `v${ver}` : 'latest'
+        const url = tag === 'latest'
+          ? 'https://api.github.com/repos/hainguyenh/OmniTerm/releases/latest'
+          : `https://api.github.com/repos/hainguyenh/OmniTerm/releases/tags/${tag}`
+        let res = await fetch(url)
+        if (!res.ok && tag !== 'latest') {
+          res = await fetch('https://api.github.com/repos/hainguyenh/OmniTerm/releases/latest')
+        }
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data?.assets || !Array.isArray(data.assets) || !active) return
+        const matches: ReleasePluginAsset[] = data.assets
+          .filter((a: any) =>
+            typeof a?.name === 'string' &&
+            a.name.endsWith('.zip') &&
+            !a.name.toLowerCase().includes('portable') &&
+            !a.name.toLowerCase().startsWith('omniterm_')
+          )
+          .map((a: any) => ({
+            name: a.name,
+            downloadUrl: a.browser_download_url,
+            size: a.size,
+          }))
+        if (active) {
+          setReleasePlugins(matches)
+          setReleaseTag(data.tag_name || tag)
+        }
+      } catch {
+        // Offline or fallback to manual ZIP install
+      }
+    }
+    void loadReleasePlugins()
+    return () => { active = false }
+  }, [])
+
   const installPackage = useCallback(async () => {
     setBusyId('__install__')
     try {
@@ -66,6 +117,32 @@ export default function PluginManager({
     } catch (error) {
       await showAlert(
         `Could not install plugin: ${error instanceof Error ? error.message : String(error)}`,
+        { title: 'Plugin Manager', tone: 'error' },
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }, [refresh, showAlert])
+
+  const installFromRelease = useCallback(async (asset: ReleasePluginAsset) => {
+    setBusyId(asset.name)
+    try {
+      const res = await fetch(asset.downloadUrl)
+      if (!res.ok) throw new Error(`Download failed (${res.status} ${res.statusText})`)
+      const buffer = await res.arrayBuffer()
+      const installed = await window.omnitermAPI.plugin.installPackage(new Uint8Array(buffer))
+      if (!installed) return
+      setRestartRequired(installed.restartRequired)
+      await refresh()
+      await showAlert(
+        installed.restartRequired
+          ? `“${installed.name}” ${installed.version} was installed. Restart OmniTerm to load the package safely.`
+          : `“${installed.name}” ${installed.version} was installed and is ready to configure.`,
+        { title: 'Plugin installed', tone: 'info' },
+      )
+    } catch (error) {
+      await showAlert(
+        `Could not install ${asset.name}: ${error instanceof Error ? error.message : String(error)}`,
         { title: 'Plugin Manager', tone: 'error' },
       )
     } finally {
@@ -255,6 +332,40 @@ export default function PluginManager({
         Install a plugin ZIP created by the OmniTerm build wizard. The native installer validates the
         package and shows its permissions before copying it.
       </p>
+      {releasePlugins.length > 0 && (
+        <div className="mb-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card-bg)] p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--theme-dim)]">
+              Release {releaseTag} Plugins
+            </span>
+            <span className="text-[9px] text-[var(--theme-dim)]">Direct install</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {releasePlugins.map(asset => (
+              <div key={asset.name} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-bg)] px-2.5 py-1.5">
+                <div className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium text-[var(--theme-fg)]" title={asset.name}>
+                    {asset.name}
+                  </span>
+                  <span className="text-[9px] text-[var(--theme-dim)]">
+                    {(asset.size / 1024 / 1024).toFixed(1)} MB
+                  </span>
+                </div>
+                <Tooltip content={`Download and install ${asset.name} from release ${releaseTag}`} placement="left">
+                  <button
+                    type="button"
+                    disabled={busyId !== null}
+                    onClick={() => { void installFromRelease(asset) }}
+                    className="shrink-0 rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-fg)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] disabled:opacity-50"
+                  >
+                    {busyId === asset.name ? 'Installing…' : 'Download & Install'}
+                  </button>
+                </Tooltip>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {plugins.length === 0 ? (
         <p className="text-[11px] text-[var(--theme-dim)] rounded-lg border border-dashed border-[var(--theme-border)] px-3 py-2">
           No compatible plugins discovered.
