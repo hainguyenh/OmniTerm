@@ -378,6 +378,8 @@ jobs:
         run: |
           . ./scripts/ReleasePackaging.ps1
           $repoRoot = (Get-Location).Path
+          pnpm build:plugin (Join-Path $repoRoot 'plugins/full-connection-manager')
+          pnpm build:plugin (Join-Path $repoRoot 'plugins/native-batch-connections')
           $artifacts = Join-Path $repoRoot 'artifacts/plugins'
           New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
