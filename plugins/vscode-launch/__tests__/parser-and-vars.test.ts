@@ -250,4 +250,56 @@ describe('expandVariables, loadEnvFile, and resolvePreLaunchTask', () => {
     fs.writeFileSync(path.join(badDir, '.vscode', 'tasks.json'), '{ invalid', 'utf8')
     expect(resolvePreLaunchTask(badDir, 'build', { ...ctx, workspaceFolder: badDir })).toBeNull()
   })
+
+  it('detects background watcher tasks and custom problemMatcher patterns', () => {
+    const dir = makeTempDir()
+    fs.mkdirSync(path.join(dir, '.vscode'), { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, '.vscode', 'tasks.json'),
+      JSON.stringify({
+        version: '2.0.0',
+        tasks: [
+          {
+            label: 'watch:tsc',
+            command: 'tsc',
+            args: ['-w'],
+            problemMatcher: ['$tsc-watch'],
+          },
+          {
+            label: 'dev:server',
+            command: 'npm',
+            args: ['run', 'dev'],
+            isBackground: true,
+            problemMatcher: {
+              background: {
+                endsPattern: 'ready on http',
+              },
+            },
+          },
+          {
+            label: 'start:web',
+            command: 'npm',
+            args: ['start'],
+          },
+        ],
+      }),
+      'utf8',
+    )
+    const ctx = {
+      workspaceFolder: dir,
+      userHome: os.homedir(),
+      pathSeparator: path.sep,
+      env: {},
+    }
+    const tscTask = resolvePreLaunchTask(dir, 'watch:tsc', ctx)
+    expect(tscTask?.isBackground).toBe(true)
+    expect(tscTask?.readyPattern).toContain('watching for file changes')
+
+    const devTask = resolvePreLaunchTask(dir, 'dev:server', ctx)
+    expect(devTask?.isBackground).toBe(true)
+    expect(devTask?.readyPattern).toBe('ready on http')
+
+    const webTask = resolvePreLaunchTask(dir, 'start:web', ctx)
+    expect(webTask?.isBackground).toBe(true)
+  })
 })

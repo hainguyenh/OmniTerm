@@ -3,23 +3,27 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { detectInstalledEditors, resolveEditorBinary } from './netcoredbg'
+import type { EditorKind } from './types'
 
 export interface VariableContext {
   workspaceFolder: string
   userHome?: string
   pathSeparator?: string
   env?: Readonly<Record<string, string | undefined>>
+  editors?: readonly EditorKind[]
 }
 
 export function createDefaultVariableContext(
   workspaceFolder: string,
   extraEnv?: Readonly<Record<string, string | undefined>>,
+  editors?: readonly EditorKind[],
 ): VariableContext {
   return {
     workspaceFolder,
     userHome: os.homedir(),
     pathSeparator: path.sep,
     env: { ...process.env, ...(extraEnv ?? {}) },
+    editors,
   }
 }
 
@@ -39,7 +43,7 @@ export function expandVariables(value: string, ctx: VariableContext): string {
     if (expr === 'pathSeparator' || expr === '/') return sep
     if (expr === 'cwd') return folder
     if (expr === 'execPath') {
-      const editors = detectInstalledEditors({ env: envMap })
+      const editors = ctx.editors ?? detectInstalledEditors({ env: envMap })
       const pref = editors.includes('codium') ? 'codium' : 'code'
       const resolved = resolveEditorBinary(pref, { env: envMap })
       return resolved?.bin ?? pref

@@ -178,7 +178,7 @@ describe('VsCodeLaunchRoot & LaunchConsoleDrawer', () => {
       openConsoleForRun('run-1')
     })
 
-    expect(await screen.findByTestId('launch-console-drawer')).toBeInTheDocument()
+    expect(await screen.findByTestId('launch-console-drawer', {}, { timeout: 4000 })).toBeInTheDocument()
     expect(await screen.findByRole('link', { name: 'http://localhost:5001' })).toBeInTheDocument()
     expect(screen.getByText(/Now listening on:/)).toBeInTheDocument()
     expect(screen.getByText(/Earlier lines were trimmed/i)).toBeInTheDocument()

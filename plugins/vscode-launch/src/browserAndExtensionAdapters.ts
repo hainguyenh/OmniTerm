@@ -160,8 +160,8 @@ export function synthesizeExtensionHostLaunch(params: {
   let command = resolved?.bin ?? (process.platform === 'win32' ? `${preferredEditor}.cmd` : preferredEditor)
   let isShell = resolved?.isCmdShim ?? (process.platform === 'win32')
 
-  if (runtimeExecutable && runtimeExecutable !== '${execPath}') {
-    command = runtimeExecutable
+  if (config.runtimeExecutable && config.runtimeExecutable !== '${execPath}') {
+    command = runtimeExecutable ?? config.runtimeExecutable
     isShell = process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(command)
   }
 
