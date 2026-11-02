@@ -192,6 +192,11 @@ test('the release publishes the installer and portable package with the bundled 
 
   // download-artifact merges by this pattern; an upload named outside it is silently dropped.
   assert.match(workflow, /pattern: OmniTerm-\*/)
+  assert.match(
+    workflow,
+    /gh release edit "\$TAG" --notes-file release_notes\.md/,
+    'release workflow must synchronize release notes via gh release edit',
+  )
 })
 
 test('packaging goes through the same functions the local wizard uses', () => {
