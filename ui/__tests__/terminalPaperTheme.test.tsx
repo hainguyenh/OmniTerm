@@ -33,6 +33,8 @@ describe('Terminal Paper built-in theme', () => {
   it('provides a designed graphite dark variant, not an inverted paper page', () => {
     expect(theme.terminal.dark.background).toBe('#242321')
     expect(theme.terminal.dark.foreground).toBe('#E9E5DD')
+    expect(theme.terminal.dark.blue).toBe('#D5A45F')
+    expect(theme.terminal.dark.brightBlue).toBe('#E08A28')
     expect(theme.ui.dark.sidebarBg).toBe('#171716')
     expect(theme.ui.dark.accent).not.toBe('#faff69')
   })
@@ -40,6 +42,8 @@ describe('Terminal Paper built-in theme', () => {
   it('keeps the Terminal Paper ornament in the theme preview', () => {
     render(<ThemePreview theme={theme} mode="light" />)
     expect(screen.getByTestId('theme-preview-light')).toHaveClass('theme-terminal-paper', 'terminal-paper-surface')
+    render(<ThemePreview theme={theme} mode="dark" />)
+    expect(screen.getByTestId('theme-preview-dark')).toHaveClass('theme-terminal-paper', 'theme-terminal-paper-dark')
   })
 
   it('styles the preview and the clipped app surface instead of the transparent Windows root', () => {
@@ -49,6 +53,9 @@ describe('Terminal Paper built-in theme', () => {
     expect(css).not.toContain('.theme-terminal-paper #root')
     expect(css).toContain('html.win-window.theme-square .app-window-rounded')
     expect(css).toContain('.theme-square .semantic-status-dot')
+    expect(css).toContain('.theme-square .animate-marching-ants')
+    expect(css).toContain('rx: 0 !important;')
+    expect(css).toContain('input[type="datetime-local"]')
     expect(css).not.toContain('.theme-square [data-terminal-toolbar-switch]')
   })
 
@@ -58,6 +65,7 @@ describe('Terminal Paper built-in theme', () => {
       .map(name => JSON.parse(fs.readFileSync(path.join(builtinDir, name), 'utf8')) as { id: string; name: string })
     expect(themes.some(entry => /clickhouse|click.house|volt.agent/i.test(entry.id + ' ' + entry.name))).toBe(false)
     expect(themes.some(entry => entry.id === 'compact')).toBe(false)
+    expect(themes.some(entry => entry.id === 'mac-novel' || entry.name === 'Novel')).toBe(false)
     expect(themes.some(entry => entry.id === 'terminal-paper')).toBe(true)
   })
 })

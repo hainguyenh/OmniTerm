@@ -81,4 +81,99 @@ describe('ViewGroupTabs', () => {
 
     expect(onUngroup).toHaveBeenCalledWith('view-1')
   })
+
+  it('moves a terminal pane to another desktop on drop', () => {
+    const onMoveTab = vi.fn()
+    const groups = [createViewGroup('view-1', 1), createViewGroup('view-2', 2)]
+    render(
+      <ViewGroupTabs
+        groups={groups}
+        activeGroupId="view-1"
+        onSelect={vi.fn()}
+        onUpdate={vi.fn()}
+        onReorder={vi.fn()}
+        onUngroup={vi.fn()}
+        onMoveTab={onMoveTab}
+      />,
+    )
+
+    const tabs = screen.getAllByRole('tab')
+    const dataTransfer = {
+      effectAllowed: '',
+      dropEffect: '',
+      setData: vi.fn(),
+      getData: vi.fn((type: string) => (type === 'application/x-omniterm-tab' ? 'session-123' : type === 'application/x-omniterm-pane' ? '0' : '')),
+      types: ['application/x-omniterm-pane', 'application/x-omniterm-tab'],
+    }
+    fireEvent.dragOver(tabs[1], { dataTransfer })
+    fireEvent.drop(tabs[1], { dataTransfer })
+
+    expect(onMoveTab).toHaveBeenCalledWith('session-123', 'view-2', 0)
+  })
+
+  it('supports vertical keyboard navigation with ArrowDown and ArrowUp', () => {
+    const groups = [createViewGroup('view-1', 1), createViewGroup('view-2', 2)]
+    render(
+      <ViewGroupTabs
+        groups={groups}
+        activeGroupId="view-1"
+        onSelect={vi.fn()}
+        onUpdate={vi.fn()}
+        onReorder={vi.fn()}
+        onUngroup={vi.fn()}
+      />,
+    )
+
+    const tabs = screen.getAllByRole('tab')
+    tabs[0].focus()
+    expect(document.activeElement).toBe(tabs[0])
+
+    fireEvent.keyDown(tabs[0], { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(tabs[1])
+
+    fireEvent.keyDown(tabs[1], { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(tabs[0])
+  })
+
+  it('displays compact desktop badges and pane counts', () => {
+    const group = { ...createViewGroup('view-1', 1), panes: ['t1', null, null, null, null, null, null, null] }
+    render(
+      <ViewGroupTabs
+        groups={[group]}
+        activeGroupId="view-1"
+        onSelect={vi.fn()}
+        onUpdate={vi.fn()}
+        onReorder={vi.fn()}
+        onUngroup={vi.fn()}
+      />,
+    )
+
+    const tab = screen.getByRole('tab')
+    expect(tab).toHaveTextContent('D1')
+    expect(tab).toHaveTextContent('1/1')
+  })
+
+  it('renders a new desktop button that calls onCreateGroup and displays text vertically', () => {
+    const onCreateGroup = vi.fn()
+    const group = { ...createViewGroup('view-1', 1), label: 'Backend' }
+    render(
+      <ViewGroupTabs
+        groups={[group]}
+        activeGroupId="view-1"
+        onSelect={vi.fn()}
+        onUpdate={vi.fn()}
+        onReorder={vi.fn()}
+        onUngroup={vi.fn()}
+        onCreateGroup={onCreateGroup}
+      />,
+    )
+
+    const btn = screen.getByTestId('add-view-group')
+    expect(btn).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onCreateGroup).toHaveBeenCalled()
+
+    const labelSpan = screen.getByText('Backend')
+    expect(labelSpan).toHaveStyle({ writingMode: 'vertical-rl', transform: 'rotate(180deg)' })
+  })
 })

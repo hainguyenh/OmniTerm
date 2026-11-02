@@ -38,6 +38,14 @@ describe('AppearanceMenu', () => {
     expect(picker.parentElement).toHaveClass('flex', 'h-6', 'items-center')
   })
 
+  it('aligns compactly with surrounding header buttons', () => {
+    renderMenu({ compact: true, hideFontSize: true })
+    const picker = screen.getByRole('button', { name: 'Appearance — theme & font size' })
+    expect(picker).toHaveClass('w-4', 'h-4', 'flex', 'items-center', 'justify-center')
+    expect(picker.parentElement).toHaveClass('flex', 'h-4', 'w-4', 'items-center', 'justify-center')
+    expect(picker.querySelector('svg')).not.toHaveClass('translate-y-[1px]')
+  })
+
   it('shows the current font size and shifts it by one step per click', () => {
     const { onFontSizeChange } = renderMenu()
     fireEvent.click(screen.getByRole('button', { name: '+' }))

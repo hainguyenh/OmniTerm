@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Bot, Database, FileText, GitBranch, Info, Lock, Plus, Sliders, SquareTerminal, X } from 'lucide-react'
+import { Bot, FileText, GitBranch, Info, Lock, Plus, Sliders, SquareTerminal, X } from 'lucide-react'
 import type { Workspace } from '@omniterm/contract'
 import { pickShell, type ShellOption } from '../shellOptions'
-import type { UseDialogReturn } from '../hooks/useDialog'
 import {
   decodeWorkspaceSelection,
   defaultWorkspaceToSelection,
@@ -13,7 +12,6 @@ import { Tooltip } from './Tooltip'
 import ToggleRow from './ToggleRow'
 import TerminalToolbarSettings from './TerminalToolbarSettings'
 import AttachmentsSettings from './AttachmentsSettings'
-import SettingsBackupSection from './SettingsBackupSection'
 import type { TerminalToolbarActions } from '../terminalToolbar'
 
 const MIN_OPEN_FILE_MB = 1
@@ -43,7 +41,6 @@ interface GeneralSettingsProps {
   shellOptions: ShellOption[]
   workspaces?: Workspace[]
   onCloseSettings: () => void
-  showAlert?: UseDialogReturn['showAlert']
 }
 
 interface ToolbarAppearanceRecord {
@@ -63,7 +60,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   shellOptions,
   workspaces = [],
   onCloseSettings,
-  showAlert,
 }) => {
   const patch = (fields: Record<string, unknown>) => {
     setAppSettings({ ...appSettings, ...fields })
@@ -95,10 +91,10 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
   return (
     <div className="p-4 flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-[1_1_15rem]">
+        <div className="min-w-0 flex-1">
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">General Preferences</h3>
-          <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
-            Configure terminal defaults, agent behavior, file attachments, and backups.
+          <p className="mt-0.5 max-w-2xl text-[10px] leading-4 text-theme-dim">
+            Configure terminal defaults, agent behavior, and file attachments.
           </p>
         </div>
         {import.meta.env.DEV && (
@@ -143,7 +139,7 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="default-workspace" className={LABEL_CLS}>Default workspace for new terminals</label>
+            <label htmlFor="default-workspace" className={LABEL_CLS} title="Default workspace for new terminals">Default Workspace</label>
             <div className="relative">
               <select
                 id="default-workspace"
@@ -194,6 +190,14 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
             checked={appSettings.skipTerminalCloseConfirm ?? false}
             onChange={() => patch({ skipTerminalCloseConfirm: !(appSettings.skipTerminalCloseConfirm ?? false) })}
             ariaLabel="Skip terminal close confirmation"
+          />
+
+          <ToggleRow
+            label="Don't ask before renewing a terminal pane"
+            description="Renew connected terminal sessions without showing the Renew confirmation dialog."
+            checked={appSettings.skipTerminalRenewConfirm ?? false}
+            onChange={() => patch({ skipTerminalRenewConfirm: !(appSettings.skipTerminalRenewConfirm ?? false) })}
+            ariaLabel="Skip terminal renew confirmation"
           />
         </div>
       </section>
@@ -394,15 +398,6 @@ const GeneralSettings: React.FC<GeneralSettingsProps> = ({
         <div className="pt-2 border-t border-theme-border/40">
           <AttachmentsSettings largePaste={appSettings.largePaste} onLargePasteChange={(largePaste) => patch({ largePaste })} />
         </div>
-      </section>
-
-      {/* ── Section 5: Data & Backup ── */}
-      <section className={CARD_CLS} aria-label="Backup & Restore">
-        <div className={SECTION_TITLE_CLS}>
-          <Database className="w-3.5 h-3.5 text-theme-accent" />
-          <span>Data &amp; Backup</span>
-        </div>
-        <SettingsBackupSection showAlert={showAlert} />
       </section>
     </div>
   )

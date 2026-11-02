@@ -3,9 +3,9 @@ import type { SessionStatus } from '@omniterm/contract'
 import { workingFolderLabel, workspaceLocationLabel } from '../utils/workspaceDisplay'
 import { newTerminalHoverText } from '../utils/newTerminalDescription'
 import ActivityBar from './ActivityBar'
-import FileBrowser from './FileBrowser'
-import WorkspacePanel from './WorkspacePanel'
-import BookmarksPanel from './BookmarksPanel'
+import MainLayoutSecondaryPanel from './MainLayoutSecondaryPanel'
+
+
 import { GitWorkspaceView } from './git/GitWorkspaceView'
 import { EditorTabHost } from './editor/EditorTabHost'
 import TerminalView from './TerminalView'
@@ -24,7 +24,7 @@ import { draggedPaneIndex, paneRect } from '../paneLayout'
 import { closesOnExit } from '../sessionExit'
 import { isRenewing } from '../hooks/useRenewSession'
 import { useGitRepoCheck } from '../hooks/useGitRepoCheck'
-import { formatAgentProfileCommand } from '../utils/agentRegistry'
+
 import { resolveEnterModes } from '../utils/enterKeys'
 import { shellLabel } from '../shellOptions'
 import { workspaceForConnection } from '../utils/workspaceIdentity'
@@ -39,10 +39,11 @@ import ViewGroupTabs from './ViewGroupTabs'
 import { Tooltip } from './Tooltip'
 import BlurSettingsOverlay from './BlurSettingsOverlay'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
-import { notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
+import { notifyCreateViewGroup, notifyMoveTabToGroup, notifyViewGroupReorder, notifyViewGroupUngroup, notifyViewGroupUpdate } from '../viewGroups'
 import { QuotaPaneLines, SuspendedOverlay, UsageProbeOverlay } from '../../plugins/agent-quota/app/paneHosts'
+import { VsCodeLaunchRoot } from '../../plugins/vscode-launch/app/VsCodeLaunchRoot'
 export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, hasConnectionProvider, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, openConnectionForm, showAlert, sidebarWidth, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealRequest, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, handleConnect, scriptRuns, openEditor, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, activeSshName, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
+  const { appSettings, setAppSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, layoutMode, setSettingsOpen, connectionCapabilities, activeTabs, visibleTabs = activeTabs, setActiveTabs, tabGroups = {}, ephemeralConns, panes, focusedPane, setFocusedPane, activeTabId, setTabMenu, setShellMenu, setPanePicker, setPanePickerAnchor = () => {}, dragPane, setDragPane, statuses, setSessionCwd, reconnectKeys, latencies, poppedOut, resumeMode, metrics, connectedAt, setStatus, setLatency, setMetric, activity, setBusy, connById, reattachTerminal, connFormOpen, setConnFormOpen, connFormInitial, connFormTarget, wsConnFormRef, activeView, sidebarVisible, editorTabs, setEditorDirty, previewTabId, keepTab, handleResizeDragStart, handleViewChange, revealInWorkspace, splitRatios, setSplitRatios, persistRatios, shellOptions, requestNewSession, handleSaveConnection, showTab, changeLayoutMode, swapPanes, scriptRuns, closeTabs, closeTab, disconnectSession, reconnectSession, retryRestore = () => {}, restoreOutcomes = {}, activeSshId, isOverlayOpen, detachControl, renderPaneHeader, idleArtUrl, loadingArtUrl, alwaysAwake: awakeState, setAlwaysAwakeOpen, alwaysAwakeAvailable, viewGroups = [], activeGroupId = '', switchViewGroup = () => {}, fullscreenPane = null, setFullscreenPane = () => {}, chromeHidden = false, pulsePaneId = null } = model
   const handleRestoreStatus = model.handleRestoreStatus ?? setStatus
   const alwaysAwake = awakeState ?? {
     enabled: false, mode: 'activeOnly' as const, expiresAtMs: 0,
@@ -62,6 +63,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     themes, appSettings, resolved: activeResolvedAppearance, target: activeTarget,
     onThemeApply: model.onThemeApply, onFontSizeChange: model.onFontSizeChange, onToolbarActionsChange: model.onToolbarActionsChange,
   }) : undefined
+  const activeTerminalTheme = themes.find(t => t.id === (activeResolvedAppearance?.themeId ?? appSettings.themeId)) ?? currentTheme
+  const activeTerminalFontSize = activeResolvedAppearance?.fontSize ?? appSettings.fontSize ?? 14
+  const activeFontFamilyMono = appSettings.darkMode
+    ? activeTerminalTheme?.ui?.dark?.fontFamilyMono
+    : activeTerminalTheme?.ui?.light?.fontFamilyMono
   const footerWorkspace = (model.workspaces ?? []).find(workspace => workspace.id === activeEditorWorkspace) ?? (activeTabId ? workspaceForConnection(model.workspaces ?? [], activeConnection) : selectedWorkspace)
   const rawActiveCwd = activeTabId ? (model.sessionCwds?.[activeTabId] ?? activeConnection?.localCwd) : undefined
   const activeRepoCwd = rawActiveCwd || (footerWorkspace?.folders?.[0]?.path) || selectedWorkspace?.folders?.[0]?.path
@@ -100,40 +106,29 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             blurAvailable={blurAvailable}
             blurEnabled={(appSettings.blurEnabled ?? true) && blurValue > 0}
             onBlurClick={() => setBlurOpen(true)}
+            desktops={viewGroups.length > 0 ? (
+              <ViewGroupTabs
+                groups={viewGroups}
+                activeGroupId={activeGroupId}
+                totalTabCount={ungroupedTabCount}
+                dragPane={dragPane}
+                panes={panes}
+                onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }}
+                onUpdate={notifyViewGroupUpdate}
+                onReorder={notifyViewGroupReorder}
+                onUngroup={notifyViewGroupUngroup}
+                onCreateGroup={notifyCreateViewGroup}
+                onMoveTab={(tabId, targetId, sourcePaneIdx) => {
+                  setFullscreenPane(null)
+                  notifyMoveTabToGroup(tabId, targetId, sourcePaneIdx)
+                }}
+              />
+            ) : null}
           />
         )}
         {/* ── Secondary Panel (Workspace/Connections/Files) ────────────────── */}
         {!chromeHidden && activeView !== null && activeView !== 'git' && (
-          <div
-            className="flex-shrink-0 flex flex-col border-r border-[var(--theme-border)] min-w-0 overflow-hidden relative bg-theme-sidebar"
-            style={{ width: sidebarVisible ? sidebarWidth : 0 }}
-          >
-            {activeView === 'workspace' ? (
-              <WorkspacePanel
-                onOpenScript={openEditor}
-                onRunScript={scriptRuns.run}
-                showAlert={showAlert}
-                onConnectWorkspaceConnection={(connection, workspaceId) => handleConnect({ ...connection, workspaceId })}
-                hasConnectionProvider={hasConnectionProvider}
-                onAddWorkspaceConnection={(target) => { setConnFormInitial(undefined); openConnectionForm(target) }}
-                onEditWorkspaceConnection={(target, conn) => { setConnFormInitial(conn); openConnectionForm(target) }}
-                connectionsRevision={wsConnectionsRevision}
-                revealRequest={revealRequest}
-                activeFile={activeTabId && editorTabs[activeTabId] ? { workspaceId: editorTabs[activeTabId].workspaceId, path: editorTabs[activeTabId].script.id } : null}
-                onWorkspacesChanged={model.refreshWorkspaces}
-              />
-            ) : activeView === 'bookmarks' ? (
-              <BookmarksPanel
-                onLaunch={(command, cwd) => requestNewSession(undefined, null, cwd ?? null, command)}
-                onShowTab={showTab}
-                launchCommandFor={(pin) => formatAgentProfileCommand(pin.agent, pin.launcher, pin.profileName)}
-              />
-            ) : activeView === 'files' && activeSshId && activeSshName ? (
-              <FileBrowser key={activeSshId} id={activeSshId} connectionName={activeSshName} active={sidebarVisible} />
-            ) : (
-              <WorkspacePanel onOpenScript={openEditor} />
-            )}
-          </div>
+          <MainLayoutSecondaryPanel model={model} />
         )}
         {!chromeHidden && activeView !== null && activeView !== 'git' && sidebarVisible && (
           <div
@@ -142,7 +137,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           />
         )}
         {/* ── Main area ───────────────────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0 relative">
+        <div className="flex-1 flex flex-col min-w-0 relative overflow-hidden">
           {gitEnabled && activeView === 'git' && (
             <div className="absolute inset-0 z-40 bg-theme-bg flex flex-col min-w-0 overflow-hidden">
               <GitWorkspaceView
@@ -156,7 +151,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
           )}
           {!chromeHidden && (
           <div className="relative z-30 flex flex-col border-b border-[var(--theme-border)] flex-shrink-0">
-            {viewGroups.length > 0 && <ViewGroupTabs groups={viewGroups} activeGroupId={activeGroupId} totalTabCount={ungroupedTabCount} onSelect={id => { setFullscreenPane(null); switchViewGroup(id) }} onUpdate={notifyViewGroupUpdate} onReorder={notifyViewGroupReorder} onUngroup={notifyViewGroupUngroup} />}
+
             <div className="h-[40px] px-2.5 flex items-center gap-2">
             {/* Tab list — flex-1 so it fills all available space before the picker */}
             <div className="flex-1 min-w-0 overflow-hidden">
@@ -476,6 +471,11 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
             )}
           </div>
           </div>
+          <VsCodeLaunchRoot
+            fontSize={activeTerminalFontSize}
+            fontFamilyMono={activeFontFamilyMono}
+            onOpenInTerminal={(spec) => requestNewSession(undefined, null, spec.cwd, spec.terminalCommand)}
+          />
         </div>
         {/* ── Connection form modal ────────────────────────────────────────── */}
         {connFormOpen && connFormTarget && (
