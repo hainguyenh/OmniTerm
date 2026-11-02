@@ -205,8 +205,9 @@ the release page can describe the plugin without unpacking it. Returns the archi
 function New-PluginPackage {
   param(
     [Parameter(Mandatory)][string]$PluginPath,
-    [Parameter(Mandatory)][string]$Destination,
-    [Parameter(Mandatory)][string]$StageRoot,
+    [Parameter(Mandatory)][Alias('OutputDirectory')][string]$Destination,
+    [string]$StageRoot,
+    [string]$Version,
     # The wizard's short label ('full') rather than the directory ('full-connection-manager'), so the
     # archive keeps the name it has always had.
     [string]$Name = (Split-Path -Leaf $PluginPath)
@@ -214,28 +215,49 @@ function New-PluginPackage {
 
   $dist = Join-Path $PluginPath 'dist'
   if (-not (Test-Path -LiteralPath $dist -PathType Container)) {
+    if (Get-Command 'pnpm' -ErrorAction SilentlyContinue) {
+      & pnpm build:plugin $PluginPath
+    }
+  }
+  if (-not (Test-Path -LiteralPath $dist -PathType Container)) {
     throw "Plugin at $PluginPath has no dist/. Run 'pnpm build:plugin $PluginPath' first."
   }
 
   $package = Get-Content (Join-Path $PluginPath 'package.json') -Raw | ConvertFrom-Json
+  $effectiveVersion = if ($Version) { $Version.TrimStart('v') } else { $package.version }
 
-  $temp = Join-Path $StageRoot ('package-' + $Name)
-  Remove-BuildTree $temp $StageRoot
+  $effectiveStageRoot = if ($StageRoot) {
+    $StageRoot
+  } else {
+    Join-Path ([System.IO.Path]::GetTempPath()) 'omniterm-plugin-stage'
+  }
+  New-Item -ItemType Directory -Force -Path $effectiveStageRoot | Out-Null
+
+  $temp = Join-Path $effectiveStageRoot ('package-' + $Name)
+  Remove-BuildTree $temp $effectiveStageRoot
   New-Item -ItemType Directory -Force -Path $temp | Out-Null
   Copy-Item (Join-Path $PluginPath 'package.json') $temp
   Copy-Item (Join-Path $PluginPath 'README.md') $temp
   Copy-Item $dist $temp -Recurse
 
-  Remove-BuildTree $Destination (Split-Path -Parent $Destination)
+  $isDedicatedDir = (Split-Path -Leaf $Destination) -eq $Name
+  if ($isDedicatedDir) {
+    Remove-BuildTree $Destination (Split-Path -Parent $Destination)
+  }
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
 
-  $archive = Join-Path $Destination "$Name-$($package.version).zip"
+  $archive = Join-Path $Destination "$Name-$effectiveVersion.zip"
   if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+  if (Test-Path -LiteralPath "$archive.sha256") { Remove-Item -LiteralPath "$archive.sha256" -Force }
   Compress-Archive -Path (Join-Path $temp '*') -DestinationPath $archive
   Write-Sha256Sidecar $archive
 
-  Copy-Item (Join-Path $PluginPath 'package.json') (Join-Path $Destination 'manifest.json') -Force
-  Copy-Item (Join-Path $PluginPath 'README.md') (Join-Path $Destination 'README.md') -Force
+  if ($isDedicatedDir) {
+    Copy-Item (Join-Path $PluginPath 'package.json') (Join-Path $Destination 'manifest.json') -Force
+    Copy-Item (Join-Path $PluginPath 'README.md') (Join-Path $Destination 'README.md') -Force
+  }
+
+  Remove-BuildTree $temp $effectiveStageRoot
 
   return $archive
 }

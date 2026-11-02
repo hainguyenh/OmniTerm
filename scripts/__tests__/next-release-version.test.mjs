@@ -209,6 +209,15 @@ test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(wizard, /VS Code Launch \(run & debug \.vscode\/launch\.json configurations\)/)
 })
 
+test('standalone plugin packaging supports OutputDirectory and Version parameters', () => {
+  const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
+  assert.match(packaging, /\[Alias\('OutputDirectory'\)\]\[string\]\$Destination/)
+  assert.match(packaging, /\[string\]\$Version/)
+  assert.match(workflow, /pnpm build:plugin .*plugins\/full-connection-manager/)
+  assert.match(workflow, /pnpm build:plugin .*plugins\/native-batch-connections/)
+  assert.match(workflow, /New-PluginPackage -PluginPath .*plugins\/full-connection-manager.* -Version \$version -OutputDirectory \$artifacts/)
+})
+
 test('portable packaging verifies the bundled plugin is present in the archive', () => {
   const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
   assert.match(packaging, /System\.IO\.Compression\.FileSystem/)
