@@ -42,6 +42,16 @@ describe('header and direct display', () => {
     expect(screen.getByText(/Upload custom images or GIFs/)).toBeInTheDocument()
     expect(screen.getAllByText('Upload')).toHaveLength(4)
   })
+
+  it('renders different pane colors switch and invokes change callback', () => {
+    const onDifferentPaneColorsChange = vi.fn()
+    renderArt({ differentPaneColors: true, onDifferentPaneColorsChange })
+    const toggle = screen.getByRole('switch', { name: 'Use different color for each terminal pane' })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(toggle)
+    expect(onDifferentPaneColorsChange).toHaveBeenCalledWith(false)
+  })
 })
 
 describe('info tooltip', () => {

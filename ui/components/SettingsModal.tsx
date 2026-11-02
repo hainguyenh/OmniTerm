@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Code2, Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
+import { Code2, Database, Gauge, Info, Keyboard, Package, Palette, RotateCcw, Sliders, X } from 'lucide-react'
 import type { ConnectionProviderCapabilities, Workspace } from '@omniterm/contract'
 import type { UseDialogReturn } from '../hooks/useDialog'
 import { useDialogDrag } from '../utils/dialogDrag'
@@ -7,7 +7,9 @@ import GeneralSettings from './GeneralSettings'
 import EditorShortcutsSettings from './EditorShortcutsSettings'
 import PluginManager from './PluginManager'
 import CustomArtSettings from './CustomArtSettings'
+import DataSettings from './DataSettings'
 import UpdateSettings from './UpdateSettings'
+import ContributorsList from './ContributorsList'
 import { Tooltip } from './Tooltip'
 import { KeycapCombo } from './Keycap'
 import { appLogo } from '../assets/appLogo'
@@ -19,7 +21,7 @@ import AgentQuotaSettings from '../../plugins/agent-quota/app/AgentQuotaSettings
 import { SETTINGS_TAB_EVENT } from '../../plugins/agent-quota/app/AgentQuotaRoot'
 import { useQuota } from '../../plugins/agent-quota/app/quotaStore'
 
-export type SettingsTabId = 'general' | 'shortcuts' | 'editorShortcuts' | 'plugins' | 'quota' | 'artwork' | 'about'
+export type SettingsTabId = 'general' | 'shortcuts' | 'editorShortcuts' | 'plugins' | 'quota' | 'appearance' | 'artwork' | 'data' | 'about'
 
 export interface SettingsModalProps {
   isOpen: boolean
@@ -59,7 +61,8 @@ const TABS: Array<{ id: SettingsTabId; label: string; icon: React.ComponentType<
   { id: 'editorShortcuts', label: 'Editor Shortcuts', icon: Code2 },
   { id: 'plugins', label: 'Plugins', icon: Package },
   { id: 'quota', label: 'Agent Quota', icon: Gauge },
-  { id: 'artwork', label: 'Artwork', icon: Palette },
+  { id: 'appearance', label: 'Appearance', icon: Palette },
+  { id: 'data', label: 'Data', icon: Database },
   { id: 'about', label: 'About & Updates', icon: Info },
 ]
 
@@ -126,7 +129,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       <div
         ref={dialogRef}
         style={drag.style}
-        className="w-full max-w-3xl bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden flex flex-col h-[580px] max-h-[85vh]"
+        className="w-full max-w-[922px] bg-theme-popup rounded-2xl border border-theme-border shadow-2xl overflow-hidden flex flex-col h-[696px] max-h-[90vh]"
       >
         {/* Header */}
         <div
@@ -154,7 +157,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Main layout: Sidebar + Content */}
         <div className="flex flex-1 min-h-0 divide-x divide-theme-border">
           {/* Navigation Sidebar */}
-          <nav className="w-44 flex-shrink-0 p-2.5 flex flex-col gap-1 bg-theme-bg/20 overflow-y-auto">
+          <nav className="w-56 flex-shrink-0 p-2.5 flex flex-col gap-1 bg-theme-bg/20 overflow-y-auto">
             {tabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -184,7 +187,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 setAppSettings={setAppSettings}
                 shellOptions={shellOptions}
                 workspaces={workspaces}
-                showAlert={showAlert}
                 onCloseSettings={onClose}
               />
             )}
@@ -192,9 +194,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {activeTab === 'shortcuts' && (
               <div className="p-4 flex flex-col gap-3">
                 <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-                  <div className="min-w-0 flex-[1_1_15rem]">
+                  <div className="min-w-0 flex-1">
                     <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Keyboard Shortcuts</h3>
-                    <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
+                    <p className="mt-0.5 max-w-2xl text-[10px] leading-4 text-theme-dim">
                       Click a binding to record a new shortcut. Modifiers will combine automatically.
                     </p>
                   </div>
@@ -281,7 +283,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 refreshCustomArt={refreshCustomArt}
               />
             )}
-            {activeTab === 'artwork' && (
+            {(activeTab === 'appearance' || activeTab === 'artwork') && (
               <div className="p-2">
                 <CustomArtSettings
                   idleArtUrlLight={idleArtUrlLight ?? null}
@@ -289,8 +291,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   loadingArtUrlLight={loadingArtUrlLight ?? null}
                   loadingArtUrlDark={loadingArtUrlDark ?? null}
                   onArtChanged={refreshCustomArt ?? (() => {})}
+                  differentPaneColors={appSettings.differentPaneColors ?? true}
+                  onDifferentPaneColorsChange={(val) => setAppSettings({ ...appSettings, differentPaneColors: val })}
                 />
               </div>
+            )}
+            {activeTab === 'data' && (
+              <DataSettings showAlert={showAlert} />
             )}
 
             {activeTab === 'about' && (
@@ -314,6 +321,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </p>
                   </div>
                 </div>
+
+                {/* Contributors */}
+                <ContributorsList />
 
                 {/* Updates */}
                 <UpdateSettings

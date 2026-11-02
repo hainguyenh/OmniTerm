@@ -55,7 +55,9 @@ fn resolve_claude_session_file(
     since_epoch_secs: Option<u64>,
 ) -> Option<String> {
     let clean_cwd = cwd.trim_end_matches(['/', '\\']);
-    let dir = profile_dir.join("projects").join(encode_project_dir(clean_cwd));
+    let dir = profile_dir
+        .join("projects")
+        .join(encode_project_dir(clean_cwd));
     let entries = fs::read_dir(&dir).ok()?;
 
     const CLOCK_SKEW_GRACE_SECS: u64 = 5;
@@ -184,4 +186,3 @@ pub async fn resolve_agent_model(
     .ok()
     .flatten()
 }
-

@@ -177,11 +177,11 @@ export const EditorShortcutsSettings: React.FC<EditorShortcutsSettingsProps> = (
   return (
     <div className="p-4 flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-[1_1_15rem]">
+        <div className="min-w-0 flex-1">
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">
             Editor Shortcuts
           </h3>
-          <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
+          <p className="mt-0.5 max-w-2xl text-[10px] leading-4 text-theme-dim">
             Configure hotkeys for code folding, search, and navigation in the editor. Switch a hotkey
             off to stop it from firing.
           </p>

@@ -46,9 +46,17 @@ mod tests {
         assert!(result.is_ok(), "git_log failed: {:?}", result.err());
         let log = result.unwrap();
         assert!(!log.is_empty());
-        let all_res = block_on(git_log(manifest_dir.to_string(), Some(5), Some("--all".into())));
+        let all_res = block_on(git_log(
+            manifest_dir.to_string(),
+            Some(5),
+            Some("--all".into()),
+        ));
         assert!(all_res.is_ok());
-        let head_res = block_on(git_log(manifest_dir.to_string(), Some(5), Some("HEAD".into())));
+        let head_res = block_on(git_log(
+            manifest_dir.to_string(),
+            Some(5),
+            Some("HEAD".into()),
+        ));
         assert!(head_res.is_ok());
     }
 

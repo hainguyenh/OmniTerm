@@ -314,6 +314,7 @@ fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::
         app_utils::clear_log,
         app_utils::get_version,
         app_utils::open_in_system,
+        app_utils::open_url,
         // Ad-hoc shells + launcher
         adhoc::shells_ready,
         adhoc::shells_release,

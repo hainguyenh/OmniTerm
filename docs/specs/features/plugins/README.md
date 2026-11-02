@@ -6,6 +6,7 @@ Routing for this product feature.
 
 - [Lifecycle/runtime](lifecycle-runtime.md) — management, host, RPC
 - [Agent Quota](agent-quota.md) — AI agent quota lines, limits, suspend and wake-up
+- [VS Code Launch](vscode-launch.md) — .vscode/launch.json runner, background watchers, and multi-console drawer
 
 ## Spec conventions
 

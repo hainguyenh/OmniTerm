@@ -30,7 +30,7 @@ import { registerTerminalSaveExport } from '../utils/terminalSaveExport'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
-import { installTerminalInterruptReset } from '../utils/terminalInterruptReset'
+import { installTerminalInterruptReset, interruptSessionProcess } from '../utils/terminalInterruptReset'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
@@ -228,6 +228,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
+      if (data === '\x03') {
+        interruptSessionProcess(id, connection.type)
+        return
+      }
       if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       noteSubmittedInput(id, data, term.buffer) // an agent launch freezes the pane at once (agentLaunchSignal.ts)
       copyTracker.noteInput(data)
@@ -340,6 +344,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         getAgentName: currentAgent,
         getShortcuts: () => shortcutsRef.current,
         getEnterModes: () => enterModesRef.current,
+        onInterrupt: () => interruptSessionProcess(id, connection.type),
       }),
     )
 

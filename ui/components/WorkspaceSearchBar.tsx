@@ -39,6 +39,7 @@ export default function WorkspaceSearchBar({ query, onChange }: WorkspaceSearchB
         aria-label="Search workspace"
         title={SEARCH_HINT}
         placeholder="Find in workspace…"
+        className="bg-transparent"
       />
       {query && (
         <Tooltip content="Clear search (Esc)" placement="bottom">

@@ -59,8 +59,11 @@ interface AppSettings {
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
+  differentPaneColors?: boolean
   /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
   skipTerminalCloseConfirm?: boolean
+  /** Skip the terminal pane renew confirmation dialog until the user turns it back off. */
+  skipTerminalRenewConfirm?: boolean
   /** Shell inline prediction (PowerShell's PSReadLine). Applies to new panes; on by default. */
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
@@ -180,7 +183,7 @@ interface Window {
       connectionCapabilities: () => Promise<import('@omniterm/contract').ConnectionProviderCapabilities | null>
       invoke: (method: string, ...args: any[]) => Promise<any>
       authGate: () => Promise<boolean>
-      installPackage: () => Promise<null | { installed: boolean; id: string; name: string; version: string; restartRequired: boolean }>
+      installPackage: (data?: number[] | Uint8Array) => Promise<null | { installed: boolean; id: string; name: string; version: string; restartRequired: boolean }>
       remove: (id: string) => Promise<boolean>
       restartApp: () => Promise<void>
     }
@@ -272,6 +275,7 @@ interface Window {
       clearLog: () => Promise<boolean>
       /** Open a local file or directory with the OS's default handler. URLs refused by the backend. */
       openInSystem: (path: string) => Promise<void>
+      openUrl: (url: string) => Promise<void>
       setZoomFactor: (factor: number) => void
       getZoomFactor: () => number
     }
@@ -279,8 +283,7 @@ interface Window {
       exportJson: (opts: { suggestedName: string; content: string }) => Promise<boolean>
       exportText: (opts: { suggestedName: string; content: string }) => Promise<boolean>
       importJson: () => Promise<string | null>
-      // One shape only. There is no encrypted-backup variant, because there is no credential to
-      // protect; the backend rejects an encrypted file from an older build with a migration hint.
+      // One shape only; backend rejects encrypted files from older builds with a migration hint.
       importFile: () => Promise<null | { folders: any[]; connections: any[] }>
       getHomeDir: () => Promise<string>
       pickDirectory: (defaultPath?: string) => Promise<string | null>
@@ -384,10 +387,7 @@ interface Window {
       list: () => Promise<Array<{ id: string; label: string }>>
       onOpen: (cb: (conn: { id: string; name: string; type: 'LOCAL'; host: string; port: string; user: string; shell: 'wsl' | 'powershell' | 'cmd'; localCwd?: string; localCommand?: string; localArgs?: string; localKeepOpen?: boolean }) => void) => () => void
     }
-    /**
-     * Which AI agent (if any) runs under each local pane's shell process tree, and its resumable
-     * Claude session id — never derived from terminal output or a renderer-supplied guess.
-     */
+    /** AI agent running under each local pane's shell process tree and its Claude session id. */
     agentSessions?: {
       detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex' | 'agy'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>

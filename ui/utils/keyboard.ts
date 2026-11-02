@@ -27,5 +27,8 @@ export const matchShortcut = (event: KeyboardEvent | React.KeyboardEvent, shortc
   if (keyPart === '-') {
     return eventKey === '-' || event.code === 'NumpadSubtract'
   }
+  if (keyPart === '0') {
+    return eventKey === '0' || event.code === 'Digit0' || event.code === 'Numpad0'
+  }
   return eventKey === keyPart
 }

@@ -85,9 +85,9 @@
   gap: 7px;
   min-height: 32px;
   padding-inline: 8px 3px;
-  border: 1px solid var(--workspace-line);
-  border-radius: var(--workspace-radius);
-  background: var(--theme-bg);
+  border: 1px solid var(--workspace-line, color-mix(in srgb, var(--theme-border) 60%, transparent));
+  border-radius: var(--workspace-radius, 4px);
+  background: transparent;
 }
 
 .workspace-search:focus-within {
@@ -98,21 +98,21 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--workspace-muted);
+  color: var(--workspace-muted, color-mix(in srgb, var(--theme-fg) 68%, var(--theme-dim)));
 }
 
 .workspace-search input {
   width: 100%;
   min-width: 0;
   padding-block: 6px;
-  background: transparent;
+  background: transparent !important;
   color: var(--theme-fg);
   font-size: 12px;
   outline: none;
 }
 
 .workspace-search input::placeholder {
-  color: var(--workspace-muted);
+  color: var(--workspace-muted, color-mix(in srgb, var(--theme-fg) 68%, var(--theme-dim)));
 }
 
 /* The surrounding search field already supplies a visible focus border. */

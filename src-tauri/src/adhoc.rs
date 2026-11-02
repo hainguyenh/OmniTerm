@@ -23,11 +23,11 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use uuid::Uuid;
 
 #[cfg(test)]
-#[path = "adhoc_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "adhoc_queue_overflow_tests.rs"]
 mod queue_overflow_tests;
+#[cfg(test)]
+#[path = "adhoc_tests.rs"]
+mod tests;
 
 /// Cap on opens queued while the renderer is not yet listening. The queue exists to cover the
 /// unlock/cold-start window; any local process can drive `--open-shell`, so it stays bounded.

@@ -17,11 +17,11 @@ use tauri::{AppHandle, Manager, Runtime};
 #[path = "connections_coverage_tail_tests.rs"]
 mod coverage_tail_tests;
 #[cfg(test)]
-#[path = "connections_tests.rs"]
-mod tests;
-#[cfg(test)]
 #[path = "connections_save_load_tests.rs"]
 mod save_load_tests;
+#[cfg(test)]
+#[path = "connections_tests.rs"]
+mod tests;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

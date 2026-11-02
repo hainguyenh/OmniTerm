@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Palette, Check, Sparkles, Minimize2, BookOpen, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
+import { Palette, Check, Sparkles, Minimize2, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
 import type { AppTheme } from '../themes'
 import { Tooltip } from './Tooltip'
 
@@ -7,7 +7,7 @@ function getThemeIcon(themeId: string) {
   const id = themeId.toLowerCase()
   if (id.includes('claude')) return Sparkles
   if (id.includes('compact')) return Minimize2
-  if (id.includes('novel')) return BookOpen
+
   if (id.includes('tokyohot') || id.includes('tokyo-hot') || id.includes('hot')) return Flame
   if (id.includes('tokyonight') || id.includes('tokyo-night') || id.includes('night')) return Moon
   if (id.includes('vercel')) return Triangle
@@ -163,12 +163,12 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   }
 
   const btnSize = compact ? 'w-4 h-4' : 'w-6 h-6'
-  const iconSize = compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
+  const iconSize = menuItem ? 'w-4 h-4 flex-shrink-0' : compact ? 'w-3 h-3' : 'w-3.5 h-3.5'
   const triggerLabel = menuItem ? 'Theme' : buttonTitle ?? 'Appearance — theme & font size'
 
   return (
     <>
-      <div className={`relative ${menuItem ? 'w-full' : titleBar ? 'flex h-6 shrink-0 items-center' : 'flex-shrink-0'}`}>
+      <div className={`relative ${menuItem ? 'w-full' : titleBar ? 'flex h-6 shrink-0 items-center' : compact ? 'flex h-4 w-4 shrink-0 items-center justify-center' : 'flex shrink-0 items-center justify-center'}`}>
         <Tooltip content={triggerLabel} placement="bottom">
           <button
             ref={btnRef}
@@ -183,7 +183,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
               : compact
                 // Borderless to match the other pane-header buttons (stop, clear, detach…) — only
                 // the icon color signals the open state, same as their hover/active treatment.
-                ? `inline-flex items-center justify-center ${btnSize} rounded transition-colors hover:bg-[#414868] ${
+                ? `flex items-center justify-center ${btnSize} rounded transition-colors hover:bg-[#414868] ${
                   open ? 'text-theme-accent' : 'text-theme-dim hover:text-theme-accent'
                   }`
                 : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${

@@ -142,9 +142,13 @@ async fn import_rejects_an_envelope_without_a_sections_object() {
     let _guard = crate::test_support::lock();
     let app = mock_app();
 
-    let error = import_settings(app.handle().clone(), json!({ "version": 1 }), "merge".into())
-        .await
-        .expect_err("a sectionless envelope must be refused");
+    let error = import_settings(
+        app.handle().clone(),
+        json!({ "version": 1 }),
+        "merge".into(),
+    )
+    .await
+    .expect_err("a sectionless envelope must be refused");
 
     assert!(error.contains("'sections'"), "unexpected error: {error}");
 }
@@ -263,10 +267,12 @@ async fn merge_import_skips_workspace_ids_that_already_exist() {
     .expect("merge import succeeds");
 
     assert_eq!(report["imported"]["workspaces"], 2);
-    let stored =
-        crate::workspace_persistence::read_workspaces(app.handle()).expect("reread");
+    let stored = crate::workspace_persistence::read_workspaces(app.handle()).expect("reread");
     assert_eq!(stored.len(), 2, "duplicate id must not create a second row");
-    assert_eq!(stored[0].name, "Original", "existing entry must win the merge");
+    assert_eq!(
+        stored[0].name, "Original",
+        "existing entry must win the merge"
+    );
     // The mock app directory is shared across the process; drop the seed so
     // independently scheduled tests start from an empty store.
     std::fs::remove_file(path).expect("cleanup seeded store");

@@ -9,6 +9,9 @@ import TerminalActionsCustomize from './TerminalActionsCustomize'
 import TerminalCopyMenu from './TerminalCopyMenu'
 import { controlsOverflow } from './sessionControlOverflow'
 import { Tooltip, type TooltipPlacement } from './Tooltip'
+import { interruptSessionProcess } from '../utils/terminalInterruptReset'
+import { PaneLaunchControl } from '../../plugins/vscode-launch/app/PaneLaunchControl'
+import { useHasLaunchConfigs } from '../../plugins/vscode-launch/app/launchStore'
 
 export type TerminalControlSurface = 'header' | 'footer'
 
@@ -42,9 +45,10 @@ interface SessionControlButtonsProps {
   tooltipPlacement?: TooltipPlacement
   detachWhere?: 'pane' | 'footer'
   className?: string
+  launchFolder?: string
 }
 
-type ControlKey = 'currentDir' | 'stop' | 'clear' | 'copy' | 'save' | 'detach' | 'fullscreen' | 'theme' | 'font'
+type ControlKey = 'launch' | 'currentDir' | 'stop' | 'clear' | 'copy' | 'save' | 'detach' | 'fullscreen' | 'theme' | 'font'
 
 const MORE_BUTTON_WIDTH = 18
 const buttonClass = 'w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors'
@@ -75,8 +79,10 @@ export default function SessionControlButtons({
   tooltipPlacement = 'bottom',
   detachWhere = 'footer',
   className = '',
+  launchFolder,
 }: SessionControlButtonsProps) {
   const resolvedSurface = surface ?? 'legacy'
+  const hasLaunchConfigs = useHasLaunchConfigs(launchFolder)
   const rootRef = useRef<HTMLSpanElement>(null)
   const measurementRef = useRef<HTMLSpanElement>(null)
   const [hiddenControls, setHiddenControls] = useState<ControlKey[]>([])
@@ -123,8 +129,9 @@ export default function SessionControlButtons({
   const availableControls = selectedActions
     .filter(action => supportedActions.includes(action))
     .map(action => actionToControl[action])
-  if (resolvedSurface !== 'footer' && conn.type === 'LOCAL' && onOpenCurrentDirectory) {
-    availableControls.unshift('currentDir')
+  if (resolvedSurface !== 'footer' && conn.type === 'LOCAL') {
+    if (onOpenCurrentDirectory) availableControls.unshift('currentDir')
+    if (hasLaunchConfigs) availableControls.unshift('launch')
   }
 
   const sendInput = (data: string) => {
@@ -136,17 +143,7 @@ export default function SessionControlButtons({
 
   const stop = (event: React.MouseEvent) => {
     event.stopPropagation()
-    const api = window.omnitermAPI?.connect
-    if (api) {
-      if (conn.type === 'LOCAL') {
-        const interrupt = api.interruptSession
-        if (interrupt) void interrupt(sessionId).catch(() => sendInput('\x03'))
-        else sendInput('\x03')
-      } else {
-        sendInput('\x03')
-      }
-    }
-    window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: sessionId } }))
+    interruptSessionProcess(sessionId, conn.type)
     setMenuOpen(false)
   }
 
@@ -179,7 +176,7 @@ export default function SessionControlButtons({
       const hidden: ControlKey[] = []
       let used = 0
       for (const key of availableControls) {
-        const width = measured.get(key) || (key === 'currentDir' ? 20 : key === 'font' ? 60 : 16)
+        const width = measured.get(key) || (key === 'launch' ? 80 : key === 'currentDir' ? 20 : key === 'font' ? 60 : 16)
         const next = used + (used ? 2 : 0) + width
         if (hidden.length === 0 && next + MORE_BUTTON_WIDTH + 2 <= availableWidth) used = next
         else hidden.push(key)
@@ -201,7 +198,8 @@ export default function SessionControlButtons({
   useEffect(() => {
     if (!menuOpen && !customizeOpen) return
     const close = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Element | null
+      if (!rootRef.current?.contains(event.target as Node) && !target?.closest?.('[data-testid="pane-launch-popover"]')) {
         setMenuOpen(false)
         setCustomizeOpen(false)
       }
@@ -296,6 +294,7 @@ export default function SessionControlButtons({
   const renderControl = (key: ControlKey) => {
     if (hiddenControls.includes(key)) return null
     switch (key) {
+      case 'launch': return <PaneLaunchControl key={key} folderPath={launchFolder} />
       case 'currentDir': return <Fragment key={key}>{currentDirectoryControl}</Fragment>
       case 'theme': return <Fragment key={key}>{themeControl}</Fragment>
       case 'detach': return <Fragment key={key}>{detachControl}</Fragment>
@@ -318,7 +317,7 @@ export default function SessionControlButtons({
       style={resolvedSurface === 'header' && neededWidth !== undefined ? { width: neededWidth } : undefined}
     >
       <span ref={measurementRef} aria-hidden="true" className="terminal-control-measurement absolute left-0 top-0 inline-flex w-max shrink-0 items-center gap-0.5 whitespace-nowrap invisible pointer-events-none">
-        {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'currentDir' ? 'h-4 w-5' : key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
+        {availableControls.map(key => <span key={key} data-control-key={key} className={key === 'launch' ? 'h-4 w-20' : key === 'currentDir' ? 'h-4 w-5' : key === 'font' ? 'h-4 w-[3.75rem]' : buttonClass} />)}
       </span>
       {availableControls.map(renderControl)}
       {appearance?.onToolbarActionsChange && resolvedSurface === 'footer' && (
@@ -337,22 +336,72 @@ export default function SessionControlButtons({
           </Tooltip>
           {menuOpen && (
             <div role="menu" aria-label="More terminal actions" className={`absolute right-0 z-50 min-w-48 rounded-lg border border-theme-border bg-theme-popup p-1 shadow-xl ${tooltipPlacement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-              {menuControls.includes('currentDir') && <button type="button" role="menuitem" onClick={openCurrentDirectory} className={menuItemClass}>
-                <svg viewBox="0 0 25 25" fill="none" className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true">
-                  <path d="M8.5 9.5L11.5 12.5L8.5 15.5M13 15.5H17M5.5 6.5H19.5V18.5H5.5V6.5Z" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-                <span>Open new pane with current directory</span>
-              </button>}
-              {menuControls.includes('theme') && <div role="menuitem" aria-label="Theme" className="flex items-center gap-2 px-2 py-1" onClick={(event) => {
-                if (event.target === event.currentTarget) event.currentTarget.querySelector('button')?.click()
-              }}><span>Theme</span>{themeControl}</div>}
-              {menuControls.includes('font') && <div role="menuitem" aria-label="Font size" className="flex items-center gap-2 px-2 py-1"><span>Font size</span>{fontControl}</div>}
-              {menuControls.includes('stop') && <button type="button" role="menuitem" disabled={!stopEnabled} onClick={stop} className={menuItemClass}><Square className="h-3.5 w-3.5 flex-shrink-0" />Stop current process</button>}
-              {menuControls.includes('clear') && <button type="button" role="menuitem" onClick={clear} className={menuItemClass}><Eraser className="h-3.5 w-3.5 flex-shrink-0" />Clear terminal</button>}
+              {menuControls.includes('launch') && (
+                <PaneLaunchControl
+                  folderPath={launchFolder}
+                  menuItem
+                />
+              )}
+              {menuControls.includes('currentDir') && (
+                <button type="button" role="menuitem" onClick={openCurrentDirectory} className={menuItemClass}>
+                  <svg viewBox="4 5 17 15" fill="none" className="h-4 w-4 flex-shrink-0" aria-hidden="true">
+                    <path d="M8.5 9.5L11.5 12.5L8.5 15.5M13 15.5H17M5.5 6.5H19.5V18.5H5.5V6.5Z" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                  <span>Open new pane with current directory</span>
+                </button>
+              )}
+              {menuControls.includes('theme') && appearance?.themes && appearance.onThemeApply && (
+                <AppearanceMenu
+                  themes={appearance.themes}
+                  themeId={appearance.themeId ?? ''}
+                  fontSize={appearance.fontSize ?? 14}
+                  darkMode={appearance.darkMode ?? true}
+                  scopeLabel={appearance.scopeLabel ?? 'this terminal'}
+                  buttonTitle={appearance.buttonTitle ?? 'Theme for this terminal'}
+                  onThemeApply={appearance.onThemeApply}
+                  onFontSizeChange={appearance.onFontSizeChange ?? (() => {})}
+                  compact
+                  menuItem
+                  hideFontSize
+                />
+              )}
+              {menuControls.includes('font') && (
+                <div role="menuitem" aria-label="Font size" className="flex items-center gap-2 px-2 py-1">
+                  <span>Font size</span>
+                  {fontControl}
+                </div>
+              )}
+              {menuControls.includes('stop') && (
+                <button type="button" role="menuitem" disabled={!stopEnabled} onClick={stop} className={menuItemClass}>
+                  <Square className="h-4 w-4 flex-shrink-0" />
+                  <span>Stop current process</span>
+                </button>
+              )}
+              {menuControls.includes('clear') && (
+                <button type="button" role="menuitem" onClick={clear} className={menuItemClass}>
+                  <Eraser className="h-4 w-4 flex-shrink-0" />
+                  <span>Clear terminal</span>
+                </button>
+              )}
               {menuControls.includes('copy') && <TerminalCopyMenu sessionId={sessionId} menuItem />}
-              {menuControls.includes('save') && <button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); onSaveOutput?.(); setMenuOpen(false) }} className={menuItemClass}><Save className="h-3.5 w-3.5 flex-shrink-0" />Save terminal output</button>}
-              {menuControls.includes('detach') && <button type="button" role="menuitem" onClick={toggleDetach} className={menuItemClass}>{detach === 'attach' ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />}{detachTitle(detach!, detachWhere)}</button>}
-              {menuControls.includes('fullscreen') && <button type="button" role="menuitem" onClick={toggleFullscreen} className={menuItemClass}>{fullscreen ? <Minimize2 className="h-3.5 w-3.5 flex-shrink-0" /> : <Maximize2 className="h-3.5 w-3.5 flex-shrink-0" />}{fullscreen ? 'Restore view mode' : 'Focus pane full screen'}</button>}
+              {menuControls.includes('save') && (
+                <button type="button" role="menuitem" onClick={(event) => { event.stopPropagation(); onSaveOutput?.(); setMenuOpen(false) }} className={menuItemClass}>
+                  <Save className="h-4 w-4 flex-shrink-0" />
+                  <span>Save terminal output</span>
+                </button>
+              )}
+              {menuControls.includes('detach') && (
+                <button type="button" role="menuitem" onClick={toggleDetach} className={menuItemClass}>
+                  {detach === 'attach' ? <Minimize2 className="h-4 w-4 flex-shrink-0" /> : <ExternalLink className="h-4 w-4 flex-shrink-0" />}
+                  <span>{detachTitle(detach!, detachWhere)}</span>
+                </button>
+              )}
+              {menuControls.includes('fullscreen') && (
+                <button type="button" role="menuitem" onClick={toggleFullscreen} className={menuItemClass}>
+                  {fullscreen ? <Minimize2 className="h-4 w-4 flex-shrink-0" /> : <Maximize2 className="h-4 w-4 flex-shrink-0" />}
+                  <span>{fullscreen ? 'Restore view mode' : 'Focus pane full screen'}</span>
+                </button>
+              )}
             </div>
           )}
         </>

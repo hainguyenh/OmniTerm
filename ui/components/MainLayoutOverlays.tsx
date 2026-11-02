@@ -166,7 +166,14 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             <RenewSessionModal
               strategy={model.appSettings.agentRenewStrategy ?? 'reopen'}
               sessionName={model.pendingRenewSessionName}
-              onConfirm={model.confirmRenew}
+              onConfirm={(remember) => {
+                if (remember) {
+                  const next = { ...model.appSettings, skipTerminalRenewConfirm: true }
+                  model.setAppSettings(next)
+                  void window.omnitermAPI?.settings?.save?.({ skipTerminalRenewConfirm: true })
+                }
+                void model.confirmRenew(remember)
+              }}
               onCancel={model.cancelRenew}
             />
           )}

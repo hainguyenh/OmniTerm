@@ -117,6 +117,25 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
   }, [])
 
   useEffect(() => {
+    const onCreate = () => {
+      const id = `view-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+      setViewGroups(prev => {
+        const nextIndex = prev.filter(item => item.id !== DEFAULT_VIEW_GROUP_ID).length + 1
+        const group = createViewGroup(id, nextIndex, 1)
+        group.persistent = true
+        const defaultGroup = prev.find(item => item.id === DEFAULT_VIEW_GROUP_ID)
+        return [...prev.filter(item => item.id !== DEFAULT_VIEW_GROUP_ID), group, ...(defaultGroup ? [defaultGroup] : [])]
+      })
+      setActiveGroupId(id)
+      setLayoutMode(1)
+      setPanes(Array(8).fill(null))
+      setFocusedPane(0)
+    }
+    window.addEventListener('omniterm:create-view-group', onCreate)
+    return () => window.removeEventListener('omniterm:create-view-group', onCreate)
+  }, [setFocusedPane, setLayoutMode, setPanes])
+
+  useEffect(() => {
     const onUngroup = (event: Event) => {
       const groupId = (event as CustomEvent<{ groupId?: unknown }>).detail?.groupId
       if (typeof groupId !== 'string') return
@@ -141,6 +160,60 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
     window.addEventListener('omniterm:ungroup-view-group', onUngroup)
     return () => window.removeEventListener('omniterm:ungroup-view-group', onUngroup)
   }, [activeGroupId, setFocusedPane, setLayoutMode, setPanes, viewGroups])
+
+  useEffect(() => {
+    const onMove = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId?: unknown; groupId?: unknown; sourcePaneIndex?: unknown }>).detail
+      if (typeof detail?.tabId !== 'string' || typeof detail?.groupId !== 'string') return
+      const tabId = detail.tabId
+      const targetGroupId = detail.groupId
+      if (targetGroupId === activeGroupId) return
+
+      const nextPanes = [...panes]
+      const paneIdx = typeof detail.sourcePaneIndex === 'number' && detail.sourcePaneIndex >= 0 && detail.sourcePaneIndex < nextPanes.length && nextPanes[detail.sourcePaneIndex] === tabId
+        ? detail.sourcePaneIndex
+        : nextPanes.indexOf(tabId)
+      if (paneIdx !== -1) {
+        nextPanes[paneIdx] = null
+      }
+      if (layoutMode === 1 && nextPanes[0] === null) {
+        const remaining = activeTabs.filter(t => t.id !== tabId && (activeGroupId === DEFAULT_VIEW_GROUP_ID ? !tabGroups[t.id] : tabGroups[t.id] === activeGroupId))
+        if (remaining.length > 0) nextPanes[0] = remaining[0].id
+      }
+      setPanes(nextPanes)
+
+      setTabGroups(prev => {
+        const next = { ...prev }
+        if (targetGroupId === DEFAULT_VIEW_GROUP_ID) {
+          delete next[tabId]
+        } else {
+          next[tabId] = targetGroupId
+        }
+        return next
+      })
+
+      setViewGroups(prev => prev.map(group => {
+        if (group.id === activeGroupId) {
+          return { ...group, panes: group.panes.map(p => p === tabId ? null : p) }
+        }
+        if (group.id === targetGroupId) {
+          const nextPanes = [...group.panes]
+          if (!nextPanes.includes(tabId)) {
+            const emptyIdx = nextPanes.indexOf(null)
+            if (emptyIdx !== -1) nextPanes[emptyIdx] = tabId
+            else nextPanes[0] = tabId
+          }
+          return { ...group, persistent: true, panes: nextPanes }
+        }
+        if (group.panes.includes(tabId)) {
+          return { ...group, panes: group.panes.map(p => p === tabId ? null : p) }
+        }
+        return group
+      }))
+    }
+    window.addEventListener('omniterm:move-tab-to-group', onMove)
+    return () => window.removeEventListener('omniterm:move-tab-to-group', onMove)
+  }, [activeGroupId, activeTabs, layoutMode, panes, setPanes, setTabGroups, setViewGroups, tabGroups])
 
   const switchViewGroup = useCallback((groupId: string) => {
     const group = viewGroups.find(item => item.id === groupId)
@@ -196,5 +269,9 @@ export function useViewGroups({ layoutMode, setLayoutMode, panes, setPanes, focu
     setActiveGroupId(activeId)
   }, [])
 
-  return { viewGroups, setViewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup, updateViewGroup, restoreGroups }
+  const moveTabToGroup = useCallback((tabId: string, groupId: string, sourcePaneIndex?: number) => {
+    window.dispatchEvent(new CustomEvent('omniterm:move-tab-to-group', { detail: { tabId, groupId, sourcePaneIndex } }))
+  }, [])
+
+  return { viewGroups, setViewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup, updateViewGroup, restoreGroups, moveTabToGroup }
 }

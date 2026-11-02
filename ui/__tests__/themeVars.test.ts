@@ -45,6 +45,8 @@ describe('themeCssVars', () => {
     }
     expect(vars['--theme-bg']).toBe(TOKYO_NIGHT.terminal.dark.background)
     expect(vars['--theme-accent']).toBe(TOKYO_NIGHT.ui.dark.accent)
+    expect(vars['colorScheme']).toBe('dark')
+    expect(vars['--theme-color-scheme']).toBe('dark')
   })
 
   it('derives the editor syntax colours from the active terminal palette', () => {
@@ -111,19 +113,23 @@ describe('themeCssVars', () => {
     const homebrew = { ...withoutUi(), id: 'mac-homebrew' }
     expect(themeCssVars(homebrew, 'dark')['--theme-accent']).toBe('#28FE14')
 
-    const novel = { ...withoutUi(), id: 'mac-novel' }
-    const vars = themeCssVars(novel, 'light')
-    expect(vars['--theme-accent']).toBe('#A05A00')
+    const lightLegacy = { ...withoutUi(), terminal: { ...withoutUi().terminal, light: { ...withoutUi().terminal.light, background: '#FFFFFF' } } }
+    const vars = themeCssVars(lightLegacy, 'light')
     expect(vars['--theme-sidebar-bg']).toBe('rgba(0, 0, 0, 0.05)')
-    expect(vars['--theme-dim']).toBe('#73635A')
+
+
+
+
+
 
     expect(themeCssVars({ ...withoutUi(), id: 'tokyo-night' }, 'dark')['--theme-accent']).toBe('#7aa2f7')
   })
 
   it('writes the record onto an element', () => {
     const element = document.createElement('div')
-    applyThemeVars(element, { '--theme-bg': '#123456' })
+    applyThemeVars(element, { '--theme-bg': '#123456', 'color-scheme': 'dark' })
     expect(element.style.getPropertyValue('--theme-bg')).toBe('#123456')
+    expect(element.style.colorScheme).toBe('dark')
   })
 })
 

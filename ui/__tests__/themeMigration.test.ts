@@ -31,11 +31,11 @@ describe('legacy built-in theme selection migration', () => {
   it('migrates retired theme selections even when old user overrides exist on disk, without changing unrelated custom themes', () => {
     const settings = {
       themeId: 'compact',
-      perConn: { a: { themeId: 'volt-agent' }, b: { themeId: 'theme-personal' } },
+      perConn: { a: { themeId: 'volt-agent' }, b: { themeId: 'theme-personal' }, c: { themeId: 'mac-novel' } },
     }
     expect(migrateThemeSettings(settings, [...available, { id: 'compact' }, { id: 'volt-agent' }])).toEqual({
       themeId: 'terminal-paper',
-      perConn: { a: { themeId: 'tokyo-night' }, b: { themeId: 'theme-personal' } },
+      perConn: { a: { themeId: 'tokyo-night' }, b: { themeId: 'theme-personal' }, c: { themeId: 'tokyo-night' } },
     })
   })
 

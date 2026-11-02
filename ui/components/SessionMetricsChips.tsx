@@ -18,13 +18,13 @@ interface MetricChipProps {
 
 const MetricChip: React.FC<MetricChipProps> = ({ icon, value, colorClass, title, compact }) => (
   <span
-    className={`inline-flex items-center rounded-full flex-shrink-0 bg-theme-bg font-medium ${
-      compact ? 'gap-0.5 px-1.5 py-0.5 text-[11px]' : 'gap-1 px-2 py-0.5 text-xs'
+    className={`inline-flex items-center justify-center rounded-full flex-shrink-0 bg-theme-bg font-medium leading-none ${
+      compact ? 'gap-0.5 px-1.5 h-4 text-[10px]' : 'gap-1 px-2 h-4 text-[11px]'
     } ${colorClass}`}
     title={title}
   >
     {icon}
-    {value}
+    <span className="leading-none inline-flex items-center">{value}</span>
   </span>
 )
 
