@@ -16,7 +16,11 @@ export interface TerminalKeyHandlerOptions {
   getAgentName: () => string | null
   getShortcuts: () => Partial<ShortcutBindings> | undefined
   getEnterModes: () => EnterModes | undefined
+  onInterrupt?: () => void
 }
+
+const isCtrlC = (e: KeyboardEvent): boolean =>
+  e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.code === 'KeyC' || e.key.toLowerCase() === 'c')
 
 /**
  * Creates the custom key event handler for an xterm instance.
@@ -30,6 +34,7 @@ export const createTerminalKeyHandler = ({
   getAgentName,
   getShortcuts,
   getEnterModes,
+  onInterrupt,
 }: TerminalKeyHandlerOptions): ((e: KeyboardEvent) => boolean) => {
   return (e: KeyboardEvent) => {
     if (e.type !== 'keydown') return true
@@ -56,6 +61,16 @@ export const createTerminalKeyHandler = ({
       } else {
         void clipboard.copySelection()
       }
+      return false
+    }
+
+    if (isCtrlC(e)) {
+      e.preventDefault()
+      e.stopPropagation()
+      if (typeof term.hasSelection === 'function' && term.hasSelection()) {
+        term.clearSelection()
+      }
+      onInterrupt?.()
       return false
     }
 

@@ -27,7 +27,10 @@ export default function BlurModal({ strength, blurDock, enabled, onSave, onClose
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
       onClick={event => { if (event.target === event.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-xs overflow-hidden rounded-2xl border border-theme-border bg-theme-popup shadow-2xl">
+      <div
+        className="w-full max-w-[480px] overflow-hidden rounded-2xl border border-theme-border bg-theme-popup shadow-2xl"
+        style={{ maxWidth: '480px' }}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-theme-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-theme-hover text-theme-accent">

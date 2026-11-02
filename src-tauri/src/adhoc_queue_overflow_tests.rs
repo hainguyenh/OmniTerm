@@ -1,6 +1,6 @@
-//! Queue overflow, workspace-argument and cwd/command-override coverage for the adhoc quick-shell path. 
-use super::*;
+//! Queue overflow, workspace-argument and cwd/command-override coverage for the adhoc quick-shell path.
 use super::tests::request;
+use super::*;
 use crate::test_support;
 #[test]
 fn quick_shell_with_workspace_and_queue_overflow_paths() {

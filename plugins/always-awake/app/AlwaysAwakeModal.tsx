@@ -87,14 +87,14 @@ export default function AlwaysAwakeModal({
           {status.error && <p className="text-xs text-theme-error">{status.error}</p>}
           <fieldset className="space-y-2">
             <legend className="text-xs font-semibold text-theme-fg">Mode</legend>
-            <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${mode === 'activeOnly' ? 'border-theme-accent bg-theme-hover' : 'border-theme-border'}`}>
+            <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${mode === 'activeOnly' ? 'border-theme-accent bg-theme-hover' : 'border-theme-border'}`}>
               <input
                 type="radio"
                 name="always-awake-mode"
                 value="activeOnly"
                 checked={mode === 'activeOnly'}
                 onChange={() => setMode('activeOnly')}
-                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                className="h-3.5 w-3.5 shrink-0"
                 style={{ accentColor: 'var(--theme-accent)' }}
               />
               <span>
@@ -102,14 +102,14 @@ export default function AlwaysAwakeModal({
                 <span className="block text-[10px] text-theme-dim">Prevent sleep only while a terminal has active work.</span>
               </span>
             </label>
-            <label className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${mode === 'always' ? 'border-theme-accent bg-theme-hover' : 'border-theme-border'}`}>
+            <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors ${mode === 'always' ? 'border-theme-accent bg-theme-hover' : 'border-theme-border'}`}>
               <input
                 type="radio"
                 name="always-awake-mode"
                 value="always"
                 checked={mode === 'always'}
                 onChange={() => setMode('always')}
-                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                className="h-3.5 w-3.5 shrink-0"
                 style={{ accentColor: 'var(--theme-accent)' }}
               />
               <span>
@@ -157,6 +157,10 @@ export default function AlwaysAwakeModal({
                   setSchedule((current) => ({ ...current, customAt }))
                 }}
                 className="mt-2 w-full rounded-lg border border-theme-border bg-theme-bg px-2 py-1.5 text-xs text-theme-fg focus:border-theme-accent focus:outline-none"
+                style={{
+                  colorScheme: 'var(--theme-color-scheme, dark)',
+                  accentColor: 'var(--theme-accent)',
+                }}
               />
             )}
             {expiresAtMs === null

@@ -105,6 +105,7 @@ function subscription<K extends keyof Handlers>(key: K) {
 function installApi(resume: () => Promise<any> = async () => null) {
   mockOmnitermAPI({
     connect: {
+      interruptSession: vi.fn().mockResolvedValue(undefined),
       local: vi.fn(), localInput: vi.fn(), localResize: vi.fn(),
       onLocalReady: subscription('localReady'), onLocalData: subscription('localData'),
       onLocalError: subscription('localError'), onLocalClosed: subscription('localClosed'),
@@ -204,6 +205,12 @@ describe('TerminalView full lifecycle', () => {
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, shiftKey: true }))).toBe(false)
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, altKey: true }))).toBe(false)
     expect(term.keyHandler?.(key('KeyC', { ctrlKey: true, shiftKey: true }))).toBe(false)
+    const ctrlC = key('KeyC', { ctrlKey: true })
+    expect(term.keyHandler?.(ctrlC)).toBe(false)
+    expect(ctrlC.preventDefault).toHaveBeenCalled()
+    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledWith('local-session')
+    act(() => term.dataHandler?.('\x03'))
+    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledTimes(2)
 
     // Every clipboard combo must preventDefault, or Chromium's native paste fires on top of ours and
     // the PTY gets the clipboard twice.

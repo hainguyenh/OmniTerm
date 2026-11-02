@@ -323,7 +323,10 @@ pub fn launcher_host_pids(rows: &[ProcRow], shell_pid: u32) -> Vec<u32> {
     while let Some(pid) = parent.filter(|&pid| pid != shell_pid && seen.insert(pid)) {
         let Some(row) = by_pid.get(&pid) else { break };
         let stem = image_stem(&row.image);
-        if matches!(stem.as_str(), "cmd" | "powershell" | "pwsh" | "bash" | "zsh" | "sh" | "wsl") {
+        if matches!(
+            stem.as_str(),
+            "cmd" | "powershell" | "pwsh" | "bash" | "zsh" | "sh" | "wsl"
+        ) {
             out.push(pid);
         }
         parent = Some(row.parent);

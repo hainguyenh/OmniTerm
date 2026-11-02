@@ -37,4 +37,11 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('=', { ctrlKey: true }), 'Ctrl+Plus')).toBe(false)
     expect(matchShortcut(key('=', { ctrlKey: true }), 'Ctrl+=')).toBe(true)
   })
+
+  it('accepts 0 key with Digit0 or Numpad0 for zoom reset', () => {
+    expect(matchShortcut(key('0', { ctrlKey: true }), 'Ctrl+0')).toBe(true)
+    expect(matchShortcut({ ...key('0', { ctrlKey: true }), code: 'Digit0' } as KeyboardEvent, 'Ctrl+0')).toBe(true)
+    expect(matchShortcut({ ...key('0', { ctrlKey: true }), code: 'Numpad0' } as KeyboardEvent, 'Ctrl+0')).toBe(true)
+    expect(matchShortcut({ ...key('Insert', { ctrlKey: true }), code: 'Numpad0' } as KeyboardEvent, 'Ctrl+0')).toBe(true)
+  })
 })

@@ -116,6 +116,57 @@ describe('createTerminalKeyHandler', () => {
     expect(term.input).toHaveBeenCalledWith('\x1b\r')
   })
 
+  it('handles Ctrl+C to interrupt process and clear active selection', () => {
+    const clearSelection = vi.fn()
+    const hasSelection = vi.fn().mockReturnValue(true)
+    const term = { input: vi.fn(), hasSelection, clearSelection } as unknown as Terminal
+    const clipboard = makeClipboard()
+    const onInterrupt = vi.fn()
+    const handler = createTerminalKeyHandler({
+      term,
+      clipboard,
+      connection: makeConnection(),
+      isMac: false,
+      getAgentName: () => null,
+      getShortcuts: () => undefined,
+      getEnterModes: () => undefined,
+      onInterrupt,
+    })
+
+    const event = new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, cancelable: true })
+    const result = handler(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+    expect(clearSelection).toHaveBeenCalledOnce()
+    expect(onInterrupt).toHaveBeenCalledOnce()
+    expect(clipboard.copySelection).not.toHaveBeenCalled()
+  })
+
+  it('preserves Ctrl+Shift+C for copy without triggering interrupt', () => {
+    const onInterrupt = vi.fn()
+    const term = { input: vi.fn() } as unknown as Terminal
+    const clipboard = makeClipboard()
+    const handler = createTerminalKeyHandler({
+      term,
+      clipboard,
+      connection: makeConnection(),
+      isMac: false,
+      getAgentName: () => null,
+      getShortcuts: () => undefined,
+      getEnterModes: () => undefined,
+      onInterrupt,
+    })
+
+    const event = new KeyboardEvent('keydown', { key: 'C', code: 'KeyC', ctrlKey: true, shiftKey: true, cancelable: true })
+    const result = handler(event)
+
+    expect(result).toBe(false)
+    expect(event.defaultPrevented).toBe(true)
+    expect(clipboard.copySelection).toHaveBeenCalledOnce()
+    expect(onInterrupt).not.toHaveBeenCalled()
+  })
+
   it('bubbles app-level chrome shortcuts to window (e.g. F11 or Ctrl+Shift+N)', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()

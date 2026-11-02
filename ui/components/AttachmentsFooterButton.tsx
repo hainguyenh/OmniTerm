@@ -106,10 +106,10 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
           aria-label={label}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className={`inline-flex items-center gap-0.5 h-5 px-1 rounded text-[10px] transition-colors ${open ? 'text-theme-accent bg-[#414868]' : 'text-theme-dim hover:text-theme-accent hover:bg-[#414868]'}`}
+          className={`inline-flex items-center justify-center gap-0.5 h-4 px-1 rounded text-[10px] leading-none transition-colors ${open ? 'text-theme-accent bg-[#414868]' : 'text-theme-dim hover:text-theme-accent hover:bg-[#414868]'}`}
         >
-          <Paperclip className="w-3 h-3" />
-          {items.length > 0 && <span className="tabular-nums">{items.length}</span>}
+          <Paperclip className="w-3 h-3 flex-shrink-0" />
+          {items.length > 0 && <span className="tabular-nums leading-none inline-flex items-center">{items.length}</span>}
         </button>
       </Tooltip>
       {open && (

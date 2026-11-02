@@ -172,7 +172,11 @@ pub async fn clear_attachments<R: Runtime>(
     let is_all = session_id.is_none();
     let dir = attachments_dir(&app, session_id.as_deref())?;
     blocking("Clearing attachments", move || {
-        let temp_dir = if is_all { Some(std::env::temp_dir()) } else { None };
+        let temp_dir = if is_all {
+            Some(std::env::temp_dir())
+        } else {
+            None
+        };
         attachments::clear_attachments(&dir, temp_dir.as_deref())
     })
     .await

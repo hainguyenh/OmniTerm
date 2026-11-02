@@ -1,6 +1,6 @@
-//! Provider data drives global workspace and resolution fallback behavior. 
-use super::*;
+//! Provider data drives global workspace and resolution fallback behavior.
 use super::integration_tests::{block_on, connection, setup, start_provider};
+use super::*;
 use crate::connections::ConnectionTree;
 use crate::{connections, pty_resolve, workspace, workspace_connections};
 #[test]
@@ -74,4 +74,3 @@ fn provider_data_drives_global_workspace_and_resolution_fallbacks() {
         "personal-provider"
     );
 }
-

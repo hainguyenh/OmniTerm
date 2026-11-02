@@ -54,6 +54,8 @@ describe('PaneHeader remaining behavior', () => {
     fireEvent.dragEnd(header)
     expect(x.props.onFocus).toHaveBeenCalled()
     expect(transfer.setData).toHaveBeenCalledWith('text/plain', '1')
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-omniterm-pane', '1')
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-omniterm-tab', 's1')
     expect(transfer.effectAllowed).toBe('move')
     expect(x.props.onDragStart).toHaveBeenCalled()
     expect(x.props.onDragEnd).toHaveBeenCalled()
@@ -83,6 +85,15 @@ describe('PaneHeader remaining behavior', () => {
     expect(screen.queryByText('Empty this pane')).not.toBeInTheDocument()
     fireEvent.dragStart(header)
     expect(x.props.onDragStart).not.toHaveBeenCalled()
+  })
+
+  it('allows dragging the pane header in single mode', () => {
+    setup({ layoutMode: 1, panes: ['s1'], sessionId: 's1', pickerOpen: false })
+    const header = screen.getByTestId('pane-header-title').closest('[draggable]') as HTMLElement
+    expect(header).toHaveAttribute('draggable', 'true')
+    const transfer = { setData: vi.fn(), effectAllowed: '' }
+    fireEvent.dragStart(header, { dataTransfer: transfer })
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-omniterm-tab', 's1')
   })
 
   it('toggles pane focus mode from the pane chrome', () => {
