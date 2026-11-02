@@ -378,13 +378,25 @@ jobs:
         run: |
           . ./scripts/ReleasePackaging.ps1
           $repoRoot = (Get-Location).Path
-          pnpm build:plugin (Join-Path $repoRoot 'plugins/full-connection-manager')
-          pnpm build:plugin (Join-Path $repoRoot 'plugins/native-batch-connections')
           $artifacts = Join-Path $repoRoot 'artifacts/plugins'
           New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/full-connection-manager') -Version $version -OutputDirectory $artifacts
-          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/native-batch-connections') -Version $version -OutputDirectory $artifacts
+
+          $pluginDirs = @(
+            Get-ChildItem -Path (Join-Path $repoRoot 'plugins') -Directory | Where-Object {
+              $manifestPath = Join-Path $_.FullName 'package.json'
+              if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { return $false }
+              $package = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+              return $null -ne $package.omnitermPlugin
+            }
+          )
+          if ($pluginDirs.Count -eq 0) { throw 'No OmniTerm plugin packages were found.' }
+
+          foreach ($dir in $pluginDirs) {
+            Write-Host "Building and packaging plugin: $($dir.Name)"
+            pnpm build:plugin $dir.FullName
+            New-PluginPackage -PluginPath $dir.FullName -Version $version -OutputDirectory $artifacts
+          }
 
       - name: Upload plugin packages
         if: matrix.platform.os == 'windows-latest'
@@ -602,7 +614,20 @@ jobs:
             } else if (name.endsWith('.dmg')) {
               categorized.macos.push({ link, desc: 'Disk Image (.dmg)', size });
             } else if (name.endsWith('.zip') && !name.includes('portable')) {
-              categorized.plugins.push({ link, desc: 'Plugin Package (.zip)', size });
+              let desc = 'Plugin Package (.zip)';
+              const match = name.match(/^([a-z0-9-]+)-\d+\.\d+\.\d+/);
+              if (match) {
+                const pluginDir = join('plugins', match[1], 'package.json');
+                if (existsSync(pluginDir)) {
+                  try {
+                    const pkg = JSON.parse(readFileSync(pluginDir, 'utf8'));
+                    if (pkg.omnitermPlugin?.displayName) {
+                      desc = `${pkg.omnitermPlugin.displayName} (.zip)`;
+                    }
+                  } catch {}
+                }
+              }
+              categorized.plugins.push({ link, desc, size });
             }
           }
 
