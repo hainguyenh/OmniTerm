@@ -209,13 +209,14 @@ test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(wizard, /VS Code Launch \(run & debug \.vscode\/launch\.json configurations\)/)
 })
 
-test('standalone plugin packaging supports OutputDirectory and Version parameters', () => {
+test('standalone plugin packaging discovers and builds all plugins with OutputDirectory and Version', () => {
   const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
   assert.match(packaging, /\[Alias\('OutputDirectory'\)\]\[string\]\$Destination/)
   assert.match(packaging, /\[string\]\$Version/)
-  assert.match(workflow, /pnpm build:plugin .*plugins\/full-connection-manager/)
-  assert.match(workflow, /pnpm build:plugin .*plugins\/native-batch-connections/)
-  assert.match(workflow, /New-PluginPackage -PluginPath .*plugins\/full-connection-manager.* -Version \$version -OutputDirectory \$artifacts/)
+  assert.match(workflow, /Get-ChildItem -Path \(Join-Path \$repoRoot 'plugins'\) -Directory/)
+  assert.match(workflow, /return \$null -ne \$package\.omnitermPlugin/)
+  assert.match(workflow, /pnpm build:plugin \$dir\.FullName/)
+  assert.match(workflow, /New-PluginPackage -PluginPath \$dir\.FullName -Version \$version -OutputDirectory \$artifacts/)
 })
 
 test('portable packaging verifies the bundled plugin is present in the archive', () => {

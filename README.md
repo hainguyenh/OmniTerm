@@ -1,100 +1,101 @@
-# OmniTerm
+<h1 align="center">OmniTerm</h1>
 
-An offline, multi-window SSH/RDP/local terminal and connection manager.
+<p align="center">
+  <strong>A fast, lightweight multi-window terminal workspace built for modern developers and AI workflows.</strong>
+</p>
 
-Built with Tauri (Rust) + React. Native PTY backend, zero credential storage,
-detachable multi-window panes, and an optional plugin system for connection
-metadata, workspace content, and app-open auth gates.
+<p align="center" >
+  <i >Local first - No telemetry - No touching any your data or information</i>
+</p>
 
-For installation, prerequisites, building, and development workflows, see
-[GUIDELINE.md](GUIDELINE.md). Current product behavior and navigation are routed from
-[docs/specs/README.md](docs/specs/README.md). For markdown-engine details, see
-[plugins/markdown-explorer/GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+<p align="center">
+  <a href="https://github.com/hainguyenh/OmniTerm/releases/latest"><img src="https://img.shields.io/github/v/release/hainguyenh/OmniTerm?style=flat-square&labelColor=7aa2f7&color=1a1b26" alt="Latest Release" /></a>
+  <a href="https://github.com/hainguyenh/OmniTerm/actions"><img src="https://img.shields.io/github/actions/workflow/status/hainguyenh/OmniTerm/build-release.yml?style=flat-square&label=build&labelColor=7aa2f7&color=1a1b26" alt="Build Status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1a1b26?style=flat-square&labelColor=7aa2f7" alt="License" /></a>
+</p>
 
----
-
-## Purpose
-
-Terminal managers commonly either hardcode saved credential storage or embed a full
-browser engine for a single pane. OmniTerm takes a different approach:
-
-- **Zero credential storage** -- No password field, vault module, save-password API,
-  or credential RPC. SSH and RDP authentication happens in-band at session start
-  and is never written to disk.
-- **Native PTY backend** -- Rust `portable-pty` / ConPTY with xterm.js rendering.
-  No Electron, no browser-engine-per-pane. Only a Tauri webview for the UI shell.
-- **Multi-window panes** -- Detach a terminal into its own OS window, re-attach it
-  later. The PTY stays owned by Rust; output routing switches internally per-pane.
-- **Layout restart** -- OmniTerm saves terminal pane/view-group placement and each pane's latest
-  working directory. Closing the app terminates its terminal processes; the next launch recreates
-  fresh shells in the saved directories instead of resuming process state or terminal output.
-- **Plugin system** -- Unsandboxed Node.js sidecar. Plugins provide connection metadata,
-  workspace content, app-open auth gates, and selected app features. Install only trusted packages.
+<p align="center">
+  <img src="assets/demo-pics/main-screen.png" alt="OmniTerm Main Screen" width="100%" />
+</p>
 
 ---
 
-## Plugins
+## What Makes OmniTerm Special?
 
-OmniTerm plugins are unsigned Node.js packages loaded by a sidecar process.
-Three optional provider types exist:
-
-- **ConnectionProvider** -- Connection metadata tree and connection profiles
-- **WorkspaceProvider** -- Workspace scripts, file scanning, and path management
-- **AuthProvider** -- Optional app-open gate before revealing the workspace
-
-Bundled providers:
-- `plugins/full-connection-manager` -- workspace-aware SSH/RDP profiles with credential scrubbing
-- `plugins/native-batch-connections` -- batch-launched SSH/RDP profiles via native client flows
-- `plugins/always-awake` -- Always Awake metadata/UI integration backed by the native Windows
-  sleep-prevention capability
-- `plugins/blur` -- Blur inactive windows with an adjustable live-preview control
-
-Release installers and Windows portable archives include Always Awake and Blur automatically. No
-separate plugin installation is required for those distributions.
-
-### Always Awake
-
-The Always Awake control is available from the Activity Bar below Files. It supports **Keep awake
-always** and **Keep awake when active** modes, with schedules ending today, 24 hours from now, or
-next Monday at 08:00 local time. Active-only mode uses LOCAL process-tree activity and conservatively
-treats a connected SSH PTY as active; the feature is Windows-first.
-
-Plugins are **unsandboxed** (access to `fs`, `net`, and `child_process`). Install only
-trusted packages. Manage plugins via **Settings > Plugins** or CLI commands in [GUIDELINE.md](GUIDELINE.md).
+- **Lightweight Native Speed** — Built on Rust (Tauri 2) and native PTYs. Starts instantaneously with minimal memory footprint, free from Electron bloat.
+- **True Multi-Window & Tile Panes** — Tile terminal panes with flexible split layouts, or pop any terminal out into its own dedicated desktop window with full detach and re-dock support.
+- **Extensible Plugin Ecosystem** — Powered by an isolated out-of-process Node.js sidecar runtime with strict TypeScript contracts (`@omniterm/contract`). OmniTerm includes **6 official built-in plugins**:
+  - **VS Code Launch Runner (`vscode-launch`)** — Discovers and executes `.vscode/launch.json` run and debug configurations directly from terminal headers, with interactive multi-console drawers.
+  - **AI Agent Quota Monitor (`agent-quota`)** — Real-time rate-limit and token tracking per pane, automatic agent suspension at quota limits, and scheduled wakeups.
+  - **Always Awake (`always-awake`)** — Keeps the host system awake during active builds, long-running agent tasks, or critical terminal sessions.
+  - **Blur Focus Mode (`blur`)** — Distraction-free privacy filter that smoothly blurs inactive terminal windows.
+  - **Full Connection Manager (`full-connection-manager`)** — Comprehensive remote session suite for SSH, Telnet, and serial connections with metadata-only profiles.
+  - **Native Batch Connections (`native-batch-connections`)** — Lightweight, password-free session launcher backed by OS-native launch scripts.
+- **Built for AI Coding Agents** — First-class environment for AI agent CLIs (Claude Code, Codex, Antigravity, Aider) with live progress tracking, token quota bars, and automated lifecycle controls.
+- **Per-Pane Visual Color Coding & Themes** — Assign unique color badges to panes for rapid multitasking. Includes Tokyo Night, The Long Ride (TLR), and a visual Theme Remix editor with real-time UI/terminal color styling.
+- **Zero Credential Persistence** — Private and secure by design. OmniTerm never writes passwords, SSH keys, or access tokens to disk.
+- **Integrated Developer Tooling** — Built-in visual Git graph with commit inspection and two-way diffs, alongside real-time Markdown and Mermaid diagram preview.
 
 ---
 
-## Integration
+<details>
+<summary><b>View Full Feature List</b></summary>
 
-OmniTerm does not embed [markdown-explorer](https://github.com/the-long-ride/markdown-explorer).
-It uses the markdown-explorer submodule at `plugins/markdown-explorer` to power Markdown
-and Mermaid preview inside the file viewer. See the markdown-explorer [GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+### Terminal & Multiplexing
 
-## Themes
+- **True Multi-Window Workspace** — Tear off any tab into a standalone native window, or re-dock it back into the main grid.
+- **Flexible Tiling & Split Panes** — Horizontal and vertical splits with configurable grid ratios and pane resizing.
+- **Shell Support** — Native shells including PowerShell, Command Prompt, Bash, Zsh, WSL, SSH, and serial ports.
+- **Pane Color Coding** — Custom color badges and custom tab titles per pane for rapid visual identification.
 
-Built-in themes are JSON files in `src-tauri/builtinThemes/`. User-created themes are stored as JSON
-in OmniTerm's application data `themes` folder. Open **Theme Remix** to create, duplicate, and edit
-themes, or use its folder button to edit a JSON file externally. Use the reload button after an
-external edit; invalid JSON files are ignored by the theme loader.
-## Pre-push checks
+### AI Agent & Developer Workflow
 
-`master` requires every Test Gate check to pass before a pull request can merge, so a broken push
-costs a full CI round trip to find out. A Husky `pre-push` hook runs the same checks locally first
-and refuses the push, naming the check that failed and the one command that reproduces it.
+- **AI TUI Optimization** — Tailored for autonomous agent CLIs with quota progress indicators, status glyphs, and suspend/wake triggers.
+- **Embedded VS Code Runner** — Detects and runs `.vscode/launch.json` compound and individual debug targets directly in terminal drawers.
+- **Git Visualization** — Integrated visual commit tree, branch navigation, and side-by-side file diffs.
+- **Markdown & Mermaid Live Preview** — Render documentation, architecture diagrams, and task lists without leaving the terminal.
 
+### Plugins & Extensibility
+
+- **Isolated Node.js Sidecar** — Plugin runtime executes out-of-process, guaranteeing core terminal stability and safety.
+- **Typed Plugin Contract** — Type-safe SDK (`@omniterm/contract`) for building custom toolbars, drawers, and background automations.
+- **6 Packaged Plugins** — Ready-to-use plugins for AI quota tracking, sleep prevention, window blurring, launch runners, and remote connections.
+
+### Customization & Security
+
+- **Modern Themes** — Ships with Tokyo Night, The Long Ride (TLR), and high-contrast dark/light palettes.
+- **Theme Remix Editor** — Visual theme customizer with instant CSS variable updates and per-theme export/import.
+- **Zero Credential Storage** — Passwords, SSH passphrases, and tokens are never persisted to disk.
+- **Local-First & Offline** — Entirely local execution with zero network telemetry or background tracking.
+
+</details>
+
+---
+
+## Quick Start
+
+### Download
+
+Get the latest installer or portable package for Windows, Linux, and macOS from [GitHub Releases](https://github.com/hainguyenh/OmniTerm/releases/latest).
+
+### Run Locally
+
+```bash
+git clone --recurse-submodules https://github.com/hainguyenh/OmniTerm.git
+cd OmniTerm
+pnpm install
+pnpm tauri dev
 ```
-pnpm check:push          # typecheck, lint + LOC, JS tests, security audit, clippy, cargo test
-pnpm check:push --full   # the above plus both coverage jobs and the 85% gate (slow)
-```
 
-The hook installs itself via the `prepare` script on `pnpm install`. The coverage jobs are left out
-of the default run because Rust coverage needs a nightly toolchain, `cargo-llvm-cov` and minutes of
-wall clock; anything skipped is named in the output rather than passed over silently. If `cargo` is
-not on PATH the Rust checks are reported as skipped, not as passing.
+---
 
-Hook bypasses hide both the Test Gate and repository identity checks. Do not use one unless the
-person responsible for the repository explicitly authorizes that exact push:
+## Documentation
 
-```
-git push --no-verify
-```
+- [Installation & Development Guide](GUIDELINE.md) — Prerequisites, build scripts, and CLI workflows.
+- [Product & Architecture Specs](docs/specs/README.md) — In-depth component and protocol specifications.
+
+---
+
+## License
+
+[MIT](LICENSE)
