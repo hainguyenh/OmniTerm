@@ -15,6 +15,7 @@ $LimitedPlugin = Join-Path $RepoRoot 'plugins\native-batch-connections'
 $AlwaysAwakePlugin = Join-Path $RepoRoot 'plugins\always-awake'
 $BlurPlugin = Join-Path $RepoRoot 'plugins\blur'
 $AgentQuotaPlugin = Join-Path $RepoRoot 'plugins\agent-quota'
+$VsCodeLaunchPlugin = Join-Path $RepoRoot 'plugins\vscode-launch'
 
 function Write-Title([string]$Text) {
   Write-Host ''
@@ -42,7 +43,8 @@ function Select-Plugin {
   Write-Host '    4. Blur (inactive-window privacy filter)'
   Write-Host '    5. Agent Quota (AI agent quota lines, limits and wake-up)'
   Write-Host '    6. Agent Quota + Always Awake (bundle agent + no sleep)'
-  do { $choice = Read-Host '  Select plugin [1-6]' } until ($choice -in @('1', '2', '3', '4', '5', '6'))
+  Write-Host '    7. VS Code Launch (run & debug .vscode/launch.json configurations)'
+  do { $choice = Read-Host '  Select plugin [1-7]' } until ($choice -in @('1', '2', '3', '4', '5', '6', '7'))
   if ($choice -eq '1') {
     return @{ Name = 'full'; Path = $FullPlugin }
   }
@@ -57,6 +59,9 @@ function Select-Plugin {
   }
   if ($choice -eq '5') {
     return @{ Name = 'agent-quota'; Path = $AgentQuotaPlugin }
+  }
+  if ($choice -eq '7') {
+    return @{ Name = 'vscode-launch'; Path = $VsCodeLaunchPlugin }
   }
   return @{
     Name = 'agent-awake'
@@ -90,7 +95,7 @@ function Build-PluginPackage($Plugin, [string]$Destination) {
 
 Set-Location $RepoRoot
 Write-Title 'OmniTerm Build Wizard'
-Write-Host '    1. Build Basic App (bundled default plugins: agent-quota, always-awake, blur)'
+Write-Host '    1. Build Basic App (bundled default plugins: agent-quota, always-awake, blur, vscode-launch)'
 Write-Host '    2. Build Plugin Package'
 Write-Host '    3. Build App with Plugin'
 do { $Mode = Read-Host '  Select build target [1-3]' } until ($Mode -in @('1', '2', '3'))
@@ -139,7 +144,7 @@ if ($Mode -in @('1', '3')) {
 }
 
 $Summary = switch ($Mode) {
-  '1' { "Basic Tauri app; bundled with default plugins (agent-quota, always-awake, blur). Profile: $BuildProfile. Output: $OutputFormat." }
+  '1' { "Basic Tauri app; bundled with default plugins (agent-quota, always-awake, blur, vscode-launch). Profile: $BuildProfile. Output: $OutputFormat." }
   '2' {
     if ($Plugin.Plugins) { "Plugin packages: $($Plugin.DisplayName)." }
     else { "Plugin package only: $($Plugin.Name)." }
