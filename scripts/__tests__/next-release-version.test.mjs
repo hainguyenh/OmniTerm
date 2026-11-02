@@ -182,7 +182,7 @@ test('the release publishes the installer and portable package with the bundled 
   }
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-always-awake\\b/)
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-blur\\b/)
-  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'[\s\S]*Name = 'agent-quota'/)
+  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'[\s\S]*Name = 'agent-quota'[\s\S]*Name = 'vscode-launch'/)
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-agent-quota\b/)
 
   const publish = workflow.slice(workflow.indexOf('Publish GitHub release'))
@@ -206,6 +206,7 @@ test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(wizard, /Copy-PortableArtifacts[\s\S]*PortablePlugins/)
   assert.match(wizard, /Blur \(inactive-window privacy filter\)/)
   assert.match(wizard, /Agent Quota \(AI agent quota lines, limits and wake-up\)/)
+  assert.match(wizard, /VS Code Launch \(run & debug \.vscode\/launch\.json configurations\)/)
 })
 
 test('portable packaging verifies the bundled plugin is present in the archive', () => {
@@ -218,6 +219,7 @@ test('portable packaging verifies the bundled plugin is present in the archive',
   assert.match(packaging, /plugins\\always-awake/)
   assert.match(packaging, /plugins\\blur/)
   assert.match(packaging, /plugins\\agent-quota/)
+  assert.match(packaging, /plugins\\vscode-launch/)
 })
 
 test('release notes generator extracts exact target tag and falls back to Unreleased', () => {
