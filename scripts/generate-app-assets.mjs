@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
+import { encodeBmp24 } from './image/bmp.mjs'
 import { encodeIco } from './image/ico.mjs'
 import { isMain } from './is-main.mjs'
 
@@ -10,6 +11,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const source = resolve(root, 'assets/OmniTerm-Logo-Original.png')
 const rendererLogo = resolve(root, 'ui/generated/OmniTerm-Logo.webp')
 const windowsIcon = resolve(root, 'src-tauri/icons/icon.ico')
+const nsisHeader = resolve(root, 'src-tauri/icons/nsis-header.bmp')
+const nsisSidebar = resolve(root, 'src-tauri/icons/nsis-sidebar.bmp')
 const ICO_SIZES = Object.freeze([16, 20, 24, 32, 40, 48, 64, 128, 256])
 
 async function writeIfChanged(path, content) {
@@ -71,8 +74,40 @@ export async function generateAppAssets() {
   })))
   const ico = encodeIco(icoImages)
 
+  const headerLogo = await sharp(sourceBuffer)
+    .resize(48, 48, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } })
+    .png()
+    .toBuffer()
+
+  const headerRaw = await sharp({
+    create: { width: 150, height: 57, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  })
+    .composite([{ input: headerLogo, gravity: 'center' }])
+    .removeAlpha()
+    .raw()
+    .toBuffer()
+
+  const headerBmp = encodeBmp24({ width: 150, height: 57, data: headerRaw })
+
+  const sidebarLogo = await sharp(sourceBuffer)
+    .resize(112, 112, { fit: 'contain', background: { r: 26, g: 27, b: 38, alpha: 0 } })
+    .png()
+    .toBuffer()
+
+  const sidebarRaw = await sharp({
+    create: { width: 164, height: 314, channels: 3, background: { r: 26, g: 27, b: 38 } },
+  })
+    .composite([{ input: sidebarLogo, gravity: 'center' }])
+    .removeAlpha()
+    .raw()
+    .toBuffer()
+
+  const sidebarBmp = encodeBmp24({ width: 164, height: 314, data: sidebarRaw })
+
   const rendererChanged = await writeIfChanged(rendererLogo, webp)
   const iconChanged = await writeIfChanged(windowsIcon, ico)
+  const headerChanged = await writeIfChanged(nsisHeader, headerBmp)
+  const sidebarChanged = await writeIfChanged(nsisSidebar, sidebarBmp)
 
   for (const { path: pngPath, size } of PNG_ICONS) {
     const pngBuf = await resizedPng(sourceBuffer, size)
@@ -81,7 +116,9 @@ export async function generateAppAssets() {
 
   console.log(
     `[app-assets] renderer=${webp.length}B${rendererChanged ? ' updated' : ''}; `
-      + `windows-icon=${ico.length}B${iconChanged ? ' updated' : ''}`,
+      + `windows-icon=${ico.length}B${iconChanged ? ' updated' : ''}; `
+      + `nsis-header=${headerBmp.length}B${headerChanged ? ' updated' : ''}; `
+      + `nsis-sidebar=${sidebarBmp.length}B${sidebarChanged ? ' updated' : ''}`,
   )
 }
 
