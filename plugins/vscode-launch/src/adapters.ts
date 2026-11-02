@@ -51,15 +51,16 @@ export { formatTerminalCommand, resolveDotnetTarget }
 function resolveEnvMap(
   config: LaunchConfigItem,
   baseEnv: Readonly<Record<string, string | undefined>>,
+  editors?: readonly EditorKind[],
 ): Record<string, string> {
-  const initialCtx = createDefaultVariableContext(config.workspaceFolder, baseEnv)
+  const initialCtx = createDefaultVariableContext(config.workspaceFolder, baseEnv, editors)
   const fromEnvFile = config.envFile
     ? loadEnvFile(path.resolve(config.workspaceFolder, expandVariables(config.envFile, initialCtx)))
     : {}
   const mergedCtx = createDefaultVariableContext(config.workspaceFolder, {
     ...baseEnv,
     ...fromEnvFile,
-  })
+  }, editors)
   const explicit: Record<string, string> = {}
   if (config.env) {
     for (const [k, v] of Object.entries(config.env)) {
@@ -75,11 +76,11 @@ export async function synthesizeLaunchCommand(
   deps: AdapterDeps = {},
 ): Promise<SynthesizedLaunch> {
   const baseEnv = deps.baseEnv ?? process.env
-  const envOverrides = resolveEnvMap(config, baseEnv)
+  const envOverrides = resolveEnvMap(config, baseEnv, deps.editors)
   const ctx = createDefaultVariableContext(config.workspaceFolder, {
     ...baseEnv,
     ...envOverrides,
-  })
+  }, deps.editors)
 
   const cwd = config.cwd
     ? path.resolve(config.workspaceFolder, expandVariables(config.cwd, ctx))
