@@ -341,7 +341,7 @@
   padding-inline: 10px 4px;
   border: 1px solid var(--theme-border);
   border-radius: 6px;
-  background: var(--theme-bg);
+  background: transparent;
 }
 
 .git-search:focus-within {

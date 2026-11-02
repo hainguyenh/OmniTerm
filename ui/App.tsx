@@ -13,6 +13,7 @@ import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
 import type { TerminalToolbarActions } from './terminalToolbar'
 import { migrateThemeSettings, visibleThemes } from './utils/themeMigration'
+import { setDifferentPaneColors } from './paneIdentity'
 
 interface AppSettings {
   themeId: string
@@ -20,8 +21,10 @@ interface AppSettings {
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
+  differentPaneColors?: boolean
   /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
   skipTerminalCloseConfirm?: boolean
+  skipTerminalRenewConfirm?: boolean
   /** Shell inline prediction (PowerShell's PSReadLine). Applies to new panes; on by default. */
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
@@ -83,6 +86,9 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [chromeFullscreen])
+  useEffect(() => {
+    setDifferentPaneColors(appSettings.differentPaneColors !== false)
+  }, [appSettings.differentPaneColors])
   const { available: blurAvailable } = useBlurPlugin()
   const windowRounded = useWindowRounding() && !chromeFullscreen
   const startupUpdateChecked = useRef(false)
@@ -321,12 +327,16 @@ function App() {
   useEffect(() => {
     if (!currentTheme) return
     applyThemeVars(document.documentElement, themeCssVars(currentTheme, appSettings.darkMode ? 'dark' : 'light'))
+    document.documentElement.style.setProperty(
+      '--terminal-font-size',
+      `${appSettings.fontSize ?? 14}px`,
+    )
     // Zero-radius themes also flatten the rounded-full shapes that bypass --theme-rounded-*
     // (see .theme-square in index.css). Detached windows share this document, so one toggle covers them.
     document.documentElement.classList.toggle('theme-square', isSquareTheme(currentTheme))
     document.documentElement.classList.toggle('theme-terminal-paper', currentTheme.id === 'terminal-paper')
-    document.documentElement.classList.toggle('theme-terminal-paper-dark', currentTheme.id === 'compact' && appSettings.darkMode)
-  }, [currentTheme, appSettings.darkMode])
+    document.documentElement.classList.toggle('theme-terminal-paper-dark', (currentTheme.id === 'terminal-paper' || currentTheme.id === 'compact') && appSettings.darkMode)
+  }, [currentTheme, appSettings.darkMode, appSettings.fontSize])
 
   // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the
   // bridge derives it from the window label, so no await is needed before choosing a root view.

@@ -260,6 +260,7 @@ const defaults: Api = {
     revealLog: async () => "",
     clearLog: async () => false,
     openInSystem: async () => {},
+    openUrl: async () => {},
     setZoomFactor: () => {},
     getZoomFactor: () => 1,
   },

@@ -24,7 +24,7 @@ const pluginsDir = path.join(appDataDir, 'plugins')
 const providerPreferenceFile = path.join(appDataDir, 'active-connection-provider.json')
 
 /** Optional bundled-plugin directory supplied by a selected app build or explicit dev command. */
-const bundledPluginDir = process.argv[3] && path.isAbsolute(process.argv[3]) ? process.argv[3] : null
+const bundledPluginDir = process.argv[3] ? path.resolve(process.argv[3]) : null
 
 try {
   fs.mkdirSync(pluginsDir, { recursive: true })

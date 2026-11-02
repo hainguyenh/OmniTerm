@@ -7,6 +7,17 @@ import { TOKYO_NIGHT } from '../../themes'
 import SessionControlButtons from '../SessionControlButtons'
 import { controlsOverflow } from '../sessionControlOverflow'
 
+vi.mock('../../../plugins/vscode-launch/app/launchStore', () => ({
+  useHasLaunchConfigs: vi.fn((folder) => Boolean(folder)),
+}))
+vi.mock('../../../plugins/vscode-launch/app/PaneLaunchControl', () => ({
+  PaneLaunchControl: ({ menuItem }: { menuItem?: boolean }) => (
+    menuItem
+      ? <button role="menuitem" data-testid="pane-launch-menu-item">Launch (3)</button>
+      : <button data-testid="pane-launch-trigger">Launch (3)</button>
+  ),
+}))
+
 const local: Connection = {
   id: 'local', name: 'Local', type: 'LOCAL', host: '', port: '', user: '',
 }
@@ -451,5 +462,37 @@ describe('SessionControlButtons', () => {
     const buttons = container.querySelectorAll('button[aria-label]')
     const labels = Array.from(buttons).map(b => b.getAttribute('aria-label'))
     expect(labels).toEqual(['Focus pane full screen', 'Detach into its own window'])
+  })
+
+  it('moves launch control to overflow menu when space is constrained', () => {
+    const clientWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth')
+    const scrollWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth')
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, value: 50 })
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get() {
+        return this instanceof HTMLElement && this.classList.contains('terminal-control-measurement') ? 120 : 50
+      },
+    })
+    try {
+      render(
+        <SessionControlButtons
+          conn={local}
+          sessionId="s1"
+          detach="detach"
+          surface="header"
+          launchFolder="/mock-repo"
+          onToggleDetach={vi.fn()}
+        />,
+      )
+      expect(screen.queryByTestId('pane-launch-trigger')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'More terminal actions' }))
+      expect(screen.getByTestId('pane-launch-menu-item')).toBeInTheDocument()
+    } finally {
+      if (clientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', clientWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+      if (scrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', scrollWidth)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'scrollWidth')
+    }
   })
 })

@@ -120,7 +120,10 @@ function createTauriAPI(): any {
       invoke: (method: string, ...args: unknown[]) =>
         invoke<unknown>('plugin_invoke', { method, args }).catch(() => null),
       authGate: () => invoke<boolean>('plugin_auth_gate').catch(() => true),
-      installPackage: () => invoke<any>('install_plugin_package'),
+      installPackage: (data?: number[] | Uint8Array) =>
+        invoke<any>('install_plugin_package', {
+          data: data ? Array.from(data) : undefined,
+        }),
       remove: (id: string) => invoke<boolean>('remove_plugin', { id }),
       restartApp: () => invoke<void>('restart_app'),
     },
@@ -232,8 +235,16 @@ function createTauriAPI(): any {
         invoke<void>('open_in_system', { path }).catch((e) => {
           diag.warn('[omnitermAPI] open_in_system failed', e)
         }),
+      openUrl: (url: string) =>
+        invoke<void>('open_url', { url }).catch((e) => {
+          diag.warn('[omnitermAPI] open_url failed', e)
+        }),
       setZoomFactor: (factor: number) => {
         zoomFactor = factor
+        if (factor === 1) {
+          document.body.style.zoom = ''
+          document.documentElement.style.zoom = ''
+        }
         invoke('set_webview_zoom', { factor }).catch(() => {
           document.body.style.zoom = String(factor)
         })

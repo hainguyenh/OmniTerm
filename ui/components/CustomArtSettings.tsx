@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { ImagePlus, RotateCcw, Info, Save } from 'lucide-react'
 import { DefaultIdleArt, DefaultLoadingArt } from '../assets/defaultArt'
 import { Tooltip } from './Tooltip'
+import ToggleRow from './ToggleRow'
 import './customArtPreview.css'
 
 /**
@@ -21,12 +22,15 @@ interface CustomArtSettingsProps {
   loadingArtUrlDark: string | null
   /** Called after upload/remove so the parent refreshes its state. */
   onArtChanged: () => void
+  differentPaneColors?: boolean
+  onDifferentPaneColorsChange?: (val: boolean) => void
 }
 
 type ArtSlot = 'idle-light' | 'idle-dark' | 'loading-light' | 'loading-dark'
 
 const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
   idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, onArtChanged,
+  differentPaneColors = true, onDifferentPaneColorsChange,
 }) => {
   const [uploading, setUploading] = useState<ArtSlot | null>(null)
   const [showTooltip, setShowTooltip] = useState(false)
@@ -72,10 +76,22 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
 
   return (
     <div className="p-4 flex flex-col gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
-        <div className="min-w-0 flex-[1_1_15rem]">
+      {/* Terminal Pane Colors */}
+      <div className="flex flex-col gap-2">
+        <ToggleRow
+          label="Use different color for each terminal pane"
+          description="Assign a distinct color and shape to each pane header and docked tab. When disabled, all panes use the theme accent color."
+          checked={differentPaneColors}
+          onChange={() => onDifferentPaneColorsChange?.(!differentPaneColors)}
+          ariaLabel="Use different color for each terminal pane"
+          dataTestId="toggle-different-pane-colors"
+        />
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 pt-1 border-t border-theme-border/60">
+        <div className="min-w-0 flex-1">
           <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Custom Pane Art</h3>
-          <p className="mt-0.5 max-w-[19rem] text-[10px] leading-4 text-theme-dim">
+          <p className="mt-0.5 text-[10px] leading-4 text-theme-dim">
             Upload custom images or GIFs for idle and connecting panes in Light and Dark modes (max 2 MB). Busy agent session art is configured in Agent Quota.
           </p>
         </div>
@@ -102,7 +118,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-t border-theme-border pt-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 border-t border-theme-border pt-3">
         <ArtCard
           label="Idle (Light)"
           description="Empty panes in Light theme"
@@ -197,7 +213,7 @@ const ArtCard: React.FC<ArtCardProps> = ({
       : 'border-theme-border bg-[var(--theme-popup-bg)]'
   }`}>
     {/* Preview area */}
-    <div className="art-preview-panel aspect-square" data-art-mode={mode}>
+    <div className="art-preview-panel h-28" data-art-mode={mode}>
       <span className="art-preview-panel__mode">{mode} mode</span>
       {customUrl ? (
         <img
@@ -218,15 +234,15 @@ const ArtCard: React.FC<ArtCardProps> = ({
 
     {/* Controls */}
     <div className="p-2 border-t border-theme-border">
-      <p className="text-[10px] font-bold text-theme-fg mb-0.5">{label}</p>
-      <p className="text-[9px] text-theme-dim mb-2">{description}</p>
+      <p className="text-[10px] font-bold text-theme-fg mb-0.5 truncate">{label}</p>
+      <p className="text-[9px] text-theme-dim mb-1.5 truncate">{description}</p>
       <div className="flex gap-1.5">
         <Tooltip content={`Select custom image for ${label}`} placement="bottom">
           <button
             type="button"
             onClick={onUpload}
             disabled={uploading}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium rounded border border-theme-border text-theme-fg hover:text-theme-accent hover:border-theme-accent transition-colors disabled:opacity-40"
+            className="flex-1 flex items-center justify-center gap-1 px-1.5 py-1 text-[9px] font-medium rounded border border-theme-border text-theme-fg hover:text-theme-accent hover:border-theme-accent transition-colors disabled:opacity-40"
           >
             <ImagePlus className="w-3 h-3" />
             {uploading ? 'Uploading…' : 'Upload'}

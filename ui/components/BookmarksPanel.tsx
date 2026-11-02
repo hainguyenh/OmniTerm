@@ -190,7 +190,7 @@ export default function BookmarksPanel({ onLaunch, onShowTab, launchCommandFor }
     <div className="flex h-full flex-col text-theme-fg select-none" data-testid="bookmarks-panel">
       {/* Search Header */}
       <div className="border-b border-theme-border/70 p-2.5">
-        <label className="flex items-center gap-2 rounded-xl border border-theme-border/60 bg-theme-bg/50 px-2.5 py-1.5 focus-within:border-theme-accent focus-within:ring-1 focus-within:ring-theme-accent/30 transition-all">
+        <label className="flex items-center gap-2 rounded-xl border border-theme-border/60 bg-transparent px-2.5 py-1.5 focus-within:border-theme-accent focus-within:ring-1 focus-within:ring-theme-accent/30 transition-all">
           <Search className="w-3.5 h-3.5 flex-shrink-0 text-theme-dim" />
           <input
             value={query}

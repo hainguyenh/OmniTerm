@@ -33,3 +33,27 @@ export const installTerminalInterruptReset = (
   window.addEventListener('omniterm:terminal-interrupted', onInterrupted)
   return { dispose: () => window.removeEventListener('omniterm:terminal-interrupted', onInterrupted) }
 }
+
+/**
+ * Interrupts a live session's foreground process tree (Stop / Ctrl+C).
+ * LOCAL sessions invoke the native `interrupt_session` command, which snapshots pre-existing
+ * descendant processes, sends ETX, and terminates those descendants while preserving the root shell.
+ * SSH sessions send ETX through their PTY channel.
+ * Both paths dispatch `omniterm:terminal-interrupted` to clear leftover terminal modes.
+ */
+export const interruptSessionProcess = (sessionId: string, connType: string): void => {
+  const api = window.omnitermAPI?.connect
+  if (api) {
+    if (connType === 'LOCAL') {
+      const interrupt = api.interruptSession
+      if (interrupt) {
+        void interrupt(sessionId).catch(() => api.localInput?.(sessionId, '\x03'))
+      } else {
+        api.localInput?.(sessionId, '\x03')
+      }
+    } else {
+      api.sshInput?.(sessionId, '\x03')
+    }
+  }
+  window.dispatchEvent(new CustomEvent('omniterm:terminal-interrupted', { detail: { id: sessionId } }))
+}

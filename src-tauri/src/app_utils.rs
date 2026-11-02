@@ -19,11 +19,27 @@ mod tests;
 /// authority carrying credentials or a `@` — `https://github.com@evil.test/…` reads as `github.com`
 /// to a human and resolves to `evil.test`.
 pub fn is_allowed_plugin_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
+    let authority = if let Some(rest) = url.strip_prefix("https://") {
+        rest.split(['/', '?', '#']).next().unwrap_or("")
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
+        let host = if auth.starts_with('[') {
+            if let Some(end) = auth.find(']') {
+                &auth[..=end]
+            } else {
+                return false;
+            }
+        } else {
+            auth.split(':').next().unwrap_or("")
+        };
+        if host == "localhost" || host == "127.0.0.1" || host == "[::1]" {
+            auth
+        } else {
+            return false;
+        }
+    } else {
         return false;
     };
-    // Authority is everything up to the first `/`, `?` or `#`; a URL may legitimately have no path.
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     if authority.is_empty() || authority.contains('@') {
         return false;
     }
@@ -136,6 +152,40 @@ fn validate_path_for_open(path: &str) -> Result<&str, String> {
 pub async fn open_in_system(path: String) -> Result<(), String> {
     let validated = validate_path_for_open(&path)?;
     opener::open(validated).map_err(|e| e.to_string())
+}
+
+fn validate_url_for_open(url: &str) -> Result<String, String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("URL is empty.".to_string());
+    }
+    if trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("URL contains control characters or whitespace.".to_string());
+    }
+    let target = if trimmed.starts_with("http://0.0.0.0:") {
+        trimmed.replacen("http://0.0.0.0:", "http://localhost:", 1)
+    } else {
+        trimmed.to_string()
+    };
+    let rest = if let Some(r) = target.strip_prefix("https://") {
+        r
+    } else if let Some(r) = target.strip_prefix("http://") {
+        r
+    } else {
+        return Err("Only http and https URLs may be opened.".to_string());
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    if authority.is_empty() || authority.contains('@') {
+        return Err("URL authority is invalid or contains credentials.".to_string());
+    }
+    Ok(target)
+}
+
+/// Open a validated HTTP or HTTPS URL in the user's default browser.
+#[tauri::command]
+pub async fn open_url(url: String) -> Result<(), String> {
+    let validated = validate_url_for_open(&url)?;
+    opener::open(&validated).map_err(|e| e.to_string())
 }
 
 pub fn handle_second_instance<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {

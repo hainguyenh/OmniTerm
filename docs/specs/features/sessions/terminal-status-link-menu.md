@@ -67,6 +67,7 @@ From the first observed `onLocalActivity` event right after a session starts, th
 - `activateTerminalLink` (removed in Phase D) — the historical direct-open handler folded into the overlay menu's `openUrl` callback so modifier-click always surfaces the menu instead.
 - `TerminalLinkMenu`, `TerminalViewLinkMenuHost` — Phase C menu surface and host glue.
 - `app.openInSystem`, `open_in_system`, `validate_path_for_open` — Phase C OS-open path boundary.
+- `app.openUrl`, `open_url`, `validate_url_for_open` — Phase C/D external browser URL launch boundary.
 
 ## Components and functions
 
@@ -81,6 +82,7 @@ From the first observed `onLocalActivity` event right after a session starts, th
 | `TerminalLinkMenu` | Render the Copy/Open overlay menu. | Surface the dedicated actions and gate on Local vs. remote. | Portal menu, viewport-clamped, kind-based items, outside-click + Escape close. | While `linkMenu` state is set on the host pane. |
 | `TerminalViewLinkMenuHost` | Host the menu from `TerminalView` without bloating that file. | Keep `TerminalView` under its line limit and own the action callbacks. | Reads `linkMenu` state; renders `TerminalLinkMenu` when non-null with copy/openURL/openPath callbacks defined once. | While `linkMenu` is non-null. |
 | `app.openInSystem` / `open_in_system` / `validate_path_for_open` | Open a path with the OS handler, validating it first. | Keep the OS-open boundary explicit and reject URLs/control chars. | Tauri command validates the trimmed path then `opener::open(trimmed)`. | When the user picks "Open in OS" in the link menu. |
+| `app.openUrl` / `open_url` / `validate_url_for_open` | Open an HTTP(S) URL in the default system browser. | Safe external browser link launching without WebView vulnerabilities. | Validates scheme is http/https with no control chars, then `opener::open(trimmed)`. | When user picks "Open Link" in link menu or clicks link in launch console. |
 
 ## State and data
 

@@ -100,7 +100,10 @@ pub fn suspend_targets_for_profile(
     start_time: u64,
     home: Option<&str>,
 ) -> Vec<ProcTarget> {
-    let Some(main) = rows.iter().find(|r| r.pid == pid && r.start_time == start_time) else {
+    let Some(main) = rows
+        .iter()
+        .find(|r| r.pid == pid && r.start_time == start_time)
+    else {
         return Vec::new();
     };
     let Some(kind) = super::agent_detect::classify(main) else {

@@ -292,11 +292,12 @@ jobs:
           pnpm build:plugin plugins/always-awake
           pnpm build:plugin plugins/blur
           pnpm build:plugin plugins/agent-quota
+          pnpm build:plugin plugins/vscode-launch
 
       - name: Stage bundled plugin resources
         shell: pwsh
         run: |
-          $pluginNames = @('always-awake', 'blur', 'agent-quota')
+          $pluginNames = @('always-awake', 'blur', 'agent-quota', 'vscode-launch')
           foreach ($pluginName in $pluginNames) {
             $stage = Join-Path (Get-Location) ".omniterm-build/plugins/$pluginName"
             New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -357,7 +358,8 @@ jobs:
             -Plugins @(
               @{ Name = 'always-awake'; Path = (Join-Path $repoRoot 'plugins/always-awake') },
               @{ Name = 'blur'; Path = (Join-Path $repoRoot 'plugins/blur') },
-              @{ Name = 'agent-quota'; Path = (Join-Path $repoRoot 'plugins/agent-quota') }
+              @{ Name = 'agent-quota'; Path = (Join-Path $repoRoot 'plugins/agent-quota') },
+              @{ Name = 'vscode-launch'; Path = (Join-Path $repoRoot 'plugins/vscode-launch') }
             )
           if (-not (Test-Path -LiteralPath $portable -PathType Leaf)) { throw "Missing $portable." }
           Get-Item -LiteralPath $portable | Select-Object FullName, Length
@@ -368,6 +370,28 @@ jobs:
         with:
           name: OmniTerm-Tauri-Windows-nsis
           path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
+
+      - name: Package standalone plugins
+        if: matrix.platform.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          . ./scripts/ReleasePackaging.ps1
+          $repoRoot = (Get-Location).Path
+          $artifacts = Join-Path $repoRoot 'artifacts/plugins'
+          New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/full-connection-manager') -Version $version -OutputDirectory $artifacts
+          New-PluginPackage -PluginPath (Join-Path $repoRoot 'plugins/native-batch-connections') -Version $version -OutputDirectory $artifacts
+
+      - name: Upload plugin packages
+        if: matrix.platform.os == 'windows-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: OmniTerm-Plugins
+          path: |
+            artifacts/plugins/*.zip
+            artifacts/plugins/*.zip.sha256
           if-no-files-found: error
 
       - name: Upload portable artifact
@@ -555,6 +579,7 @@ jobs:
             windows: [],
             linux: [],
             macos: [],
+            plugins: [],
           };
 
           for (const file of files) {
@@ -574,6 +599,8 @@ jobs:
               categorized.linux.push({ link, desc, size });
             } else if (name.endsWith('.dmg')) {
               categorized.macos.push({ link, desc: 'Disk Image (.dmg)', size });
+            } else if (name.endsWith('.zip') && !name.includes('portable')) {
+              categorized.plugins.push({ link, desc: 'Plugin Package (.zip)', size });
             }
           }
 
@@ -602,6 +629,16 @@ jobs:
             md += `| File | Description | Size |\n`;
             md += `| :--- | :--- | :--- |\n`;
             for (const item of categorized.macos) {
+              md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
+            }
+            md += `\n`;
+          }
+
+          if (categorized.plugins.length > 0) {
+            md += `### Plugins\n\n`;
+            md += `| File | Description | Size |\n`;
+            md += `| :--- | :--- | :--- |\n`;
+            for (const item of categorized.plugins) {
               md += `| ${item.link} | ${item.desc} | ${item.size} |\n`;
             }
             md += `\n`;

@@ -53,7 +53,7 @@ export interface UseRenewSessionOptions {
   sessionCwds: Record<string, string>
   connById: (id: string) => Connection | undefined
   reconnectSession: (id: string) => void
-  appSettings: { agentRenewStrategy?: 'reopen' | 'new-command' }
+  appSettings: { agentRenewStrategy?: 'reopen' | 'new-command'; skipTerminalRenewConfirm?: boolean }
   activeTabId: string | null
   /** Shows a renew failure to the user; failures used to be logged only. */
   onError?: (message: string) => void
@@ -179,19 +179,20 @@ export function useRenewSession({
       const targetId = sessionId ?? activeTabId
       if (!targetId) return
 
-      if (inMemoryRenewRemembered) {
+      if (inMemoryRenewRemembered || appSettings.skipTerminalRenewConfirm) {
         void executeRenew(targetId)
       } else {
         setPendingRenewSessionId(targetId)
       }
     },
-    [activeTabId, executeRenew],
+    [activeTabId, appSettings.skipTerminalRenewConfirm, executeRenew],
   )
 
   const confirmRenew = useCallback(
     async (remember: boolean) => {
       if (remember) {
         inMemoryRenewRemembered = true
+        void window.omnitermAPI?.settings?.save?.({ skipTerminalRenewConfirm: true })
       }
       const targetId = pendingRenewSessionId
       setPendingRenewSessionId(null)

@@ -50,8 +50,12 @@ function api(overrides: Record<string, unknown> = {}) {
     importFile: vi.fn(async () => null),
     ...((overrides.files as object) ?? {}),
   }
-  mockOmnitermAPI({ plugin, connections, files })
-  return { plugin, connections, files }
+  const updates = {
+    getVersion: vi.fn(async () => '0.1.15'),
+    ...((overrides.updates as object) ?? {}),
+  }
+  mockOmnitermAPI({ plugin, connections, files, updates })
+  return { plugin, connections, files, updates }
 }
 
 function setup({ activeSessionCount = 0, confirmations = [true], showAlert = vi.fn(async () => {}) } = {}) {
@@ -274,5 +278,63 @@ describe('PluginManager complete behavior', () => {
     await screen.findByText('Import metadata')
     fireEvent.click(screen.getByText('Import metadata'))
     await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not import metadata: bad json', expect.anything()))
+  })
+
+  it('discovers release plugins and installs directly from release assets', async () => {
+    const originalFetch = global.fetch
+    const mockReleaseData = {
+      tag_name: 'v0.1.15',
+      assets: [
+        {
+          name: 'full-connection-manager-0.1.15.zip',
+          browser_download_url: 'https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.15/full-connection-manager-0.1.15.zip',
+          size: 1024 * 1024 * 2,
+        },
+        {
+          name: 'OmniTerm_0.1.15_x64-portable.zip',
+          browser_download_url: 'https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.15/portable.zip',
+          size: 1024 * 1024 * 50,
+        },
+      ],
+    }
+
+    const installMock = vi.fn(async () => ({ name: 'Full Manager', version: '0.1.15', restartRequired: false }))
+    api({
+      plugin: { installPackage: installMock },
+      updates: { getVersion: vi.fn(async () => '0.1.15') },
+    })
+
+    global.fetch = vi.fn(async (url: any) => {
+      if (String(url).includes('releases/tags/v0.1.15')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => mockReleaseData,
+        } as any
+      }
+      if (String(url).includes('full-connection-manager-0.1.15.zip')) {
+        return {
+          ok: true,
+          status: 200,
+          arrayBuffer: async () => new ArrayBuffer(8),
+        } as any
+      }
+      return { ok: false, status: 404 } as any
+    })
+
+    try {
+      const view = setup()
+      await screen.findByText('Release v0.1.15 Plugins')
+      expect(screen.getByText('full-connection-manager-0.1.15.zip')).toBeInTheDocument()
+      expect(screen.queryByText('OmniTerm_0.1.15_x64-portable.zip')).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }))
+      await waitFor(() => expect(installMock).toHaveBeenCalled())
+      expect((installMock.mock.calls as any)[0][0]).toBeInstanceOf(Uint8Array)
+      await waitFor(() => expect(view.showAlert).toHaveBeenCalledWith(expect.stringContaining('ready to configure'), expect.anything()))
+      view.unmount()
+    } finally {
+      global.fetch = originalFetch
+    }
   })
 })

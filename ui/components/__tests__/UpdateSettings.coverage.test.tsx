@@ -34,7 +34,7 @@ describe('UpdateSettings', () => {
     expect(screen.getByText('Not checked yet')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Check for updates'))
     expect(p.checkForUpdates).toHaveBeenCalled()
-    fireEvent.click(screen.getByText('OFF'))
+    fireEvent.click(screen.getByRole('switch', { name: 'Check on startup' }))
     expect(p.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ checkUpdatesOnStartup: true }))
     expect(window.omnitermAPI.settings.save).toHaveBeenCalled()
 

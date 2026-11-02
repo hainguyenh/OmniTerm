@@ -18,7 +18,13 @@ const copyText = (text: string) => {
 }
 const openUrl = (url: string) => {
   const validated = safeHttpUrl(url)
-  if (validated) window.open(validated.href, '_blank', 'noopener,noreferrer')
+  if (validated) {
+    if (window.omnitermAPI?.app?.openUrl) {
+      void window.omnitermAPI.app.openUrl(validated.href)
+    } else {
+      window.open(validated.href, '_blank', 'noopener,noreferrer')
+    }
+  }
 }
 const openPath = (path: string) => {
   void window.omnitermAPI.app.openInSystem(path)

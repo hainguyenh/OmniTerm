@@ -54,11 +54,19 @@ fn merge_theme_roots(
     // Retired themes are hidden even if a user override remains in app data.
     // Do not delete those files: switching back to an older release can still recover them.
     let retired = |theme: &serde_json::Value| {
-        matches!(theme_id(theme), Some("compact" | "clickhouse" | "click-house" | "volt-agent"))
+        matches!(
+            theme_id(theme),
+            Some("compact" | "clickhouse" | "click-house" | "volt-agent")
+        )
     };
-    let mut themes: Vec<_> = builtin.into_iter().filter(|theme| !retired(theme)).collect();
+    let mut themes: Vec<_> = builtin
+        .into_iter()
+        .filter(|theme| !retired(theme))
+        .collect();
     for theme in user {
-        if retired(&theme) { continue; }
+        if retired(&theme) {
+            continue;
+        }
         let existing = theme_id(&theme)
             .and_then(|id| themes.iter().position(|other| theme_id(other) == Some(id)));
         match existing {
@@ -359,7 +367,10 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        assert!(prepared, "could not turn the app-data path into a plain file");
+        assert!(
+            prepared,
+            "could not turn the app-data path into a plain file"
+        );
 
         let error = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap_err();
         assert!(error.contains("Failed to create themes directory"));

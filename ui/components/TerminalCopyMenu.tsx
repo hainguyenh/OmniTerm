@@ -70,7 +70,7 @@ export default function TerminalCopyMenu({ sessionId, placement = 'bottom', menu
             ? 'flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-left text-xs text-theme-fg hover:bg-theme-hover'
             : 'w-4 h-4 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent transition-colors'}
         >
-          <Copy className="w-3 h-3" />
+          <Copy className={menuItem ? 'w-4 h-4 flex-shrink-0' : 'w-3 h-3'} />
           {menuItem && <span>Copy terminal output</span>}
         </button>
       </Tooltip>

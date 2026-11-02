@@ -92,3 +92,41 @@ html.win-window.theme-square .app-window-rounded {
 
 /* Toolbar switches use theme radius variables (rounded-md/sm).
    Do not exempt them from .theme-square: TLR deliberately has square corners. */
+
+/* Running session tab animated dashed border has no radius under TLR / square themes. */
+.theme-square .animate-marching-ants,
+.theme-terminal-paper .animate-marching-ants {
+  rx: 0 !important;
+  ry: 0 !important;
+}
+
+/* Floating copy toast has no radius under TLR / square themes. */
+.theme-square .omniterm-copied-toast,
+.theme-terminal-paper .omniterm-copied-toast {
+  border-radius: 0 !important;
+}
+
+/* Native date-time and form pickers adhere to active theme color scheme and accent */
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"] {
+  color-scheme: var(--theme-color-scheme, dark);
+  accent-color: var(--theme-accent);
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: var(--theme-rounded-sm, 4px);
+  padding: 2px;
+  opacity: 0.85;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: var(--theme-hover-bg);
+}

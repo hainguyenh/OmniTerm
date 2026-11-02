@@ -131,9 +131,13 @@ describe('SettingsModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Plugins' }))
     expect(screen.getByText('Install ZIP')).toBeInTheDocument()
 
-    // Switch to Artwork
-    fireEvent.click(screen.getByRole('button', { name: 'Artwork' }))
+    // Switch to Appearance
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }))
     expect(screen.getByText('Custom Pane Art')).toBeInTheDocument()
+
+    // Switch to Data
+    fireEvent.click(screen.getByRole('button', { name: 'Data' }))
+    expect(screen.getByText('Data & Backup')).toBeInTheDocument()
 
     // Switch to About & Updates
     fireEvent.click(screen.getByRole('button', { name: 'About & Updates' }))
@@ -141,13 +145,13 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Check for updates')).toBeInTheDocument()
   }, 15000)
 
-  it('keeps the shortcuts description narrow without overlapping Reset', () => {
+  it('keeps the shortcuts description spacious without overlapping Reset', () => {
     renderModal()
     fireEvent.click(screen.getByRole('button', { name: 'Shortcuts' }))
     const title = screen.getByText('Keyboard Shortcuts')
     expect(title.parentElement?.parentElement).toHaveClass('flex-wrap', 'gap-x-3')
     expect(screen.getByText('Click a binding to record a new shortcut. Modifiers will combine automatically.'))
-      .toHaveClass('max-w-[19rem]', 'text-[10px]')
+      .toHaveClass('max-w-2xl', 'text-[10px]')
     expect(screen.getByRole('button', { name: 'Reset' })).toHaveClass('whitespace-nowrap', 'shrink-0')
   })
 

@@ -219,8 +219,12 @@ pub async fn report_detached_terminal_context<R: Runtime>(
     let Some(mut entry) = registry.entries.get_mut(&session_id) else {
         return Err("Detached terminal session is no longer registered".to_string());
     };
-    let cwd = cwd.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
-    let title = title.map(|value| value.trim().to_string()).filter(|value| !value.is_empty());
+    let cwd = cwd
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let title = title
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     let cwd_changed = cwd != entry.last_cwd;
     let title_changed = title != entry.last_title;
     if !cwd_changed && !title_changed {
