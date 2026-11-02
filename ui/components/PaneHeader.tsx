@@ -99,7 +99,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
       ? false
       : true
     : false
-  const arrangeable = !!conn && !single
+  const arrangeable = !!conn
 
   return (
     <div className="relative flex-shrink-0" data-pane-header>
@@ -107,6 +107,8 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         draggable={arrangeable}
         onDragStart={arrangeable ? (e) => {
           e.dataTransfer.setData('text/plain', String(paneIndex))
+          e.dataTransfer.setData('application/x-omniterm-pane', String(paneIndex))
+          if (sessionId) e.dataTransfer.setData('application/x-omniterm-tab', sessionId)
           e.dataTransfer.effectAllowed = 'move'
           onDragStart()
         } : undefined}
@@ -144,6 +146,7 @@ const PaneHeader: React.FC<PaneHeaderProps> = ({
         <span data-testid="pane-header-controls" className="ml-1 flex min-w-[3.5rem] max-w-[50%] flex-initial items-center justify-end gap-0.5" onMouseDown={(e) => { e.stopPropagation(); onFocus() }}>
           {conn && sessionId && (
             <SessionControlButtons
+              launchFolder={conn.type === 'LOCAL' ? (folderPath ?? conn.localCwd) : undefined}
               conn={conn}
               sessionId={sessionId}
               busy={busy}

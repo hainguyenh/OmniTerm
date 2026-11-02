@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { useState } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ActivityBar from '../ActivityBar'
 import CloseConfirmModal from '../CloseConfirmModal'
@@ -11,6 +11,12 @@ import DetachedPlaceholder from '../DetachedPlaceholder'
 import { PaneResizers } from '../PaneResizers'
 import WaitingPane from '../WaitingPane'
 import type { SplitRatios } from '../../paneLayout'
+import {
+  getLaunchState,
+  resetLaunchStore,
+  setLaunchAvailable,
+  setRunsSnapshot,
+} from '../../../plugins/vscode-launch/app/launchStore'
 
 describe('navigation and empty-session shell', () => {
   beforeEach(() => {
@@ -78,6 +84,76 @@ describe('navigation and empty-session shell', () => {
     expect(gitBtn).toBeInTheDocument()
     fireEvent.click(gitBtn)
     expect(onViewChange).toHaveBeenCalledWith('git')
+  })
+
+  it('renders Launch Consoles Play icon when plugin is available and shows active count badge', () => {
+    resetLaunchStore()
+    const { rerender } = render(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        onViewChange={vi.fn()}
+        onSettingsClick={vi.fn()}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /Launch Consoles/i })).not.toBeInTheDocument()
+
+    act(() => {
+      setLaunchAvailable(true)
+      setRunsSnapshot([
+        {
+          runId: 'r-1',
+          configId: '.::App',
+          name: 'App',
+          type: 'node',
+          mode: 'run',
+          status: 'running',
+          rootDir: '/repo',
+          workspaceFolder: '/repo',
+          relativeFolder: '.',
+          cwd: '/repo',
+          terminalCommand: 'node app.js',
+          startedAt: 100,
+          listeningUrls: [],
+        },
+        {
+          runId: 'r-2',
+          configId: '.::Worker',
+          name: 'Worker',
+          type: 'node',
+          mode: 'run',
+          status: 'starting',
+          rootDir: '/repo',
+          workspaceFolder: '/repo',
+          relativeFolder: '.',
+          cwd: '/repo',
+          terminalCommand: 'node worker.js',
+          startedAt: 101,
+          listeningUrls: [],
+        },
+      ])
+    })
+
+    rerender(
+      <ActivityBar
+        activeView={null}
+        filesEnabled
+        onViewChange={vi.fn()}
+        onSettingsClick={vi.fn()}
+      />,
+    )
+
+    const launchBtn = screen.getByRole('button', { name: 'Launch Consoles (2 active)' })
+    expect(launchBtn).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+
+    // Click to open console drawer
+    fireEvent.click(launchBtn)
+    expect(getLaunchState().consoleOpen).toBe(true)
+
+    // Click again to toggle/close console drawer
+    fireEvent.click(launchBtn)
+    expect(getLaunchState().consoleOpen).toBe(false)
   })
 
   it('confirms one or many connected terminal closes and supports every cancel route', () => {

@@ -1,4 +1,4 @@
-//! Save/load round trip for the local connection tree. 
+//! Save/load round trip for the local connection tree.
 use super::*;
 #[test]
 fn test_save_and_load_connections() {

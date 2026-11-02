@@ -105,9 +105,16 @@ fn executable_adjacent_path_from(executable: &Path, relative: &Path) -> Option<P
 fn bundled_plugin_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     #[cfg(debug_assertions)]
     if let Ok(value) = std::env::var("OMNITERM_DEV_PLUGIN") {
-        let dir = PathBuf::from(value);
+        let dir = PathBuf::from(&value);
         if dir.exists() {
             return Some(dir);
+        }
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Some(workspace_root) = manifest_dir.parent() {
+            let candidate = workspace_root.join(&value);
+            if candidate.exists() {
+                return Some(candidate);
+            }
         }
     }
     app.path()

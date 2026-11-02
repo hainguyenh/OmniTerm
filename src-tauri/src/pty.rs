@@ -165,7 +165,7 @@ pub async fn start_local_session<R: Runtime>(
     shell: Option<String>,
     dark_mode: Option<bool>,
     on_data: Channel<Response>,
-    on_status: Channel<SessionStatus>
+    on_status: Channel<SessionStatus>,
 ) -> Result<(), String> {
     state.configure(&app)?;
     let launch = resolve_local_launch(&app, &conn_id, shell).await?;
@@ -181,9 +181,9 @@ pub async fn start_local_session<R: Runtime>(
     if let Some(value) = colorfgbg_for_dark_mode(dark_mode) {
         env.push(("COLORFGBG".to_string(), value.to_string()));
     }
-    if let Some((key, value)) = utf8_locale_fallback(std::env::consts::OS, |name| {
-        std::env::var_os(name)
-    }) {
+    if let Some((key, value)) =
+        utf8_locale_fallback(std::env::consts::OS, |name| std::env::var_os(name))
+    {
         env.push((key.to_string(), value.to_string()));
     }
     let launched_with_command = launch.command.is_some();
@@ -250,8 +250,6 @@ pub async fn disconnect_session(
     state.sessions.remove(&id);
     state.client()?.disconnect(id).await
 }
-
-
 
 pub(crate) async fn attach_existing_session(
     manager: &PtyManager,
