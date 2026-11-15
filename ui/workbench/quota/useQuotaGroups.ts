@@ -1,0 +1,22 @@
+import { useMemo } from 'react'
+
+import { getQuotaNow, useCoarseNow, useQuota } from '../../../plugins/agent-quota/app/quotaStore'
+
+import { activeQuotaSession, nearestReset, quotaGroups } from './quotaModel'
+import { useActiveSessionId } from './useActiveSessionId'
+
+/**
+ * The quota groups and the active session they follow, recomputed when either changes. The clock
+ * is coarse (30s, by the second only near a reset), so the always-visible status bar does not
+ * re-render every second.
+ */
+export function useQuotaGroups() {
+  const sessionId = useActiveSessionId()
+  const terminals = useQuota((state) => state.terminals)
+  const profiles = useQuota((state) => state.profiles)
+  const deadline = useMemo(() => nearestReset(profiles, getQuotaNow()), [profiles])
+  const now = useCoarseNow(deadline)
+  const active = useMemo(() => activeQuotaSession({ terminals }, sessionId), [terminals, sessionId])
+  const groups = useMemo(() => quotaGroups({ profiles, now }, active), [profiles, now, active])
+  return { sessionId, active, groups }
+}

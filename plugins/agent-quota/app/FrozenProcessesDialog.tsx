@@ -6,7 +6,7 @@ import { createAgentQuotaAPI } from './agentQuotaAPI'
 import { useDialogDrag } from './dialogDrag'
 import { AGENT_LABELS } from './quotaConfig'
 import { formatCountdown } from './quotaPolicy'
-import { getQuotaState, quotaCommands, setReviewSession, terminalConfig, useQuota } from './quotaStore'
+import { getQuotaState, quotaCommands, setReviewSession, terminalConfig, useQuota, useQuotaNow } from './quotaStore'
 import { scheduleResumeRecovery } from './resumeRecovery'
 
 /**
@@ -17,7 +17,7 @@ export function FrozenProcessesDialog() {
   const reviewSessionId = useQuota((state) => state.reviewSessionId)
   const terminal = useQuota((state) => (reviewSessionId ? state.terminals[reviewSessionId] : undefined))
   const guard = useQuota((state) => (terminal ? state.guards[terminal.instanceKey] : undefined))
-  const now = useQuota((state) => state.now)
+  const now = useQuotaNow()
 
   const [processes, setProcesses] = useState<FrozenProcess[]>([])
   const [loading, setLoading] = useState(true)

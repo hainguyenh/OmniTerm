@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { AlertTriangle, Info, CheckCircle2, XCircle } from 'lucide-react'
 import type { DialogTone } from '../hooks/useDialog'
 
-// ── Internal dialog state type (mirrored from useDialog to avoid a circular dep) ──
+// ── Internal dialog state type (defined locally to avoid a circular dep) ──
 type DialogState =
   | { kind: 'alert'; title: string; message: string; tone: DialogTone; buttonLabel: string; resolve: () => void }
   | { kind: 'confirm'; title: string; message: string; tone: DialogTone; confirmLabel: string; cancelLabel: string; resolve: (v: boolean) => void }

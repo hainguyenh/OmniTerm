@@ -1,4 +1,4 @@
-/** Standalone mirror of the public OmniTerm plugin contract. */
+/** Standalone definitions of the public OmniTerm plugin contract. */
 
 export type LocalShell = 'wsl' | 'powershell' | 'cmd' | 'default' | 'zsh' | 'bash' | 'sh'
 

@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../themes'
-import type { ViewGroup } from '../viewGroups'
+import { DEFAULT_VIEW_GROUP_ID, type ViewGroup } from '../viewGroups'
 import {
   SNAPSHOT_VERSION,
   loadSnapshot,
@@ -20,6 +20,7 @@ import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence }
 import { extractAgentWorkItem } from '../utils/agentWorkItem'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { agentBrandFor } from '../utils/agentIdentity'
+import { ownsSessionPersistence } from '../utils/sessionOwnerWindow'
 
 /** How often each open pane's agent is re-detected and its Claude session file re-resolved. */
 const AGENT_POLL_MS = 5_000
@@ -29,8 +30,6 @@ interface PersistenceDeps {
   ephemeralConns?: Connection[]
   resolveConnection?: (id?: string) => Connection | undefined
   viewGroups?: ViewGroup[]
-  tabGroups?: Record<string, string>
-  activeGroupId?: string
   layoutMode?: LayoutMode
   sessionCwds?: Record<string, string>
   pendingSnapshot?: SessionSnapshot | null
@@ -82,8 +81,6 @@ function buildSnapshot(
   connectionFor: (id: string) => Connection | undefined,
   ephemeralById: Map<string, Connection>,
   viewGroups: ViewGroup[],
-  tabGroups: Record<string, string>,
-  activeGroupId: string,
   layoutMode: LayoutMode,
   sessionCwds: Record<string, string>,
   pendingSnapshot: SessionSnapshot | null,
@@ -150,8 +147,9 @@ function buildSnapshot(
     activeTabs,
     ephemeralConns: ephemeralConnsOut,
     viewGroups: persistedGroups,
-    tabGroups: Object.fromEntries(Object.entries(tabGroups).filter(([tabId]) => ptyTabIds.has(tabId))),
-    activeGroupId,
+    // Desktops are gone; the fields stay in the snapshot so older builds can still read it.
+    tabGroups: {},
+    activeGroupId: DEFAULT_VIEW_GROUP_ID,
     layoutMode,
     revision,
   }, pendingSnapshot)
@@ -162,8 +160,6 @@ export function useSessionPersistence({
   ephemeralConns = [],
   resolveConnection,
   viewGroups = [],
-  tabGroups = {},
-  activeGroupId = 'ungrouped',
   layoutMode = 1,
   sessionCwds = {},
   pendingSnapshot = null,
@@ -173,20 +169,25 @@ export function useSessionPersistence({
   const revisionRef = useRef(0)
   const hadPtyTabsRef = useRef(false)
   const previousTabIdsRef = useRef<Set<string>>(new Set())
+  const ownerRef = useRef<boolean | null>(null)
+  ownerRef.current ??= ownsSessionPersistence()
+  const owner = ownerRef.current
 
   if (!loadedRef.current) {
     loadedRef.current = true
-    initialSnapshotRef.current = loadSnapshot()
+    // A non-owner window starts empty and leaves the shared storage alone: see ownsSessionPersistence.
+    initialSnapshotRef.current = owner ? loadSnapshot() : null
     revisionRef.current = initialSnapshotRef.current?.revision ?? 0
     // Any session still `active` belongs to a tab id from the previous run — whether that run ended
     // cleanly or was killed, this run has no such tab yet, so the session is now resumable.
-    promoteStaleActiveSessions()
+    if (owner) promoteStaleActiveSessions()
     // Merge the crash-safe copy: after a hard kill, localStorage may be missing the last writes.
-    void hydrateAgentSessionStore()
+    if (owner) void hydrateAgentSessionStore()
   }
 
   // Layout/recovery snapshot: unrelated to which agent runs where, so it saves on its own schedule.
   useEffect(() => {
+    if (!owner) return
     const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
     const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
     const ptyTabs = activeTabs.filter(tab => {
@@ -203,8 +204,6 @@ export function useSessionPersistence({
         connectionFor,
         ephemeralById,
         viewGroups,
-        tabGroups,
-        activeGroupId,
         layoutMode,
         sessionCwds,
         pendingSnapshot,
@@ -220,7 +219,7 @@ export function useSessionPersistence({
       window.removeEventListener('pagehide', saveCheckpoint)
       window.removeEventListener('beforeunload', saveCheckpoint)
     }
-  }, [activeTabs, ephemeralConns, resolveConnection, viewGroups, tabGroups, activeGroupId, layoutMode, sessionCwds, pendingSnapshot])
+  }, [owner, activeTabs, ephemeralConns, resolveConnection, viewGroups, layoutMode, sessionCwds, pendingSnapshot])
 
   // A closed tab's resumable-session tracking ends immediately — it does not wait for the next poll,
   // which only ever sees tabs that are still open.

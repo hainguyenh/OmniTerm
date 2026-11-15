@@ -1,14 +1,14 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 
-import type { AgentKind, QuotaWindow, WindowKind } from '../src/types'
+import type { AgentKind, QuotaWindow, WindowKind } from './usage/types'
 import type { AgentConfig, WakeMode } from './quotaConfig'
 
-import { isSafePrompt } from '../src/prompt'
+import { isSafePrompt } from './usage/prompt'
 import { confirmDisableSuspend } from './dangerConfirm'
 import { AgentIcon, QuotaLine } from './QuotaLine'
 import { AGENT_LABELS, clampLimit, WINDOW_KINDS, WINDOW_LABELS } from './quotaConfig'
-import { useQuota } from './quotaStore'
+import { useCoarseNow } from './quotaStore'
 import { CompactSwitch, FIELD, SubHeading, Switch } from './settingsControls'
 
 const WAKE_MODES: Array<{ id: WakeMode; label: string }> = [
@@ -45,7 +45,7 @@ function agentSummary(config: AgentConfig): string {
  */
 export function AgentSettingsCard({ agent, config, onChange, defaultExpanded = false }: AgentSettingsCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
-  const now = useQuota((state) => state.now)
+  const now = useCoarseNow()
   const patch = (fields: Partial<AgentConfig>) => onChange({ ...config, ...fields })
   const toggleSuspend = () => {
     if (config.suspendAtLimit) confirmDisableSuspend(AGENT_LABELS[agent], () => patch({ suspendAtLimit: false }))

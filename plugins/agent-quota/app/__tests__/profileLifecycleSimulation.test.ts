@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DiscoveredProfile, QuotaSnapshot } from '../../src/types'
+import type { DiscoveredProfile, QuotaSnapshot } from '../usage/types'
 import type { AgentQuotaAPI, SessionAgent } from '../agentQuotaAPI'
 import type { TerminalAgent } from '../quotaStore'
 

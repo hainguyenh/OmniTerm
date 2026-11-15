@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { isMain } from './is-main.mjs'
+import { isIdeModulePath } from './ide-modules.mjs'
 
 export const DEFAULT_LIMITS = Object.freeze({
   '.ts': 400,
@@ -18,6 +19,9 @@ const IGNORED_DIRECTORIES = new Set([
   'node_modules', 'target', 'vendor', 'markdown-explorer',
 ])
 
+// Agent worktrees: full checkouts of other branches, checked in their own runs.
+const IGNORED_PATHS = new Set(['.claude/worktrees'])
+
 export function countLines(content) {
   if (content.length === 0) return 0
   const normalized = content.replaceAll('\r\n', '\n')
@@ -25,7 +29,7 @@ export function countLines(content) {
   return normalized.endsWith('\n') ? count - 1 : count
 }
 
-async function collectFiles(root, limits) {
+async function collectFiles(root, limits, skipPath) {
   const files = []
 
   async function walk(dir) {
@@ -33,6 +37,7 @@ async function collectFiles(root, limits) {
     for (const entry of entries) {
       if (entry.isDirectory() && IGNORED_DIRECTORIES.has(entry.name)) continue
       const fullPath = path.join(dir, entry.name)
+      if (skipPath(path.relative(root, fullPath))) continue
       if (entry.isDirectory()) await walk(fullPath)
       else if (entry.isFile() && Object.hasOwn(limits, path.extname(entry.name))) files.push(fullPath)
     }
@@ -42,9 +47,11 @@ async function collectFiles(root, limits) {
   return files.sort()
 }
 
-export async function checkLoc({ root = process.cwd(), limits = DEFAULT_LIMITS } = {}) {
+export async function checkLoc({ root = process.cwd(), limits = DEFAULT_LIMITS, ideModuleRoots } = {}) {
   const absoluteRoot = path.resolve(root)
-  const files = await collectFiles(absoluteRoot, limits)
+  const skipPath = (relativePath) =>
+    IGNORED_PATHS.has(relativePath.replaceAll(path.sep, '/')) || isIdeModulePath(relativePath, ideModuleRoots)
+  const files = await collectFiles(absoluteRoot, limits, skipPath)
   const violations = []
 
   for (const fullPath of files) {

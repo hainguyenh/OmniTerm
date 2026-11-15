@@ -77,7 +77,6 @@ pub fn defaults() -> Value {
         "ctrlEnter": "lf",
         "workspaces": [],
         "gitUtilEnabled": true,
-        "gitGraphEnabled": true,
     })
 }
 
@@ -132,6 +131,10 @@ pub async fn save_settings<R: Runtime>(app: AppHandle<R>, settings: Value) -> Re
     if !settings.is_object() {
         return Err("Settings must be an object.".to_string());
     }
+    // The built-in features' on/off state is written only by the Plugins dialog's own command: a
+    // window saving a stale whole-settings copy must not switch a feature back.
+    let mut settings = settings;
+    app_core::builtin_features::strip_patch(&mut settings);
 
     let merged = merge_shallow(&read_settings(&app), &settings);
     write_settings_raw(&app, merged)

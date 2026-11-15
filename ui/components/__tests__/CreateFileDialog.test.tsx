@@ -46,13 +46,13 @@ describe('CreateFileDialog', () => {
     expect(await screen.findByText('File name cannot contain slashes')).toBeInTheDocument()
   })
 
-  it('calls createTextFile and onCreated upon submission', async () => {
+  it('calls writeScript and onCreated upon submission', async () => {
     const onCreated = vi.fn()
     const onClose = vi.fn()
-    const createMock = vi.fn().mockResolvedValue('folder#1/src/newfile.ts')
+    const writeMock = vi.fn().mockResolvedValue(undefined)
     mockOmnitermAPI({
       workspace: {
-        createTextFile: createMock,
+        writeScript: writeMock,
       },
     })
 
@@ -70,7 +70,7 @@ describe('CreateFileDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
 
     await waitFor(() => {
-      expect(createMock).toHaveBeenCalledWith('ws#1', 'folder#1/src/newfile.ts')
+      expect(writeMock).toHaveBeenCalledWith('ws#1', 'folder#1/src/newfile.ts', '')
       expect(onCreated).toHaveBeenCalledWith('folder#1/src/newfile.ts', 'newfile.ts')
       expect(onClose).toHaveBeenCalled()
     })

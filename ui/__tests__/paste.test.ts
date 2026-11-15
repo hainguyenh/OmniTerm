@@ -34,7 +34,14 @@ describe("clipboardActionFor", () => {
     expect(clipboardActionFor(key("KeyV", { ctrlKey: true, shiftKey: true }), true)).toBe("paste");
   });
 
-  it("claims Ctrl+Shift+C for copy but never plain Ctrl+C", () => {
+  it("claims plain Ctrl+C for copy only while text is selected", () => {
+    expect(clipboardActionFor(key("KeyC", { ctrlKey: true }), false, false, false, true)).toBe("copy");
+    expect(clipboardActionFor(key("KeyC", { ctrlKey: true }), false, false, false, false)).toBeNull();
+    // macOS keeps Ctrl+C as SIGINT; Cmd+C is the copy binding there.
+    expect(clipboardActionFor(key("KeyC", { ctrlKey: true }), true, false, false, true)).toBeNull();
+  });
+
+  it("claims Ctrl+Shift+C for copy but never plain Ctrl+C without a selection", () => {
     expect(clipboardActionFor(key("KeyC", { ctrlKey: true, shiftKey: true }), false)).toBe("copy");
     // Plain Ctrl+C must stay SIGINT.
     expect(clipboardActionFor(key("KeyC", { ctrlKey: true }), false)).toBeNull();

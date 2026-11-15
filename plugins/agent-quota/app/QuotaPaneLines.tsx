@@ -1,7 +1,7 @@
 import { AlarmClock, ScanText, ShieldOff, SlidersHorizontal, Snowflake } from 'lucide-react'
 import { useRef } from 'react'
 
-import type { WindowKind } from '../src/types'
+import type { WindowKind } from './usage/types'
 
 import './agentQuota.css'
 import { QuotaOverridePopover } from './QuotaOverridePopover'

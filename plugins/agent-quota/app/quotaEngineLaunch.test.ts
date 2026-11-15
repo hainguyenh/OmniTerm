@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
 
 import { DEFAULT_QUOTA_CONFIG, type QuotaConfig } from './quotaConfig'

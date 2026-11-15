@@ -4,10 +4,9 @@ use super::*;
 
 /// Start the poller the first time the frontend asks for Always Awake, and never again.
 ///
-/// `run()` used to spawn this from `setup`, which made the feature a built-in: the loop ran on every
-/// launch whether or not the Always Awake plugin was installed. The frontend only calls `get_state`
-/// once the plugin has answered `alwaysAwake.info`, so gating the spawn here means a build without
-/// the plugin never polls, never reads the power configuration and never asserts anything.
+/// The loop is not spawned from `setup`: the frontend only calls `get_state` once
+/// `always_awake_info` says the built-in feature is switched on in Plugins, so while it is off the
+/// app never polls, never reads the power configuration and never asserts anything.
 pub(super) fn ensure_poller<R: Runtime>(app: &AppHandle<R>, state: &AlwaysAwakeState) {
     if state.poller_started.swap(true, Ordering::AcqRel) {
         return;

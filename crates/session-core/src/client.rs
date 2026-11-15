@@ -7,7 +7,7 @@ use session_protocol::{
     PROTOCOL_VERSION,
 };
 
-use crate::transport::{connect, read_frame, write_frame, BoxedStream};
+use crate::transport::{connect, read_frame, read_server_message, write_frame, BoxedStream};
 
 pub struct SessionSubscription {
     pub snapshot: AttachSnapshot,
@@ -17,7 +17,7 @@ pub struct SessionSubscription {
 
 impl SessionSubscription {
     pub async fn next(&mut self) -> Result<ServerMessage, String> {
-        read_frame(&mut *self.stream).await
+        read_server_message(&mut *self.stream).await
     }
 }
 
@@ -141,6 +141,7 @@ impl SessionDaemonClient {
             &ClientRequest::Attach {
                 client_id: self.client_id.clone(),
                 session_id,
+                binary_data: true,
             },
         )
         .await?;

@@ -56,7 +56,7 @@ function parseArgs(argv) {
 }
 
 /**
- * Mirror of `handle_reverse_call` in src-tauri/src/plugin_host_api.rs.
+ * Counterpart of `handle_reverse_call` in src-tauri/src/plugin_host_api.rs.
  *
  * Kept deliberately identical in what it *refuses*. A harness that were more permissive than the host
  * would certify a plugin that then failed in the app, which is worse than having no harness.

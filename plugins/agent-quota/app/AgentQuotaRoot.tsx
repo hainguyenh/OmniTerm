@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { QuotaConfig } from './quotaConfig'
 
@@ -27,14 +27,10 @@ export interface AgentQuotaRootProps {
   openSettings: () => void
 }
 
-/** The sidecar launches asynchronously, so presence is probed with back-off (as useBlurPlugin does). */
+/** The feature switch is read over IPC; an early failure is retried with back-off (as useBlurPlugin does). */
 const PROBE_DELAYS = [0, 500, 1_000, 2_000, 4_000]
-/**
- * Once present, re-checked on this slower cadence so the icon, engine, and any frozen agent all
- * follow the Plugin Manager immediately: enabling brings monitoring back, disabling stops the
- * engine and thaws everything it froze, instead of requiring a full app restart either way.
- */
-const AVAILABILITY_POLL_MS = 5_000
+
+const windowVisible = () => document.visibilityState !== 'hidden'
 
 /** Window event the `agentQuota` shortcut dispatches to toggle quick settings. */
 export const QUICK_SETTINGS_EVENT = 'omniterm:agent-quota'
@@ -62,30 +58,26 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       if (getQuotaState().available === present) return
       updateQuota((state) => ({ ...state, available: present }))
     }
-    // Once present, keep checking on the slow cadence — this is what notices the Plugin Manager
-    // disabling (or re-enabling) the plugin without requiring the user to restart the app.
-    const pollWhilePresent = () => {
-      void api.info().then((present) => {
-        if (cancelled) return
-        setAvailable(present)
-        timer = setTimeout(pollWhilePresent, AVAILABILITY_POLL_MS)
-      })
-    }
     const probe = (attempt: number) => {
       void api.info().then((present) => {
         if (cancelled) return
-        if (present) {
-          setAvailable(true)
-          timer = setTimeout(pollWhilePresent, AVAILABILITY_POLL_MS)
-        } else if (attempt + 1 < PROBE_DELAYS.length) {
-          timer = setTimeout(() => probe(attempt + 1), PROBE_DELAYS[attempt + 1])
-        }
+        if (present) setAvailable(true)
+        else if (attempt + 1 < PROBE_DELAYS.length) timer = setTimeout(() => probe(attempt + 1), PROBE_DELAYS[attempt + 1])
       })
     }
     probe(0)
+    // The Plugins dialog switching the built-in feature (in any window) is announced, so the icon,
+    // engine and any frozen agent follow it at once — disabling stops the engine and thaws what it
+    // froze — without polling while nothing changes.
+    const stopWatching = api.onPluginsChanged?.(() => {
+      void api.info().then((present) => {
+        if (!cancelled) setAvailable(present)
+      })
+    })
     return () => {
       cancelled = true
       clearTimeout(timer)
+      stopWatching?.()
     }
   }, [api])
 
@@ -93,6 +85,8 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
   useEffect(() => {
     const config = parseQuotaConfig(rawConfig)
     updateQuota((state) => ({ ...state, config }))
+    // Switched back on: run now rather than at the switched-off loop's next, distant tick.
+    if (config.enabled) engineRef.current?.poke()
   }, [rawConfig])
 
   useEffect(() => {
@@ -106,8 +100,14 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
       inlineProbe: (terminal) => probeUsageInline(terminal, LIVE_PROBE_IO),
       launchHold: { hold: (sessionId) => holdForLaunch(sessionId), release: (sessionId) => releaseLaunchHold(sessionId) },
       readScreen: readPaneScreen,
+      visible: windowVisible,
     })
     engineRef.current = engine
+    // Back on screen: bring the stood-still countdowns up to date at once.
+    const onVisibility = () => {
+      if (windowVisible()) engine.poke()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
     const stopLaunchWatch = onAgentLaunch((sessionId, agent) => {
       if (isMonitoredAgent(agent)) engine.noteLaunch(sessionId, agent)
     })
@@ -133,6 +133,7 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
     })
     engine.start()
     return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
       stopLaunchWatch()
       engine.stop()
       unregister()

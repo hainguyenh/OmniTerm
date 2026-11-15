@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config";
 
+import { ideAliases } from "./scripts/ide-aliases.mjs";
+
 export default defineConfig({
+  resolve: { alias: ideAliases },
   test: {
     globals: true,
     environment: "node",
@@ -34,6 +37,8 @@ export default defineConfig({
         "ui/main.tsx",
         "ui/testSetup.ts",
         "ui/testUtils.tsx",
+        // The IDE modules keep their own code style and are outside the JS coverage gate.
+        "ui/ide/**",
         "ui/assets/**",
         "ui/generated/**",
         "src-tauri/sidecar/plugin-host.cjs",

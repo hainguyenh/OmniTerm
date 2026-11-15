@@ -78,10 +78,6 @@ export function markPastedScript(term: Terminal): PastedScriptMarkup | null {
     if (armed && endsPendingBlock(data)) dispose()
   })
   disposables.push(input)
-
-  const onInterrupted = () => dispose()
-  window.addEventListener('omniterm:terminal-interrupted', onInterrupted)
-  disposables.push({ dispose: () => window.removeEventListener('omniterm:terminal-interrupted', onInterrupted) })
   queueMicrotask(() => { armed = true })
 
   return { dispose }

@@ -113,3 +113,25 @@ fn attached_snapshot_accepts_older_daemon_without_replay_metadata() {
     assert_eq!(snapshot.replay_available, None);
     assert_eq!(snapshot.replay_bytes, None);
 }
+
+#[test]
+fn attach_asks_for_binary_data_without_breaking_older_peers() {
+    // An older client never sends the field: the daemon keeps answering with JSON.
+    let older: ClientRequest =
+        serde_json::from_str(r#"{"kind":"attach","clientId":"c","sessionId":"s"}"#).unwrap();
+    assert_eq!(
+        older,
+        ClientRequest::Attach {
+            client_id: "c".into(),
+            session_id: "s".into(),
+            binary_data: false,
+        }
+    );
+    let current = serde_json::to_value(ClientRequest::Attach {
+        client_id: "c".into(),
+        session_id: "s".into(),
+        binary_data: true,
+    })
+    .unwrap();
+    assert_eq!(current["binaryData"], true);
+}

@@ -1,7 +1,7 @@
 import { Bot, CodeXml, Gem, Orbit, Sparkles, SquareTerminal } from 'lucide-react'
 import type React from 'react'
 
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 
 export type AgentBrand = AgentKind | 'opencode' | 'copilot' | 'agy' | 'gemini'
 

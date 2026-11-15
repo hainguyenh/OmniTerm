@@ -143,8 +143,8 @@ fn parse_manifest(bytes: &[u8]) -> Result<PackageManifest, String> {
     })
 }
 
-fn read_package_manifest<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
+fn read_package_manifest(
+    archive: &mut zip::ZipArchive<fs::File>,
 ) -> Result<PackageManifest, String> {
     if archive.len() > MAX_FILES {
         return Err(format!(
@@ -177,8 +177,8 @@ fn read_package_manifest<R: Read + std::io::Seek>(
     parse_manifest(&bytes)
 }
 
-fn extract_validated<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
+fn extract_validated(
+    archive: &mut zip::ZipArchive<fs::File>,
     destination: &Path,
 ) -> Result<(), String> {
     for index in 0..archive.len() {
@@ -218,8 +218,8 @@ fn installed_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
         .join("plugins"))
 }
 
-fn install_validated_archive<R: Read + std::io::Seek>(
-    archive: &mut zip::ZipArchive<R>,
+fn install_validated_archive(
+    archive: &mut zip::ZipArchive<fs::File>,
     plugins: &Path,
     manifest: &PackageManifest,
 ) -> Result<(), String> {
@@ -261,25 +261,16 @@ fn install_validated_archive<R: Read + std::io::Seek>(
 pub async fn install_plugin_package<R: Runtime>(
     app: AppHandle<R>,
     host: State<'_, PluginHost>,
-    data: Option<Vec<u8>>,
 ) -> Result<Option<PluginChange>, String> {
-    let archive_bytes = match data {
-        Some(bytes) => bytes,
-        None => {
-            let Some(file) = AsyncFileDialog::new()
-                .add_filter("OmniTerm plugin package", &["zip"])
-                .pick_file()
-                .await
-            else {
-                return Ok(None);
-            };
-            fs::read(file.path()).map_err(|error| error.to_string())?
-        }
+    let Some(file) = AsyncFileDialog::new()
+        .add_filter("OmniTerm plugin package", &["zip"])
+        .pick_file()
+        .await
+    else {
+        return Ok(None);
     };
-    if archive_bytes.len() as u64 > MAX_ARCHIVE_BYTES {
-        return Err("Plugin ZIP is too large (max 64 MB).".to_string());
-    }
-    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(archive_bytes))
+    let archive_file = fs::File::open(file.path()).map_err(|error| error.to_string())?;
+    let mut archive = zip::ZipArchive::new(archive_file)
         .map_err(|error| format!("Invalid plugin ZIP: {error}"))?;
     let manifest = read_package_manifest(&mut archive)?;
     let permissions = if manifest.permissions.is_empty() {
@@ -333,6 +324,7 @@ pub async fn remove_plugin<R: Runtime>(
     let _ = host.uninstall(id).await;
     fs::remove_dir_all(target)
         .map_err(|error| format!("Could not remove plugin files: {error}"))?;
+    crate::plugin_commands::notify_plugins_changed(&app);
     Ok(true)
 }
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { DashboardRow } from './profileDashboard'
 

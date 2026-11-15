@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
 
 import { DEFAULT_QUOTA_CONFIG, type QuotaConfig } from './quotaConfig'
 import { QuotaEngine } from './quotaEngine'
-import { getQuotaState, resetQuotaStore, setOverride, updateQuota } from './quotaStore'
+import { getQuotaNow, getQuotaState, resetQuotaStore, setOverride, updateQuota } from './quotaStore'
 
 const T0 = Date.UTC(2026, 8, 25, 3, 0)
 const RESET = T0 + 3_600_000
@@ -77,7 +77,7 @@ describe('QuotaEngine', () => {
     const profile = state.profiles['claude:c:\\p\\work']
     expect(profile).toMatchObject({ fetching: false, errorStreak: 0, history: [{ at: T0, usedPct: 40 }] })
     expect(profile.nextFetchAt - T0).toBe(280_000)
-    expect(state.now).toBe(T0)
+    expect(getQuotaNow()).toBe(T0)
   })
 
   it('ignores sessions not open here and does not read agents switched off', async () => {

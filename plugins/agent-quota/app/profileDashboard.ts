@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-import type { DiscoveredProfile, QuotaSnapshot } from '../src/types'
+import type { DiscoveredProfile, QuotaSnapshot } from './usage/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { HiddenProbeDeps } from './hiddenProfileProbe'
 import type { ProfileQuota, QuotaState, TerminalAgent } from './quotaStore'
@@ -109,7 +109,7 @@ let hiddenRun: Promise<unknown> = Promise.resolve()
 
 /**
  * Read inactive profiles in the hidden terminal (hiddenProfileProbe.ts). A profile it could not
- * start, or whose panel it could not read, falls back to the sidecar's background read; when that
+ * start, or whose panel it could not read, falls back to the native background read; when that
  * fails too, the hidden run's reason is the one shown.
  */
 async function readProfiles(rows: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {

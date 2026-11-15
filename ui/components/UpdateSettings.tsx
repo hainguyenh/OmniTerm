@@ -4,13 +4,19 @@
  * Opt-in update checking: the current state, the download/install actions, skipping a version, and the
  * startup-check toggle. Nothing here contacts a server until the user asks.
  *
+ * This used to be `AdvancedSettings`, one half of an "Advanced" tab it shared with the encrypted vault
+ * backup. That pairing was wrong: the backup only functions with a connection-manager plugin (it now
+ * lives beside that plugin in PluginManager), while checking for updates is ordinary app settings and
+ * belongs in plain sight under General. The tab itself is gone.
+ *
  * Backend-agnostic on purpose: everything goes through `window.omnitermAPI`, which is the Electron
  * typed commands exposed by src/omnitermAPI.ts.
  */
 
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Check, Download, Loader2, RotateCw, X } from 'lucide-react'
-import ToggleRow from './ToggleRow'
+import { useProject } from '../ide/platform/project'
+import { saveUpdateSource, type UpdateSourceChoice } from '../workbench/updater'
 import { Tooltip } from './Tooltip'
 
 export interface UpdateSettingsProps {
@@ -32,6 +38,8 @@ export default function UpdateSettings({
   setAppSettings,
   updateState,
   updateChecking,
+  installerChoiceOpen,
+  setInstallerChoiceOpen,
   checkForUpdates,
   skipThisVersion,
   clearSkippedVersion,
@@ -42,7 +50,12 @@ export default function UpdateSettings({
   // manual download flow below stays the only path, exactly as before.
   const [nativeReady, setNativeReady] = useState(false)
   const [nativeInstalling, setNativeInstalling] = useState(false)
-  const [nativeError, setNativeError] = useState<string | null>(null)
+  // Same setting as Settings › Updates › Update source (`general.updateSource`).
+  const storedSource = useProject((state) => state.settings?.general?.updateSource)
+  const updateSource: UpdateSourceChoice = storedSource === 'github' || storedSource === 'cnb' ? storedSource : 'auto'
+  const handleSourceChange = (choice: UpdateSourceChoice) => {
+    void saveUpdateSource(choice)
+  }
   useEffect(() => {
     let alive = true
     window.omnitermAPI?.updates?.nativeCheck?.()
@@ -52,22 +65,16 @@ export default function UpdateSettings({
   }, [])
   const runNativeInstall = async () => {
     setNativeInstalling(true)
-    try {
-      setNativeError(null)
-      await window.omnitermAPI.updates.nativeInstall()
-    } catch (error) {
-      setNativeError(error instanceof Error ? error.message : String(error))
-    } finally { setNativeInstalling(false) }
+    try { await window.omnitermAPI.updates.nativeInstall() } finally { setNativeInstalling(false) }
   }
   return (
-    <section
-      className="rounded-xl border border-theme-border/60 bg-theme-bg/30 p-4 flex flex-col gap-3.5 shadow-sm"
-      aria-label="Application Updates Preferences"
-    >
+    <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-bold text-theme-fg tracking-wide uppercase">
-          <RotateCw className="w-3.5 h-3.5 text-theme-accent" />
-          <span>Application Updates</span>
+        <div>
+          <h3 className="text-xs font-bold text-theme-fg uppercase tracking-wider">Application Updates</h3>
+          <p className="text-[11px] text-theme-dim mt-0.5 leading-relaxed">
+            Opt-in only — OmniTerm never contacts a server for updates unless you ask it to here, or switch on the startup check below.
+          </p>
         </div>
         {updateState?.updateAvailable && (
           <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-theme-success px-2 py-0.5 rounded-full border border-[#9ece6a]/30 bg-[#9ece6a]/10 flex-shrink-0">
@@ -77,178 +84,223 @@ export default function UpdateSettings({
         )}
       </div>
 
-      <p className="text-[11px] text-theme-dim -mt-1 leading-relaxed">
-        Opt-in only — OmniTerm never contacts a server for updates unless you ask it to here, or switch on the startup check below.
-      </p>
+      <div className="border-t border-theme-border pt-2">
+          {updateState?.updateAvailable ? (
+            <div className="rounded-xl bg-theme-accent/8 border border-[#9ece6a]/30 px-3 py-2.5 flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <Download className="w-4 h-4 text-theme-success flex-shrink-0" />
+                <span className="text-xs font-semibold text-theme-success">
+                  Update available — v{updateState.latest}
+                </span>
+              </div>
+              <p className="text-[11px] text-theme-fg leading-relaxed">
+                You're on v{updateState.current}. {updateState.isPortable ? 'Download the portable update.' : 'Download the installer.'}
+              </p>
 
-      {updateState?.updateAvailable ? (
-        <div className="rounded-xl bg-theme-accent/8 border border-[#9ece6a]/30 px-3 py-2.5 flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Download className="w-4 h-4 text-theme-success flex-shrink-0" />
-            <span className="text-xs font-semibold text-theme-success">
-              Update available — v{updateState.latest}
-            </span>
-          </div>
-          <p className="text-[11px] text-theme-fg leading-relaxed">
-            You're on v{updateState.current}. Downloads are sourced from the published GitHub release.
-          </p>
-
-          {updateState.downloadStatus && (
-            <div className="text-[11px] text-[var(--theme-accent)] font-semibold bg-theme-bg px-2 py-1 rounded border border-theme-border animate-pulse">
-              {updateState.downloadStatus}
-            </div>
-          )}
-
-          {nativeError && <p role="alert" className="max-w-[45ch] text-[11px] text-theme-error">{nativeError}</p>}
-          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-            {nativeReady && (
-              <Tooltip content="Install the signed update and relaunch OmniTerm" placement="bottom">
-                <button
-                  type="button"
-                  disabled={nativeInstalling || updateChecking}
-                  onClick={() => void runNativeInstall()}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg disabled:opacity-60"
-                >
-                  {nativeInstalling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                  Download & install
-                </button>
-              </Tooltip>
-            )}
-            {updateState.installerAssetUrl && (
-              <Tooltip content="Open the official installer download in your browser" placement="bottom">
-                <button
-                  type="button"
-                  disabled={updateChecking || nativeInstalling}
-                  onClick={() => handleDownloadInstaller(false)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60"
-                >
-                  <Download className="w-3 h-3" />
-                  Download installer
-                </button>
-              </Tooltip>
-            )}
-            {updateState.portableAssetUrl && (
-              <Tooltip content="Open the official portable download in your browser" placement="bottom">
-                <button
-                  type="button"
-                  disabled={updateChecking || nativeInstalling}
-                  onClick={handleDownloadPortable}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60"
-                >
-                  <Download className="w-3 h-3" />
-                  Download portable
-                </button>
-              </Tooltip>
-            )}
-            <button
-              type="button"
-              onClick={() => void window.omnitermAPI.updates.openReleasePage()}
-              className="text-[11px] text-theme-accent underline underline-offset-2 hover:text-theme-fg"
-            >
-              View on GitHub
-            </button>
-            <button
-              type="button"
-              onClick={skipThisVersion}
-              disabled={updateChecking || nativeInstalling}
-              className="text-[11px] text-theme-dim hover:text-theme-accent disabled:opacity-60"
-            >
-              Skip v{updateState.latest}
-            </button>
-          </div>
-          {!nativeReady && !updateState.installerAssetUrl && !updateState.portableAssetUrl && (
-            <p className="max-w-[45ch] text-[11px] text-theme-dim">No platform download was attached to this release. Open its GitHub page to review the available files.</p>
-          )}
-        </div>
-      ) : updateState?.error ? (
-        <div className="rounded-xl bg-theme-error/8 border border-[#f7768e]/30 px-3 py-2.5">
-          <p className="text-[11px] text-theme-error leading-relaxed">
-            Couldn't check for updates: {updateState.error}
-          </p>
-          <Tooltip content="Retry update check" placement="bottom">
-            <button
-              type="button"
-              onClick={checkForUpdates}
-              disabled={updateChecking}
-              className="relative mt-2 inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 transition-colors"
-            >
-              {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-              Retry
-              {updateState?.hasNewerVersion && (
-                <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-theme-accent ring-1 ring-[var(--theme-popup-bg)]" />
+              {updateState.downloadStatus && (
+                <div className="text-[11px] text-[var(--theme-accent)] font-semibold bg-theme-bg px-2 py-1 rounded border border-theme-border animate-pulse">
+                  {updateState.downloadStatus}
+                </div>
               )}
-            </button>
-          </Tooltip>
-        </div>
-      ) : (
-        <div className="flex flex-row items-center justify-between gap-3">
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-2 text-theme-fg">
-              {updateChecking ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin text-theme-accent" /><span className="text-xs">Checking…</span></>
-              ) : updateState?.latest ? (
-                <><Check className="w-3.5 h-3.5 text-theme-success" /><span className="text-xs">Up to date — v{updateState.current} (latest v{updateState.latest})</span></>
+
+              {installerChoiceOpen ? (
+                <div className="flex flex-col gap-2 p-2 bg-theme-bg rounded-lg border border-theme-border mt-1.5">
+                  <p className="text-[10px] text-theme-fg font-semibold">How would you like to install the update?</p>
+                  <div className="flex gap-2">
+                    <Tooltip content="Download update and launch installer immediately" placement="bottom">
+                      <button
+                        type="button"
+                        disabled={updateChecking}
+                        onClick={() => handleDownloadInstaller(true)}
+                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                      >
+                        Install now
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="Download update in background and install upon exiting" placement="bottom">
+                      <button
+                        type="button"
+                        disabled={updateChecking}
+                        onClick={() => handleDownloadInstaller(false)}
+                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent disabled:opacity-60 transition-colors"
+                      >
+                        On exit
+                      </button>
+                    </Tooltip>
+                  </div>
+                </div>
               ) : (
-                <><AlertTriangle className="w-3.5 h-3.5 text-theme-dim" /><span className="text-xs text-theme-dim">Not checked yet</span></>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {nativeReady ? (
+                    /* Signed build: the updater verifies and installs natively, then relaunches. */
+                    <Tooltip content="Verify, install and relaunch — no manual download" placement="bottom">
+                      <button
+                        type="button"
+                        disabled={nativeInstalling || updateChecking}
+                        onClick={() => void runNativeInstall()}
+                        className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                      >
+                        {nativeInstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        Download & install
+                      </button>
+                    </Tooltip>
+                  ) : (
+                    <>
+                  <Tooltip content={updateState.isPortable ? 'Download portable zip archive' : 'Install latest update'} placement="bottom">
+                    <button
+                      type="button"
+                      disabled={updateChecking}
+                      onClick={updateState.isPortable ? handleDownloadPortable : () => setInstallerChoiceOpen(true)}
+                      className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {updateState.isPortable ? 'Download update' : 'Install update'}
+                      <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-[#9ece6a]" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content={`Ignore notification for version ${updateState.latest}`} placement="bottom">
+                    <button
+                      type="button"
+                      disabled={updateChecking}
+                      onClick={skipThisVersion}
+                      className="inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent disabled:opacity-60 transition-colors"
+                    >
+                      Skip v{updateState.latest}
+                    </button>
+                  </Tooltip>
+                    </>
+                  )}
+                </div>
               )}
             </div>
-            {updateState?.lastCheckAt && !updateChecking && (
-              <p className="text-[10px] text-theme-dim">Last checked {new Date(updateState.lastCheckAt).toLocaleString()}</p>
-            )}
-          </div>
-          <Tooltip content="Check GitHub releases for updates" placement="bottom">
-            <button
-              type="button"
-              onClick={checkForUpdates}
-              disabled={updateChecking}
-              className="relative shrink-0 inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            >
-              {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
-              Check for updates
-              {updateState?.hasNewerVersion && (
-                <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-theme-accent ring-1 ring-[var(--theme-popup-bg)]" />
+          ) : updateState?.error ? (
+            <div className="rounded-xl bg-theme-error/8 border border-[#f7768e]/30 px-3 py-2.5">
+              <p className="text-[11px] text-theme-error leading-relaxed">
+                Couldn't check for updates: {updateState.error}
+              </p>
+              <Tooltip content="Retry update check" placement="bottom">
+                <button
+                  type="button"
+                  onClick={checkForUpdates}
+                  disabled={updateChecking}
+                  className="relative mt-2 inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 transition-colors"
+                >
+                  {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+                  Retry
+                  {updateState?.hasNewerVersion && (
+                    <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-theme-accent ring-1 ring-[var(--theme-popup-bg)]" />
+                  )}
+                </button>
+              </Tooltip>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2 text-theme-fg">
+                {updateChecking ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin text-theme-accent" /><span className="text-xs">Checking…</span></>
+                ) : updateState?.latest ? (
+                  <><Check className="w-3.5 h-3.5 text-theme-success" /><span className="text-xs">Up to date — v{updateState.current} (latest v{updateState.latest})</span></>
+                ) : (
+                  <><AlertTriangle className="w-3.5 h-3.5 text-theme-dim" /><span className="text-xs text-theme-dim">Not checked yet</span></>
+                )}
+              </div>
+              {updateState?.lastCheckAt && !updateChecking && (
+                <p className="text-[10px] text-theme-dim">Last checked {new Date(updateState.lastCheckAt).toLocaleString()}</p>
               )}
-            </button>
-          </Tooltip>
-        </div>
-      )}
+              <Tooltip content="Check GitHub releases for updates" placement="bottom">
+                <button
+                  type="button"
+                  onClick={checkForUpdates}
+                  disabled={updateChecking}
+                  className="relative inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                >
+                  {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+                  Check for updates
+                  {updateState?.hasNewerVersion && (
+                    <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-theme-accent ring-1 ring-[var(--theme-popup-bg)]" />
+                  )}
+                </button>
+              </Tooltip>
+            </div>
+          )}
 
-      {/* Skipped-version control */}
-      {updateState?.skippedVersion && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] text-theme-dim uppercase font-bold tracking-widest">Skipped version</label>
-          <div className="flex items-center gap-1.5">
-            <span className="flex-1 min-w-0 inline-flex items-center gap-1.5 text-xs text-theme-fg bg-theme-bg border border-theme-border rounded-lg py-1.5 px-2.5">
-              <Check className="w-3.5 h-3.5 text-theme-success flex-shrink-0" />
-              Skipping v{updateState.skippedVersion}
-            </span>
-            <Tooltip content="Clear skipped version — get notified again" placement="bottom">
-              <button
-                type="button"
-                onClick={clearSkippedVersion}
-                aria-label="Clear skipped version — get notified again"
-                className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-theme-bg border border-theme-border text-theme-error hover:border-[#f7768e] transition-colors"
+          {/* Skipped-version control: only shown when a version is currently skipped */}
+          {updateState?.skippedVersion && (
+            <div className="mt-3 pt-3 border-t border-theme-border">
+              <label className="text-[10px] text-theme-dim uppercase font-bold tracking-widest">Skipped version</label>
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="flex-1 min-w-0 inline-flex items-center gap-1.5 text-xs text-theme-fg bg-theme-bg border border-theme-border rounded-lg py-1.5 px-2.5">
+                  <Check className="w-3.5 h-3.5 text-theme-success flex-shrink-0" />
+                  Skipping v{updateState.skippedVersion}
+                </span>
+                <Tooltip content="Clear skipped version — get notified again" placement="bottom">
+                  <button
+                    type="button"
+                    onClick={clearSkippedVersion}
+                    aria-label="Clear skipped version — get notified again"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-theme-bg border border-theme-border text-theme-error hover:border-[#f7768e] transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          )}
+
+          {/* Update Source (Feature 39) */}
+          <div className="mt-3 pt-3 border-t border-theme-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <span
+                  className="text-[10px] text-theme-dim uppercase font-bold tracking-widest block"
+                  title="Select download source for release artifacts and updates"
+                >
+                  Update Source
+                </span>
+                <span className="text-[11px] text-theme-dim">
+                  Release channel used to fetch updates and release notes
+                </span>
+              </div>
+              <select
+                aria-label="Update source"
+                value={updateSource}
+                onChange={(e) => handleSourceChange(e.target.value as UpdateSourceChoice)}
+                className="text-xs bg-theme-bg border border-theme-border rounded-lg py-1 px-2.5 text-theme-fg hover:border-theme-accent focus:outline-none transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </Tooltip>
+                <option value="auto">Automatic</option>
+                <option value="github">GitHub Releases</option>
+                <option value="cnb">CNB (Asia)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Startup Check Control */}
+          <div className="mt-3 pt-3 border-t border-theme-border">
+            <div className="flex items-center justify-between">
+              <span
+                className="text-[10px] text-theme-dim uppercase font-bold tracking-widest"
+                title="Automatically check GitHub for a newer release when the app starts"
+              >Check on startup</span>
+              <Tooltip content="Toggle automatic update checking when OmniTerm launches" placement="left">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...appSettings, checkUpdatesOnStartup: !appSettings.checkUpdatesOnStartup }
+                    setAppSettings(next)
+                    window.omnitermAPI.settings.save(next)
+                  }}
+                  className={`w-14 h-6 rounded-lg border text-[11px] font-bold transition-colors ${
+                    appSettings.checkUpdatesOnStartup
+                      ? 'bg-theme-accent/15 border-theme-accent text-theme-accent'
+                      : 'bg-theme-bg border-theme-border text-theme-dim hover:text-theme-fg'
+                  }`}
+                >
+                  {appSettings.checkUpdatesOnStartup ? 'ON' : 'OFF'}
+                </button>
+              </Tooltip>
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Startup Check Control */}
-      <ToggleRow
-        label="Check on startup"
-        description="Automatically check GitHub for a newer release when OmniTerm starts."
-        checked={!!appSettings.checkUpdatesOnStartup}
-        onChange={() => {
-          const next = { ...appSettings, checkUpdatesOnStartup: !appSettings.checkUpdatesOnStartup }
-          setAppSettings(next)
-          window.omnitermAPI.settings.save(next)
-        }}
-        ariaLabel="Check on startup"
-        dataTestId="startup-check-toggle"
-      />
-    </section>
+      </div>
   )
 }

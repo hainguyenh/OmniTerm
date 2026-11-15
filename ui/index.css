@@ -16,7 +16,6 @@
   --theme-error: #f7768e;
   --theme-success: #9ece6a;
   --theme-overlay: rgba(15, 23, 42, 0.58);
-  --terminal-font-size: 14px;
 }
 
 /* ── Global layout ───────────────────────────────────────────────── */
@@ -51,6 +50,7 @@ html.win-window #root {
 html.win-window .app-window-rounded {
   border-radius: 8px;
 }
+
 /* ── Global scrollbars: thin, theme-colored, transparent track ── */
 *::-webkit-scrollbar {
   width: 6px;
@@ -152,20 +152,21 @@ html.win-window .app-window-rounded {
   --theme-selection: #33467c;
 }
 
-/* Force global font-family override */
-html,
-body,
-#root,
-button,
-input,
-select,
-textarea,
-kbd,
-span,
-div,
-p,
-a {
+/* Force global font-family override. The workbench is excluded: it follows the IDE design
+   tokens (Inter 13px UI, ui/ide/styles), which the UI mock uses too, instead of the terminal theme's font. */
+:is(html, body, #root, button, input, select, textarea, kbd, span, div, p, a):not([data-workbench], [data-workbench] *) {
   font-family: var(--theme-font-family, var(--theme-font-sans));
+}
+
+[data-workbench] {
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  line-height: 1.4;
+  color: var(--fg);
+}
+
+[data-workbench] :is(button, input, select, textarea) {
+  font-family: inherit;
 }
 
 .font-mono,
@@ -185,9 +186,7 @@ a {
  * `new Terminal({ fontFamily })`, so measurement and render can no longer drift apart.
  */
 .terminal-pane .xterm,
-.terminal-pane .xterm *,
-.launch-console-viewport,
-.launch-console-viewport * {
+.terminal-pane .xterm * {
   font-family: var(--pane-font-mono, var(--theme-font-mono)) !important;
 }
 
@@ -284,27 +283,22 @@ a {
 .bg-theme-card {
   background-color: var(--theme-card-bg) !important;
 }
+
 /* Ensure status bar at bottom matches sidebar background dynamic variable */
 .bg-\[\#1f2335\] {
   background-color: var(--theme-sidebar-bg) !important;
 }
-/* Fix input field readability in light themes (prevent white-on-white text) */
-input:not(.bg-transparent):not([class*="bg-transparent"]),
-select,
-textarea:not(.bg-transparent):not([class*="bg-transparent"]) {
+
+/* Fix input field readability in light themes (prevent white-on-white text). The workbench is
+   excluded: its fields draw their own frame (box-shadow) and background from the IDE tokens, which
+   these !important declarations would otherwise override. */
+:is(input, select, textarea):not([data-workbench] *) {
   color: var(--theme-fg) !important;
   background-color: var(--theme-bg) !important;
   border-color: var(--theme-border) !important;
 }
-input.bg-transparent,
-input[class*="bg-transparent"],
-textarea.bg-transparent,
-textarea[class*="bg-transparent"],
-.workspace-search input,
-.git-search input {
-  background: transparent !important;
-  background-color: transparent !important;
-}
+/* Dim AND italic: a placeholder is an example, not a value. Without the slant, a greyed-out
+   "192.168.1.1" reads as a host that is already filled in. */
 input::placeholder, select::placeholder, textarea::placeholder {
   color: var(--theme-dim) !important;
   font-style: italic;

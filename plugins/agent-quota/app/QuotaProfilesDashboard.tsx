@@ -1,7 +1,7 @@
 import { Users, X } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 
-import type { AgentKind, QuotaSnapshot, QuotaWindow } from '../src/types'
+import type { AgentKind, QuotaSnapshot, QuotaWindow } from './usage/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { ProfileAdvice } from './profileAdvisor'
 import type { DashboardRow } from './profileDashboard'

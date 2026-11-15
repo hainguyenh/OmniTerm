@@ -1,5 +1,4 @@
 import type { Terminal } from '@xterm/xterm'
-import { showPixelCopiedToast } from './pixelCopiedToast'
 import { findLinkOrPathInTerminal, isTerminalLinkModifierClick, type TerminalLinkMenuKind } from './terminalLinks'
 
 // The clipboard surface a pane already wires up — see `createTerminalClipboard`. The handler only
@@ -28,8 +27,6 @@ export interface CreateTerminalContextMenuArgs {
   /** Arms the post-contextmenu native-paste suppression window (also used by the terminal's
    *  own paste handler). */
   setSuppressPaste: () => void
-  /** Optional callback to notify when right-click copy succeeds. Defaults to showPixelCopiedToast. */
-  onCopyFeedback?: (x: number, y: number) => void
 }
 
 export interface TerminalContextMenuHandlers {
@@ -65,11 +62,6 @@ export const createTerminalContextMenu =
         typeof args.term.hasSelection === 'function' && args.term.hasSelection()
       if (hasSelection) {
         void args.clipboard.copySelection()
-        if (args.onCopyFeedback) {
-          args.onCopyFeedback(e.clientX, e.clientY)
-        } else {
-          showPixelCopiedToast(e.clientX, e.clientY)
-        }
       } else {
         // Chromium/xterm can dispatch a native paste after the context-menu gesture; the custom
         // route below is the single writer for right-click, so the native event must not duplicate.

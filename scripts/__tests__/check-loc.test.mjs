@@ -46,6 +46,18 @@ test('checkLoc has no legacy-baseline escape hatch', async () => {
   assert.deepEqual(result.violations.map((item) => item.path), ['legacy.tsx'])
 })
 
+test('checkLoc skips agent worktrees, which are checkouts of other branches', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'omniterm-loc-'))
+  await mkdir(path.join(root, '.claude', 'worktrees', 'agent-1', 'src'), { recursive: true })
+  await writeFile(path.join(root, '.claude', 'worktrees', 'agent-1', 'src', 'long.ts'), 'x\n'.repeat(401))
+  await mkdir(path.join(root, '.claude', 'skills'), { recursive: true })
+  await writeFile(path.join(root, '.claude', 'skills', 'long.ts'), 'x\n'.repeat(401))
+
+  const result = await checkLoc({ root, limits: { '.ts': 400 } })
+
+  assert.deepEqual(result.violations.map((item) => item.path), ['.claude/skills/long.ts'])
+})
+
 test('repository satisfies every configured LOC hard limit', async () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
   const result = await checkLoc({ root })

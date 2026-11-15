@@ -5,21 +5,27 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { maskRustNonCode, matchingBrace } from './rust-source-mask.mjs'
+import { isIdeModulePath } from './ide-modules.mjs'
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx']
 // Static/re-export imports, dynamic `import()`, and Vite worker entries. A worker module is reached
 // only through `new URL('./x.worker.ts', import.meta.url)`, never through an import statement.
 const IMPORT_PATTERN = /(?:import|export)\s+(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]|import\(\s*['"]([^'"]+)['"]\s*\)|new\s+URL\(\s*['"]([^'"]+)['"]\s*,\s*import\.meta\.url/g
 
+// IDE modules keep their own code style and are not part of this audit (see ide-modules.mjs).
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const isIdeModule = (full) => isIdeModulePath(path.relative(REPO_ROOT, full))
+
 function walk(dir, found = []) {
   if (!fs.existsSync(dir)) return found
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
+      if (isIdeModule(full)) continue
       if (!['node_modules', 'dist', 'coverage', 'target', '__tests__', 'markdown-explorer', 'vendor'].includes(entry.name)) walk(full, found)
       continue
     }
-    if (SOURCE_EXTENSIONS.includes(path.extname(entry.name)) && !/\.(?:test|spec)\.tsx?$/.test(entry.name)) {
+    if (!isIdeModule(full) && SOURCE_EXTENSIONS.includes(path.extname(entry.name)) && !/\.(?:test|spec)\.tsx?$/.test(entry.name)) {
       found.push(path.resolve(full))
     }
   }
@@ -31,6 +37,7 @@ function walkRust(dir, found = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
+      if (isIdeModule(full)) continue
       if (!['target', 'vendor', 'tests'].includes(entry.name)) walkRust(full, found)
       continue
     }
@@ -173,8 +180,11 @@ function invokedTauriCommands(source) {
 
 export function findUnreferencedTauriCommands({
   root = process.cwd(),
-  handlerFile = 'src-tauri/src/lib.rs',
+  handlerFile = 'src-tauri/src/invoke_handlers.rs',
   frontendRoots = ['ui'],
+  // Generated typed bindings of the IDE workbench frontend (ui/ide). Their callers sit in the
+  // IDE modules, which this audit skips, so the contract file itself is what counts as a caller.
+  bindingFiles = ['ui/ide/bindings.ts'],
 } = {}) {
   const absoluteRoot = path.resolve(root)
   const handlerPath = path.resolve(absoluteRoot, handlerFile)
@@ -191,6 +201,12 @@ export function findUnreferencedTauriCommands({
   const invoked = new Set()
   for (const file of frontendRoots.flatMap((sourceRoot) => walk(path.resolve(absoluteRoot, sourceRoot)))) {
     for (const command of invokedTauriCommands(fs.readFileSync(file, 'utf8'))) invoked.add(command)
+  }
+
+  for (const file of bindingFiles) {
+    const bindingPath = path.resolve(absoluteRoot, file)
+    if (!fs.existsSync(bindingPath)) continue
+    for (const match of fs.readFileSync(bindingPath, 'utf8').matchAll(/__TAURI_INVOKE(?:<[^>(]*>)?\(\s*["']([^"']+)["']/g)) invoked.add(match[1])
   }
 
   const relative = path.relative(absoluteRoot, handlerPath).replaceAll(path.sep, '/')
@@ -215,6 +231,7 @@ export function checkRepository(root = process.cwd()) {
       'ui/testUtils.tsx',
       'ui/vite-env.d.ts',
       'ui/editorSettings.d.ts',
+      'ui/workbenchSettings.d.ts',
       'contract/index.ts',
       ...pluginEntries,
     ],

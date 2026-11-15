@@ -50,12 +50,8 @@ function api(overrides: Record<string, unknown> = {}) {
     importFile: vi.fn(async () => null),
     ...((overrides.files as object) ?? {}),
   }
-  const updates = {
-    getVersion: vi.fn(async () => '0.1.15'),
-    ...((overrides.updates as object) ?? {}),
-  }
-  mockOmnitermAPI({ plugin, connections, files, updates })
-  return { plugin, connections, files, updates }
+  mockOmnitermAPI({ plugin, connections, files })
+  return { plugin, connections, files }
 }
 
 function setup({ activeSessionCount = 0, confirmations = [true], showAlert = vi.fn(async () => {}) } = {}) {
@@ -71,14 +67,27 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.restoreAllMocks())
 
 describe('PluginManager complete behavior', () => {
+  it('offers Installed and a Marketplace tab that is not available yet', async () => {
+    api()
+    setup()
+    await screen.findByText('Full Manager')
+    expect(screen.getByRole('tab', { name: 'Installed (4)' }).getAttribute('aria-selected')).toBe('true')
+    const marketplace = screen.getByRole('tab', { name: /Marketplace/ })
+    expect(marketplace.getAttribute('aria-disabled')).toBe('true')
+    expect(marketplace.getAttribute('aria-selected')).toBe('false')
+  })
+
   it('refreshes descriptors, summaries, errors, capabilities, and reports provider state', async () => {
     api()
     const x = setup()
     await screen.findByText('Full Manager')
-    expect(screen.getByText('4 installed')).toBeInTheDocument()
-    for (const feature of ['Integrated SSH', 'Native RDP', 'BAT launchers', 'open External', 'clipboard']) {
-      expect(screen.getAllByText(feature).length).toBeGreaterThan(0)
-    }
+    expect(screen.getByRole('tab', { name: 'Installed (4)' })).toBeInTheDocument()
+    // Each card names its package and the permissions it holds.
+    expect(screen.getByText(`${custom.id} · openExternal, clipboard`)).toBeInTheDocument()
+    expect(screen.getAllByText('Bundled').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Running').length).toBeGreaterThan(0)
+    expect(screen.getByText('Error')).toBeInTheDocument()
+    expect(screen.getByText('Incompatible')).toBeInTheDocument()
     expect(screen.getByText('broken')).toBeInTheDocument()
     expect(screen.getByText('Full provider')).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: 'Enable Old' })).toBeDisabled()
@@ -104,7 +113,7 @@ describe('PluginManager complete behavior', () => {
     const canceled = api()
     const x = setup()
     await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install ZIP'))
+    fireEvent.click(screen.getByText('Install from disk…'))
     await waitFor(() => expect(canceled.plugin.installPackage).toHaveBeenCalled())
     expect(x.showAlert).not.toHaveBeenCalled()
     x.unmount()
@@ -112,7 +121,7 @@ describe('PluginManager complete behavior', () => {
     const ready = api({ plugin: { installPackage: vi.fn(async () => ({ name: 'Ready', version: '2.0', restartRequired: false })) } })
     const readyView = setup()
     await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install ZIP'))
+    fireEvent.click(screen.getByText('Install from disk…'))
     await waitFor(() => expect(readyView.showAlert).toHaveBeenCalledWith(expect.stringContaining('ready to configure'), expect.anything()))
     expect(ready.plugin.list).toHaveBeenCalledTimes(2)
     readyView.unmount()
@@ -120,7 +129,7 @@ describe('PluginManager complete behavior', () => {
     api({ plugin: { installPackage: vi.fn(async () => ({ name: 'Restarted', version: '3.0', restartRequired: true })) } })
     const restart = setup({ confirmations: [true] })
     await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install ZIP'))
+    fireEvent.click(screen.getByText('Install from disk…'))
     await screen.findByText('Restart required to finish plugin changes.')
     fireEvent.click(screen.getByText('Restart now'))
     await waitFor(() => expect(window.omnitermAPI.plugin.restartApp).toHaveBeenCalled())
@@ -129,7 +138,7 @@ describe('PluginManager complete behavior', () => {
     api({ plugin: { installPackage: vi.fn(async () => { throw 'bad zip' }) } })
     const failed = setup()
     await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install ZIP'))
+    fireEvent.click(screen.getByText('Install from disk…'))
     await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not install plugin: bad zip', expect.anything()))
   })
 
@@ -279,62 +288,21 @@ describe('PluginManager complete behavior', () => {
     fireEvent.click(screen.getByText('Import metadata'))
     await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not import metadata: bad json', expect.anything()))
   })
+})
 
-  it('discovers release plugins and installs directly from release assets', async () => {
-    const originalFetch = global.fetch
-    const mockReleaseData = {
-      tag_name: 'v0.1.15',
-      assets: [
-        {
-          name: 'full-connection-manager-0.1.15.zip',
-          browser_download_url: 'https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.15/full-connection-manager-0.1.15.zip',
-          size: 1024 * 1024 * 2,
-        },
-        {
-          name: 'OmniTerm_0.1.15_x64-portable.zip',
-          browser_download_url: 'https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.15/portable.zip',
-          size: 1024 * 1024 * 50,
-        },
-      ],
-    }
-
-    const installMock = vi.fn(async () => ({ name: 'Full Manager', version: '0.1.15', restartRequired: false }))
-    api({
-      plugin: { installPackage: installMock },
-      updates: { getVersion: vi.fn(async () => '0.1.15') },
-    })
-
-    global.fetch = vi.fn(async (url: any) => {
-      if (String(url).includes('releases/tags/v0.1.15')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => mockReleaseData,
-        } as any
-      }
-      if (String(url).includes('full-connection-manager-0.1.15.zip')) {
-        return {
-          ok: true,
-          status: 200,
-          arrayBuffer: async () => new ArrayBuffer(8),
-        } as any
-      }
-      return { ok: false, status: 404 } as any
-    })
-
-    try {
-      const view = setup()
-      await screen.findByText('Release v0.1.15 Plugins')
-      expect(screen.getByText('full-connection-manager-0.1.15.zip')).toBeInTheDocument()
-      expect(screen.queryByText('OmniTerm_0.1.15_x64-portable.zip')).not.toBeInTheDocument()
-
-      fireEvent.click(screen.getByRole('button', { name: 'Download & Install' }))
-      await waitFor(() => expect(installMock).toHaveBeenCalled())
-      expect((installMock.mock.calls as any)[0][0]).toBeInstanceOf(Uint8Array)
-      await waitFor(() => expect(view.showAlert).toHaveBeenCalledWith(expect.stringContaining('ready to configure'), expect.anything()))
-      view.unmount()
-    } finally {
-      global.fetch = originalFetch
-    }
+describe('PluginManager cards', () => {
+  it('shows Configure only for enabled plugins that have a settings page', async () => {
+    api()
+    const configure = vi.fn()
+    const configureAction = vi.fn((id: string) => (id === full.id ? configure : undefined))
+    render(<PluginManager activeSessionCount={0} onProviderStatusChanged={vi.fn()} showAlert={vi.fn(async () => {})}
+      showConfirm={vi.fn(async () => true)} configureAction={configureAction} />)
+    await screen.findByText('Full Manager')
+    const links = screen.getAllByRole('button', { name: 'Configure' })
+    expect(links).toHaveLength(1)
+    fireEvent.click(links[0]!)
+    expect(configure).toHaveBeenCalled()
+    // A disabled plugin's page is not offered.
+    expect(configureAction).not.toHaveBeenCalledWith(custom.id)
   })
 })

@@ -21,6 +21,11 @@ export function agentBrandFor(agent?: string | null): AgentBrand | null {
 }
 
 /** "Claude Code · profile claude-work" — the tooltip text that stands in for a visible name. */
+/** "Claude Code": the display name of a brand. */
+export function agentLabel(brand: AgentBrand): string {
+  return AGENT_LABELS[brand]
+}
+
 export function agentTooltip(brand: AgentBrand, profileName?: string): string {
   const label = AGENT_LABELS[brand]
   return profileName && profileName.toLowerCase() !== brand ? `${label} · profile ${profileName}` : label

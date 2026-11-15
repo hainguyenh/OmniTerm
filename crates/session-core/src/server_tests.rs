@@ -174,6 +174,7 @@ async fn attach_on_missing_session_returns_error() {
         ClientRequest::Attach {
             client_id: "c".into(),
             session_id: "nope".into(),
+            binary_data: false,
         },
     )
     .await;
@@ -214,6 +215,7 @@ async fn attach_on_existing_session_returns_attached_with_replay() {
         &ClientRequest::Attach {
             client_id: "c2".into(),
             session_id: "s".into(),
+            binary_data: false,
         },
     )
     .await

@@ -20,16 +20,16 @@
  */
 import { useSyncExternalStore } from 'react'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { TerminalAgent } from './quotaStore'
 import type { DriveIO, OutputWatch } from './usageProbeCore'
 
 import { tapSessionOutput } from '../../../ui/tauriSessions'
 import { holdPaneInput, lastUserInputAt } from '../../../ui/utils/paneInputHold'
 import { readPaneScreen } from '../../../ui/utils/paneScreens'
-import { AGENT_PROBES, isBlockingScreen, MAX_SETTLE_MS, QUIET_MS, settleAndTrust, submitAndRead, waitForQuiet } from './usageProbeCore'
+import { AGENT_PROBES, isBlockingScreen, isLoginScreen, MAX_SETTLE_MS, QUIET_MS, settleAndTrust, submitAndRead, waitForQuiet } from './usageProbeCore'
 
-export { isBlockingScreen, isTrustScreen } from './usageProbeCore'
+export { isBlockingScreen, isLoginScreen, isTrustScreen } from './usageProbeCore'
 
 /** Only an agent this young is still at its empty prompt (or its resume picker). */
 export const PROBE_MAX_AGE_S = 30
@@ -127,10 +127,12 @@ export function isProbingUsage(sessionId: string): boolean {
  */
 export function canProbeInline(
   terminal: TerminalAgent,
-  io: Pick<ProbeIO, 'lastUserInputAt' | 'now'>,
+  io: Pick<ProbeIO, 'lastUserInputAt' | 'now'> & { screen?: (sessionId: string) => string[] | null },
   heldSinceLaunch = false,
 ): boolean {
   if (!Object.hasOwn(AGENT_PROBES, terminal.agent)) return false
+  const screen = io.screen?.(terminal.sessionId)
+  if (screen && isLoginScreen(screen)) return false
   const startedMs = terminal.startTime * 1000
   if (io.now() - startedMs > PROBE_MAX_AGE_S * 1000) return false
   if (heldSinceLaunch) return true
@@ -144,6 +146,7 @@ async function waitForUnblocked(io: ProbeIO, sessionId: string): Promise<number 
   while (io.now() - start < MAX_DIALOG_WAIT_MS) {
     const screen = io.screen(sessionId)
     if (!screen) return null
+    if (isLoginScreen(screen)) return null
     if (!isBlockingScreen(screen)) return io.now()
     await io.sleep(DIALOG_POLL_MS)
   }
@@ -152,8 +155,14 @@ async function waitForUnblocked(io: ProbeIO, sessionId: string): Promise<number 
 
 export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Promise<QuotaSnapshot | null> {
   const { sessionId } = terminal
+  const initialScreen = io.screen(sessionId)
+  if (initialScreen && isLoginScreen(initialScreen)) {
+    const adopted = takeLaunchHold(sessionId)
+    if (adopted) giveBack(io, sessionId, adopted)
+    return null
+  }
   const adopted = takeLaunchHold(sessionId)
-  if (!canProbeInline(terminal, io, adopted !== null) || !io.screen(sessionId)) {
+  if (!canProbeInline(terminal, io, adopted !== null) || !initialScreen) {
     if (adopted) giveBack(io, sessionId, adopted)
     return null
   }
@@ -171,6 +180,11 @@ export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Pr
   let unfreeze: (() => void) | null = freeze(adopted ?? undefined)
   try {
     const screen = await settleAndTrust(io, sessionId, watch)
+    if (isLoginScreen(screen)) {
+      unfreeze()
+      unfreeze = null
+      return null
+    }
     if (isBlockingScreen(screen)) {
       unfreeze()
       unfreeze = null
@@ -178,10 +192,15 @@ export async function probeUsageInline(terminal: TerminalAgent, io: ProbeIO): Pr
       const typed = io.lastUserInputAt(sessionId)
       // Keys typed after the picker closed went to the agent's prompt: the user has taken over.
       if (clearedAt === null || (typed !== undefined && typed > clearedAt)) return null
+      const freshScreen = io.screen(sessionId) ?? []
+      if (isLoginScreen(freshScreen)) return null
       unfreeze = freeze()
       await waitForQuiet(io, watch, QUIET_MS, MAX_SETTLE_MS)
-      if (isBlockingScreen(io.screen(sessionId) ?? [])) return null
+      const afterQuiet = io.screen(sessionId) ?? []
+      if (isBlockingScreen(afterQuiet) || isLoginScreen(afterQuiet)) return null
     }
+    const beforeSubmit = io.screen(sessionId) ?? []
+    if (isLoginScreen(beforeSubmit)) return null
     const parsed = await submitAndRead(probe, io, sessionId, watch)
     return parsed?.ok ? { windows: parsed.windows, fetchedAt: io.now(), source: 'cli' } : null
   } finally {

@@ -1,4 +1,5 @@
 import { withPreviewCsp } from './htmlPreviewCsp'
+import './preview.css'
 
 /**
  * Static rendering of an HTML file.

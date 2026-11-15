@@ -32,7 +32,8 @@ describe('AgentQuotaSettings', () => {
     const save = liveSave()
     render(<AgentQuotaSettings />)
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('switch', { name: 'Pin Agent Quota to the activity bar' }))
+    // Seeded pinned only; "Hidden" clears the pin in the draft.
+    fireEvent.change(screen.getByRole('combobox', { name: 'Agent quota display' }), { target: { value: 'hidden' } })
     expect(save).not.toHaveBeenCalled()
     expect(getQuotaState().config.pinned).toBe(true)
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
@@ -80,7 +81,7 @@ describe('AgentQuotaSettings', () => {
     seed()
     liveSave()
     render(<AgentQuotaSettings />)
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Agent Quota' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Enable Agent Quota' }))
     expect(screen.queryByRole('region', { name: 'Claude Code quota settings' })).toBeNull()
     expect(getQuotaState().config.enabled).toBe(true) // not applied yet
     apply()

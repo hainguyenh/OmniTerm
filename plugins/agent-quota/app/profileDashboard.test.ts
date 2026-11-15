@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentQuotaAPI } from './agentQuotaAPI'
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 
 import { dashboardRows, fetchAllMissingProfiles, getProfileDashboard, resetProfileDashboard, setDashboardOpen } from './profileDashboard'
 import { getQuotaState, resetQuotaStore } from './quotaStore'

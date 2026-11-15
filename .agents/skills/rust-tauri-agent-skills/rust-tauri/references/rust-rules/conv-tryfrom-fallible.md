@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Notes
 
-- Implement `TryFrom`, not `TryInto`; the blanket impl provides `TryInto` automatically (mirrors the `From`/`Into` relationship).
+- Implement `TryFrom`, not `TryInto`; the blanket impl provides `TryInto` automatically (parallels the `From`/`Into` relationship).
 - Use a concrete error type, not `String` or `Box<dyn Error>`, so callers can match on it.
 - When the conversion is truly infallible, implement `From` instead.
 

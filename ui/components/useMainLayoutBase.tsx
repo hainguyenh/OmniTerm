@@ -1,32 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
 import type { ActivityView } from './ActivityBar'
 import type { WorkspaceConnectionTarget } from './WorkspacePanel'
 import { useDialog } from '../hooks/useDialog'
-import { useSplitRatios } from '../hooks/useSplitRatios'
-import { useUpdateActions } from '../hooks/useUpdateActions'
 import { openNewSession } from '../newSession'
 import { loadShellOptions, pickShell, type ShellOption } from '../shellOptions'
 import { upsertWorkspaceConnection } from '../utils/workspaceConnections'
 import { diag } from '../diag'
-import { DEFAULT_SHORTCUTS, MAX_PLANES, type MainLayoutProps } from './mainLayoutShared'
-import { useViewGroups } from '../hooks/useViewGroups'
+import { MAX_PLANES, type MainLayoutProps } from './mainLayoutShared'
 import { useCustomArt } from '../hooks/useCustomArt'
-import { visibleTabsForGroup } from '../viewGroups'
-import { paneOrder } from '../paneLayout'
+import { singleViewGroup } from '../viewGroups'
 import { decodeWorkspaceSelection, isSelectionLive, resolveNewSessionWorkspace } from '../utils/workspaceSelection'
+import { readStoredSelection, storeSelection } from '../platform/workspaceStore'
 import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 export function useMainLayoutBase({
-  appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, settingsOpen,
-  setSettingsOpen, updateState, setUpdateState, themes = [currentTheme], zoomFactor,
-  onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onToolbarActionsChange,
+  appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, themes = [currentTheme], zoomFactor,
+  onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
   onSettingsReload, chromeHidden = false,
 }: MainLayoutProps) {
   const handleConnectRef = useRef<(connection: Connection) => void>(() => undefined)
   const appSettingsRef = useRef(appSettings)
   appSettingsRef.current = appSettings
   const shellOptionsRef = useRef<ShellOption[]>([])
-  const workspaceCatalog = Object.assign(useWorkspaceCatalog(), { onToolbarActionsChange })
+  const workspaceCatalog = useWorkspaceCatalog()
   const { selectedWorkspaceId } = workspaceCatalog
   const requestNewSession = useCallback((requestedShell?: string, requestedWorkspaceId?: string | null, requestedCwd?: string | null, requestedCommand?: string | null) => {
       const shell = requestedShell ?? pickShell(shellOptionsRef.current, appSettingsRef.current.defaultShell);
@@ -38,7 +34,7 @@ export function useMainLayoutBase({
           }, null, null, requestedCwd ?? null, requestedCommand ?? null).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
           return
       }
-      const lastUsed = (() => { try { return localStorage.getItem('omniterm:last-workspace') } catch { return null } })();
+      const lastUsed = readStoredSelection();
       // Explicit arg wins (including an explicit null = forced home); otherwise default setting,
       // then last-used, then home. Stale selections fall through instead of failing the launch.
       const workspaceId = resolveNewSessionWorkspace(
@@ -51,21 +47,32 @@ export function useMainLayoutBase({
       const targetWorkspaceId = selection?.workspaceId ?? null
       const folderId = selection?.folderId ?? null
       void openNewSession(shell, (conn) => {
-          try {
-              if (targetWorkspaceId) localStorage.setItem('omniterm:last-workspace', workspaceId ?? targetWorkspaceId)
-              else localStorage.removeItem('omniterm:last-workspace')
-          } catch { /* storage is optional */ }
+          storeSelection(targetWorkspaceId ? workspaceId ?? targetWorkspaceId : null)
           handleConnectRef.current({ ...(conn as Connection), workspaceId: targetWorkspaceId ?? undefined })
       }, targetWorkspaceId, folderId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
   }, [workspaceCatalog.workspaces])
   const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
   const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
+  // Which connection provider plugin is on is read again whenever the settings change (the Settings
+  // window enables and disables plugins) and when this window gets focus back.
   useEffect(() => {
-      Promise.all([window.omnitermAPI.plugin.list(), window.omnitermAPI.plugin.connectionCapabilities()])
-          .then(([plugins, capabilities]) => {
-              setHasConnectionProvider(plugins.some(p => p.selectedConnectionProvider && p.enabled));
-              setConnectionCapabilities(capabilities);
-          }).catch(diag.error);
+      let cancelled = false;
+      const read = () => {
+          Promise.all([window.omnitermAPI.plugin.list(), window.omnitermAPI.plugin.connectionCapabilities()])
+              .then(([plugins, capabilities]) => {
+                  if (cancelled) return;
+                  setHasConnectionProvider(plugins.some(p => p.selectedConnectionProvider && p.enabled));
+                  setConnectionCapabilities(capabilities);
+              }).catch(diag.error);
+      };
+      read();
+      const stopSettings = window.omnitermAPI.settings.onChanged(read);
+      window.addEventListener('focus', read);
+      return () => {
+          cancelled = true;
+          stopSettings();
+          window.removeEventListener('focus', read);
+      };
   }, []);
   const [activeTabs, setActiveTabs] = useState<{
       id: string;
@@ -78,36 +85,14 @@ export function useMainLayoutBase({
   const [focusedPane, setFocusedPane] = useState(0);
   /** Animation window (ms) for the reattach focus-ring pulse; slightly past the CSS 600 ms. */
   const PULSE_CLEAR_MS = 700;
-  const [fullscreenPane, setFullscreenPane] = useState<number | null>(null)
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFullscreenPane(null)
-    }
-    window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
   const activeTabId = panes[focusedPane] ?? null;
-  const { viewGroups, activeGroupId, tabGroups, setTabGroups, switchViewGroup, createNewViewGroup, restoreGroups } = useViewGroups({
-      layoutMode, setLayoutMode, panes, setPanes, focusedPane, setFocusedPane, activeTabs,
-  })
-  const visibleTabsUnsorted = visibleTabsForGroup(activeTabs, tabGroups, activeGroupId)
-  const currentPaneOrder = paneOrder(layoutMode, appSettings.split3Style, appSettings.split2Style)
-  const visibleTabs = [...visibleTabsUnsorted].sort((a, b) => {
-    const idxA = panes.findIndex((p, i) => p === a.id && i < layoutMode)
-    const idxB = panes.findIndex((p, i) => p === b.id && i < layoutMode)
-    if (idxA !== -1 && idxB !== -1) return currentPaneOrder.indexOf(idxA) - currentPaneOrder.indexOf(idxB)
-    if (idxA !== -1) return -1
-    if (idxB !== -1) return 1
-    return 0
-  })
+  // One pane grid per workspace; snapshots still carry it as a single group (see viewGroups.ts).
+  const viewGroups = useMemo(() => [singleViewGroup(layoutMode, panes, focusedPane)], [layoutMode, panes, focusedPane])
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; tabId: string } | null>(null);
   const [shellMenu, setShellMenu] = useState<{ x: number; y: number } | null>(null);
   const [pendingCloseTabIds, setPendingCloseTabIds] = useState<string[] | null>(null);
   const skipCloseConfirmRef = useRef(appSettings.skipTerminalCloseConfirm ?? false);
   skipCloseConfirmRef.current = appSettings.skipTerminalCloseConfirm ?? false;
-  const [panePicker, setPanePicker] = useState<number | null>(null);
-  const [panePickerAnchor, setPanePickerAnchor] = useState<DOMRect | null>(null);
-  const panePickerRef = useRef<HTMLDivElement>(null);
-  const [dragPane, setDragPane] = useState<number | null>(null);
   const [statuses, setStatuses] = useState<Record<string, SessionStatus>>({});
   const [reconnectKeys, setReconnectKeys] = useState<Record<string, number>>({});
   const [latencies, setLatencies] = useState<Record<string, number | null>>({});
@@ -233,56 +218,7 @@ export function useMainLayoutBase({
       wsConnFormRef.current = target.workspaceId;
       setConnFormOpen(true);
   };
-  const [recordingAction, setRecordingAction] = useState<string | null>(null);
   const { dialogState, showAlert, showConfirm } = useDialog();
-  useEffect(() => {
-      if (!recordingAction)
-          return;
-      const handleRecordKey = (e: KeyboardEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (['control', 'shift', 'alt', 'meta'].includes(e.key.toLowerCase())) {
-              return;
-          }
-          const parts: string[] = [];
-          if (e.ctrlKey || e.metaKey)
-              parts.push('Ctrl');
-          if (e.shiftKey)
-              parts.push('Shift');
-          if (e.altKey)
-              parts.push('Alt');
-          let keyName = e.key;
-          if (keyName === ' ')
-              keyName = 'Space';
-          if (keyName.length === 1) {
-              keyName = keyName.toUpperCase();
-          }
-          parts.push(keyName);
-          const combo = parts.join('+');
-          const lowerCombo = combo.toLowerCase();
-          if (lowerCombo === 'ctrl+r' || lowerCombo === 'ctrl+f5') {
-              showAlert('Ctrl+R and Ctrl+F5 are native Chromium shortcuts and cannot be changed.', { title: 'Reserved Shortcut', tone: 'warning' });
-              setRecordingAction(null);
-              return;
-          }
-          const currentShortcuts = appSettings.shortcuts || DEFAULT_SHORTCUTS;
-          const updated = {
-              ...currentShortcuts,
-              [recordingAction]: combo
-          };
-          const nextSettings = {
-              ...appSettings,
-              shortcuts: updated
-          };
-          setAppSettings(nextSettings);
-          window.omnitermAPI.settings.save(nextSettings);
-          setRecordingAction(null);
-      };
-      window.addEventListener('keydown', handleRecordKey, true);
-      return () => {
-          window.removeEventListener('keydown', handleRecordKey, true);
-      };
-  }, [recordingAction, appSettings, setAppSettings]);
   const [dataMenuOpen, setDataMenuOpen] = useState(false);
   const dataMenuRef = useRef<HTMLDivElement>(null);
   const dataMenuBtnRef = useRef<HTMLButtonElement>(null);
@@ -304,16 +240,28 @@ export function useMainLayoutBase({
   useEffect(() => {
       let unsubscribe: (() => void) | null = null;
       let cancelled = false;
-      void window.omnitermAPI.plugin.invoke('alwaysAwake.info')
-          .then((info) => {
-              if (cancelled || !info) return;
-              setAlwaysAwakeAvailable(true);
-              void window.omnitermAPI.alwaysAwake.getState().then(setAlwaysAwake).catch(diag.error);
-              unsubscribe = window.omnitermAPI.alwaysAwake.onState(setAlwaysAwake);
-          })
-          .catch(diag.error);
+      // Follows the built-in feature's switch in the Plugins dialog (in any window).
+      const sync = () => {
+          void window.omnitermAPI.alwaysAwake.info()
+              .then((on) => {
+                  if (cancelled) return;
+                  setAlwaysAwakeAvailable(on);
+                  if (!on) {
+                      unsubscribe?.();
+                      unsubscribe = null;
+                      setAlwaysAwakeOpen(false);
+                      return;
+                  }
+                  void window.omnitermAPI.alwaysAwake.getState().then(setAlwaysAwake).catch(diag.error);
+                  unsubscribe ??= window.omnitermAPI.alwaysAwake.onState(setAlwaysAwake);
+              })
+              .catch(diag.error);
+      };
+      sync();
+      const stopWatching = window.omnitermAPI.plugin?.onChanged?.(sync);
       return () => {
           cancelled = true;
+          stopWatching?.();
           unsubscribe?.();
       };
   }, []);
@@ -337,7 +285,7 @@ export function useMainLayoutBase({
           sidebarWidthRef.current = w;
       }
       const savedView = localStorage.getItem('cc.activeView');
-      if (savedView === 'workspace' || savedView === 'files' || savedView === 'bookmarks' || savedView === 'git') {
+      if (savedView === 'workspace' || savedView === 'sessions' || savedView === 'files' || savedView === 'bookmarks') {
           setActiveView(savedView);
           lastViewRef.current = savedView;
       }
@@ -369,19 +317,13 @@ export function useMainLayoutBase({
       const handleCommandPalette = () => {
           setCommandPaletteOpen(true);
       };
-      const handleOpenGit = () => {
-          setActiveView('git');
-          localStorage.setItem('cc.activeView', 'git');
-      };
       window.addEventListener('omniterm:new-session', handleNewSession);
       window.addEventListener('omniterm:toggle-sidebar', handleToggleSidebar);
       window.addEventListener('omniterm:command-palette', handleCommandPalette);
-      window.addEventListener('omniterm:open-git', handleOpenGit);
       return () => {
           window.removeEventListener('omniterm:new-session', handleNewSession);
           window.removeEventListener('omniterm:toggle-sidebar', handleToggleSidebar);
           window.removeEventListener('omniterm:command-palette', handleCommandPalette);
-          window.removeEventListener('omniterm:open-git', handleOpenGit);
       };
   }, [requestNewSession]);
   const handleResizeDragStart = useCallback((e: React.MouseEvent) => {
@@ -423,11 +365,6 @@ export function useMainLayoutBase({
       revealNonce.current += 1;
       setRevealRequest({ workspaceId: editor.workspaceId, path: editor.script.id, nonce: revealNonce.current });
   }, [editorTabs, handleViewChange]);
-  const aboutOpen = settingsOpen; const setAboutOpen = setSettingsOpen;
-  const {
-    updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen,
-    checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion,
-  } = useUpdateActions({ updateState, setUpdateState, showAlert });
   useEffect(() => {
       void loadShellOptions().then(opts => {
           shellOptionsRef.current = opts;
@@ -465,7 +402,6 @@ export function useMainLayoutBase({
       window.addEventListener('mousedown', onClick);
       return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onClick); };
   }, [dataMenuOpen]);
-  const [splitRatios, setSplitRatios, persistRatios] = useSplitRatios(appSettings, setAppSettings);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
   const handleSaveConnection = async (conn: Connection) => {
       const wsId = wsConnFormRef.current;
@@ -490,5 +426,5 @@ export function useMainLayoutBase({
           await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
       }
   };
-  return { ...workspaceCatalog, chromeHidden, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, settingsOpen, setSettingsOpen, updateState, setUpdateState, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, visibleTabs, setActiveTabs, tabGroups, setTabGroups, viewGroups, activeGroupId, switchViewGroup, createNewViewGroup, restoreGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, fullscreenPane, setFullscreenPane, pulsePaneId, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, panePicker, setPanePicker, panePickerAnchor, setPanePickerAnchor, panePickerRef, dragPane, setDragPane, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, aboutOpen, setAboutOpen, updateChecking, setUpdateChecking, installerChoiceOpen, setInstallerChoiceOpen, splitRatios, setSplitRatios, persistRatios, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
+  return { ...workspaceCatalog, chromeHidden, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, setActiveTabs, viewGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, pulsePaneId, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
 }

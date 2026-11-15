@@ -25,6 +25,7 @@ import { createWorkspaceAPI } from './workspaceAPI'
 import { createTempNotesAPI } from './tempNotesAPI'
 import { createConnectAPI } from './omnitermAPIConnect'
 import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport } from './utils/attachmentTypes'
+import { scanPaneAgents } from './utils/paneAgentScan'
 import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
 import type { DetectedPaneAgent } from './utils/agentSessionDetector'
 
@@ -94,7 +95,7 @@ function createTauriAPI(): any {
   let zoomFactor = 1
 
   const updates = {
-    ...createUpdateAPI(() => invoke<string>('get_version'), url => invoke<void>('open_update_release_link', { url })),
+    ...createUpdateAPI(() => invoke<string>('get_version')),
     // Native signed-update path (tauri-plugin-updater). Absent config in dev builds resolves to
     // `{ available: false, reason: 'updater-disabled' }` instead of an error.
     nativeCheck: () => invoke<{ available: boolean; reason?: string; version?: string }>('check_for_native_update'),
@@ -109,9 +110,11 @@ function createTauriAPI(): any {
 
     plugin: {
       available: () => invoke<boolean>('plugin_available').catch(() => false),
-      list: () => invoke<any[]>('plugin_list').catch(() => []),
+      list: () => invoke<any[]>('omni_plugin_list').catch(() => []),
+      /** Ids of the IDE plugins the app ships (listed as built in by the Plugins dialog). */
+      builtinIds: () => invoke<string[]>('builtin_plugin_ids').catch(() => [] as string[]),
       setEnabled: (id: string, enabled: boolean) =>
-        invoke<any>('plugin_set_enabled', { id, enabled }).catch(() => null),
+        invoke<any>('omni_plugin_set_enabled', { id, enabled }).catch(() => null),
       selectConnectionProvider: (id: string | null) =>
         invoke<any[]>('plugin_select_connection_provider', { id }),
       connectionCapabilities: () =>
@@ -120,12 +123,11 @@ function createTauriAPI(): any {
       invoke: (method: string, ...args: unknown[]) =>
         invoke<unknown>('plugin_invoke', { method, args }).catch(() => null),
       authGate: () => invoke<boolean>('plugin_auth_gate').catch(() => true),
-      installPackage: (data?: number[] | Uint8Array) =>
-        invoke<any>('install_plugin_package', {
-          data: data ? Array.from(data) : undefined,
-        }),
+      installPackage: () => invoke<any>('install_plugin_package'),
       remove: (id: string) => invoke<boolean>('remove_plugin', { id }),
       restartApp: () => invoke<void>('restart_app'),
+      /** A Node plugin was enabled, disabled or removed (in any window). */
+      onChanged: (callback: () => void) => onEvent<unknown>('omniterm://plugins-changed', () => callback()),
     },
 
     alwaysAwake: createAlwaysAwakeAPI(),
@@ -235,16 +237,8 @@ function createTauriAPI(): any {
         invoke<void>('open_in_system', { path }).catch((e) => {
           diag.warn('[omnitermAPI] open_in_system failed', e)
         }),
-      openUrl: (url: string) =>
-        invoke<void>('open_url', { url }).catch((e) => {
-          diag.warn('[omnitermAPI] open_url failed', e)
-        }),
       setZoomFactor: (factor: number) => {
         zoomFactor = factor
-        if (factor === 1) {
-          document.body.style.zoom = ''
-          document.documentElement.style.zoom = ''
-        }
         invoke('set_webview_zoom', { factor }).catch(() => {
           document.body.style.zoom = String(factor)
         })
@@ -354,7 +348,9 @@ function createTauriAPI(): any {
     // terminal output or a renderer-supplied guess. Shared with the Agent Quota plugin, which is why
     // this command is always registered, whether or not that plugin is enabled.
     agentSessions: {
-      detect: () => invoke<DetectedPaneAgent[]>('agent_quota_detect').catch(() => []),
+      detect: () => scanPaneAgents()
+        .then((rows) => (Array.isArray(rows) ? (rows as DetectedPaneAgent[]) : []))
+        .catch(() => []),
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) =>
         invoke<string | null>('resolve_claude_session', { profileDir, cwd, sinceEpochSecs }).catch(() => null),
       resolveModel: (agent: string, profileDir?: string, cwd?: string) =>

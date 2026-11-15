@@ -4,7 +4,7 @@
 
 ## Why It Matters
 
-`AsMut<T>` is the mutable mirror of `AsRef<T>`. Accepting `impl AsMut<[u8]>` instead of `&mut Vec<u8>` lets callers pass `&mut Vec<u8>`, `&mut [u8]`, or `&mut [u8; N]` arrays without any conversion overhead. This widens the function's usefulness without changing its implementation or runtime cost. Reserve it for genuinely generic write targets — not every `&mut T` parameter needs this treatment.
+`AsMut<T>` is the mutable counterpart of `AsRef<T>`. Accepting `impl AsMut<[u8]>` instead of `&mut Vec<u8>` lets callers pass `&mut Vec<u8>`, `&mut [u8]`, or `&mut [u8; N]` arrays without any conversion overhead. This widens the function's usefulness without changing its implementation or runtime cost. Reserve it for genuinely generic write targets — not every `&mut T` parameter needs this treatment.
 
 ## Bad
 

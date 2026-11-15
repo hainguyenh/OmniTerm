@@ -163,3 +163,4 @@ pub(super) fn setup() -> (
     };
     (app, workspace_root, paths)
 }
+

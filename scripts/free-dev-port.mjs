@@ -27,7 +27,7 @@ const WINDOWS = process.platform === 'win32'
 /**
  * Spawn one command, portably.
  *
- * Mirrors `scripts/pre-push-check.mjs`: on Windows the same DEP0190 trap applies, so we join the
+ * Matches `scripts/pre-push-check.mjs`: on Windows the same DEP0190 trap applies, so we join the
  * command line and go through a shell; elsewhere we pass an args array with no shell. Everything
  * here is built from literals (no user input), so the Windows join is safe.
  */

@@ -15,7 +15,6 @@ function makeHandler(overrides: {
   clipboard?: { copySelection: () => void; paste: () => void }
   setLinkMenu?: (state: { x: number; y: number; kind: 'url' | 'path'; text: string }) => void
   setSuppressPaste?: () => void
-  onCopyFeedback?: (x: number, y: number) => void
 } = {}) {
   let suppressCalls = 0
   const suppress = () => { suppressCalls += 1 }
@@ -61,7 +60,6 @@ function makeHandler(overrides: {
     clipboard,
     setLinkMenu,
     setSuppressPaste: overrides.setSuppressPaste ?? suppress,
-    onCopyFeedback: overrides.onCopyFeedback,
   })
   return {
     onContextMenu,
@@ -176,19 +174,16 @@ describe('createTerminalContextMenu — onContextMenu (paste-fallback)', () => {
 
   it('copies selection when the right-click has a selection (no link detection runs)', () => {
     const clipboard = { copySelection: vi.fn(), paste: vi.fn() }
-    const onCopyFeedback = vi.fn()
     const { onContextMenu, setLinkMenu } = makeHandler({
       clipboard,
       term: { hasSelection: () => true } as Partial<Terminal>,
-      onCopyFeedback,
     })
 
     // Click anywhere — selection does not depend on detection since the link path is gone.
-    onContextMenu(click({ clientX: 300, clientY: 42 }))
+    onContextMenu(click({ clientX: 300, clientY: 6 }))
 
     expect(setLinkMenu).not.toHaveBeenCalled()
     expect(clipboard.copySelection).toHaveBeenCalled()
-    expect(onCopyFeedback).toHaveBeenCalledWith(300, 42)
     expect(clipboard.paste).not.toHaveBeenCalled()
   })
 

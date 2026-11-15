@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mockOmnitermAPI } from '../../testUtils'
 import GeneralSettings from '../GeneralSettings'
@@ -16,17 +16,13 @@ beforeEach(() => {
 })
 
 describe('GeneralSettings', () => {
-  it('keeps the compact description separate from the Open log button on narrow settings views', () => {
-    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const title = screen.getByText('General Preferences')
-    expect(title.parentElement?.parentElement).toHaveClass('flex-wrap', 'gap-x-3')
-    expect(title.parentElement).toHaveClass('min-w-0', 'flex-1')
-    expect(screen.getByText('Configure terminal defaults, agent behavior, and file attachments.'))
-      .toHaveClass('max-w-2xl', 'text-[10px]')
-    const openLog = screen.queryByRole('button', { name: 'Open log' })
-    if (openLog) expect(openLog).toHaveClass('shrink-0', 'whitespace-nowrap')
+  it('shows only the sections of the page it is on', () => {
+    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} sections={['git']} />)
+    expect(screen.getByLabelText('Git Integration Preferences')).toBeTruthy()
+    for (const other of ['Terminal & Shell Preferences', 'AI Agents Preferences', 'Files & Attachments Preferences', 'Backup & Restore']) {
+      expect(screen.queryByLabelText(other)).toBeNull()
+    }
   })
-
 
   it('persists shell and clamps file-size values', async () => {
     const setAppSettings = vi.fn()
@@ -64,15 +60,6 @@ describe('GeneralSettings', () => {
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
     expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith({ gitUtilEnabled: false })
-  })
-
-  it('shows Git Graph tab setting on by default and saves it when toggled off', () => {
-    const setAppSettings = vi.fn()
-    render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const toggle = screen.getByRole('switch', { name: 'Show Git Graph tab' })
-    expect(toggle).toHaveAttribute('aria-checked', 'true')
-    fireEvent.click(toggle)
-    expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith({ gitGraphEnabled: false })
   })
 
   it('shows locked exclusions, dismisses the list, and rejects duplicate or protected extensions', async () => {
@@ -125,7 +112,7 @@ describe('GeneralSettings', () => {
     )
     await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
 
-    const select = screen.getByLabelText('Default Workspace') as HTMLSelectElement
+    const select = screen.getByLabelText('Default workspace for new terminals') as HTMLSelectElement
     expect(select.value).toBe('unset')
 
     // Folder selection encodes workspace + folder; the stored shape is the discriminated union.
@@ -157,10 +144,92 @@ describe('GeneralSettings', () => {
         onCloseSettings={vi.fn()}
       />,
     )
-    const select = screen.getByLabelText('Default Workspace') as HTMLSelectElement
+    const select = screen.getByLabelText('Default workspace for new terminals') as HTMLSelectElement
     expect(select.value).toBe('sel:ws1::f1')
   })
 
+  it('exports the backend settings envelope unchanged', async () => {
+    const exportAll = vi.fn(async () => ({
+      version: 1,
+      exportedAt: '2026-08-24T00:00:00Z',
+      sections: { appSettings: {}, connections: { connections: [], folders: [] }, themes: [], workspaces: [] },
+    }))
+    mockOmnitermAPI({
+      settings: {
+        save: vi.fn(async () => {}),
+        systemExcludedViewExts: vi.fn(async () => []),
+        exportAll,
+        importAll: vi.fn(async () => ({ imported: {} })),
+      },
+    })
+    let capturedBlob: Blob | undefined
+    URL.createObjectURL = vi.fn(((blob: Blob) => { capturedBlob = blob; return 'blob:x' }) as typeof URL.createObjectURL)
+    URL.revokeObjectURL = vi.fn()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <GeneralSettings
+        appSettings={{}}
+        setAppSettings={vi.fn()}
+        shellOptions={shells}
+        onCloseSettings={vi.fn()}
+        showAlert={async () => {}}
+      />,
+    )
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: /Export settings/i }))
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    const written = JSON.parse(await (capturedBlob as Blob).text())
+    expect(written.version).toBe(1)
+    expect(written.sections.persistencePolicies).toBeUndefined()
+    clickSpy.mockRestore()
+  })
+
+  it('imports the chosen strategy without renderer-owned persistence data', async () => {
+    const importAll = vi.fn(
+      async (_envelope: unknown, _strategy: 'merge' | 'replace') => ({ imported: { appSettings: 1, workspaces: 2 } }),
+    )
+    mockOmnitermAPI({
+      settings: {
+        save: vi.fn(async () => {}),
+        systemExcludedViewExts: vi.fn(async () => []),
+        exportAll: vi.fn(),
+        importAll,
+      },
+    })
+
+    render(
+      <GeneralSettings
+        appSettings={{}}
+        setAppSettings={vi.fn()}
+        shellOptions={shells}
+        onCloseSettings={vi.fn()}
+        showAlert={async () => {}}
+      />,
+    )
+    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
+
+    const envelope = {
+      version: 1,
+      exportedAt: '2026-08-24T00:00:00Z',
+      sections: { appSettings: {} },
+    }
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    const file = new File([JSON.stringify(envelope)], 'backup.json', { type: 'application/json' })
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }) })
+
+    // Strategy choice appears before anything is sent.
+    expect(importAll).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Replace all' }))
+
+    await waitFor(() => expect(importAll).toHaveBeenCalledTimes(1))
+    const [sentEnvelope, strategy] = importAll.mock.calls[0]
+    expect(strategy).toBe('replace')
+    expect((sentEnvelope as { sections: Record<string, unknown> }).sections).toEqual({ appSettings: {} })
+    // Choice row retires after a decision.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Merge' })).not.toBeInTheDocument())
+  })
   it('persists the connected-terminal close confirmation preference', async () => {
     const setAppSettings = vi.fn()
     const { rerender } = render(
@@ -178,71 +247,6 @@ describe('GeneralSettings', () => {
     fireEvent.click(screen.getByRole('switch', { name: 'Skip terminal close confirmation' }))
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalCloseConfirm: false })
   })
-
-  it('persists the connected-terminal renew confirmation preference', async () => {
-    const setAppSettings = vi.fn()
-    const { rerender } = render(
-      <GeneralSettings appSettings={{ skipTerminalRenewConfirm: false }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />,
-    )
-    await waitFor(() => expect(window.omnitermAPI.settings.systemExcludedViewExts).toHaveBeenCalled())
-
-    fireEvent.click(screen.getByRole('switch', { name: 'Skip terminal renew confirmation' }))
-    expect(setAppSettings).toHaveBeenLastCalledWith(expect.objectContaining({ skipTerminalRenewConfirm: true }))
-    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalRenewConfirm: true })
-
-    rerender(
-      <GeneralSettings appSettings={{ skipTerminalRenewConfirm: true }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />,
-    )
-    fireEvent.click(screen.getByRole('switch', { name: 'Skip terminal renew confirmation' }))
-    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ skipTerminalRenewConfirm: false })
-  })
-
-  it('starts with every configurable toolbar action switched on by default', () => {
-    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
-    expect(toolbar.getAllByRole('switch')).toHaveLength(8)
-    expect(toolbar.getByRole('switch', { name: 'Theme' })).toHaveClass('h-3.5', 'w-6', 'rounded-md')
-    expect(toolbar.getByRole('switch', { name: 'Theme' }).parentElement).toHaveClass('py-1', 'text-xs')
-    expect(toolbar.getByRole('switch', { name: 'Theme' }).firstElementChild).toHaveClass('rounded-sm')
-    const toolbarDescription = toolbar.getByText(/Choose the default actions and their order/)
-    expect(toolbarDescription).toHaveClass('w-full')
-    expect(toolbarDescription).not.toHaveClass('max-w-[45ch]')
-    for (const action of toolbar.getAllByRole('switch')) {
-      expect(action).toHaveAttribute('aria-checked', 'true')
-    }
-    expect(toolbar.queryByRole('checkbox')).not.toBeInTheDocument()
-  })
-
-  it('keeps general preferences description clear of the log action', () => {
-    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const description = screen.getByText('Configure terminal defaults, agent behavior, and file attachments.')
-    expect(description).toHaveClass('max-w-2xl')
-    expect(description.parentElement).toHaveClass('min-w-0', 'flex-1')
-    const logButton = screen.queryByRole('button', { name: /Open log/i })
-    if (logButton) expect(logButton).toHaveClass('shrink-0')
-  })
-
-  it('respects explicit user-disabled actions rather than resetting them', () => {
-    render(<GeneralSettings appSettings={{ toolbarActions: { header: ['theme'], footer: ['clear'] } }} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
-    expect(toolbar.getByRole('switch', { name: 'Theme' })).toHaveAttribute('aria-checked', 'true')
-    expect(toolbar.getByRole('switch', { name: 'Detach terminal' })).toHaveAttribute('aria-checked', 'false')
-    expect(toolbar.getByRole('switch', { name: 'Copy terminal output' })).toHaveAttribute('aria-checked', 'false')
-  })
-
-  it('applies global toolbar visibility and order to every connection', () => {
-    const setAppSettings = vi.fn()
-    render(<GeneralSettings appSettings={{ perConn: { saved: { toolbarActions: { footer: ['clear'] } } } }} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
-    const toolbar = within(screen.getByRole('region', { name: 'Global terminal toolbar' }))
-    fireEvent.click(toolbar.getByRole('switch', { name: 'Stop current process' }))
-    fireEvent.click(toolbar.getByRole('button', { name: 'Move Save output to file up' }))
-    expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith(expect.objectContaining({
-      toolbarActions: expect.objectContaining({ footer: expect.arrayContaining(['save']) }),
-      perConn: { saved: {} },
-    }))
-    expect(setAppSettings).toHaveBeenLastCalledWith(expect.objectContaining({ perConn: { saved: {} } }))
-  })
-
 
   it('persists AI agent renew strategy selection', async () => {
     const setAppSettings = vi.fn()

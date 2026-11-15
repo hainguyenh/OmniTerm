@@ -37,7 +37,7 @@ pub struct Session {
     pub output: mpsc::Receiver<Vec<u8>>,
 }
 
-/// Open a PTY and spawn `launch` through it, mirroring `pty::start_local_session`.
+/// Open a PTY and spawn `launch` through it, matching `pty::start_local_session`.
 pub fn start(launch: &LocalLaunch) -> Session {
     let invocation = launch.invocation().expect("the launch spec should resolve");
 

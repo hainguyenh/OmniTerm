@@ -4,17 +4,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TOKYO_NIGHT } from '../../themes'
+import { useThemeOverride } from '../../ide/workbench/theme'
 import { mockOmnitermAPI } from '../../testUtils'
+import { useTitleControlsProps } from '../../workbench/titleControlsStore'
 
-const captured = vi.hoisted(() => ({ title: null as any, main: null as any, remix: null as any, detached: null as any, shortcuts: null as any }))
+const captured = vi.hoisted(() => ({ main: null as any, remix: null as any, detached: null as any, shortcuts: null as any }))
 
-vi.mock('../TitleBar', () => ({ TitleBar: (props: any) => {
-  captured.title = props
-  return <div data-testid="title"><button onClick={() => props.setThemeRemixOpen(true)}>open-remix</button><button onClick={props.onZoomReset}>reset-zoom</button><button onClick={() => props.onFontSizeChange(2)}>title-font</button><button onClick={() => props.onThemeApply('theme-b')}>title-theme</button><button onClick={() => props.onApplyToAll(22)}>all-font</button></div>
-} }))
 vi.mock('../MainLayout', () => ({ default: (props: any) => {
   captured.main = props
-  return <div data-testid="main"><button onClick={() => props.setSettingsOpen(true)}>open-settings</button><button onClick={() => props.onActiveTerminalChange({ id: 'tab-1', connId: 'conn-1' })}>focus-terminal</button><button onClick={() => props.onFontSizeChange(1)}>focused-font</button><button onClick={() => props.onFontSizeChange(-100, { id: 'adhoc-tab', connId: 'adhoc-new' })}>adhoc-font</button><button onClick={() => props.onThemeApply('theme-b')}>focused-theme</button><button onClick={() => props.onSettingsReload('tab-1')}>reload-settings</button></div>
+  return <div data-testid="main"><button onClick={() => props.onActiveTerminalChange({ id: 'tab-1', connId: 'conn-1' })}>focus-terminal</button><button onClick={() => props.onFontSizeChange(1)}>focused-font</button><button onClick={() => props.onFontSizeChange(-100, { id: 'adhoc-tab', connId: 'adhoc-new' })}>adhoc-font</button><button onClick={() => props.onThemeApply('theme-b')}>focused-theme</button><button onClick={() => props.onSettingsReload('tab-1')}>reload-settings</button></div>
 } }))
 vi.mock('../ThemeRemixModal', () => ({ ThemeRemixModal: (props: any) => {
   captured.remix = props
@@ -36,14 +34,13 @@ const themeB = {
 }
 
 let settingsChanged: (() => void) | null
-let updateListener: ((state: UpdateState) => void) | null
 let settingsSave: ReturnType<typeof vi.fn>
 let settingsGet: ReturnType<typeof vi.fn>
 let setZoomFactor: ReturnType<typeof vi.fn>
 
 function install(settings: AppSettings, options: { detached?: boolean; themes?: any[] } = {}) {
+  useThemeOverride.setState({ theme: null })
   settingsChanged = null
-  updateListener = null
   settingsSave = vi.fn(async () => {})
   settingsGet = vi.fn(async () => settings)
   setZoomFactor = vi.fn()
@@ -57,9 +54,7 @@ function install(settings: AppSettings, options: { detached?: boolean; themes?: 
     themes: { list: vi.fn(async () => options.themes ?? [TOKYO_NIGHT, themeB]) },
     app: { setZoomFactor },
     updates: {
-      onState: vi.fn((cb: (state: UpdateState) => void) => { updateListener = cb; return vi.fn() }),
-      state: vi.fn(async () => ({ current: '1.0.0', checking: false })),
-      getVersion: vi.fn(async () => '1.0.0'),
+      check: vi.fn(async () => ({ current: '1.0.0', checking: false })),
     },
   })
 }
@@ -71,34 +66,8 @@ const settings: AppSettings = {
 }
 
 beforeEach(() => {
-  captured.title = captured.main = captured.remix = captured.detached = captured.shortcuts = null
+  captured.main = captured.remix = captured.detached = captured.shortcuts = null
   localStorage.clear()
-})
-
-describe('legacy theme settings migration', () => {
-  it('migrates removed built-in IDs and saves the migrated selections', async () => {
-    install({
-      ...settings, themeId: 'compact',
-      perConn: { 'conn-1': { themeId: 'volt-agent', fontSize: 19 } },
-    }, { themes: [TOKYO_NIGHT, { ...themeB, id: 'terminal-paper' }] })
-    render(<App />)
-    await waitFor(() => expect(captured.title?.appSettings.themeId).toBe('terminal-paper'))
-    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({
-      themeId: 'terminal-paper',
-      perConn: { 'conn-1': { themeId: 'tokyo-night', fontSize: 19 } },
-    })))
-  })
-
-  it('hides retired Compact overrides and migrates their active selection to TLR', async () => {
-    install({ ...settings, themeId: 'compact' }, {
-      themes: [TOKYO_NIGHT, { ...themeB, id: 'compact', name: 'My Compact' }, { ...themeB, id: 'terminal-paper' }],
-    })
-    render(<App />)
-    await waitFor(() => expect(captured.title?.appSettings.themeId).toBe('terminal-paper'))
-    expect(captured.title.themes.some((theme: { id: string }) => theme.id === 'compact')).toBe(false)
-    expect(captured.title.themes.some((theme: { id: string }) => theme.id === 'terminal-paper')).toBe(true)
-    await waitFor(() => expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'terminal-paper' })))
-  })
 })
 
 describe('App orchestration', () => {
@@ -114,25 +83,26 @@ describe('App orchestration', () => {
     expect(setZoomFactor).toHaveBeenCalledWith(1.2)
     expect(onZoomChanged).toHaveBeenCalled()
     window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
-    expect(captured.title.appVersion).toBe('1.0.0')
     expect(captured.main.currentTheme.id).toBe(TOKYO_NIGHT.id)
 
-    fireEvent.click(screen.getByText('open-settings'))
-    expect(captured.main.settingsOpen).toBe(true)
-    fireEvent.click(screen.getByText('open-remix'))
+    // The workbench title bar drives the app-wide controls through the published props.
+    await waitFor(() => expect(useTitleControlsProps.getState().props?.zoomFactor).toBe(1.2))
+    const published = () => useTitleControlsProps.getState().props!
+    act(() => published().setThemeRemixOpen(true))
     expect(screen.getByTestId('remix')).toBeInTheDocument()
     fireEvent.click(screen.getByText('close-remix'))
     expect(screen.queryByTestId('remix')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByText('reset-zoom'))
+    act(() => published().onZoomReset?.())
     expect(setZoomFactor).toHaveBeenCalledWith(1)
     expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ zoomFactor: 1 }))
 
-    fireEvent.click(screen.getByText('title-font'))
+    act(() => published().onFontSizeChange?.(2))
     expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 16 }))
-    fireEvent.click(screen.getByText('title-theme'))
-    expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ themeId: 'theme-b' }))
-    fireEvent.click(screen.getByText('all-font'))
+    act(() => published().onThemeApply?.('theme-b'))
+    // The theme is chosen through the workbench setting (the override stands in without a backend).
+    expect(useThemeOverride.getState().theme).toBe('plugin:omniterm/theme-b@dark')
+    act(() => published().onApplyToAll?.(22))
     expect(settingsSave).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 22 }))
 
     fireEvent.click(screen.getByText('focus-terminal'))
@@ -148,12 +118,20 @@ describe('App orchestration', () => {
     fireEvent.click(screen.getByText('adhoc-font'))
     expect(settingsSave).toHaveBeenCalledTimes(savesBeforeAdhoc)
 
-    act(() => updateListener?.({ current: '1.0.0', checking: true } as UpdateState))
-    expect(captured.main.updateState.checking).toBe(true)
     act(() => settingsChanged?.())
     await waitFor(() => expect(settingsGet.mock.calls.length).toBeGreaterThan(1))
     fireEvent.click(screen.getByText('reload-settings'))
     await waitFor(() => expect(settingsGet.mock.calls.length).toBeGreaterThan(2))
+  })
+
+  it('publishes the title controls for the workbench title bar', async () => {
+    install(settings)
+    render(<App />)
+    await waitFor(() => expect(screen.getByTestId('main')).toBeInTheDocument())
+    await waitFor(() => expect(useTitleControlsProps.getState().props?.zoomFactor).toBe(1.2))
+    const published = useTitleControlsProps.getState().props
+    act(() => published?.onZoomReset?.())
+    expect(setZoomFactor).toHaveBeenCalledWith(1)
   })
 
   it('cleans stale ad-hoc appearance and exposes shortcut callbacks', async () => {

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, ExternalLink, FolderOpen } from 'lucide-react'
-import { showPixelCopiedToast } from '../utils/pixelCopiedToast'
 import type { TerminalLinkMenuKind } from '../utils/terminalLinks'
 
 export type { TerminalLinkMenuKind }
@@ -56,28 +55,12 @@ export const TerminalLinkMenu: React.FC<TerminalLinkMenuProps> = ({
     >
       {kind === 'url' ? (
         <>
-          <MenuItem
-            icon={<Copy className="w-3 h-3" />}
-            label="Copy Link"
-            onClick={() => {
-              onCopyText(text)
-              showPixelCopiedToast(x, y)
-              onClose()
-            }}
-          />
+          <MenuItem icon={<Copy className="w-3 h-3" />} label="Copy Link" onClick={() => { onCopyText(text); onClose() }} />
           <MenuItem icon={<ExternalLink className="w-3 h-3" />} label="Open Link" onClick={() => { onOpenUrl(text); onClose() }} />
         </>
       ) : (
         <>
-          <MenuItem
-            icon={<Copy className="w-3 h-3" />}
-            label="Copy Path"
-            onClick={() => {
-              onCopyText(text)
-              showPixelCopiedToast(x, y)
-              onClose()
-            }}
-          />
+          <MenuItem icon={<Copy className="w-3 h-3" />} label="Copy Path" onClick={() => { onCopyText(text); onClose() }} />
           {isLocal && (
             <MenuItem icon={<FolderOpen className="w-3 h-3" />} label="Open in OS" onClick={() => { onOpenPath(text); onClose() }} />
           )}

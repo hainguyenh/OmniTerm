@@ -40,8 +40,8 @@ export const CreateFileDialog: React.FC<CreateFileDialogProps> = ({
     setBusy(true)
     setError(null)
     try {
-      const createdPath = await window.omnitermAPI.workspace.createTextFile(workspaceId, relativePath)
-      onCreated(createdPath, fullFileName)
+      await window.omnitermAPI.workspace.writeScript(workspaceId, relativePath, '')
+      onCreated(relativePath, fullFileName)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

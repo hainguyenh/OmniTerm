@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AdvisorProfile } from './profileAdvisor'
 
 import { adviseProfiles } from './profileAdvisor'

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../../src/types'
+import type { QuotaSnapshot } from '../usage/types'
 import type { HiddenTerminal } from '../../../../ui/utils/hiddenTerminal'
 import type { HiddenProbeDeps, HiddenProbeTarget } from '../hiddenProfileProbe'
 

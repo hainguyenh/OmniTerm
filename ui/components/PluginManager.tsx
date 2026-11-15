@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { UseDialogReturn } from '../hooks/useDialog'
+import { Button } from '../ide/ui'
+
+import { PluginCard } from './PluginCard'
 import { Tooltip } from './Tooltip'
 
 interface PluginManagerProps {
@@ -7,25 +10,10 @@ interface PluginManagerProps {
   onProviderStatusChanged(hasConnectionProvider: boolean): void
   showAlert: UseDialogReturn['showAlert']
   showConfirm: UseDialogReturn['showConfirm']
-}
-
-function pluginFeatureSummary(plugin: PluginDescriptor): string[] {
-  if (plugin.id === '@omniterm/full-connection-manager') {
-    return ['Integrated SSH', 'Native RDP', 'Workspace connections', 'Passwords never stored']
-  }
-  if (plugin.id === '@omniterm/native-batch-connections') {
-    return ['Windows OpenSSH', 'Native mstsc', 'BAT launchers', 'Passwords never stored']
-  }
-  if (plugin.id === '@omniterm/vscode-launch') {
-    return ['VS Code launch.json (>=0.2.0)', 'Multi-launch & compounds', 'VSCodium + netcoredbg', 'Launch Console']
-  }
-  return plugin.permissions.map(permission => permission.replace(/([A-Z])/g, ' $1').trim())
-}
-
-interface ReleasePluginAsset {
-  name: string
-  downloadUrl: string
-  size: number
+  /** The action that opens a plugin's settings page, when it has one. */
+  configureAction?: (pluginId: string) => (() => void) | undefined
+  /** Show only this plugin, without the list header (the Plugins dialog's details pane). */
+  onlyPluginId?: string
 }
 
 export default function PluginManager({
@@ -33,13 +21,13 @@ export default function PluginManager({
   onProviderStatusChanged,
   showAlert,
   showConfirm,
+  configureAction,
+  onlyPluginId,
 }: PluginManagerProps) {
   const [plugins, setPlugins] = useState<PluginDescriptor[]>([])
   const [busyId, setBusyId] = useState<string | null>(null)
   const [capabilities, setCapabilities] = useState<ConnectionProviderCapabilities | null>(null)
   const [restartRequired, setRestartRequired] = useState(false)
-  const [releasePlugins, setReleasePlugins] = useState<ReleasePluginAsset[]>([])
-  const [releaseTag, setReleaseTag] = useState('')
   const providerStatusChangedRef = useRef(onProviderStatusChanged)
   providerStatusChangedRef.current = onProviderStatusChanged
 
@@ -61,46 +49,6 @@ export default function PluginManager({
     void refresh()
   }, [refresh])
 
-  useEffect(() => {
-    let active = true
-    async function loadReleasePlugins() {
-      try {
-        const ver = await window.omnitermAPI.updates?.getVersion?.().catch(() => '')
-        const tag = ver ? `v${ver}` : 'latest'
-        const url = tag === 'latest'
-          ? 'https://api.github.com/repos/hainguyenh/OmniTerm/releases/latest'
-          : `https://api.github.com/repos/hainguyenh/OmniTerm/releases/tags/${tag}`
-        let res = await fetch(url)
-        if (!res.ok && tag !== 'latest') {
-          res = await fetch('https://api.github.com/repos/hainguyenh/OmniTerm/releases/latest')
-        }
-        if (!res.ok) return
-        const data = await res.json()
-        if (!data?.assets || !Array.isArray(data.assets) || !active) return
-        const matches: ReleasePluginAsset[] = data.assets
-          .filter((a: any) =>
-            typeof a?.name === 'string' &&
-            a.name.endsWith('.zip') &&
-            !a.name.toLowerCase().includes('portable') &&
-            !a.name.toLowerCase().startsWith('omniterm_')
-          )
-          .map((a: any) => ({
-            name: a.name,
-            downloadUrl: a.browser_download_url,
-            size: a.size,
-          }))
-        if (active) {
-          setReleasePlugins(matches)
-          setReleaseTag(data.tag_name || tag)
-        }
-      } catch {
-        // Offline or fallback to manual ZIP install
-      }
-    }
-    void loadReleasePlugins()
-    return () => { active = false }
-  }, [])
-
   const installPackage = useCallback(async () => {
     setBusyId('__install__')
     try {
@@ -117,32 +65,6 @@ export default function PluginManager({
     } catch (error) {
       await showAlert(
         `Could not install plugin: ${error instanceof Error ? error.message : String(error)}`,
-        { title: 'Plugin Manager', tone: 'error' },
-      )
-    } finally {
-      setBusyId(null)
-    }
-  }, [refresh, showAlert])
-
-  const installFromRelease = useCallback(async (asset: ReleasePluginAsset) => {
-    setBusyId(asset.name)
-    try {
-      const res = await fetch(asset.downloadUrl)
-      if (!res.ok) throw new Error(`Download failed (${res.status} ${res.statusText})`)
-      const buffer = await res.arrayBuffer()
-      const installed = await window.omnitermAPI.plugin.installPackage(new Uint8Array(buffer))
-      if (!installed) return
-      setRestartRequired(installed.restartRequired)
-      await refresh()
-      await showAlert(
-        installed.restartRequired
-          ? `“${installed.name}” ${installed.version} was installed. Restart OmniTerm to load the package safely.`
-          : `“${installed.name}” ${installed.version} was installed and is ready to configure.`,
-        { title: 'Plugin installed', tone: 'info' },
-      )
-    } catch (error) {
-      await showAlert(
-        `Could not install ${asset.name}: ${error instanceof Error ? error.message : String(error)}`,
         { title: 'Plugin Manager', tone: 'error' },
       )
     } finally {
@@ -307,177 +229,66 @@ export default function PluginManager({
     }
   }, [showAlert, showConfirm])
 
+  const installedCount = plugins.filter(plugin => plugin.id !== 'omniterm.plugin-host').length
+  const shown = onlyPluginId ? plugins.filter(plugin => plugin.id === onlyPluginId) : plugins
   return (
     <>
-    <div className="px-4 py-3 border-t border-[var(--theme-border)]">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-[10px] uppercase font-bold tracking-widest text-[var(--theme-dim)]">Plugins</p>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-[var(--theme-dim)]">
-            {plugins.filter(plugin => plugin.id !== 'omniterm.plugin-host').length} installed
-          </span>
-          <Tooltip content="Install plugin package from .zip archive" placement="bottom">
-            <button
-              type="button"
-              disabled={busyId !== null}
-              onClick={() => { void installPackage() }}
-              className="rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-fg)] hover:border-[var(--theme-accent)] disabled:opacity-50"
-            >
-              Install ZIP
+    <div className="px-4 py-3">
+      {!onlyPluginId && <div className="mb-2 flex items-center gap-1">
+        <div role="tablist" aria-label="Plugin sources" className="flex items-center gap-1">
+          <button type="button" role="tab" aria-selected="true" className="h-[26px] rounded-md bg-[var(--bg-selected,var(--bg-hover))] px-2 text-[var(--fg-strong)]">
+            Installed ({installedCount})
+          </button>
+          <Tooltip content="Not supported yet" placement="bottom">
+            <button type="button" role="tab" aria-selected="false" aria-disabled="true" className="flex h-[26px] cursor-not-allowed items-center gap-1.5 px-2 text-[var(--fg-secondary)] opacity-55">
+              Marketplace <span className="rounded-lg bg-[var(--bg-hover)] px-1.5 text-[10.5px]">soon</span>
             </button>
           </Tooltip>
         </div>
-      </div>
-      <p className="mb-2 text-[10px] leading-relaxed text-[var(--theme-dim)]">
-        Install a plugin ZIP created by the OmniTerm build wizard. The native installer validates the
-        package and shows its permissions before copying it.
-      </p>
-      {releasePlugins.length > 0 && (
-        <div className="mb-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card-bg)] p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--theme-dim)]">
-              Release {releaseTag} Plugins
-            </span>
-            <span className="text-[9px] text-[var(--theme-dim)]">Direct install</span>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {releasePlugins.map(asset => (
-              <div key={asset.name} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--theme-border)]/60 bg-[var(--theme-bg)] px-2.5 py-1.5">
-                <div className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-medium text-[var(--theme-fg)]" title={asset.name}>
-                    {asset.name}
-                  </span>
-                  <span className="text-[9px] text-[var(--theme-dim)]">
-                    {(asset.size / 1024 / 1024).toFixed(1)} MB
-                  </span>
-                </div>
-                <Tooltip content={`Download and install ${asset.name} from release ${releaseTag}`} placement="left">
-                  <button
-                    type="button"
-                    disabled={busyId !== null}
-                    onClick={() => { void installFromRelease(asset) }}
-                    className="shrink-0 rounded-md border border-[var(--theme-border)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-fg)] hover:border-[var(--theme-accent)] hover:text-[var(--theme-accent)] disabled:opacity-50"
-                  >
-                    {busyId === asset.name ? 'Installing…' : 'Download & Install'}
-                  </button>
-                </Tooltip>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {plugins.length === 0 ? (
-        <p className="text-[11px] text-[var(--theme-dim)] rounded-lg border border-dashed border-[var(--theme-border)] px-3 py-2">
+        <div className="flex-1" />
+        <Tooltip content="Install a plugin package (.zip) built by the OmniTerm build wizard" placement="bottom">
+          <Button disabled={busyId !== null} onClick={() => { void installPackage() }}>
+            Install from disk…
+          </Button>
+        </Tooltip>
+      </div>}
+      {shown.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-2 text-xs text-[var(--fg-muted)]">
           No compatible plugins discovered.
         </p>
       ) : (
-        <div className="flex flex-col gap-2">
-          {plugins.map(plugin => (
-            <div key={plugin.id} className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-card-bg)] px-3 py-2.5">
-              <div className="flex items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-xs font-semibold text-[var(--theme-fg)]">{plugin.name}</span>
-                    <span className="text-[9px] text-[var(--theme-dim)]">v{plugin.version}</span>
-                  </div>
-                  <div className="mt-0.5 flex items-center gap-1.5 text-[9px] text-[var(--theme-dim)]">
-                    <span>{plugin.source}</span>
-                    <span>•</span>
-                    <span className={plugin.status === 'error' ? 'text-theme-error' : plugin.status === 'loaded' ? 'text-theme-success' : ''}>
-                      {plugin.status}
-                    </span>
-                    {plugin.activeConnectionProvider && <span>• connection provider</span>}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={plugin.enabled}
-                  aria-label={`${plugin.enabled ? 'Disable' : 'Enable'} ${plugin.name}`}
-                  disabled={busyId === plugin.id || plugin.status === 'incompatible'}
-                  onClick={() => { void toggle(plugin) }}
-                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${plugin.enabled ? 'bg-[var(--theme-accent)]' : 'bg-[var(--theme-border)]'}`}
-                >
-                  {/* Anchored with `left`, not `translate-x`. An absolute box with no horizontal anchor
-                      keeps its static position, and a <button> centers its content — so the knob
-                      started mid-pill and the translate pushed it past the right edge when on. */}
-                  <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${plugin.enabled ? 'left-[18px]' : 'left-0.5'}`} />
-                </button>
-              </div>
-              {plugin.error && <p className="mt-1.5 text-[10px] leading-relaxed text-theme-error">{plugin.error}</p>}
-              {plugin.description && (
-                <p className="mt-2 text-[10px] leading-relaxed text-[var(--theme-fg)]">{plugin.description}</p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1">
-                {pluginFeatureSummary(plugin).map(feature => (
-                  <span key={feature}
-                    className="rounded-full border border-[var(--theme-border)] bg-[var(--theme-bg)] px-2 py-0.5 text-[9px] text-[var(--theme-dim)]">
-                    {feature}
-                  </span>
-                ))}
-              </div>
-              {plugin.permissions.length > 0 && (
-                <p className="mt-1.5 truncate text-[9px] text-[var(--theme-dim)]" title={plugin.permissions.join(', ')}>
-                  Permissions: {plugin.permissions.join(', ')}
-                </p>
-              )}
-              {plugin.activeConnectionProvider && plugin.enabled && plugin.status === 'loaded' && (
-                <Tooltip
-                  content={plugin.selectedConnectionProvider ? 'Currently active connection provider' : 'Select this plugin as the active connection provider'}
-                  placement="bottom"
-                >
-                  <button type="button"
-                    disabled={busyId === plugin.id || plugin.selectedConnectionProvider}
-                    onClick={() => { void selectProvider(plugin) }}
-                    className={`mt-2 w-full rounded-md border px-2 py-1.5 text-[10px] font-semibold transition-colors disabled:cursor-default ${
-                      plugin.selectedConnectionProvider
-                        ? 'border-[var(--theme-accent)] bg-[var(--theme-hover-bg)] text-[var(--theme-accent)]'
-                        : 'border-[var(--theme-border)] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]'
-                    }`}>
-                    {plugin.selectedConnectionProvider ? 'Active connection provider' : 'Use for connections'}
-                  </button>
-                </Tooltip>
-              )}
-              {plugin.source === 'user' && (
-                <Tooltip content={`Remove “${plugin.name}” from computer`} placement="bottom">
-                  <button
-                    type="button"
-                    disabled={busyId !== null}
-                    onClick={() => { void removePlugin(plugin) }}
-                    className="mt-2 w-full rounded-md border border-theme-error/60 px-2 py-1.5 text-[10px] font-semibold text-theme-error hover:bg-theme-error/10 disabled:opacity-50"
-                  >
-                    Remove plugin
-                  </button>
-                </Tooltip>
-              )}
-            </div>
+        <div>
+          {shown.map(plugin => (
+            <PluginCard
+              key={plugin.id}
+              plugin={plugin}
+              busy={busyId === plugin.id}
+              anyBusy={busyId !== null}
+              onConfigure={plugin.enabled ? configureAction?.(plugin.id) : undefined}
+              onToggle={() => { void toggle(plugin) }}
+              onSelectProvider={() => { void selectProvider(plugin) }}
+              onRemove={() => { void removePlugin(plugin) }}
+            />
           ))}
         </div>
       )}
       {restartRequired && (
-        <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[var(--theme-accent)] bg-[var(--theme-hover-bg)] px-3 py-2">
-          <span className="text-[10px] text-[var(--theme-fg)]">Restart required to finish plugin changes.</span>
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-[var(--accent)] bg-[var(--bg-hover)] px-3 py-2">
+          <span className="text-[11px] text-[var(--fg)]">Restart required to finish plugin changes.</span>
           <Tooltip content="Restart OmniTerm to apply plugin updates" placement="left">
-            <button type="button" onClick={() => { void restart() }}
-              className="shrink-0 rounded-md bg-[var(--theme-accent)] px-2 py-1 text-[10px] font-semibold text-[var(--theme-accent-fg)]">
+            <Button variant="primary" size="small" onClick={() => { void restart() }}>
               Restart now
-            </button>
+            </Button>
           </Tooltip>
         </div>
       )}
       {capabilities?.importExport && plugins.some(plugin => plugin.selectedConnectionProvider) && (
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 flex gap-2">
           <Tooltip content="Import connection metadata from file" placement="bottom">
-            <button type="button" onClick={() => { void importMetadata() }}
-              className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
-              Import metadata
-            </button>
+            <Button onClick={() => { void importMetadata() }}>Import metadata</Button>
           </Tooltip>
           <Tooltip content="Export saved connection metadata to file" placement="bottom">
-            <button type="button" onClick={() => { void exportMetadata() }}
-              className="rounded-md border border-[var(--theme-border)] px-2 py-1.5 text-[10px] text-[var(--theme-fg)] hover:border-[var(--theme-accent)]">
-              Export metadata
-            </button>
+            <Button onClick={() => { void exportMetadata() }}>Export metadata</Button>
           </Tooltip>
         </div>
       )}

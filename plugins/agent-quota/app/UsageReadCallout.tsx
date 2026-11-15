@@ -1,6 +1,6 @@
 import { ScanText, X } from 'lucide-react'
 
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 
 import { quotaCommands } from './quotaStore'
 import { AGENT_PROBES } from './usageProbeCore'

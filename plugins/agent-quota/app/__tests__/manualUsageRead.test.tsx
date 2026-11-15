@@ -4,7 +4,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../../src/types'
+import type { QuotaSnapshot } from '../usage/types'
 import type { AgentQuotaAPI, SessionAgent } from '../agentQuotaAPI'
 
 import { AWAIT_USAGE_MS } from '../manualUsageRead'

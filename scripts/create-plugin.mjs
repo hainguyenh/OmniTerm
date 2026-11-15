@@ -149,4 +149,4 @@ console.log(`✓ Created ${rel}
     pnpm build:plugin ${rel}
     pnpm install:plugin ${rel}
 
-  Then restart OmniTerm. See docs/PLUGINS.md for the API.`)
+  Then restart OmniTerm.`)

@@ -95,10 +95,12 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
         .contains("Unsupported"));
 
     assert_eq!(fixture.ok("plugin_available", json!({})), json!(false));
-    assert_eq!(fixture.ok("plugin_list", json!({})), json!([]));
+    let listed = fixture.ok("omni_plugin_list", json!({}));
+    let ids: Vec<&str> = listed.as_array().into_iter().flatten().filter_map(|row| row["id"].as_str()).collect();
+    assert_eq!(ids, ["omniterm.agent-quota", "omniterm.always-awake"]);
     assert!(fixture
         .error(
-            "plugin_set_enabled",
+            "omni_plugin_set_enabled",
             json!({ "id": "missing", "enabled": true }),
         )
         .to_string()
@@ -210,11 +212,6 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
             "write_script",
             json!({ "workspaceId": "x", "path": "a.sh", "content": 2 }),
         ),
-        ("open_text_file", json!({ "workspaceId": "x", "path": 2 })),
-        (
-            "save_text_file",
-            json!({ "workspaceId": "x", "path": "a.ts", "request": { "content": 2 } }),
-        ),
         ("load_workspace_connections", json!({ "workspaceId": 2 })),
         (
             "save_workspace_connections",
@@ -226,7 +223,7 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
         ),
         ("shells_release", json!({ "connId": 2 })),
         ("open_quick_shell", json!({ "shell": 2 })),
-        ("plugin_set_enabled", json!({ "id": "x", "enabled": "yes" })),
+        ("omni_plugin_set_enabled", json!({ "id": "x", "enabled": "yes" })),
         ("plugin_select_connection_provider", json!({ "id": 2 })),
         ("plugin_invoke", json!({ "method": "x", "args": {} })),
         ("remove_plugin", json!({ "id": true })),

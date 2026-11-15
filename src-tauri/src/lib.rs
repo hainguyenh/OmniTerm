@@ -1,6 +1,7 @@
 #[path = "../../plugins/agent-quota/native/agent_quota.rs"]
 pub mod agent_quota;
 pub mod agent_session;
+mod agent_session_cleanup;
 #[path = "../../plugins/always-awake/native/always_awake.rs"]
 pub mod always_awake;
 mod app_utils;
@@ -13,22 +14,26 @@ pub use plugin_commands::*;
 mod settings;
 mod settings_transfer;
 mod themes;
+mod update_coordinator;
 mod update_manager;
+mod update_progress;
 mod window_control;
 
 #[cfg(test)]
 mod command_coverage_tests;
-mod file_view_commands;
-mod git_branch_commands;
-pub mod git_commands;
+mod app_state;
+mod builtin_features;
+mod builtin_plugins;
+mod idea_host;
+pub mod ide;
+mod invoke_handlers;
 #[cfg(test)]
-mod git_commands_tests;
+use invoke_handlers::with_invoke_handler;
 #[cfg(test)]
 mod ipc_contract_tests;
 mod temp_note_commands;
 #[cfg(test)]
 mod test_support;
-mod text_file_commands;
 mod workspace_file_commands;
 
 // Public so integration tests under tests/ can drive launch and command paths.
@@ -61,12 +66,15 @@ pub mod workspace_folders;
 pub mod workspace_lifecycle;
 mod workspace_persistence;
 
-use adhoc::AdhocRegistry;
 use agent_quota::AgentQuotaState;
+// Only the command tests name these through `use super::*`; the state itself is registered in `app_state`.
+#[cfg(test)]
+use adhoc::AdhocRegistry;
+#[cfg(test)]
+use rdp_embed::RdpSessionManager;
 use always_awake::AlwaysAwakeState;
 use plugin_host::PluginHost;
 use pty::PtyManager;
-use rdp_embed::RdpSessionManager;
 use tauri::{Emitter, Manager, RunEvent};
 use terminal_window::DetachRegistry;
 
@@ -88,21 +96,20 @@ pub fn run() {
     // OMNITERM_UPDATER_PUBKEY, so gate on the same variable: set here means the configure step ran
     // and the merged config carries real endpoints. Without it the updater commands still answer
     // with their typed "updater-disabled" results (update_manager.rs).
-    let builder = if std::env::var_os("OMNITERM_UPDATER_PUBKEY").is_some() {
+    let updater = std::env::var_os("OMNITERM_UPDATER_PUBKEY").is_some();
+    let builder = if updater {
         builder.plugin(tauri_plugin_updater::Builder::new().build())
     } else {
         builder
     };
-    let builder = builder
-        .manage(PtyManager::new())
-        .manage(AdhocRegistry::new())
-        .manage(DetachRegistry::new())
-        .manage(PluginHost::new())
-        .manage(RdpSessionManager::new())
+    let builder = builder.manage(update_manager::UpdaterRegistered(updater));
+    let builder = app_state::manage_state(builder)
         .manage(os_actions::ExternalLauncherState::system())
-        .manage(AlwaysAwakeState::new())
-        .manage(AgentQuotaState::new())
         .setup(move |app| {
+            // The embedded omniterm backend; its failure must not take OmniTerm's own commands down.
+            if let Err(error) = idea_host::setup(app) {
+                log::error!("[setup] omniterm backend did not start: {error}");
+            }
             // Logging is a development-only facility. `#[cfg]` (not `cfg!`) so the registration is
             // not even compiled into a release or portable build: nothing installs a logger, so no
             // log directory is created and no line is ever written to disk. Cargo.toml's
@@ -112,6 +119,21 @@ pub fn run() {
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Trace)
+                    // The embedded IDE backend compiles WebAssembly plugins and talks to language
+                    // servers; at trace level their libraries write gigabytes per minute.
+                    .level_for("cranelift_codegen", log::LevelFilter::Warn)
+                    .level_for("cranelift_frontend", log::LevelFilter::Warn)
+                    .level_for("wasmtime", log::LevelFilter::Warn)
+                    .level_for("wasmtime_internal_cranelift", log::LevelFilter::Warn)
+                    .level_for("wasmtime_internal_cache", log::LevelFilter::Warn)
+                    .level_for("regalloc2", log::LevelFilter::Warn)
+                    .level_for("wasmparser", log::LevelFilter::Warn)
+                    .level_for("gix", log::LevelFilter::Info)
+                    .level_for("globset", log::LevelFilter::Info)
+                    .level_for("ignore", log::LevelFilter::Info)
+                    .level_for("notify", log::LevelFilter::Info)
+                    .level_for("mio", log::LevelFilter::Info)
+                    .level_for("tao", log::LevelFilter::Info)
                     .build(),
             )?;
 
@@ -187,7 +209,7 @@ pub fn run() {
             Ok(())
         });
 
-    with_invoke_handler(builder)
+    idea_host::attach(builder)
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
@@ -195,6 +217,11 @@ pub fn run() {
             // detached window's Destroyed handler runs its kill-or-fold branch on the way out —
             // reaping sessions during teardown and emitting fold-back events at a main window that
             // is itself closing.
+            if matches!(event, RunEvent::Exit) {
+                // Runs, terminals, language servers and debug sessions of the workbench must not
+                // outlive the app.
+                idea_host::on_exit(app);
+            }
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
                 if let Some(pty) = app.try_state::<PtyManager>() {
                     // Do not let the GUI lease retry loop respawn a daemon while the process is
@@ -216,181 +243,4 @@ pub fn run() {
                 }
             }
         });
-}
-
-fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.invoke_handler(tauri::generate_handler![
-        // PTY
-        pty::start_local_session,
-        pty::send_session_input,
-        pty_interrupt::interrupt_session,
-        pty::resize_session,
-        pty::disconnect_session,
-        pty_resolve::prepare_ssh_session,
-        // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
-        // positioned a window that was never reparented and got no error saying so. Docking, if
-        // built, belongs to a plugin — see the note at the top of rdp_embed.rs.
-        rdp_embed::connect_rdp,
-        rdp_embed::rdp_disconnect,
-        // Detached terminal windows
-        terminal_window::detach_terminal,
-        terminal_window::bootstrap_terminal_window,
-        terminal_window::report_detached_terminal_context,
-        terminal_window::attach_session,
-        terminal_window::reattach_terminal,
-        terminal_window::focus_terminal_window,
-        terminal_window::release_terminal_window,
-        // Settings
-        settings::get_settings,
-        settings::save_settings,
-        // Settings transfer (export / import envelope)
-        settings_transfer::export_settings,
-        settings_transfer::import_settings,
-        // Native updater
-        update_manager::check_for_native_update,
-        update_manager::download_and_install_update,
-        update_manager::open_update_release_link,
-        // Themes
-        themes::list_themes,
-        themes::save_theme,
-        themes::delete_theme,
-        themes::open_themes_folder,
-        // Custom art
-        custom_art::upload_custom_art,
-        custom_art::get_custom_art,
-        custom_art::remove_custom_art,
-        // Connections
-        connections::load_connections,
-        connections::save_connections,
-        connections::export_json,
-        connections::export_text,
-        connections::import_json,
-        connections::import_file,
-        // Window control
-        window_control::minimize_window,
-        window_control::toggle_maximize,
-        window_control::close_window,
-        window_control::is_maximized,
-        window_control::set_webview_zoom,
-        window_control::set_fullscreen,
-        // Workspace
-        workspace::list_workspaces,
-        workspace::create_workspace,
-        workspace::add_workspace,
-        workspace_folders::add_workspace_folder,
-        workspace_folders::remove_workspace_folder,
-        workspace_folders::rename_workspace_folder,
-        workspace_lifecycle::import_workspace_file,
-        workspace_lifecycle::remove_workspace,
-        workspace_lifecycle::rename_workspace,
-        workspace_appearance::set_workspace_appearance,
-        workspace_appearance::set_workspace_folder_color,
-        workspace::move_workspace,
-        workspace::set_workspace_entry_pinned,
-        workspace::scan_scripts,
-        workspace::scan_workspace_folders,
-        workspace::scan_workspace_entries,
-        workspace::run_script,
-        workspace::read_script,
-        workspace::write_script,
-        text_file_commands::open_text_file,
-        text_file_commands::save_text_file,
-        text_file_commands::create_text_file,
-        workspace_file_commands::create_workspace_directory,
-        workspace_file_commands::move_workspace_file,
-        workspace_file_commands::delete_workspace_file,
-        temp_note_commands::list_temp_notes,
-        temp_note_commands::read_temp_note,
-        temp_note_commands::write_temp_note,
-        temp_note_commands::delete_temp_note,
-        temp_note_commands::save_temp_note_as,
-        file_view_commands::open_image_file,
-        safepath_command::system_excluded_view_exts,
-        workspace_connections::load_workspace_connections,
-        workspace_connections::save_workspace_connections,
-        workspace_connections::delete_workspace_connection,
-        // App utils
-        app_utils::reveal_log,
-        app_utils::clear_log,
-        app_utils::get_version,
-        app_utils::open_in_system,
-        app_utils::open_url,
-        // Ad-hoc shells + launcher
-        adhoc::shells_ready,
-        adhoc::shells_release,
-        adhoc::open_quick_shell,
-        shell_probe::list_available_shells,
-        launcher::setup_launcher,
-        // Plugin host commands
-        plugin_available,
-        plugin_list,
-        plugin_management::install_plugin_package,
-        plugin_management::remove_plugin,
-        plugin_management::restart_app,
-        plugin_set_enabled,
-        plugin_select_connection_provider,
-        connection_provider_capabilities,
-        plugin_invoke,
-        plugin_auth_gate,
-        always_awake::get_state,
-        always_awake::set_state,
-        always_awake::disable,
-        agent_quota::agent_quota_detect,
-        agent_quota::agent_quota_suspend,
-        agent_quota::agent_quota_resume,
-        agent_quota::agent_quota_resume_all,
-        agent_quota::agent_quota_terminate,
-        agent_quota::agent_quota_get_held,
-        agent_quota::agent_quota_resume_pid,
-        agent_session::resolve_claude_session,
-        agent_session::resolve_agent_model,
-        agent_session::export_claude_transcript,
-        agent_session::agent_sessions_load,
-        agent_session::agent_sessions_save,
-        attachments::save_temp_image,
-        attachments::save_attachment,
-        attachments::import_clipboard_files,
-        attachments::list_attachments,
-        attachments::clear_attachments,
-        // Git
-        git_commands::git_status,
-        git_commands::git_diff,
-        git_commands::git_stage,
-        git_commands::git_unstage,
-        git_commands::git_revert,
-        git_commands::git_commit,
-        git_commands::git_log,
-        git_commands::git_commit_details,
-        git_commands::git_commit_file_diff,
-        git_commands::git_branches,
-        git_commands::git_checkout,
-        git_commands::git_create_branch,
-        git_commands::git_delete_branches,
-        git_commands::git_fetch,
-        git_commands::git_pull,
-        git_commands::git_push,
-        git_commands::git_merge,
-        git_commands::git_rebase,
-        git_commands::git_init,
-        git_commands::git_diff_branch,
-        git_commands::git_blame,
-        git_commands::git_delete_file,
-        git_commands::git_read_file,
-        git_commands::git_read_file_revision,
-        git_commands::git_write_file,
-        git_commands::git_compare_branches,
-        git_commands::git_stash_list,
-        git_commands::git_stash_save,
-        git_commands::git_stash_pop,
-        git_commands::git_stash_apply,
-        git_commands::git_stash_drop,
-        git_commands::git_cherry_pick,
-        git_commands::git_file_history,
-        file_view_commands::git_file_context,
-        git_branch_commands::git_update_branch,
-        git_branch_commands::git_rename_branch,
-        git_branch_commands::git_set_upstream,
-        git_branch_commands::git_add_worktree,
-        git_branch_commands::git_worktrees,
-    ])
 }

@@ -1,0 +1,11 @@
+# Tests of the ported ide-vcs crate run git against throwaway repositories and expect byte-exact
+# files. A machine-wide `core.autocrlf=true` (Git for Windows default) rewrites line endings and
+# makes `git pull --rebase` see "unstaged changes". These variables override it for cargo runs only;
+# no user or system git configuration is touched.
+[env]
+GIT_CONFIG_COUNT = "1"
+GIT_CONFIG_KEY_0 = "core.autocrlf"
+GIT_CONFIG_VALUE_0 = "false"
+
+[build]
+jobs = 4

@@ -9,12 +9,12 @@
  * paths answered one of those edits — or an edit was committed early and the IME re-inserted it —
  * characters were duplicated or lost.
  *
- * Here the textarea mirrors what the PTY has received since the last key xterm sent itself, and each
+ * Here the textarea tracks what the PTY has received since the last key xterm sent itself, and each
  * IME edit is forwarded as the difference: one Backspace per changed character, then the new text.
  * The difference sent is recorded, so an edit reported twice (an `input` and a `compositionend`, a
  * repeated commit) finds nothing left to send. A composition is previewed while it is built and sent
  * when the IME ends it; the textarea is never touched while the IME is composing in it. Keys the IME
- * does not claim (Enter, arrows, Ctrl+…) stay xterm's, and the mirror restarts after one because the
+ * does not claim (Enter, arrows, Ctrl+…) stay xterm's, and tracking restarts after one because the
  * PTY's line moved on without it.
  */
 interface ImeTerminal {
@@ -68,7 +68,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
   /** The textarea text the PTY has already received. */
   let sent = ''
   let composing = false
-  /** xterm sent a key mid-composition: the mirror restarts once the IME lets go of the textarea. */
+  /** xterm sent a key mid-composition: tracking restarts once the IME lets go of the textarea. */
   let restartAfterComposition = false
   /** The printable key xterm is handling: its own `input` is xterm's business, not the IME's. */
   let xtermKey: string | null = null
@@ -93,7 +93,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
     return value.slice(commonPrefixLength(Array.from(sent), value)).join('')
   }
 
-  const setMirror = (value: string): void => {
+  const setShadow = (value: string): void => {
     textarea.value = value
     textarea.setSelectionRange(value.length, value.length)
     sent = value
@@ -113,7 +113,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
   const dropForeignText = (): void => {
     if (textarea.value === sent) return
     if (textarea.value.length === 0) sent = ''
-    else setMirror('')
+    else setShadow('')
   }
 
   const onKeyDown = (event: KeyboardEvent): void => {
@@ -137,7 +137,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
     const plainBackspace = event.key === 'Backspace' && !event.ctrlKey && !event.altKey && !event.metaKey
     // xterm sends a Backspace itself; the IME must see the character gone too, or its next
     // correction would reach for text the PTY no longer has.
-    setMirror(plainBackspace && textarea.value === sent ? Array.from(sent).slice(0, -1).join('') : '')
+    setShadow(plainBackspace && textarea.value === sent ? Array.from(sent).slice(0, -1).join('') : '')
   }
 
   const onKeyUp = (): void => {
@@ -146,7 +146,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
 
   // A click can move the PTY cursor (Alt+Click) and the copy menu refills the textarea.
   const onMouseDown = (): void => {
-    if (!composing) setMirror('')
+    if (!composing) setShadow('')
   }
 
   const onBeforeInput = (event: InputEvent): void => {
@@ -169,7 +169,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
     const inputEvent = event as InputEvent
     if (!IME_INPUT_TYPES.has(inputEvent.inputType) || (xtermKey !== null && inputEvent.data === xtermKey)) {
       // A paste or drop, or the default action of a key xterm handled: never the IME's typing.
-      setMirror('')
+      setShadow('')
       return
     }
     sync()
@@ -199,7 +199,7 @@ export const installWindowsImeInput = (terminal: ImeTerminal): WindowsImeInput =
     sync()
     if (restartAfterComposition) {
       restartAfterComposition = false
-      setMirror('')
+      setShadow('')
     }
   }
 

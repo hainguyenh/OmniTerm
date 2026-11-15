@@ -8,8 +8,15 @@ use app_core::workspace_model::{logical_target, move_entry_pin, namespace_path, 
 use app_protocol::workspace::Workspace;
 use tauri::{AppHandle, Runtime};
 
-use crate::text_file_commands::blocking;
 use crate::workspace::{find_workspace, read_workspaces, write_workspaces};
+
+async fn blocking<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("Task failed: {e}"))?
+}
 
 /// Apply `change` to the stored workspace and persist it only when something changed.
 fn update_workspace<R: Runtime>(

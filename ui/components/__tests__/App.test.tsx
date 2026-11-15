@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import App from "../../App";
 import { TOKYO_NIGHT } from "../../themes";
@@ -23,14 +23,6 @@ describe("App", () => {
       disconnect = vi.fn();
       unobserve = vi.fn();
     } as unknown as typeof ResizeObserver;
-  });
-
-  it("opens directly into the terminal workspace with no login", async () => {
-    render(<App />);
-    // The workspace (MainLayout) renders straight away — no master-password gate.
-    await waitFor(() => expect(screen.getByText(/Open a terminal/i)).toBeInTheDocument());
-    expect(screen.queryByPlaceholderText("Master password")).not.toBeInTheDocument();
-    expect(screen.queryByText("Local Vaults")).not.toBeInTheDocument();
   });
 
   it("loads stored settings and themes on mount", async () => {

@@ -16,7 +16,7 @@ export const TERMINAL_COPY_EVENT = 'omniterm:copy-terminal'
 export const TERMINAL_SAVE_OUTPUT_EVENT = 'omniterm:save-terminal-output'
 
 export interface TerminalBufferLineLike {
-  /** Mirrors xterm's IBufferLine.translateToString; `true` drops trailing cell padding. */
+  /** Matches xterm's IBufferLine.translateToString; `true` drops trailing cell padding. */
   translateToString: (trimRight?: boolean) => string
 }
 
@@ -153,7 +153,7 @@ export const createLastOutputTracker = (
   }
 }
 
-/** Dispatch a copy request for one session. Fired by TerminalCopyMenu. */
+/** Dispatch a copy request for one session. Fired by the session tab menu. */
 export const dispatchTerminalCopy = (sessionId: string, action: TerminalCopyAction): void => {
   window.dispatchEvent(new CustomEvent(TERMINAL_COPY_EVENT, { detail: { sessionId, action } }))
 }

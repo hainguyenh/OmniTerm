@@ -1,4 +1,4 @@
-import type { QuotaSnapshot, WindowKind } from '../src/types'
+import type { QuotaSnapshot, WindowKind } from './usage/types'
 import type { AgentConfig } from './quotaConfig'
 
 import { allUnderLimit, breachedWindow, isFresh, windowOf } from './quotaPolicy'

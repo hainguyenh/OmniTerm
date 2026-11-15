@@ -143,7 +143,8 @@ describe("release configuration", () => {
     ]) {
       expect(workflow, `${name} is never uploaded`).toContain(`name: ${name}`);
     }
-    expect(workflow).toMatch(/-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'/);
+    expect(workflow).toMatch(/-Plugins @\([\s\S]*Name = 'blur'/);
+    expect(workflow).not.toContain("Name = 'always-awake'");
     expect(workflow).not.toContain("name: OmniTerm-Plugin-always-awake");
     expect(workflow).not.toContain("name: OmniTerm-Plugin-blur");
     expect(workflow).toContain("release-artifacts/**/*.zip");

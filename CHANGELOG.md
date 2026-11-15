@@ -1,36 +1,5 @@
 # Changelog
 
-## [v0.1.15] — 2026-11-02
-
-### Added
-- **VS Code Launch Configuration Runner (`plugins/vscode-launch`)**: Run and debug launch targets defined in `.vscode/launch.json` directly from terminal pane headers.
-  - Multi-language debug adapter synthesis for Node.js (`pwa-node`), .NET / C# (`coreclr`, `dotnet`) via `netcoredbg` DAP adapter, Python (`debugpy`), Go (`delve`), Rust (`cargo`), and system browsers (`chrome`, `msedge`, `firefox`).
-  - VS Code and VSCodium Extension Host runner (`type: "extensionHost"`) expanding `${execPath}` and active development directories.
-  - Asynchronous background watcher pre-launch task unblocking: tasks matching `$tsc-watch` or `isBackground: true` unblock the main launch upon compilation readiness regex without hanging.
-  - Multi-console drawer docked below terminal panes with tab switching, ANSI colors, output search filter, and process tree termination.
-  - Interactive console tabs with `<Tooltip>` integration and `Stop & Close Console` process termination.
-- **Terminal Pane Color Settings**: Added "Use different color for each terminal pane" toggle under Settings → Appearance (default ON). When disabled, all terminal panes adopt the active theme accent color (`var(--theme-accent)`).
-- **External URL Launching**: Native `open_url` Tauri command and `omnitermAPI.app.openUrl` bridge to open HTTP/HTTPS links in the system's default browser from terminal link menus and launch consoles.
-- **Floating Copy Feedback**: Pixel-accurate floating theme-styled "Copied" badge at the cursor position on right-click copy in terminal panes and launch consoles.
-- **Settings Data Tab & Contributors**: Dedicated Data settings tab for backup/restore operations and GitHub Contributors list under Settings → About.
-
-### Changed
-- **Appearance & Settings Modal Polish**:
-  - Renamed the Artwork settings tab to **Appearance**, displaying custom idle and loading art previews in a compact 4-column responsive grid.
-  - Widened the Settings navigation sidebar to 14rem (`w-56`) and modal dialog container to 922px (`max-w-[922px]`).
-  - Vertically centered theme and launch trigger buttons in pane headers and title bar.
-  - Expanded launch trigger click zone to cover the launch configuration name and trigger button seamlessly.
-- **Aligned desktop title-bar controls**: Zoom reset, appearance picker, global font-size stepper, light/dark toggle, and native minimize/maximize/close buttons share a consistent 24 px vertical alignment inside the 28 px draggable bar. Native window buttons use 32 px slots, and all interactive controls remain in a non-draggable region.
-- **TLR theme**: Replaced the Compact built-in with **TLR** (internal ID `terminal-paper`), with a paper-and-graphite light palette and a warm-graphite dark palette. Retired Compact, ClickHouse and Volt Agent from the selectable theme catalog, with legacy selection migration.
-- **Customizable terminal controls**: Header/footer actions default to enabled, are ordered using compact accessible switches, and overflow into the three-dot menu as panes narrow. The current-directory action appears inline when room allows and supports `Ctrl+Alt+N`.
-
-### Fixed
-- **Safe startup session restoration**: Reopen saved panes as plain shells in their last working directories. Never automatically relaunch an AI coding TUI just because an agent previously ran in that pane or a different pane with the same folder; interrupted agents remain available for explicit Resume.
-- **Settings layout**: Smaller switch controls no longer compress their rows; the Terminal Header & Footer description spans the full available width, and the General Preferences summary stays clear of the Open Log button.
-- **Theme and window polish**: Aligned TLR previews, status indicators, and square-corner styling with the desktop shell and its Windows window-rounding behavior.
-- **Native toolbar alignment at non-default zoom**: Removed the theme picker trigger's inline baseline gap so its border aligns with the zoom, font-size, and mode buttons even at 80% app zoom.
-- **Theme-correct switches**: Global and per-terminal toolbar switch tracks/thumbs now use theme-defined corner radii; TLR uses square corners instead of forced pills.
-
 ## [v0.1.14] — 2026-10-07
 
 ### Added

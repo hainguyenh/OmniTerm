@@ -58,11 +58,8 @@ describe('sessionStore', () => {
   it('round-trips pane layout, connection metadata, and cwd', () => {
     const snapshot = makeSnapshot({
       viewGroups: [
-        { id: 'ungrouped', label: 'Ungrouped', layoutMode: 1, panes: ['tab-1', null, null, null, null, null, null, null], focusedPane: 0 },
-        { id: 'view-1', label: 'Desktop 1', layoutMode: 2, panes: [null, 'tab-1', null, null, null, null, null, null], focusedPane: 1, color: '#ff0000' },
+        { id: 'ungrouped', label: 'Ungrouped', layoutMode: 2, panes: ['tab-1', 'tab-2', null, null, null, null, null, null], focusedPane: 1 },
       ],
-      tabGroups: { 'tab-1': 'view-1' },
-      activeGroupId: 'view-1',
       layoutMode: 2,
       revision: 9,
     })
@@ -76,6 +73,39 @@ describe('sessionStore', () => {
       name: 'PowerShell',
       recovery: { cwd: 'F:/repo', cwdSource: 'reported', shell: 'powershell' },
     })
+  })
+
+  it('folds a snapshot with desktops into the single pane grid', () => {
+    saveSnapshot(makeSnapshot({
+      viewGroups: [
+        { id: 'ungrouped', label: 'Ungrouped', layoutMode: 1, panes: ['tab-0', null, null, null, null, null, null, null], focusedPane: 0 },
+        { id: 'view-1', label: 'Desktop 1', layoutMode: 2, panes: [null, 'tab-1', null, null, null, null, null, null], focusedPane: 1, color: '#ff0000' },
+      ],
+      tabGroups: { 'tab-1': 'view-1' },
+      activeGroupId: 'view-1',
+      layoutMode: 2,
+    }))
+
+    const loaded = loadSnapshot()
+    expect(loaded?.viewGroups).toHaveLength(1)
+    expect(loaded?.viewGroups[0]).toMatchObject({ id: 'ungrouped', layoutMode: 2, focusedPane: 1 })
+    expect(loaded?.viewGroups[0]?.panes[1]).toBe('tab-1')
+    expect(loaded?.tabGroups).toEqual({})
+    expect(loaded?.activeGroupId).toBe('ungrouped')
+    expect(loaded?.layoutMode).toBe(2)
+  })
+
+  it('falls back to the first populated desktop when the active one is missing', () => {
+    saveSnapshot(makeSnapshot({
+      viewGroups: [
+        { id: 'ungrouped', label: 'Ungrouped', layoutMode: 1, panes: Array(8).fill(null), focusedPane: 0 },
+        { id: 'view-2', label: 'Desktop 2', layoutMode: 4, panes: ['tab-1', null, null, null, null, null, null, null], focusedPane: 0 },
+      ],
+      activeGroupId: 'gone',
+      layoutMode: 1,
+    }))
+
+    expect(loadSnapshot()).toMatchObject({ layoutMode: 4, activeGroupId: 'ungrouped' })
   })
 
   /**

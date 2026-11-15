@@ -55,7 +55,7 @@ export function resetAgentLaunchSignalForTests(): void {
 const AGENT_LINE = /^\s*(?:PS [^>]*>|[A-Za-z]:\\[^>]*>|\S*[$#%]|[❯›➜λ])?\s*(?:&\s*)?(?:\S*[\\/])?(claude|codex|agy|opencode|aider|gemini)(?:-[A-Za-z0-9_.]{1,40})?(?:\.(?:cmd|bat|exe|ps1))?(?:\s+(.*))?$/i
 
 /** Subcommands and flags that print and exit instead of opening the agent's interactive screen. */
-const ONE_SHOT = /^(?:-v|-h|-p|--version|--help|--print|update|doctor|mcp|config|install|login|logout|exec|e|apply|completion)(?:\s|$)/i
+const ONE_SHOT = /^(?:-v|-h|-p|--version|--help|--print|update|doctor|mcp|config|install|login|logout|auth|signin|sign-in|log-in|exec|e|apply|completion)(?:\s|$)/i
 
 /** Which agent a submitted shell line starts interactively, if any. */
 export function agentLaunchedBy(line: string): LaunchedAgent | null {

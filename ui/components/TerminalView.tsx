@@ -24,16 +24,19 @@ import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
+import { forgetCtrlC, recentlyInterrupted } from '../terminal/ctrlCGuard'
+import { exitBannerText } from '../terminal/exitBanner'
 import { createTerminalKeyHandler } from '../terminal/terminalKeyHandler'
 import { bufferText, createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
 import { registerTerminalSaveExport } from '../utils/terminalSaveExport'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
-import { installTerminalInterruptReset, interruptSessionProcess } from '../utils/terminalInterruptReset'
+import { installTerminalInterruptReset } from '../utils/terminalInterruptReset'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
+import CtrlCHint from './CtrlCHint'
 import type { TerminalViewProps } from './TerminalView.types'
 
 export { DEFAULT_MONO_STACK }
@@ -44,6 +47,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const [isFocused, setIsFocused] = React.useState(false)
   const [isHovered, setIsHovered] = React.useState(false)
   const [sessionUnavailable, setSessionUnavailable] = React.useState(false)
+  const [ctrlCHintTick, setCtrlCHintTick] = React.useState(0)
   // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
   // host (Escape / outside click / item picked).
   const [linkMenu, setLinkMenu] = React.useState<TerminalLinkMenuState | null>(null)
@@ -228,10 +232,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
-      if (data === '\x03') {
-        interruptSessionProcess(id, connection.type)
-        return
-      }
       if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       noteSubmittedInput(id, data, term.buffer) // an agent launch freezes the pane at once (agentLaunchSignal.ts)
       copyTracker.noteInput(data)
@@ -297,7 +297,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
     const interruptReset = installTerminalInterruptReset(term, id)
-    // The pane-header copy menu (TerminalCopyMenu) asks for this pane's text by session id; the
+    // The session tab menu (Copy) asks for this pane's text by session id; the
     // xterm instance lives only here, so the extraction runs at the request site.
     const disposeCopyRequests = registerTerminalCopyHandler({
       sessionId: id,
@@ -335,8 +335,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     const isMac = window.omnitermAPI.app.platform === 'darwin'
 
+    // A single Ctrl+C that ends the process keeps the tab (see sessionExit.ts); until the user restarts
+    // or closes it, Enter and Ctrl+C act on the dead session instead of being sent to the PTY.
+    let exitedAfterInterrupt = false
+
     term.attachCustomKeyEventHandler(
       createTerminalKeyHandler({
+        sessionId: id,
         term,
         clipboard,
         connection,
@@ -344,7 +349,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         getAgentName: currentAgent,
         getShortcuts: () => shortcutsRef.current,
         getEnterModes: () => enterModesRef.current,
-        onInterrupt: () => interruptSessionProcess(id, connection.type),
+        onInterruptHint: () => setCtrlCHintTick((n) => n + 1),
+        getExitedActions: () => (exitedAfterInterrupt && cbs.current.onRestart ? { restart: () => { exitedAfterInterrupt = false; cbs.current.onRestart?.() } } : null),
       }),
     )
 
@@ -353,7 +359,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term, api, id, isLocal, host: connection.host, mode,
       onStatus: (s) => cbs.current.onStatus?.(s),
       onUnavailable: () => setSessionUnavailable(true),
-      onExit: (code) => cbs.current.onExit?.(code),
+      onExit: (code) => {
+        if (recentlyInterrupted(id, Date.now())) {
+          exitedAfterInterrupt = true
+          term.write(exitBannerText(code))
+        }
+        cbs.current.onExit?.(code)
+      },
       onMetrics: (m) => cbs.current.onMetrics?.(m),
       onActivity: (busy) => cbs.current.onActivity?.(busy),
       smartColors: () => smartColorsRef.current === true,
@@ -396,6 +408,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
       releaseSessionMedia(id)
+      forgetCtrlC(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
       termRef.current = null
@@ -470,6 +483,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         isLocal={connection.type === 'LOCAL'}
         onClose={() => setLinkMenu(null)}
       />
+      <CtrlCHint trigger={ctrlCHintTick} />
       <PastedImageViewerHost sessionId={id} />
     </div>
   )

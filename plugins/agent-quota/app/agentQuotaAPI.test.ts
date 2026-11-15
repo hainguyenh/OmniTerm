@@ -61,10 +61,14 @@ describe('createAgentQuotaAPI', () => {
 
   it('sends exact command payloads and parses the answers', async () => {
     const api = createAgentQuotaAPI()
-    invoke.mockResolvedValueOnce({ name: 'Agent Quota' })
+    invoke.mockResolvedValueOnce(true)
     expect(await api.info()).toBe(true)
-    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.info', args: [] })
-    invoke.mockRejectedValueOnce(new Error('no plugin'))
+    expect(invoke).toHaveBeenLastCalledWith('agent_quota_info')
+    invoke.mockResolvedValueOnce(false)
+    expect(await api.info()).toBe(false)
+    invoke.mockResolvedValueOnce({ name: 'Agent Quota' })
+    expect(await api.info()).toBe(false)
+    invoke.mockRejectedValueOnce(new Error('no command'))
     expect(await api.info()).toBe(false)
 
     invoke.mockResolvedValueOnce([])
@@ -88,16 +92,17 @@ describe('createAgentQuotaAPI', () => {
     expect(invoke).toHaveBeenLastCalledWith('agent_quota_terminate', { sessionId: 's', pid: 1, startTime: 2 })
   })
 
-  it('routes usage and wake through the plugin and never throws', async () => {
+  it('routes usage and wake through the native commands and never throws', async () => {
     const api = createAgentQuotaAPI()
     invoke.mockResolvedValueOnce({ windows: [], fetchedAt: 1 })
     expect(await api.fetchUsage({ agent: 'codex' })).toEqual({ windows: [], fetchedAt: 1 })
-    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.fetchUsage', args: [{ agent: 'codex' }] })
-    invoke.mockRejectedValueOnce('sidecar down')
-    expect(await api.fetchUsage({ agent: 'codex' })).toMatchObject({ error: 'failed', message: 'sidecar down' })
+    expect(invoke).toHaveBeenLastCalledWith('agent_quota_fetch_usage', { request: { agent: 'codex' } })
+    invoke.mockRejectedValueOnce('Agent Quota is turned off in Plugins.')
+    expect(await api.fetchUsage({ agent: 'codex' })).toMatchObject({ error: 'failed', message: 'Agent Quota is turned off in Plugins.' })
 
     invoke.mockResolvedValueOnce({ ok: true })
     expect(await api.wake({ agent: 'claude', prompt: 'hi' })).toEqual({ ok: true, message: undefined })
+    expect(invoke).toHaveBeenLastCalledWith('agent_quota_wake', { request: { agent: 'claude', prompt: 'hi' } })
     invoke.mockResolvedValueOnce({ ok: false, message: 'nope' })
     expect(await api.wake({ agent: 'claude', prompt: 'hi' })).toEqual({ ok: false, message: 'nope' })
     invoke.mockResolvedValueOnce(null)
@@ -110,7 +115,7 @@ describe('createAgentQuotaAPI', () => {
     const api = createAgentQuotaAPI()
     invoke.mockResolvedValueOnce('C:\\Temp\\omniterm-wake')
     expect(await api.probeDir?.()).toBe('C:\\Temp\\omniterm-wake')
-    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.probeDir', args: [] })
+    expect(invoke).toHaveBeenLastCalledWith('agent_quota_probe_dir')
     for (const bad of ['', 42, null, 'x'.repeat(1025), 'C:\\a\0b']) {
       invoke.mockResolvedValueOnce(bad)
       expect(await api.probeDir?.()).toBeNull()
@@ -140,11 +145,11 @@ describe('parseDiscoveredProfiles', () => {
     expect(parseDiscoveredProfiles({})).toEqual([])
   })
 
-  it('asks the sidecar and treats a missing plugin as no profiles', async () => {
+  it('asks the native command and treats a failure as no profiles', async () => {
     invoke.mockReset()
     invoke.mockResolvedValueOnce([{ agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' }])
     expect(await listAgentProfiles()).toEqual([{ agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' }])
-    expect(invoke).toHaveBeenLastCalledWith('plugin_invoke', { method: 'agentQuota.listProfiles', args: [] })
+    expect(invoke).toHaveBeenLastCalledWith('agent_quota_list_profiles')
     invoke.mockRejectedValueOnce(new Error('no plugin'))
     expect(await listAgentProfiles()).toEqual([])
   })

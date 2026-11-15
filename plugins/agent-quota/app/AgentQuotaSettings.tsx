@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 import type { AgentConfig, DisplayConfig, QuotaConfig } from './quotaConfig'
 
 import './agentQuota.css'
-import { isSafePrompt } from '../src/prompt'
+import { isSafePrompt } from './usage/prompt'
 import { AgentSettingsCard } from './AgentSettingsCard'
 import { LoadingArtSettings } from './LoadingArtSettings'
 import { QuotaLinesSettings } from './QuotaLinesSettings'
 import { AGENT_KINDS } from './quotaConfig'
-import { clearAllManualPauses, clearOverrides, quotaCommands, useQuota } from './quotaStore'
-import { CompactSwitch } from './settingsControls'
+import { clearAllManualPauses, clearOverrides, quotaCommands, useCoarseNow, useQuota } from './quotaStore'
+import { QuotaSummaryForm } from './QuotaSummaryForm'
 
 type SettingsGroup = 'agents' | 'lines' | 'artwork'
 
@@ -32,7 +32,8 @@ function promptsValid(config: QuotaConfig): boolean {
 }
 
 /**
- * The Settings → Agent Quota tab: the master switch and the pin, then three groups — Agents (limits,
+ * The Settings → Agent quota page: a summary form (master switch, placement, animations, providers,
+ * at-limit guard), then three groups — Agents (limits,
  * protection and wake-up per agent), Quota lines (how the pane strips look) and Loading artwork (the
  * busy-header art) — one at a time, each with a live preview of what it controls.
  *
@@ -43,7 +44,7 @@ function promptsValid(config: QuotaConfig): boolean {
 export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: AgentQuotaSettingsProps) {
   const committed = useQuota((state) => state.config)
   const overrideCount = useQuota((state) => Object.keys(state.overrides).length)
-  const now = useQuota((state) => state.now)
+  const now = useCoarseNow()
   const [draft, setDraft] = useState<QuotaConfig>(committed)
   const [group, setGroup] = useState<SettingsGroup>('agents')
   const [resetOverridesToo, setResetOverridesToo] = useState(false)
@@ -75,23 +76,7 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: Agen
 
   return (
     <div className="p-5 flex flex-col gap-3 text-theme-fg">
-      <div className="flex flex-col gap-0.5 px-1">
-        <CompactSwitch
-          label="Agent Quota"
-          note="quota lines for AI agents in each terminal, and limit guards"
-          checked={draft.enabled}
-          onChange={() => setDraft({ ...draft, enabled: !draft.enabled })}
-          ariaLabel="Enable Agent Quota"
-        />
-        <CompactSwitch
-          label="Pin to activity bar"
-          note="quick-settings icon"
-          hint="Keep the quick-settings icon in the activity bar (shortcut: Agent Quota in Shortcuts)."
-          checked={draft.pinned}
-          onChange={() => setDraft({ ...draft, pinned: !draft.pinned })}
-          ariaLabel="Pin Agent Quota to the activity bar"
-        />
-      </div>
+      <QuotaSummaryForm draft={draft} onChange={setDraft} />
 
       <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl border border-theme-border text-xs sticky top-0 bg-theme-bg z-10">
         {applied

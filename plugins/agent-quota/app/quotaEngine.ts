@@ -1,5 +1,6 @@
-import type { AgentKind, QuotaSnapshot } from '../src/types'
-import type { AgentQuotaAPI, SessionAgent } from './agentQuotaAPI'
+import type { AgentKind, QuotaSnapshot } from './usage/types'
+import type { SessionAgent } from './agentQuotaAPI'
+import type { EngineDeps, EngineInputs } from './quotaEngineDeps'
 import type { ProfileQuota, TerminalAgent } from './quotaStore'
 
 import { releaseUnguarded, resumeByHand, runGuards, suspendByHand } from './guardRunner'
@@ -9,45 +10,25 @@ import { instanceKeyOf, profileKeyOf } from './profileKey'
 import { AGENT_LABELS, type AgentConfig } from './quotaConfig'
 import { isHeld } from './quotaGuard'
 import { isOlderReading, windowOf } from './quotaPolicy'
-import { getQuotaState, patchProfile, pushNotice, terminalConfig, updateQuota } from './quotaStore'
+import { getQuotaState, patchProfile, pushNotice, setQuotaNow, terminalConfig, updateQuota } from './quotaStore'
 import { pushSample } from './smartInterval'
 import { dueWake, rememberReset, weekSpent } from './wakePolicy'
 
 /**
- * The Agent Quota loop. Once a second it advances the shared clock; every few seconds it asks Rust
- * which agent each open terminal runs; and it reads each *active* profile's quota on that profile's
- * own smart interval, then lets the guard and the wake schedule act on the reading.
+ * The Agent Quota loop. Once a second it advances the countdown clock (while the window is
+ * visible); every few seconds it asks Rust which agent each open terminal runs; and it reads each
+ * *active* profile's quota on that profile's own smart interval, then lets the guard and the wake
+ * schedule act on the reading.
  *
  * Plain class with injected API, clock and timers, so every rule is testable without React.
  */
 
-export interface EngineDeps {
-  api: AgentQuotaAPI
-  now(): number
-  random(): number
-  setTimer(run: () => void, ms: number): unknown
-  clearTimer(handle: unknown): void
-  /**
-   * Read quota from the agent itself when it starts in a terminal (see inlineUsageProbe.ts); null
-   * when it can't, and the background read runs instead. Absent: always the background read.
-   */
-  inlineProbe?(terminal: TerminalAgent): Promise<QuotaSnapshot | null>
-  /**
-   * Freezes a pane from the moment an agent is started in it until the inline probe takes it over
-   * (see `noteLaunch`); `release` lets go of a hold no probe is going to take.
-   */
-  launchHold?: { hold(sessionId: string): void; release(sessionId: string): void }
-  /** A pane's rendered screen, for the strip's manual read (see manualUsageRead.ts). */
-  readScreen?(sessionId: string): string[] | null
-}
-
-export interface EngineInputs {
-  /** Terminal sessions open in this window; detection results for anything else are ignored. */
-  sessionIds: readonly string[]
-  busy: Readonly<Record<string, boolean>>
-}
-
 const TICK_MS = 1000
+/**
+ * With Agent Quota switched off nothing is read, guarded or counted down: the loop only lets go of
+ * guards switched off meanwhile, this rarely. Switching it back on runs a tick at once (`poke`).
+ */
+const OFF_TICK_MS = 15_000
 const DETECT_MS = 5000
 const AFTER_WAKE_REFRESH_MS = 5000
 /** While an agent is being started in a frozen pane, its process is looked for this often. */
@@ -80,13 +61,31 @@ export class QuotaEngine {
   start(): void {
     if (!this.stopped) return
     this.stopped = false
-    const loop = () => {
+    this.loop()
+  }
+
+  private ticking = false
+
+  private loop(): void {
+    if (this.stopped || this.ticking) return
+    this.ticking = true
+    void this.tick().finally(() => {
+      this.ticking = false
       if (this.stopped) return
-      void this.tick().finally(() => {
-        if (!this.stopped) this.timer = this.deps.setTimer(loop, TICK_MS)
-      })
-    }
-    loop()
+      const delay = getQuotaState().config.enabled ? TICK_MS : OFF_TICK_MS
+      this.timer = this.deps.setTimer(() => this.loop(), delay)
+    })
+  }
+
+  /**
+   * Tick now instead of at the next scheduled one: Agent Quota was switched back on, or the window
+   * became visible again and its countdowns are stale.
+   */
+  poke(): void {
+    if (this.stopped || this.ticking) return
+    if (this.timer !== null) this.deps.clearTimer(this.timer)
+    this.timer = null
+    this.loop()
   }
 
   stop(): void {
@@ -136,10 +135,10 @@ export class QuotaEngine {
 
   async tick(): Promise<void> {
     const now = this.deps.now()
-    updateQuota((current) => ({ ...current, now }))
     await this.track(releaseUnguarded(this.deps.api))
     this.expireLaunches(now)
     if (!getQuotaState().config.enabled) return
+    if (this.deps.visible?.() ?? true) setQuotaNow(now)
     if (now >= this.detectAt && !this.detecting) await this.detect(now)
     for (const profile of Object.values(getQuotaState().profiles)) {
       const monitoring = this.configsForProfile(profile.key).some((config) => config.enabled)
@@ -175,7 +174,8 @@ export class QuotaEngine {
   private async detect(now: number): Promise<void> {
     this.detecting = true
     try {
-      const rows = await this.deps.api.detect().catch(() => null)
+      // A launch being watched needs this second's process table, not the shared reading.
+      const rows = await this.deps.api.detect(this.launching.size > 0).catch(() => null)
       if (rows) this.applyDetection(rows, now)
     } finally {
       this.detecting = false

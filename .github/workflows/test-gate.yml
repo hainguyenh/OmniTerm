@@ -82,7 +82,18 @@ jobs:
   rust-checks:
     name: Rust — Clippy & Tests
     runs-on: ubuntu-latest
+    env:
+      # Debug info is not needed for linting, tests or LLVM coverage and dominates the target size.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
+      # The full workspace (IDE crates, Wasmtime, Tauri) fills the 14 GB runner disk once
+      # instrumented, so drop preinstalled toolchains this repository never uses first.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force || true
+          df -h /
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}
@@ -111,7 +122,18 @@ jobs:
   rust-coverage:
     name: Rust — Coverage (llvm-cov)
     runs-on: ubuntu-latest
+    env:
+      # Debug info is not needed for linting, tests or LLVM coverage and dominates the target size.
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_PROFILE_TEST_DEBUG: '0'
     steps:
+      # The full workspace (IDE crates, Wasmtime, Tauri) fills the 14 GB runner disk once
+      # instrumented, so drop preinstalled toolchains this repository never uses first.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force || true
+          df -h /
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.git_ref || github.ref }}

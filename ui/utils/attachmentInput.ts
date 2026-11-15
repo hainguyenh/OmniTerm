@@ -6,7 +6,7 @@
  */
 import type { AttachmentInfo } from './attachmentTypes'
 
-/** Mirrors `MAX_ATTACHMENT_BYTES` in app-core, so an oversized file is skipped before it is read. */
+/** Matches `MAX_ATTACHMENT_BYTES` in app-core, so an oversized file is skipped before it is read. */
 export const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
 
 /** A stored attachment, with its bytes when it is an image (for the pane's image viewer). */

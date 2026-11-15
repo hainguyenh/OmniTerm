@@ -66,7 +66,7 @@ export default function NewTerminalMenu({
       folder.path,
     ].some(value => value.toLocaleLowerCase().includes(normalizedQuery)))
   }, [normalizedQuery, rows])
-  // Flat navigation order mirrors the rendered rows: "None" row, filtered folders, then shells.
+  // Flat navigation order matches the rendered rows: "None" row, filtered folders, then shells.
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'folder', selection: null },
     ...filteredRows.map(({ selection }) => ({ kind: 'folder' as const, selection })),

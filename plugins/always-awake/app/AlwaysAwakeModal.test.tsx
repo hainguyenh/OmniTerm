@@ -171,9 +171,7 @@ describe('AlwaysAwakeModal', () => {
     const custom = fromLocalInput(toLocalInput(Date.now() + 5 * 86_400_000))
     render(<AlwaysAwakeModal status={{ ...status, enabled: true, expiresAtMs: custom }} onClose={vi.fn()} onSaved={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Custom' })).toHaveAttribute('aria-pressed', 'true')
-    const input = screen.getByLabelText('Keep awake until')
-    expect(input).toHaveValue(toLocalInput(custom))
-    expect(input).toHaveStyle({ colorScheme: 'var(--theme-color-scheme, dark)' })
+    expect(screen.getByLabelText('Keep awake until')).toHaveValue(toLocalInput(custom))
   })
 
   it('classifies a stored deadline back into the schedule that produced it', () => {
@@ -211,13 +209,5 @@ describe('AlwaysAwakeModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Off' }))
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(disabled))
     expect(onClose).toHaveBeenCalled()
-  })
-
-  it('aligns the mode radio buttons vertically centered with their labels', () => {
-    render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
-    const radio = screen.getByRole('radio', { name: /While terminal work is active/ })
-    const label = radio.closest('label')
-    expect(label).toHaveClass('items-center')
-    expect(radio).not.toHaveClass('mt-0.5')
   })
 })

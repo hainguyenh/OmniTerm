@@ -20,6 +20,8 @@ function onState(callback: (state: AlwaysAwakeStatus) => void): () => void {
 
 export function createAlwaysAwakeAPI() {
   return {
+    /** Whether the built-in feature is switched on in the Plugins dialog. */
+    info: () => invoke<unknown>('always_awake_info').then((enabled) => enabled === true, () => false),
     getState: () => invoke<AlwaysAwakeStatus>('get_state'),
     setState: (payload: { enabled: boolean; mode: AlwaysAwakeMode; expiresAtMs: number }) =>
       invoke<AlwaysAwakeStatus>('set_state', payload),

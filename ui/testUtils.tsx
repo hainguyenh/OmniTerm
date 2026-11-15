@@ -88,6 +88,8 @@ const defaults: Api = {
   plugin: {
     available: async () => false,
     list: async () => [],
+    builtinIds: async () => [],
+    onChanged: () => () => {},
     setEnabled: async () => {
       throw new Error('Unknown plugin')
     },
@@ -111,6 +113,7 @@ const defaults: Api = {
     wake: async () => ({ ok: true }),
   },
   alwaysAwake: {
+    info: async () => true,
     getState: async () => ({
       enabled: false,
       mode: 'activeOnly',
@@ -170,13 +173,6 @@ const defaults: Api = {
     run: async () => true,
     readScript: async () => '',
     writeScript: async () => {},
-    openTextFile: async () => ({
-      content: '', size: 0, mtimeMs: 0, lineCount: 1, maxLineLen: 0, eol: 'lf' as const,
-      mixedEol: false, hasBom: false, readOnly: false,
-    }),
-    saveTextFile: async () => ({ status: 'saved' as const, size: 0, mtimeMs: 0 }),
-    openImageFile: async () => new Uint8Array(),
-    createTextFile: async (_wsId: string, path: string) => path,
     createDirectory: async (_wsId: string, path: string) => path,
     moveFile: async (_wsId: string, _from: string, to: string) => to,
     deleteFile: async () => {},
@@ -260,7 +256,6 @@ const defaults: Api = {
     revealLog: async () => "",
     clearLog: async () => false,
     openInSystem: async () => {},
-    openUrl: async () => {},
     setZoomFactor: () => {},
     getZoomFactor: () => 1,
   },
@@ -288,7 +283,6 @@ const defaults: Api = {
     showSaveDialog: async () => null,
     downloadPortable: async () => {},
     downloadInstaller: async () => {},
-    openReleasePage: async () => {},
     nativeCheck: async () => ({ available: false, reason: 'updater-disabled' }),
     nativeInstall: async () => {},
     onState: noopSub,

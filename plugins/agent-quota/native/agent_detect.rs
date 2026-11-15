@@ -192,7 +192,7 @@ pub fn profile_name(kind: AgentKind, dir: Option<&str>) -> String {
 }
 
 /// `claude-th` from a command-line token naming `…\claude-th.cmd` (or `.bat`). Only names shaped
-/// `<agent>-<suffix>` with a short plain suffix qualify: the sidecar resolves the name again from
+/// `<agent>-<suffix>` with a short plain suffix qualify: `app_core::agent_quota` resolves the name again from
 /// the user's bin directory, so nothing here ever becomes a path to execute.
 pub fn launcher_name(token: &str, kind: AgentKind) -> Option<String> {
     let file = token.trim_matches(['"', '\'']).rsplit(['/', '\\']).next()?;
@@ -323,10 +323,7 @@ pub fn launcher_host_pids(rows: &[ProcRow], shell_pid: u32) -> Vec<u32> {
     while let Some(pid) = parent.filter(|&pid| pid != shell_pid && seen.insert(pid)) {
         let Some(row) = by_pid.get(&pid) else { break };
         let stem = image_stem(&row.image);
-        if matches!(
-            stem.as_str(),
-            "cmd" | "powershell" | "pwsh" | "bash" | "zsh" | "sh" | "wsl"
-        ) {
+        if matches!(stem.as_str(), "cmd" | "powershell" | "pwsh" | "bash" | "zsh" | "sh" | "wsl") {
             out.push(pid);
         }
         parent = Some(row.parent);

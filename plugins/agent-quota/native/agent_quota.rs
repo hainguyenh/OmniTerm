@@ -1,10 +1,11 @@
 //! Agent Quota runtime: detects the AI agent in each local terminal and freezes or thaws it on the
 //! renderer's request.
 //!
-//! Quota data, limits and the watchdog live in the plugin (Node sidecar + renderer). This module
-//! only owns what needs the process table: which agent and profile a terminal runs, and the
-//! processes it froze — so they are thawed on resume, on plugin shutdown and when the app exits,
-//! and never left suspended behind a closed window.
+//! Limits and the watchdog live in the renderer; reading quota and waking profiles are the
+//! `usage_commands` (logic in `app_core::agent_quota`). This module owns what needs the process
+//! table: which agent and profile a terminal runs, and the processes it froze — so they are thawed
+//! on resume, when the feature is switched off and when the app exits, and never left suspended
+//! behind a closed window.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -19,6 +20,8 @@ mod agent_guard;
 mod agent_snapshot;
 #[path = "process_suspend.rs"]
 mod process_suspend;
+#[path = "usage_commands.rs"]
+pub mod usage_commands;
 
 use agent_detect::{ProcRow, ProcTarget};
 use agent_guard::{NativeOps, ProcOps};
@@ -174,15 +177,7 @@ impl AgentQuotaState {
             .map_err(|_| "Agent Quota hold lock is poisoned".to_string())?;
         let entry = held.entry(session_id.to_string()).or_default();
         let home = agent_snapshot::home_dir();
-        agent_guard::suspend_session(
-            self.ops.as_ref(),
-            &rows,
-            shell,
-            pid,
-            start_time,
-            entry,
-            home.as_deref(),
-        )
+        agent_guard::suspend_session(self.ops.as_ref(), &rows, shell, pid, start_time, entry, home.as_deref())
     }
 
     fn terminate(
@@ -195,15 +190,7 @@ impl AgentQuotaState {
         let rows = self.source.action_rows(shell);
         let held = self.take_held(session_id);
         let home = agent_snapshot::home_dir();
-        agent_guard::terminate_session(
-            self.ops.as_ref(),
-            &rows,
-            shell,
-            pid,
-            start_time,
-            held,
-            home.as_deref(),
-        )
+        agent_guard::terminate_session(self.ops.as_ref(), &rows, shell, pid, start_time, held, home.as_deref())
     }
 }
 
@@ -302,7 +289,10 @@ pub async fn agent_quota_get_held<R: Runtime>(
     app: AppHandle<R>,
     session_id: Option<String>,
 ) -> Result<Vec<ProcTarget>, String> {
-    blocking(&app, move |state| Ok(state.get_held(session_id.as_deref()))).await
+    blocking(&app, move |state| {
+        Ok(state.get_held(session_id.as_deref()))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -311,7 +301,10 @@ pub async fn agent_quota_resume_pid<R: Runtime>(
     session_id: String,
     pid: u32,
 ) -> Result<bool, String> {
-    blocking(&app, move |state| state.resume_pid(&session_id, pid)).await
+    blocking(&app, move |state| {
+        state.resume_pid(&session_id, pid)
+    })
+    .await
 }
 
 #[cfg(test)]

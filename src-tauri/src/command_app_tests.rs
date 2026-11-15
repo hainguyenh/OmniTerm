@@ -13,9 +13,10 @@ fn app_and_plugin_commands_cover_safe_no_side_effect_paths() {
 
     let host = fixture.app.state::<PluginHost>();
     assert!(!block_on(plugin_available(app.clone(), host.clone())).unwrap());
-    assert!(block_on(plugin_list(app.clone(), host.clone()))
-        .unwrap()
-        .is_empty());
+    // No plugin host runs here, so only the built-in features are listed.
+    let listed = block_on(omni_plugin_list(app.clone(), host.clone())).unwrap();
+    let ids: Vec<&str> = listed.iter().filter_map(|row| row["id"].as_str()).collect();
+    assert_eq!(ids, ["omniterm.agent-quota", "omniterm.always-awake"]);
     assert!(block_on(plugin_management::remove_plugin(
         app.clone(),
         host,
@@ -105,7 +106,8 @@ fn plugin_command_wrappers_preserve_stopped_host_fallbacks_and_errors() {
         None
     );
     assert!(block_on(plugin_auth_gate(host.clone())).unwrap());
-    assert!(block_on(plugin_set_enabled(
+    assert!(block_on(omni_plugin_set_enabled(
+        fixture.handle(),
         host.clone(),
         "missing".to_string(),
         true,

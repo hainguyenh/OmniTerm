@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { GuardState } from './quotaGuard'
 
 import { DEFAULT_QUOTA_CONFIG } from './quotaConfig'

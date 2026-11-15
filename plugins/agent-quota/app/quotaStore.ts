@@ -1,12 +1,13 @@
 import { useSyncExternalStore } from 'react'
 
-import type { AgentKind, QuotaSnapshot } from '../src/types'
+import type { AgentKind, QuotaSnapshot } from './usage/types'
 import type { SessionAgent } from './agentQuotaAPI'
 import type { AgentConfig, AgentOverride, QuotaConfig } from './quotaConfig'
 import type { GuardState } from './quotaGuard'
 import type { Sample } from './smartInterval'
 import type { WakeMemory } from './wakePolicy'
 
+import { setQuotaNow } from './quotaClock'
 import { DEFAULT_QUOTA_CONFIG, effectiveConfig } from './quotaConfig'
 
 /**
@@ -75,8 +76,6 @@ export interface QuotaState {
    * engine reads the pane until the user's own `/usage` panel shows up (see manualUsageRead.ts).
    */
   awaitingUsage: Record<string, number>
-  /** Coarse clock shared by every countdown, advanced by the engine once a second. */
-  now: number
 }
 
 export const initialQuotaState = (): QuotaState => ({
@@ -92,7 +91,6 @@ export const initialQuotaState = (): QuotaState => ({
   reviewSessionId: null,
   confirm: null,
   awaitingUsage: {},
-  now: Date.now(),
 })
 
 let state: QuotaState = initialQuotaState()
@@ -125,6 +123,7 @@ export function subscribeQuota(listener: () => void): () => void {
 /** Test hook: back to a pristine store. */
 export function resetQuotaStore(): void {
   state = initialQuotaState()
+  setQuotaNow(Date.now())
   commands = NO_COMMANDS
   for (const listener of [...listeners]) listener()
 }
@@ -133,21 +132,8 @@ export function useQuota<T>(selector: (current: QuotaState) => T): T {
   return useSyncExternalStore(subscribeQuota, () => selector(state), () => selector(state))
 }
 
-/**
- * The engine's clock, rounded to a coarse bucket so a pane strip doesn't re-render every second
- * just because *some* other profile ticked. Selects the same `state.now` the engine already
- * advances once a second — this only changes how often a *given* subscriber notices, via
- * `useSyncExternalStore`'s `Object.is` check on the bucketed value.
- *
- * Pass the nearest deadline this caller cares about (a window's own `resetsAt`) to get
- * second-level precision once it is under two minutes away; omit it for the coarse 30s cadence.
- */
-export function useCoarseNow(nearestDeadlineMs?: number): number {
-  return useQuota((current) => {
-    const bucketMs = nearestDeadlineMs !== undefined && nearestDeadlineMs - current.now < 120_000 ? 1_000 : 30_000
-    return Math.floor(current.now / bucketMs) * bucketMs
-  })
-}
+/** The countdown clock lives in its own store (see quotaClock.ts); re-exported for the plugin's views. */
+export { getQuotaNow, setQuotaNow, useCoarseNow, useQuotaNow } from './quotaClock'
 
 let nextNoticeId = 1
 const MAX_NOTICES = 4

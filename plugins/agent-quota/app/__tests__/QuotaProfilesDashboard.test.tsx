@@ -4,7 +4,7 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { QuotaSnapshot } from '../../src/types'
+import type { QuotaSnapshot } from '../usage/types'
 
 import { QuotaProfilesDashboard } from '../QuotaProfilesDashboard'
 import { getProfileDashboard, resetProfileDashboard, setDashboardOpen, setDiscoveredProfiles } from '../profileDashboard'

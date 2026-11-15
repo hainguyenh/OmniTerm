@@ -43,6 +43,7 @@ This file is the canonical repository instruction source. Keep tool-specific fil
 | `.rs` | 400 |
 
 - Limits apply to production and test code. Generated, vendored, submodule, coverage, and build output are exempt.
+- The IDE modules (the directories listed in `IDE_MODULE_ROOTS` in `scripts/ide-modules.mjs`: `ui/ide/**` feature areas, `crates/ide-*`, `languages/`, `ide-plugins/`, `wit/`, `fixtures/`) are OmniTerm-owned code with their own local code style (double quotes, semicolons, larger files). Edit them directly and keep the style of the surrounding file rather than reformatting it to the rules below. They are exempt from the size, ESLint, and dead-code gates; the crates among them that are Cargo workspace members still go through the Rust build, Clippy, and test gates. Keep license headers and attribution in those files.
 - Split an oversized file by responsibility. Never compress code, remove useful whitespace, or combine unrelated statements to evade a limit.
 
 ### Warnings, unused code, and suppressions
@@ -61,7 +62,7 @@ This file is the canonical repository instruction source. Keep tool-specific fil
 - Use ESM in the frontend, contract, and repository scripts. Use CommonJS only in packages or sidecars that explicitly declare it.
 - Use PascalCase for components and types, camelCase for functions and variables, `use*` for hooks, and UPPER_SNAKE_CASE for module-level constants.
 - Prefer named exports. Reserve default exports for framework or configuration entry points that require them.
-- Keep rendering pure where practical. Move domain transformations out of JSX and view components, derive values instead of mirroring them with effects, and clean up listeners, channels, subscriptions, and timers.
+- Keep rendering pure where practical. Move domain transformations out of JSX and view components, derive values instead of duplicating them with effects, and clean up listeners, channels, subscriptions, and timers.
 - Do not use `console` outside the repository's existing diagnostics and test exceptions; route application diagnostics through `diag`.
 - Colocate single-use values. Extract genuinely shared or repeated domain values into focused modules instead of creating catch-all `constants.ts` or `enums.ts` files.
 - Prefer literal unions or `as const` maps over TypeScript `enum` unless runtime enum behavior is required.

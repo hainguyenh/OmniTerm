@@ -105,6 +105,11 @@ pub enum ClientRequest {
     Attach {
         client_id: String,
         session_id: String,
+        /// The client reads terminal output as raw binary frames (see the daemon's transport)
+        /// instead of JSON number arrays. A daemon that predates the field ignores it and keeps
+        /// sending JSON, which such a client still reads, so neither side needs a version bump.
+        #[serde(default)]
+        binary_data: bool,
     },
     Input {
         session_id: String,

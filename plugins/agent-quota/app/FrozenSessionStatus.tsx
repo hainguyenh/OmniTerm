@@ -2,13 +2,13 @@ import { ShieldAlert, Snowflake } from 'lucide-react'
 
 import { formatCountdown } from './quotaPolicy'
 import { showSuspendedOverlay } from './frozenOverlayEvents'
-import { setReviewSession, useQuota } from './quotaStore'
+import { setReviewSession, useQuota, useQuotaNow } from './quotaStore'
 
 /** Compact footer status for a session held by the quota guard. */
 export function FrozenSessionStatus({ sessionId }: { sessionId: string }) {
   const terminal = useQuota((state) => state.terminals[sessionId])
   const guard = useQuota((state) => (terminal ? state.guards[terminal.instanceKey] : undefined))
-  const now = useQuota((state) => state.now)
+  const now = useQuotaNow()
   if (!guard || guard.phase === 'active') return null
 
   const stopped = guard.phase === 'stopped'

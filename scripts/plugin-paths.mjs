@@ -41,7 +41,7 @@ export const PERMISSION_EFFECTS = {
   workspace: 'Can supply the workspace list and workspace-scoped connections.',
 }
 
-/** Where installed plugins live. Mirrors `pluginsDir` in src-tauri/sidecar/plugin-host.cjs. */
+/** Where installed plugins live. Matches `pluginsDir` in src-tauri/sidecar/plugin-host.cjs. */
 export function pluginsDir() {
   const appData =
     process.platform === 'win32'
@@ -87,7 +87,7 @@ export function readManifest(dir) {
   return { pkg, manifest, permissions, main: pkg.main ?? 'dist/index.js' }
 }
 
-/** A plugin directory name safe to use on disk. Mirrors the sanitizing the sidecar used to do. */
+/** A plugin directory name safe to use on disk. Matches the sanitizing the sidecar used to do. */
 export function safeDirName(id) {
   return id.replace(/[/\\?%*:|"<>]/g, '_')
 }

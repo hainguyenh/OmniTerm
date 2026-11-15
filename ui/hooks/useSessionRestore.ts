@@ -7,7 +7,13 @@ import { type PersistedConn, type PersistedTab, type SessionSnapshot } from '../
 import { selectPendingSnapshotTabs } from '../utils/sessionCheckpoint'
 import { diag } from '../diag'
 import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
+import { formatAgentResumeCommand } from '../utils/agentRegistry'
+import { parseAgentTitle } from '../utils/agentTitle'
+import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
 import { whenAgentSessionsHydrated } from '../utils/agentSessionDurable'
+import { markRestoredPane } from '../utils/agentPresenceStore'
+import { agentLaunchedBy, noteAgentLaunch } from '../utils/agentLaunchSignal'
+import { markSessionRestoreSettled, setLegacyLayout } from '../workbench/sessions/sessionBridge'
 
 interface SessionRestoreInput {
   initialSnapshot: SessionSnapshot | null
@@ -18,14 +24,12 @@ interface SessionRestoreInput {
   shouldRestoreTab?: (tab: PersistedTab) => boolean
   setActiveTabs: (fn: (prev: { id: string; connId: string; name: string }[]) => { id: string; connId: string; name: string }[]) => void
   setEphemeralConns: (fn: (prev: Connection[]) => Connection[]) => void
-  setTabGroups: (fn: (prev: Record<string, string>) => Record<string, string>) => void
   setResumeMode: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
   setRestoreOutcomes?: (outcomes: Record<string, RestoreOutcome>) => void
   onRestoreResult?: (attemptedIds: string[], unresolvedIds: string[]) => void
   restoreLayout?: boolean
   retryToken?: number
   resolveConnection?: (id?: string) => Connection | undefined
-  restoreGroups: (groups: ViewGroup[], activeId: string) => void
   setPanes: (panes: (string | null)[]) => void
   setLayoutMode: (mode: LayoutMode) => void
   setFocusedPane: (pane: number) => void
@@ -53,6 +57,41 @@ function groupsForSnapshot(snapshot: SessionSnapshot): ViewGroup[] {
   }))
 }
 
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  opencode: 'OpenCode',
+  agy: 'Antigravity CLI',
+  copilot: 'Copilot CLI',
+  gemini: 'Gemini CLI',
+}
+
+function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
+  const stored = findSessionByTabId(tab.id)
+    ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
+    ?? loadStoredSessions().find(item => item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+  const rawAgent = stored?.agent ?? tab.recovery.agent
+  const agentName = parseAgentTitle(tab.name)?.agentName
+    ?? parseAgentTitle(savedConn?.name)?.agentName
+    ?? (rawAgent ? (AGENT_DISPLAY_NAMES[rawAgent] ?? rawAgent) : undefined)
+  const sessionId = stored?.sessionId ?? tab.recovery.agentSessionId
+  const candidateLauncher = stored?.launcher ?? tab.recovery.launcher
+  const candidateProfile = stored?.profileName ?? tab.recovery.profileName
+  const launcher = candidateLauncher === 'agy-gemini' ? undefined : (candidateLauncher ?? (
+    candidateProfile
+      ? candidateProfile.startsWith('claude-') || candidateProfile.startsWith('codex-') || candidateProfile.startsWith('opencode-') || (candidateProfile.startsWith('agy-') && candidateProfile !== 'agy-gemini')
+        ? candidateProfile
+        : candidateProfile !== 'claude' && candidateProfile !== 'codex' && candidateProfile !== 'opencode' && candidateProfile !== 'agy' && candidateProfile !== 'gemini' && !(rawAgent === 'agy' && candidateProfile === 'gemini')
+          ? `${rawAgent}-${candidateProfile}`
+          : undefined
+      : undefined
+  ))
+  const cleanProfile = candidateProfile === 'agy-gemini' || (rawAgent === 'agy' && candidateProfile === 'gemini')
+    ? undefined
+    : candidateProfile
+  return formatAgentResumeCommand(agentName, sessionId, launcher, cleanProfile)
+}
+
 export function useSessionRestore(input: SessionRestoreInput): void {
   const latestInput = useRef(input)
   latestInput.current = input
@@ -60,11 +99,14 @@ export function useSessionRestore(input: SessionRestoreInput): void {
 
   useEffect(() => {
     const current = latestInput.current
-    if (!initialSnapshot || initialSnapshot.activeTabs.length === 0) return
+    if (!initialSnapshot || initialSnapshot.activeTabs.length === 0) {
+      markSessionRestoreSettled()
+      return
+    }
     let cancelled = false
 
     void (async () => {
-      // Wait for durable session metadata before deciding which panes are eligible to restore.
+      // The resume command comes from stored sessions, whose crash-safe copy may still be loading.
       await whenAgentSessionsHydrated()
       if (cancelled) return
 
@@ -73,7 +115,10 @@ export function useSessionRestore(input: SessionRestoreInput): void {
         .filter(tab => latestInput.current.isRestoreAllowed?.(tab.id) !== false)
         .map(tab => tab.id))
       const snapshot = selectPendingSnapshotTabs(initialSnapshot, allowedIds)
-      if (!snapshot) return
+      if (!snapshot) {
+        markSessionRestoreSettled()
+        return
+      }
 
       latestInput.current.setRestoreOutcomes?.(Object.fromEntries(snapshot.activeTabs.map(tab => [tab.id, {
         phase: 'pending',
@@ -102,17 +147,32 @@ export function useSessionRestore(input: SessionRestoreInput): void {
 
         if ((savedConn?.type ?? conn?.type) === 'LOCAL' && savedConn) {
           try {
-            // Restore the pane's shell and working folder only. A prior agent, including one
-            // in another pane with the same cwd, is never launched without a user action.
-            // The interrupted agent session remains available through explicit Resume.
+            const resumeCommand = resumeCommandForTab(tab, savedConn)
             const opened = await window.omnitermAPI.shells.open(
               savedConn.shell ?? tab.recovery.shell,
               savedConn.workspaceId ?? null,
               undefined,
               tab.recovery.cwd ?? savedConn.localCwd ?? null,
-              null,
+              resumeCommand,
             ) as Connection | null
-            conn = opened ?? undefined
+            if (opened) {
+              conn = opened
+              if (resumeCommand) {
+                // Freeze the pane before its agent draws anything: every restored agent gets its
+                // folder-trust answer and `/usage` read without the user typing into it first.
+                const agent = agentLaunchedBy(resumeCommand)
+                if (agent) noteAgentLaunch(tab.id, agent)
+                const stored = findSessionByTabId(tab.id)
+                  ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
+                  ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+                if (stored) {
+                  upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })
+                  markRestoredPane(tab.id)
+                }
+              }
+            } else {
+              conn = undefined
+            }
           } catch (error) {
             diag.warn('[useSessionRestore] fresh shell registration failed', error)
             conn = undefined
@@ -137,7 +197,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
         }
 
         restoredConns.set(conn.id, conn)
-        restoredTabs.push({ id: tab.id, connId: conn.id, name: conn.name })
+        restoredTabs.push({ id: tab.id, connId: conn.id, name: tab.name })
         outcomes[tab.id] = {
           phase: 'recovering',
           message: 'Starting a fresh terminal in the saved folder.',
@@ -145,9 +205,16 @@ export function useSessionRestore(input: SessionRestoreInput): void {
         }
       }
 
-      if (cancelled || attemptedIds.length === 0) return
+      if (cancelled) return
+      if (attemptedIds.length === 0) {
+        markSessionRestoreSettled()
+        return
+      }
       latestInput.current.onRestoreResult?.(attemptedIds, unresolvedIds)
-      if (restoredTabs.length === 0) return
+      if (restoredTabs.length === 0) {
+        markSessionRestoreSettled()
+        return
+      }
 
       const restoredById = new Map(restoredTabs.map(tab => [tab.id, tab]))
       const existingTabs = latestInput.current.existingTabs ?? []
@@ -179,11 +246,9 @@ export function useSessionRestore(input: SessionRestoreInput): void {
       }))
 
       if (current.restoreLayout !== false) {
-        current.setTabGroups(() => ({ ...snapshot.tabGroups }))
-        const groups = groupsForSnapshot(snapshot)
-        current.restoreGroups(groups, snapshot.activeGroupId)
-        const activeGroup = groups.find(group => group.id === snapshot.activeGroupId)
+        const activeGroup = groupsForSnapshot(snapshot)[0]
         if (activeGroup) {
+          setLegacyLayout({ layoutMode: activeGroup.layoutMode, panes: activeGroup.panes, focusedPane: activeGroup.focusedPane })
           current.setPanes(activeGroup.panes)
           current.setLayoutMode(activeGroup.layoutMode)
           current.setFocusedPane(Math.min(activeGroup.focusedPane, activeGroup.layoutMode - 1))
@@ -191,6 +256,7 @@ export function useSessionRestore(input: SessionRestoreInput): void {
       }
 
       current.setRestoreOutcomes?.(outcomes)
+      markSessionRestoreSettled()
       diag.log('[useSessionRestore] recreated', restoredTabs.length, 'terminal pane(s)')
     })()
 

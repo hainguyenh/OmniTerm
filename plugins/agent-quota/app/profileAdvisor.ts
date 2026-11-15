@@ -1,4 +1,4 @@
-import type { QuotaSnapshot, QuotaWindow } from '../src/types'
+import type { QuotaSnapshot, QuotaWindow } from './usage/types'
 
 import { formatCountdown, windowOf } from './quotaPolicy'
 

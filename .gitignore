@@ -17,6 +17,9 @@ plugins/*/node_modules
 artifacts/
 .omniterm-build/
 *.local
+*.local.*
+.omniterm/settings.toml
+.playwright-cli/
 *.tsbuildinfo
 # `pnpm typecheck` runs `tsc -b`, and tsconfig.node.json is a composite project, so it cannot set
 # `noEmit` - it drops compiled copies of vite.config.ts (the JS module and its declaration file)
@@ -34,7 +37,7 @@ artifacts/
 *.sln
 *.sw?
 **/.engram
-docs/superpowers/
+docs/
 .impeccable/
 .opencode/*
 # Shared opencode slash commands that point at .agents/skills are tracked.
@@ -54,4 +57,5 @@ coverage-rust/
 lcov.info
 push-hainguyenh.*
 target/
+!crates/ide-ssh/src/target/
 cov-html7/

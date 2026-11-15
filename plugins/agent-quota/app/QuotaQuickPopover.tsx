@@ -1,7 +1,7 @@
 import { AlarmClock, Gauge, Pin, PinOff, Play, RefreshCw, Settings, Snowflake, Users, X } from 'lucide-react'
 import { useEffect } from 'react'
 
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 import type { QuotaConfig } from './quotaConfig'
 
 import { confirmDisableSuspend } from './dangerConfirm'

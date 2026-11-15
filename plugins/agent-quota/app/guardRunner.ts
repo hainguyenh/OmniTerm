@@ -1,4 +1,4 @@
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AgentQuotaAPI } from './agentQuotaAPI'
 import type { GuardAction, GuardState } from './quotaGuard'
 import type { TerminalAgent } from './quotaStore'

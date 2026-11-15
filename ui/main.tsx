@@ -1,11 +1,14 @@
 import ReactDOM from 'react-dom/client'
+import type { ReactElement } from 'react'
 import App from './App.tsx'
 import OverlayBar from './components/OverlayBar.tsx'
+import { RootErrorBoundary } from './components/RootErrorBoundary'
 import { GlobalButtonTooltips } from './components/Tooltip.tsx'
 import { initTauriBridge } from './omnitermAPI'
 import { silenceConsole } from './diag'
+import { auxiliaryWindow } from './ide/platform/auxWindow'
+import './ide/styles/global.css'
 import './index.css'
-import './terminalPaper.css'
 
 // A packaged (release or portable) build reports nothing about itself. App code routes diagnostics
 // through `diag` (no-ops there), but dependencies write to the console directly, so the console is
@@ -28,9 +31,22 @@ if (isOverlay) {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <>
-    {isOverlay ? <OverlayBar /> : <App />}
-    <GlobalButtonTooltips />
-  </>,
-)
+// Settings, comparison and Sync with Deployed windows of the IDE load this page too; they get their
+// own root view and never mount OmniTerm's shell.
+const aux = isOverlay ? null : auxiliaryWindow()
+
+async function rootView(): Promise<ReactElement> {
+  if (isOverlay) return <OverlayBar />
+  if (!aux) return <App />
+  const { mountAuxiliaryWindow } = await import('./workbench/auxiliaryWindow')
+  return mountAuxiliaryWindow(aux.kind, aux.parent)
+}
+
+void rootView().then(view => {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <RootErrorBoundary>
+      {view}
+      <GlobalButtonTooltips />
+    </RootErrorBoundary>,
+  )
+})

@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Connection } from '@omniterm/contract'
-import type { SessionTabItem } from '../components/SessionTabs'
 import { findSessionByTabId, clearActiveForTab } from '../utils/agentSessionStorage'
 import { getPanePresence } from '../utils/agentPresenceStore'
 import { formatAgentProfileCommand } from '../utils/agentRegistry'
 import { diag } from '../diag'
+
+/** A session of the window as the shell keeps it. */
+export interface SessionTabItem {
+  id: string
+  connId: string
+  name: string
+}
 
 const RENEW_EVENT = 'omniterm:renew-session'
 /** How long after the swap an exit event from the old process is still attributed to the renew. */
@@ -53,7 +59,7 @@ export interface UseRenewSessionOptions {
   sessionCwds: Record<string, string>
   connById: (id: string) => Connection | undefined
   reconnectSession: (id: string) => void
-  appSettings: { agentRenewStrategy?: 'reopen' | 'new-command'; skipTerminalRenewConfirm?: boolean }
+  appSettings: { agentRenewStrategy?: 'reopen' | 'new-command' }
   activeTabId: string | null
   /** Shows a renew failure to the user; failures used to be logged only. */
   onError?: (message: string) => void
@@ -179,20 +185,19 @@ export function useRenewSession({
       const targetId = sessionId ?? activeTabId
       if (!targetId) return
 
-      if (inMemoryRenewRemembered || appSettings.skipTerminalRenewConfirm) {
+      if (inMemoryRenewRemembered) {
         void executeRenew(targetId)
       } else {
         setPendingRenewSessionId(targetId)
       }
     },
-    [activeTabId, appSettings.skipTerminalRenewConfirm, executeRenew],
+    [activeTabId, executeRenew],
   )
 
   const confirmRenew = useCallback(
     async (remember: boolean) => {
       if (remember) {
         inMemoryRenewRemembered = true
-        void window.omnitermAPI?.settings?.save?.({ skipTerminalRenewConfirm: true })
       }
       const targetId = pendingRenewSessionId
       setPendingRenewSessionId(null)

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileCode, FileText, Loader2, Search, X } from 'lucide-react'
-import type { Workspace, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
+import type { Workspace, WorkspaceScript } from '@omniterm/contract'
+
+import { getOrIndexWorkspace, type IndexedFile } from '../../utils/projectIndexer'
 
 export interface ProjectSearchModalProps {
   isOpen: boolean
@@ -9,18 +11,7 @@ export interface ProjectSearchModalProps {
   activeWorkspaceId?: string | null
   onOpenScript: (workspaceId: string, script: WorkspaceScript) => void
 }
-
-interface SearchFileItem {
-  id: string
-  name: string
-  path: string
-  kind: string
-  workspaceId: string
-  workspaceName: string
-  viewable?: boolean
-  editable?: boolean
-  shell?: WorkspaceScript['shell']
-}
+type SearchFileItem = IndexedFile
 
 function scoreFile(file: SearchFileItem, q: string): number {
   const name = file.name.toLowerCase()
@@ -75,71 +66,11 @@ export const ProjectSearchModal: React.FC<ProjectSearchModalProps> = ({
     return workspaces[0] ?? null
   }, [workspaces, activeWorkspaceId])
 
-  const loadWorkspaceFiles = useCallback(async (ws: Workspace) => {
+  const loadWorkspaceFiles = useCallback(async (ws: Workspace, force = false) => {
     setLoading(true)
     try {
-      const collected: SearchFileItem[] = []
-      const seen = new Set<string>()
-
-      // 1. Fetch runnable scripts
-      try {
-        const scripts = (await window.omnitermAPI.workspace.scanScripts(ws.id)) as WorkspaceScript[]
-        for (const s of scripts) {
-          if (!seen.has(s.path)) {
-            seen.add(s.path)
-            collected.push({
-              id: s.id,
-              name: s.name,
-              path: s.path,
-              kind: s.kind,
-              workspaceId: ws.id,
-              workspaceName: ws.name,
-              viewable: s.viewable ?? true,
-              editable: s.editable,
-              shell: s.shell,
-            })
-          }
-        }
-      } catch {
-        // Fallback or ignore
-      }
-
-      // 2. Fetch skeleton folders and their first page entries
-      try {
-        const dirs = (await window.omnitermAPI.workspace.scanFolders(ws.id)) as WorkspaceEntry[]
-        const nonDeferred = dirs.filter((d) => !d.deferred).map((d) => d.id)
-        const targetFolders = ['', ...nonDeferred.slice(0, 30)]
-
-        const pages = await Promise.all(
-          targetFolders.map((f) =>
-            window.omnitermAPI.workspace.scanFolderEntries(ws.id, f, 0, 500).catch(() => null),
-          ),
-        )
-
-        for (const page of pages) {
-          if (!page || !page.entries) continue
-          for (const e of page.entries) {
-            if (!e.isDir && !seen.has(e.path)) {
-              seen.add(e.path)
-              collected.push({
-                id: e.id,
-                name: e.name,
-                path: e.path,
-                kind: e.kind,
-                workspaceId: ws.id,
-                workspaceName: ws.name,
-                viewable: e.viewable ?? true,
-                editable: e.editable,
-                shell: e.shell,
-              })
-            }
-          }
-        }
-      } catch {
-        // Ignore
-      }
-
-      setFiles(collected)
+      const indexed = await getOrIndexWorkspace(ws, force)
+      setFiles(indexed)
     } finally {
       setLoading(false)
     }

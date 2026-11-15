@@ -1,4 +1,4 @@
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { AgentConfig } from './quotaConfig'
 
 import { windowOf } from './quotaPolicy'

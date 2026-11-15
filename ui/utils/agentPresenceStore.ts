@@ -89,16 +89,16 @@ export function resetPanePresenceForTests(): void {
   emit()
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribePanePresence(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
 export function usePanePresence(tabId: string | null | undefined): PanePresence | undefined {
-  return useSyncExternalStore(subscribe, () => getPanePresence(tabId), () => undefined)
+  return useSyncExternalStore(subscribePanePresence, () => getPanePresence(tabId), () => undefined)
 }
 
 /** Every pane's presence at once — for lists (the tab strip) that cannot call a hook per item. */
 export function useAllPanePresence(): Readonly<Record<string, PanePresence>> {
-  return useSyncExternalStore(subscribe, () => presence, () => presence)
+  return useSyncExternalStore(subscribePanePresence, () => presence, () => presence)
 }

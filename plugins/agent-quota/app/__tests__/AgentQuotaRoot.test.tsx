@@ -87,21 +87,42 @@ describe('AgentQuotaRoot', () => {
   it('stops the engine and thaws frozen agents when the plugin is disabled, and recovers if it is re-enabled', async () => {
     vi.useFakeTimers()
     let present = true
-    const api = fakeApi(() => Promise.resolve(present))
-    render(<AgentQuotaRoot api={api} appSettings={settings} setAppSettings={vi.fn()} sessionIds={[]} busy={{}} openSettings={vi.fn()} />)
+    const listeners = new Set<() => void>()
+    const api: AgentQuotaAPI = {
+      ...fakeApi(() => Promise.resolve(present)),
+      onPluginsChanged: (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+    }
+    const announce = () => listeners.forEach((listener) => listener())
+    const { unmount } = render(<AgentQuotaRoot api={api} appSettings={settings} setAppSettings={vi.fn()} sessionIds={[]} busy={{}} openSettings={vi.fn()} />)
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })
     expect(getQuotaState().available).toBe(true)
+    const checks = vi.mocked(api.info).mock.calls.length
 
-    // The Plugin Manager disabled it — no restart, no new mount, just the next periodic check.
+    // Nothing changed: the feature switch is not read again, however long the app runs.
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
+    expect(vi.mocked(api.info).mock.calls.length).toBe(checks)
+
+    // The Plugin Manager disabled it — no restart, no new mount, just the announcement.
     present = false
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    await act(async () => {
+      announce()
+      await vi.advanceTimersByTimeAsync(0)
+    })
     expect(getQuotaState().available).toBe(false)
     expect(api.resumeAll).toHaveBeenCalled()
 
     // Re-enabling brings it back without a restart either.
     present = true
-    await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
+    await act(async () => {
+      announce()
+      await vi.advanceTimersByTimeAsync(0)
+    })
     expect(getQuotaState().available).toBe(true)
+    unmount()
+    expect(listeners.size).toBe(0)
   })
 
   it('logs a failed resume-all on shutdown', async () => {

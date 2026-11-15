@@ -1,9 +1,9 @@
-import type { QuotaSnapshot } from '../../src/types'
+import type { QuotaSnapshot } from '../usage/types'
 import type { GuardState } from '../quotaGuard'
 import type { ProfileQuota, TerminalAgent } from '../quotaStore'
 
 import { DEFAULT_QUOTA_CONFIG, type QuotaConfig } from '../quotaConfig'
-import { updateQuota } from '../quotaStore'
+import { setQuotaNow, updateQuota } from '../quotaStore'
 
 export const NOW = Date.UTC(2026, 8, 25, 3, 0)
 
@@ -57,11 +57,11 @@ interface Seed {
 
 /** Put the store into a known state for a component test. */
 export function seed({ config = DEFAULT_QUOTA_CONFIG, terminals = [terminal()], profiles = [profile(reading(40))], guards = {}, available = true }: Seed = {}) {
+  setQuotaNow(NOW)
   updateQuota((state) => ({
     ...state,
     available,
     config,
-    now: NOW,
     terminals: Object.fromEntries(terminals.map((entry) => [entry.sessionId, entry])),
     profiles: Object.fromEntries(profiles.map((entry) => [entry.key, entry])),
     guards,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export function useCustomArt(darkMode: boolean) {
   const [idleArtUrlLight, setIdleArtUrlLight] = useState<string | null>(null)
@@ -12,6 +12,13 @@ export function useCustomArt(darkMode: boolean) {
     window.omnitermAPI.customArt.get('loading-dark').then(setLoadingArtUrlDark).catch(() => setLoadingArtUrlDark(null))
   }, [])
   useEffect(() => { refreshCustomArt() }, [refreshCustomArt])
+  // The Settings window edits the art and bumps `customArtRevision` (see workbench/settings/customArtSync).
+  const revision = useRef<number | undefined>(undefined)
+  useEffect(() => window.omnitermAPI.settings.onChanged((settings: AppSettings) => {
+    if (settings?.customArtRevision === revision.current) return
+    revision.current = settings?.customArtRevision
+    refreshCustomArt()
+  }), [refreshCustomArt])
   return {
     idleArtUrl: darkMode ? idleArtUrlDark : idleArtUrlLight,
     loadingArtUrl: darkMode ? loadingArtUrlDark : loadingArtUrlLight,

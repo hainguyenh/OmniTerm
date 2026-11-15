@@ -1,35 +1,33 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import MainLayout from './components/MainLayout'
 import DetachedTerminalWindow from './components/DetachedTerminalWindow'
-import { TitleBar } from './components/TitleBar'
 import { ThemeRemixModal } from './components/ThemeRemixModal'
 import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
-import { applyThemeVars, isSquareTheme, themeCssVars } from './utils/themeVars'
+import { installUnifiedTheme, refreshUnifiedTheme, selectOmniTheme, setOmniThemes, useUnifiedTheme } from './platform/theme/unifiedTheme'
+import { WORKBENCH_THEME_ID, legacyChoice } from './platform/theme/choice'
+import { useThemeSync } from './platform/theme/useThemeSync'
 import { diag } from './diag'
+import { useTitleControlsProps } from './workbench/titleControlsStore'
 import { setLargePasteThresholds } from './utils/largeTextPaste'
 import { useBlurPlugin } from './hooks/useBlurPlugin'
+import { useSettingsWindowRedirect } from './workbench/settings/useSettingsWindowRedirect'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
-import type { TerminalToolbarActions } from './terminalToolbar'
-import { migrateThemeSettings, visibleThemes } from './utils/themeMigration'
-import { setDifferentPaneColors } from './paneIdentity'
 
 interface AppSettings {
   themeId: string
+  themeChoice?: string
   fontSize: number
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
-  differentPaneColors?: boolean
   /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
   skipTerminalCloseConfirm?: boolean
-  skipTerminalRenewConfirm?: boolean
   /** Shell inline prediction (PowerShell's PSReadLine). Applies to new panes; on by default. */
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
-  toolbarActions?: TerminalToolbarActions
   /** Any id from `shells.list`; the picker falls back when it is no longer available. */
   defaultShell?: string
   /** Where new terminals land when the launch site does not name a workspace itself. */
@@ -44,11 +42,12 @@ interface AppSettings {
   largePaste?: { promptChars?: number; attachChars?: number }
   /** Whether the Git integration utility is enabled (Activity bar tab and status bar branch indicator). */
   gitUtilEnabled?: boolean
-  gitGraphEnabled?: boolean
+  /** Show the IDE workbench frame around the sessions (on unless false). */
+  workbenchEnabled?: boolean
 }
 
 function App() {
-  const [appSettings, setAppSettings] = useState<AppSettings>({
+  const [storedSettings, setAppSettings] = useState<AppSettings>({
     themeId: DEFAULT_THEME_ID,
     fontSize: 14,
     smartColors: false,
@@ -56,14 +55,24 @@ function App() {
     darkMode: true,
     defaultShell: 'powershell',
     gitUtilEnabled: true,
-    gitGraphEnabled: true,
   })
   const [themes, setThemes] = useState<AppTheme[]>([TOKYO_NIGHT])
+  const [themesLoaded, setThemesLoaded] = useState(false)
+  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  // The workbench's `appearance.theme` is the one theme setting; the OmniTerm theme and mode every
+  // terminal and panel paints from are derived from it (see platform/theme/unifiedTheme.ts).
+  // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the
+  // bridge derives it from the window label, so no await is needed before choosing a root view.
+  const isDetachedWindow = (window.omnitermAPI?.terminalWindow?.detachedSessionId ?? null) !== null
+  const unified = useUnifiedTheme()
+  const appSettings = useMemo<AppSettings>(
+    () => ({ ...storedSettings, themeId: unified.themeId, darkMode: unified.mode === 'dark' }),
+    [storedSettings, unified.themeId, unified.mode],
+  )
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(1)
   const [themeRemixOpen, setThemeRemixOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [updateState, setUpdateState] = useState<UpdateState | null>(null)
-  const [appVersion, setAppVersion] = useState('')
+  // OmniTerm's settings live in the IDE's Settings window; the Agent Quota "Settings" link lands there.
+  useSettingsWindowRedirect()
   // Per-terminal appearance (font size + theme). In-memory per-session-instance overrides on top of
   // the persisted per-connection defaults (`appSettings.perConn`), which themselves fall back to the
   // app-wide settings. Only the focused terminal's controls (TitleBar / footer / detached window)
@@ -86,9 +95,6 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [chromeFullscreen])
-  useEffect(() => {
-    setDifferentPaneColors(appSettings.differentPaneColors !== false)
-  }, [appSettings.differentPaneColors])
   const { available: blurAvailable } = useBlurPlugin()
   const windowRounded = useWindowRounding() && !chromeFullscreen
   const startupUpdateChecked = useRef(false)
@@ -101,55 +107,41 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const unsub = window.omnitermAPI.updates.onState((s) => {
-      setUpdateState(s)
-    })
-    window.omnitermAPI.updates.state().then((s) => {
-      setUpdateState(s)
-    })
-    return unsub
-  }, [])
-
-  useEffect(() => {
-    window.omnitermAPI.updates.getVersion().then(setAppVersion)
-  }, [])
-
-  useEffect(() => {
     if (!appSettings.checkUpdatesOnStartup || startupUpdateChecked.current) return
     startupUpdateChecked.current = true
     void window.omnitermAPI.updates.check()
-      .then(setUpdateState)
       .catch((error: unknown) => diag.warn('[updates] startup check failed', error))
   }, [appSettings.checkUpdatesOnStartup])
 
-  // Reconcile persisted theme IDs only against the actual catalog, so saved custom
-  // overrides are never replaced by a migration for the deleted built-in themes.
-  const refreshSettingsAndThemes = useCallback(async () => {
-    const [settings, available] = await Promise.all([
-      window.omnitermAPI.settings.get(),
-      window.omnitermAPI.themes.list(),
-    ])
-    const selectable = visibleThemes(available)
-    const migrated = migrateThemeSettings(settings as AppSettings, selectable)
-    setThemes(selectable)
-    setAppSettings(migrated)
-    if (migrated !== settings) {
-      void window.omnitermAPI.settings.save(migrated).catch((error: unknown) =>
-        diag.warn('[themes] failed to save migrated theme selection', error))
-    }
+  // Settings can be saved from any window (a popped-out terminal writes the connection's
+  // appearance). The backend broadcasts each save, so re-read here and both windows stay in sync
+  // live — a change in the detached window shows up in the main window's footer/title bar and
+  // vice versa, without waiting for a re-attach.
+  useEffect(() => {
+    return window.omnitermAPI.settings.onChanged(() => {
+      window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
+    })
   }, [])
 
   // Read at paste time by every pane in this window (main or detached).
   useEffect(() => setLargePasteThresholds(appSettings.largePaste), [appSettings.largePaste])
 
-  // Detached windows share the same settings and reload after any save.
-  useEffect(() => window.omnitermAPI.settings.onChanged(() => {
-    void refreshSettingsAndThemes()
-  }), [refreshSettingsAndThemes])
+  // `workbench` is the theme derived from the workbench's own themes; it is not a file on disk.
+  const allThemes = useMemo(
+    () => unified.themeId === WORKBENCH_THEME_ID ? [...themes, unified.appTheme] : themes,
+    [themes, unified.themeId, unified.appTheme],
+  )
+  const currentTheme = unified.appTheme
 
-  const currentTheme = themes.find(t => t.id === appSettings.themeId) ?? themes[0] ?? TOKYO_NIGHT
+  // Load settings and themes on mount.
+  const reloadSettingsAndThemes = () => {
+    window.omnitermAPI.settings.get().then((s: any) => { setAppSettings(s); setSettingsLoaded(true) })
+    window.omnitermAPI.themes.list().then((t: any) => { setThemes(t); setThemesLoaded(true) })
+  }
 
-  useEffect(() => { void refreshSettingsAndThemes() }, [refreshSettingsAndThemes])
+  useEffect(() => {
+    reloadSettingsAndThemes()
+  }, [])
 
   // One-time cleanup for settings saved before ad-hoc appearance stopped persisting: an ad-hoc
   // shell's id is never seen again, so a stale `adhoc-*` entry can only ever be dead weight.
@@ -191,7 +183,6 @@ function App() {
   // defaults, which fall back to the app-wide settings. `perConn` is a plain settings key, so the
   // backend's shallow JSON merge persists it with no schema change.
   const appearanceOf = (id: string, connId: string): TerminalAppearance => ({
-    toolbarActions: appSettings.toolbarActions,
     ...(appSettings.perConn?.[connId] ?? {}),
     ...(tabAppearance[id] ?? {}),
   })
@@ -251,21 +242,11 @@ function App() {
   const applyTheme = (themeId: string, target?: { id: string; connId: string }) => {
     const t = target ?? activeTerminal
     if (!t) {
-      const next = { ...appSettings, themeId }
-      setAppSettings(next)
-      window.omnitermAPI.settings.save(next)
+      void selectOmniTheme(themeId, unified.mode)
       return
     }
     setTabAppearance(prev => ({ ...prev, [t.id]: { ...(prev[t.id] ?? {}), themeId } }))
     persistConnAppearance(t.connId, { themeId })
-  }
-
-  /** Persist the visible terminal actions alongside the terminal's appearance settings. */
-  const setToolbarActions = (actions: TerminalToolbarActions, target?: { id: string; connId: string }) => {
-    const t = target ?? activeTerminal
-    if (!t) return
-    setTabAppearance(prev => ({ ...prev, [t.id]: { ...(prev[t.id] ?? {}), toolbarActions: actions } }))
-    persistConnAppearance(t.connId, { toolbarActions: actions })
   }
 
   /** Apply an absolute font size to every open terminal — the AppearanceMenu's "apply to all". Sets
@@ -285,11 +266,9 @@ function App() {
   }
 
   /** Switch every open terminal's theme — the TitleBar's theme picker targets all terminals (a
-   * pane's own picker in its header still targets just that pane). Mirrors applyFontSizeToAll. */
+   * pane's own picker in its header still targets just that pane). Parallels applyFontSizeToAll. */
   const applyThemeToAll = (themeId: string) => {
-    const next = { ...appSettings, themeId }
-    setAppSettings(next)
-    window.omnitermAPI.settings.save(next)
+    void selectOmniTheme(themeId, unified.mode)
     setTabAppearance(prev => {
       const cleared: typeof prev = {}
       for (const [id, a] of Object.entries(prev)) {
@@ -310,7 +289,7 @@ function App() {
   // overrides back in by re-reading settings and dropping the tab's in-memory layer so the reloaded
   // per-connection defaults (not a stale override) win.
   const handleSettingsReload = useCallback((tabId?: string) => {
-    void refreshSettingsAndThemes()
+    window.omnitermAPI.settings.get().then((s: any) => setAppSettings(s))
     if (tabId) {
       setTabAppearance(prev => {
         if (!(tabId in prev)) return prev
@@ -319,31 +298,38 @@ function App() {
         return next
       })
     }
-  }, [refreshSettingsAndThemes])
+  }, [])
 
 
-  // Dynamically update document CSS variables when the current theme changes. The mapping itself lives
-  // in utils/themeVars.ts so the Theme Remix preview paints from the very same record.
+  // Apply the selected theme to this window's document (CSS variables and attributes only, so a
+  // switch repaints in place). Windows without the workbench settings follow the settings.json copy.
+  const storedChoiceRef = useRef<string>('dark')
+  storedChoiceRef.current = storedSettings.themeChoice ?? legacyChoice(storedSettings.themeId, storedSettings.darkMode)
+  useEffect(() => installUnifiedTheme(() => storedChoiceRef.current), [])
+  useEffect(() => { if (themesLoaded) setOmniThemes(themes) }, [themes, themesLoaded])
+  useEffect(() => refreshUnifiedTheme(), [storedSettings.themeChoice, storedSettings.themeId, storedSettings.darkMode])
+  const patchStored = useCallback((partial: Partial<AppSettings>) => {
+    setAppSettings(prev => ({ ...prev, ...partial }))
+    void window.omnitermAPI.settings.save(partial as AppSettings)
+  }, [])
+  useThemeSync({ stored: storedSettings, loaded: settingsLoaded, enabled: !isDetachedWindow, patch: patchStored })
+
+  // The workbench's own title bar carries the app-wide zoom, theme and mode controls, through the store below.
   useEffect(() => {
-    if (!currentTheme) return
-    applyThemeVars(document.documentElement, themeCssVars(currentTheme, appSettings.darkMode ? 'dark' : 'light'))
-    document.documentElement.style.setProperty(
-      '--terminal-font-size',
-      `${appSettings.fontSize ?? 14}px`,
-    )
-    // Zero-radius themes also flatten the rounded-full shapes that bypass --theme-rounded-*
-    // (see .theme-square in index.css). Detached windows share this document, so one toggle covers them.
-    document.documentElement.classList.toggle('theme-square', isSquareTheme(currentTheme))
-    document.documentElement.classList.toggle('theme-terminal-paper', currentTheme.id === 'terminal-paper')
-    document.documentElement.classList.toggle('theme-terminal-paper-dark', (currentTheme.id === 'terminal-paper' || currentTheme.id === 'compact') && appSettings.darkMode)
-  }, [currentTheme, appSettings.darkMode, appSettings.fontSize])
+    useTitleControlsProps.setState({
+      props: {
+        appSettings, setAppSettings: (s) => setAppSettings(s), themes: allThemes, setThemeRemixOpen,
+        zoomFactor: appSettings.zoomFactor ?? 1, onZoomReset: resetZoom,
+        onFontSizeChange: changeFontSize, onThemeApply: applyThemeToAll, onApplyToAll: applyFontSizeToAll,
+      },
+    })
+  })
 
   // Non-null only when this renderer is a popped-out terminal window. Read synchronously — the
   // bridge derives it from the window label, so no await is needed before choosing a root view.
-  const isDetachedWindow = (window.omnitermAPI?.terminalWindow?.detachedSessionId ?? null) !== null
 
   useAppShortcuts({
-    appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom,
+    appSettings, setAppSettings, changeFontSize, resetFontSize, persistZoom,
     onToggleFullscreen: toggleChromeFullscreen,
     isDetached: isDetachedWindow,
   })
@@ -356,28 +342,14 @@ function App() {
       <DetachedTerminalWindow
         appSettings={appSettings}
         setAppSettings={(s) => setAppSettings(s)}
-        themes={themes}
+        themes={allThemes}
         smartColors={appSettings.smartColors}
       />
     )
   }
 
   return (
-    <div className={`terminal-paper-surface h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
-      {!chromeFullscreen && (
-        <TitleBar
-          appSettings={appSettings}
-          setAppSettings={(s) => setAppSettings(s)}
-          themes={themes}
-          setThemeRemixOpen={setThemeRemixOpen}
-          appVersion={appVersion}
-          zoomFactor={appSettings.zoomFactor ?? 1}
-          onZoomReset={resetZoom}
-          onFontSizeChange={changeFontSize}
-          onThemeApply={applyThemeToAll}
-          onApplyToAll={applyFontSizeToAll}
-        />
-      )}
+    <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       <div className="flex-1 min-h-0 relative">
         <div className="h-full w-full" style={{ filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
           <MainLayout
@@ -385,20 +357,15 @@ function App() {
           appSettings={appSettings}
           setAppSettings={setAppSettings}
           currentTheme={currentTheme}
-          themes={themes}
+          themes={allThemes}
           layoutMode={layoutMode}
           setLayoutMode={setLayoutMode}
-          settingsOpen={settingsOpen}
-          setSettingsOpen={setSettingsOpen}
-          updateState={updateState}
-          setUpdateState={setUpdateState}
           zoomFactor={appSettings.zoomFactor ?? 1}
           onZoomReset={resetZoom}
           resolveAppearance={appearanceOf}
           onActiveTerminalChange={handleActiveTerminalChange}
           onFontSizeChange={changeFontSize}
           onThemeApply={applyTheme}
-          onToolbarActionsChange={setToolbarActions}
           onSettingsReload={handleSettingsReload}
           />
         </div>

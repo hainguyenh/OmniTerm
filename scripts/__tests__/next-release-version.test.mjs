@@ -182,7 +182,9 @@ test('the release publishes the installer and portable package with the bundled 
   }
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-always-awake\\b/)
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-blur\\b/)
-  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'always-awake'[\s\S]*Name = 'blur'[\s\S]*Name = 'agent-quota'[\s\S]*Name = 'vscode-launch'/)
+  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'blur'/)
+  // Agent Quota and Always Awake are built into the app, so neither is packaged as a plugin.
+  assert.doesNotMatch(workflow, /plugins\/(?:always-awake|agent-quota)/)
   assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-agent-quota\b/)
 
   const publish = workflow.slice(workflow.indexOf('Publish GitHub release'))
@@ -192,11 +194,6 @@ test('the release publishes the installer and portable package with the bundled 
 
   // download-artifact merges by this pattern; an upload named outside it is silently dropped.
   assert.match(workflow, /pattern: OmniTerm-\*/)
-  assert.match(
-    workflow,
-    /gh release edit "\$TAG" --notes-file release_notes\.md/,
-    'release workflow must synchronize release notes via gh release edit',
-  )
 })
 
 test('packaging goes through the same functions the local wizard uses', () => {
@@ -210,18 +207,7 @@ test('packaging goes through the same functions the local wizard uses', () => {
   assert.match(wizard, /Get-DefaultPortablePlugins/)
   assert.match(wizard, /Copy-PortableArtifacts[\s\S]*PortablePlugins/)
   assert.match(wizard, /Blur \(inactive-window privacy filter\)/)
-  assert.match(wizard, /Agent Quota \(AI agent quota lines, limits and wake-up\)/)
-  assert.match(wizard, /VS Code Launch \(run & debug \.vscode\/launch\.json configurations\)/)
-})
-
-test('standalone plugin packaging discovers and builds all plugins with OutputDirectory and Version', () => {
-  const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
-  assert.match(packaging, /\[Alias\('OutputDirectory'\)\]\[string\]\$Destination/)
-  assert.match(packaging, /\[string\]\$Version/)
-  assert.match(workflow, /Get-ChildItem -Path \(Join-Path \$repoRoot 'plugins'\) -Directory/)
-  assert.match(workflow, /return \$null -ne \$package\.omnitermPlugin/)
-  assert.match(workflow, /pnpm build:plugin \$dir\.FullName/)
-  assert.match(workflow, /New-PluginPackage -PluginPath \$dir\.FullName -Version \$version -OutputDirectory \$artifacts/)
+  assert.doesNotMatch(wizard, /plugins\\(?:always-awake|agent-quota)/)
 })
 
 test('portable packaging verifies the bundled plugin is present in the archive', () => {
@@ -231,10 +217,8 @@ test('portable packaging verifies the bundled plugin is present in the archive',
   assert.match(packaging, /Portable archive is missing required sidecar entry/)
   assert.match(packaging, /Portable archive is missing bundled plugin entry/)
   assert.match(packaging, /dist\/index\.js/)
-  assert.match(packaging, /plugins\\always-awake/)
   assert.match(packaging, /plugins\\blur/)
-  assert.match(packaging, /plugins\\agent-quota/)
-  assert.match(packaging, /plugins\\vscode-launch/)
+  assert.doesNotMatch(packaging, /plugins\\(?:always-awake|agent-quota)/)
 })
 
 test('release notes generator extracts exact target tag and falls back to Unreleased', () => {

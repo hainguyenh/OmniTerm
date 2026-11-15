@@ -8,14 +8,13 @@ import React from 'react'
  * anchor keeps its *static* position — and a `<button>` centers its content — so a translate-only knob
  * starts mid-track and slides out past the end of it.
  */
-export default function ToggleRow({ label, description, checked, onChange, icon, ariaLabel, dataTestId }: {
+export default function ToggleRow({ label, description, checked, onChange, icon, ariaLabel }: {
   label: string
   description: string
   checked: boolean
   onChange: () => void
   icon?: React.ReactNode
   ariaLabel: string
-  dataTestId?: string
 }) {
   return (
     <button
@@ -23,7 +22,6 @@ export default function ToggleRow({ label, description, checked, onChange, icon,
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
-      data-testid={dataTestId}
       onClick={onChange}
       className={`w-full flex items-center gap-2 py-1.5 px-3 rounded-xl border transition-colors text-sm text-left ${
         checked ? 'border-[#9ece6a] text-theme-success' : 'border-theme-border text-theme-fg hover:border-theme-accent hover:text-white'

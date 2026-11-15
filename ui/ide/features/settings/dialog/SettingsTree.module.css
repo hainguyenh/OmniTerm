@@ -1,0 +1,90 @@
+/* Settings page tree, after the prototype's `.stree` / `.sg` / `.sp` rows. */
+.tree {
+  padding: 4px 0;
+  outline: none;
+  user-select: none;
+}
+.group,
+.page {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.group {
+  height: 28px;
+  margin: 0 6px;
+  padding: 0 8px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.page {
+  height: 26px;
+  margin-right: 6px;
+  padding: 0 8px;
+  color: var(--fg-secondary);
+}
+.group:hover,
+.page:hover {
+  background: var(--bg-hover);
+}
+.group.selected,
+.page.selected {
+  background: var(--bg-tree-selected);
+  color: var(--fg-strong);
+}
+.page.selected::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.tree:focus-visible .selected {
+  box-shadow: inset 0 0 0 1px var(--focus-ring, var(--accent));
+}
+.chevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  color: var(--fg-muted);
+}
+/* A nested page with sub-pages: the chevron sits in the indent, so labels stay aligned. */
+.nestedChevron {
+  position: absolute;
+  left: -12px;
+}
+.groupIcon {
+  flex: none;
+}
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.count {
+  margin-left: auto;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--fg-subtle);
+}
+.dirty .label {
+  color: var(--accent);
+}
+.tree mark {
+  background: #fbbf2455;
+  color: inherit;
+  border-radius: 2px;
+}
+.empty {
+  padding: 12px;
+  color: var(--fg-muted);
+}

@@ -5,11 +5,11 @@
  * no open pane, see hiddenProfileProbe.ts). Neither holds the user's input here: the callers own
  * that, this module only drives the agent.
  */
-import type { AgentKind, QuotaError, QuotaSnapshot, QuotaWindow } from '../src/types'
+import type { AgentKind, QuotaError, QuotaSnapshot, QuotaWindow } from './usage/types'
 
-import { parseAgyUsage } from '../src/agyUsageParser'
-import { parseClaudeUsage } from '../src/claudeUsageParser'
-import { parseCodexStatus } from '../src/codexStatusParser'
+import { parseAgyUsage } from './usage/agyUsageParser'
+import { parseClaudeUsage } from './usage/claudeUsageParser'
+import { parseCodexStatus } from './usage/codexStatusParser'
 import { planTrustAnswer } from './trustDialog'
 
 export const QUIET_MS = 700
@@ -97,12 +97,31 @@ export function isTrustScreen(lines: readonly string[]): boolean {
   return false
 }
 
+const LOGIN_SCREEN = [
+  /\b(?:please\s+run\s+\/login|not\s+logged\s+in|log\s*in\s+to\s+continue|login\s+required|sign\s*in\s+to\s+continue|please\s+sign\s*in|sign\s*in\s+with)\b/i,
+  /\b(?:choose|select)\s+(?:a\s+)?(?:sign[- ]in|login|auth|authentication)\s+method\b/i,
+  /\b(?:invalid\s+api\s+key|oauth\s+token\s+has\s+expired|enter\s+(?:your\s+)?api\s+key)\b/i,
+  /\b(?:visit\s+https?:\/\/|open\s+browser\s+to\s+authenticate|press\s+enter\s+to\s+open)\b/i,
+  /\b(?:verification|authorization)\s+code\b/i,
+  /\b(?:not\s+signed\s+in|antigravity\s+cli\s+is\s+not\s+signed\s+in)\b/i,
+]
+
+export function isLoginScreen(lines: readonly string[]): boolean {
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (LOGIN_SCREEN.some((pattern) => pattern.test(lines[i]))) {
+      return !hasPromptAfter(lines, i)
+    }
+  }
+  return false
+}
+
 /**
  * A screen that is waiting on a choice: a resume picker, a folder-trust or login prompt, or any
  * list with a selected numbered option (`❯ 1. Yes, proceed`). Prose lines quoting a `>` prompt are
  * not a selection, so only the agents' own selection markers count.
  */
 const BLOCKING_SCREEN = [
+  ...LOGIN_SCREEN,
   /\bresume (?:a previous )?session\b/i,
   /\btype to search\b/i,
   /\btrust (?:the (?:authors|files)|this (?:folder|directory|project|environment|env|workspace))\b/i,
@@ -275,6 +294,7 @@ export async function submitAndRead(
   const before = new Set(beforeScreen)
   const beforeText = beforeScreen.join('\n')
   watch.text = ''
+  let parsedResult: UsageParse | null = null
   try {
     io.send(sessionId, probe.command)
     await waitForEcho(probe, io, sessionId)
@@ -286,8 +306,12 @@ export async function submitAndRead(
     let retries = 0
     while (io.now() - lastEnter < REPLY_TIMEOUT_MS && io.now() - started < MAX_REPLY_MS) {
       const screen = io.screen(sessionId)
+      if (screen && isLoginScreen(screen)) return { ok: false, error: 'not_signed_in' }
       const parsed = readReply(probe, screen, before, beforeText, watch.text, io.now())
-      if (parsed?.ok || parsed?.error === 'not_signed_in') return parsed
+      if (parsed?.ok || parsed?.error === 'not_signed_in') {
+        parsedResult = parsed
+        return parsed
+      }
       if (retries < MAX_ENTER_RETRIES && io.now() - lastEnter >= RETRY_ENTER_MS) {
         // The Enter was dropped, or landed inside a paste burst: the command is still on the prompt.
         if (commandOnPrompt(screen ?? [], probe.command) || watch.text.length === outputAtEnter) {
@@ -301,7 +325,9 @@ export async function submitAndRead(
     }
     return null
   } finally {
-    if (probe.close) {
+    const afterScreen = io.screen(sessionId) ?? []
+    const isNotSignedIn = Boolean(parsedResult && !parsedResult.ok && parsedResult.error === 'not_signed_in')
+    if (probe.close && !isNotSignedIn && !isLoginScreen(afterScreen)) {
       io.send(sessionId, probe.close)
       await io.sleep(CLOSE_DELAY_MS)
     }

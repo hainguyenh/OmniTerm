@@ -1,4 +1,4 @@
-import type { QuotaSnapshot, QuotaWindow, WindowKind } from '../src/types'
+import type { QuotaSnapshot, QuotaWindow, WindowKind } from './usage/types'
 import type { AgentConfig, PaceTier } from './quotaConfig'
 
 /**
@@ -79,7 +79,7 @@ export function isFresh(snapshot: QuotaSnapshot | undefined, now: number): snaps
 
 /**
  * A good reading taken before the one already held. Claude's `-p /usage` draws no limits panel
- * while no 5-hour session is running, so the sidecar falls back to the usage Claude Code cached in
+ * while no 5-hour session is running, so the native reader falls back to the usage Claude Code cached in
  * its config — often older than the panel the user just read; that must never roll the profile back.
  */
 export function isOlderReading(snapshot: QuotaSnapshot, held: QuotaSnapshot | undefined): boolean {

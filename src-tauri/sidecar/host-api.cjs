@@ -5,7 +5,7 @@ const path = require('path')
 const fs = require('fs')
 
 /**
- * Permissions the host recognises and enforces; mirrors `PluginPermission` in contract/index.ts.
+ * Permissions the host recognises and enforces; matches `PluginPermission` in contract/index.ts.
  *
  * Lives next to the enforcement rather than next to the discovery code: a permission that appears in
  * this list but is not gated below would read to a plugin author as a check that does not exist.
@@ -35,7 +35,7 @@ function requirePermission(pluginId, permissions, permission, what) {
   }
 }
 
-/** A single path segment safe to use as a directory name. Mirrors scripts/install-plugin.mjs. */
+/** A single path segment safe to use as a directory name. Matches scripts/install-plugin.mjs. */
 function safeDirName(id) {
   return id.replace(/[/\\?%*:|"<>]/g, '_')
 }

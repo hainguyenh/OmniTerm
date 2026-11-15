@@ -2,8 +2,6 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
 
-import { parseSaveOutcome, parseTextFileContent, type TextFileSaveRequest } from './utils/textFileWire'
-
 type WorkspaceWire = Omit<Workspace, 'pins'> & { pins?: Workspace['pins'] }
 
 /** The tree's file and folder edits; each resolves to the entry's new folder-namespaced path. */
@@ -26,12 +24,6 @@ function normalizeWorkspaces(workspaces: WorkspaceWire[] | undefined | null): Wo
 function parseLogicalPath(value: unknown): string {
   if (typeof value === 'string' && value) return value
   throw new Error('The workspace entry could not be updated: unexpected response from the app.')
-}
-
-function parseImageBytes(value: unknown): Uint8Array {
-  if (value instanceof ArrayBuffer) return new Uint8Array(value)
-  if (value instanceof Uint8Array) return value
-  throw new Error('The image could not be read: unexpected response from the app.')
 }
 
 const treeEdits: WorkspaceTreeEditAPI = {
@@ -97,17 +89,7 @@ export function createWorkspaceAPI() {
     readScript: (workspaceId: string, path: string) => invoke<string>('read_script', { workspaceId, path }),
     writeScript: (workspaceId: string, path: string, content: string) =>
       invoke<void>('write_script', { workspaceId, path, content }),
-    // The built-in editor's own read/write: any viewable file, with stats, BOM handling and conflicts.
-    openTextFile: (workspaceId: string, path: string) =>
-      invoke<unknown>('open_text_file', { workspaceId, path }).then(parseTextFileContent),
-    saveTextFile: (workspaceId: string, path: string, request: TextFileSaveRequest) =>
-      invoke<unknown>('save_text_file', { workspaceId, path, request }).then(parseSaveOutcome),
-    createTextFile: (workspaceId: string, path: string) =>
-      invoke<string>('create_text_file', { workspaceId, path }),
     ...treeEdits,
-    // Raw image bytes for the editor's image viewer; the command answers with a binary IPC body.
-    openImageFile: (workspaceId: string, path: string) =>
-      invoke<unknown>('open_image_file', { workspaceId, path }).then(parseImageBytes),
     loadConnections: (workspaceId: string) =>
       invoke<Connection[]>('load_workspace_connections', { workspaceId }).catch(() => []),
     saveConnections: (workspaceId: string, data: Connection[]) =>

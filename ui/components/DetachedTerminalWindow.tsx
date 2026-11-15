@@ -6,6 +6,7 @@ import type { Connection, SessionStatus } from './MainLayout'
 import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
+import { recentlyInterrupted } from '../terminal/ctrlCGuard'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { useWindowRounding } from '../hooks/useWindowRounding'
@@ -54,6 +55,12 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const lastReportedCwd = useRef<string | undefined>(undefined)
   const lastReportedTitle = useRef<string | undefined>(undefined)
   const { available: blurAvailable } = useBlurPlugin()
+  // Double Ctrl+C in the terminal asks to close its session; here the session is the whole window.
+  useEffect(() => {
+    const close = () => { void window.omnitermAPI.windowControl.close() }
+    window.addEventListener('omniterm:close-tab', close)
+    return () => window.removeEventListener('omniterm:close-tab', close)
+  }, [])
   const windowRounded = useWindowRounding()
 
   useEffect(() => {
@@ -123,7 +130,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   }
 
   return (
-    <div className={`terminal-paper-surface detach-window-enter h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
+    <div className={`detach-window-enter h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       {/* The window is built with decorations off, so this strip is the title bar; the drag region
           is Tauri's, declared on the element rather than via a CSS property. */}
       <div
@@ -211,7 +218,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             fontFamilyMono={fontFamilyMono}
             shortcuts={appSettings.shortcuts}
             enterModes={resolveEnterModes(appSettings)}
-            onExit={(code) => { if (closesOnExit(meta.connection, code)) window.omnitermAPI.windowControl.close() }}
+            onExit={(code) => { if (closesOnExit(meta.connection, code, recentlyInterrupted(meta.sessionId, Date.now()))) window.omnitermAPI.windowControl.close() }}
             onFontSizeChange={(size) => saveAppearance({ fontSize: size })}
           />
         ) : (

@@ -1,4 +1,7 @@
 import { useEffect } from 'react'
+
+import { toggleThemeMode } from '../platform/theme/unifiedTheme'
+import { openSettingsWindow } from '../workbench/settings/openSettingsWindow'
 import { matchShortcut } from '../utils/keyboard'
 import { resolveShortcuts, survivesTerminalFocus } from '../utils/shortcuts'
 
@@ -7,7 +10,6 @@ const LAYOUT_KEYS = ['layout1', 'layout2', 'layout3', 'layout4', 'layout5', 'lay
 export interface UseAppShortcutsInput {
   appSettings: AppSettings
   setAppSettings: (s: AppSettings) => void
-  setSettingsOpen: (open: boolean) => void
   /** Shift the focused terminal's font size (or the app-wide default with none focused). */
   changeFontSize: (delta: number) => void
   /** Clear the focused terminal's font-size override, falling back to its connection/app default. */
@@ -31,7 +33,7 @@ export interface UseAppShortcutsInput {
  * events — but the keyboard path has no such gate, hence the explicit `inTerminal` branch below.
  */
 export function useAppShortcuts({
-  appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom,
+  appSettings, setAppSettings, changeFontSize, resetFontSize, persistZoom,
   onToggleFullscreen, isDetached,
 }: UseAppShortcutsInput) {
   useEffect(() => {
@@ -66,7 +68,7 @@ export function useAppShortcuts({
 
       if (matches('toggleThemeMode')) {
         e.preventDefault()
-        setAppSettings({ ...appSettings, darkMode: !appSettings.darkMode })
+        void toggleThemeMode()
         return
       }
 
@@ -104,7 +106,7 @@ export function useAppShortcuts({
 
       if (matches('openSettings')) {
         e.preventDefault()
-        setSettingsOpen(true)
+        openSettingsWindow()
         return
       }
 
@@ -130,7 +132,7 @@ export function useAppShortcuts({
 
       // This pane action has a fixed shortcut by design. It must keep working even if the user
       // customizes the unrelated New Folder binding in Settings.
-      if (inPane && e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n' && ((e.altKey && !e.shiftKey) || (e.shiftKey && !e.altKey))) {
+      if (inPane && e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.key.toLowerCase() === 'n') {
         e.preventDefault()
         window.dispatchEvent(new CustomEvent('omniterm:new-pane-current-directory'))
         return
@@ -187,5 +189,5 @@ export function useAppShortcuts({
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('wheel', handleWheel)
     }
-  }, [appSettings, setAppSettings, setSettingsOpen, changeFontSize, resetFontSize, persistZoom, onToggleFullscreen, isDetached])
+  }, [appSettings, setAppSettings, changeFontSize, resetFontSize, persistZoom, onToggleFullscreen, isDetached])
 }

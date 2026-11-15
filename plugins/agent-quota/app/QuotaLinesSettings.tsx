@@ -1,4 +1,4 @@
-import type { QuotaWindow } from '../src/types'
+import type { QuotaWindow } from './usage/types'
 import type { DisplayConfig, IconConfig, LineSize } from './quotaConfig'
 
 import { QuotaLine } from './QuotaLine'

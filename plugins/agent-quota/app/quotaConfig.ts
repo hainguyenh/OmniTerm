@@ -1,5 +1,6 @@
-import { isSafePrompt } from '../src/prompt'
-import type { AgentKind, WindowKind } from '../src/types'
+import { isSafePrompt } from './usage/prompt'
+import type { AgentKind, WindowKind } from './usage/types'
+import { parseQuotaDock, type QuotaDock } from './quotaDock'
 
 /**
  * Agent Quota settings: one global object under `settings.agentQuota`, validated here because the
@@ -88,6 +89,10 @@ export interface QuotaConfig {
   enabled: boolean
   /** Show the quick-settings icon in the activity bar. */
   pinned: boolean
+  /** Show one status chip per agent profile on the footer line, next to the session footer. */
+  footer: boolean
+  /** Where the workbench shows quota (tab strip line, tool window, footer…); see quotaDock.ts. */
+  dock: QuotaDock
   display: DisplayConfig
   agents: Record<AgentKind, AgentConfig>
 }
@@ -133,6 +138,8 @@ export const DEFAULT_PACE_GLYPHS: Record<PaceTier, PaceGlyph> = {
 export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
   enabled: true,
   pinned: true,
+  footer: false,
+  dock: 'right',
   display: {
     size: 'normal',
     lines: { session: true, weekly: true, monthly: true },
@@ -234,6 +241,8 @@ export function parseQuotaConfig(value: unknown): QuotaConfig {
   return {
     enabled: bool(source.enabled, base.enabled),
     pinned: bool(source.pinned, base.pinned),
+    footer: bool(source.footer, base.footer),
+    dock: parseQuotaDock(source.dock, source.footer),
     display: {
       size: oneOf(display.size, ['thin', 'normal', 'thick'] as const, base.display.size),
       lines: {

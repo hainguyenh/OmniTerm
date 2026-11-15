@@ -6,7 +6,7 @@ import type { Workspace } from '@omniterm/contract'
 import type { ShellOption } from '../../shellOptions'
 import NewTerminalMenu from '../NewTerminalMenu'
 
-// jsdom implements neither scrollIntoView; mirror commandPalette.coverage.test.tsx.
+// jsdom implements neither scrollIntoView; matches commandPalette.coverage.test.tsx.
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
 })

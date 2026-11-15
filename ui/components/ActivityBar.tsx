@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react'
-import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, GitBranch, MoonStar, Play, Settings, StickyNote } from 'lucide-react'
+import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, GitBranch, MoonStar, Settings, Sparkles, StickyNote } from 'lucide-react'
 import { useQuotaActivityEntry } from '../../plugins/agent-quota/app/activityEntry'
-import { useLaunchActivityEntry } from '../../plugins/vscode-launch/app/launchActivityEntry'
 import { Tooltip } from './Tooltip'
 import { TempNotesPopover } from './TempNotesPopover'
 
-export type ActivityView = 'files' | 'workspace' | 'bookmarks' | 'git'
+export type ActivityView = 'files' | 'workspace' | 'sessions' | 'bookmarks'
 
 interface ActivityBarProps {
   /** Which secondary panel is active, or null when the panel is collapsed. */
@@ -28,7 +27,6 @@ interface ActivityBarProps {
   blurAvailable?: boolean
   blurEnabled?: boolean
   onBlurClick?: () => void
-  desktops?: React.ReactNode
 }
 
 /** A narrow icon rail (48 px) pinned to the left edge of the app — modelled after
@@ -46,11 +44,9 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   blurAvailable = false,
   blurEnabled = false,
   onBlurClick = () => {},
-  desktops,
 }) => {
   // Pinned by the Agent Quota plugin; null without the plugin or once the user unpins it.
   const quota = useQuotaActivityEntry()
-  const launch = useLaunchActivityEntry()
   const [tempNotesCount, setTempNotesCount] = useState(0)
   const [tempNotesOpen, setTempNotesOpen] = useState(false)
   const [tempNotesAnchor, setTempNotesAnchor] = useState<DOMRect | null>(null)
@@ -72,7 +68,6 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
 
   const handleIconClick = (view: ActivityView) => {
     if (view === 'files' && !filesEnabled) return
-    if (view === 'git' && !gitEnabled) return
     // Clicking the active icon collapses the panel; clicking another one switches.
     onViewChange(activeView === view ? null : view)
   }
@@ -83,7 +78,7 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
         style={{ backgroundColor: 'var(--theme-sidebar-bg)' }}
       >
         {/* ── Top icons ──────────────────────────────────────────────── */}
-        <div className="flex flex-col items-center gap-1 pt-2 w-full flex-shrink-0">
+        <div className="flex flex-col items-center gap-1 pt-2 w-full">
           {/* Workspace is always available (a built-in provider backs it), independent of any plugin. */}
           <ActivityIcon
             icon={<FolderGit2 className="w-5 h-5" />}
@@ -91,6 +86,12 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
             shortcut="Ctrl+B"
             active={activeView === 'workspace'}
             onClick={() => handleIconClick('workspace')}
+          />
+          <ActivityIcon
+            icon={<Sparkles className="w-5 h-5" />}
+            label="Sessions"
+            active={activeView === 'sessions'}
+            onClick={() => handleIconClick('sessions')}
           />
           <ActivityIcon
             icon={<FolderOpen className="w-5 h-5" />}
@@ -109,9 +110,8 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
             <ActivityIcon
               icon={<GitBranch className="w-5 h-5" />}
               label="Git"
-              shortcut="Ctrl+Shift+G"
-              active={activeView === 'git'}
-              onClick={() => handleIconClick('git')}
+              active={false}
+              onClick={() => window.dispatchEvent(new CustomEvent('omniterm:open-git'))}
             />
           )}
           {tempNotesCount > 0 && (
@@ -140,17 +140,7 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
         {/* ── Bottom icons (pinned) ──────────────────────────────────── */}
         {/* Always Awake sits with Settings rather than with the panel views: it opens a modal and toggles
             a machine-wide setting, it does not switch the secondary panel. */}
-        {/* ── Desktops item (vertically in empty space, scrollable if many) ── */}
-        {desktops && (
-          <div
-            className="flex-1 min-h-0 w-full overflow-y-auto no-scrollbar flex flex-col items-center py-2 gap-1.5 border-t border-[var(--theme-border)]/40 my-1"
-            data-testid="activity-bar-desktops"
-          >
-            {desktops}
-          </div>
-        )}
-
-        <div className={`${desktops ? '' : 'mt-auto'} flex flex-col items-center gap-1 pb-2 w-full flex-shrink-0`}>
+        <div className="mt-auto flex flex-col items-center gap-1 pb-2 w-full">
           {blurAvailable && (
             <ActivityIcon
               icon={<Eye className="w-5 h-5" />}
@@ -180,27 +170,6 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
               label={alwaysAwakeEnabled ? (alwaysAwakeKeepingAwake ? 'Always Awake (active)' : 'Always Awake (waiting)') : 'Always Awake'}
               active={alwaysAwakeEnabled}
               onClick={onAlwaysAwakeClick}
-            />
-          )}
-          {launch.available && (
-            <ActivityIcon
-              icon={(
-                <span className="relative flex items-center justify-center">
-                  <Play className="w-5 h-5" />
-                  {launch.activeCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 px-1 min-w-[14px] h-3.5 rounded-full text-[9px] font-bold bg-theme-accent text-theme-accent-fg flex items-center justify-center leading-none">
-                      {launch.activeCount}
-                    </span>
-                  )}
-                </span>
-              )}
-              label={
-                launch.activeCount > 0
-                  ? `Launch Consoles (${launch.activeCount} active)`
-                  : 'Launch Consoles'
-              }
-              active={launch.consoleOpen}
-              onClick={launch.toggleConsole}
             />
           )}
           <ActivityIcon

@@ -204,8 +204,7 @@ pnpm install:plugin ./my-plugin
 ```
 
 Plugins are Node.js 24 CommonJS modules communicating over JSON-RPC via stdio
-with the Tauri sidecar process. See [docs/PLUGINS.md](docs/PLUGINS.md) for the
-full authoring guide.
+with the Tauri sidecar process.
 
 ---
 
@@ -231,7 +230,6 @@ OmniTerm/
     full-connection-manager/   # SSH/RDP profiles with credential scrubbing
     native-batch-connections/  # Batch-launched SSH/RDP profiles
   contract/               # Shared TypeScript plugin contract (@omniterm/contract)
-  docs/                   # PLUGINS.md, CREDENTIAL-AUDIT.md, adr/
   scripts/                # Build utilities (Build-OmniTerm.ps1, plugin scripts)
 
 ```

@@ -12,6 +12,7 @@ mod activity;
 mod agent_activity;
 mod client;
 mod exit_watcher;
+mod forward;
 mod freeze;
 mod manager;
 mod manifest;

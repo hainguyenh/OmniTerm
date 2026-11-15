@@ -2,7 +2,6 @@
 import type React from 'react'
 import type { Connection, Folder, LocalShell, SessionStatus } from '@omniterm/contract'
 import type { AppTheme, LayoutMode } from '../themes'
-import type { TerminalToolbarActions } from '../terminalToolbar'
 
 export type { Connection, Folder, LocalShell, SessionStatus }
 
@@ -12,10 +11,6 @@ export interface MainLayoutProps {
   currentTheme: AppTheme
   layoutMode: LayoutMode
   setLayoutMode: (mode: LayoutMode) => void
-  settingsOpen: boolean
-  setSettingsOpen: (open: boolean) => void
-  updateState: UpdateState | null
-  setUpdateState: (state: UpdateState | null) => void
   themes?: AppTheme[]
   zoomFactor?: number
   onZoomReset?: () => void
@@ -23,7 +18,6 @@ export interface MainLayoutProps {
   onActiveTerminalChange?: (terminal: { id: string; connId: string } | null) => void
   onFontSizeChange?: (delta: number, terminal?: { id: string; connId: string }) => void
   onThemeApply?: (themeId: string, terminal?: { id: string; connId: string }) => void
-  onToolbarActionsChange?: (actions: TerminalToolbarActions, terminal?: { id: string; connId: string }) => void
   onSettingsReload?: (tabId?: string) => void
   /** Whole-app fullscreen: the main window hides all chrome except panes and the status footer. */
   chromeHidden?: boolean
@@ -38,14 +32,14 @@ export const shortcutLabels = {
   newFolder: 'New Folder',
   openSettings: 'Open Settings',
   toggleThemeMode: 'Toggle Light/Dark',
-  layout1: 'Grid 1 Layout',
-  layout2: 'Grid 2 Layout',
-  layout3: 'Grid 3 Layout',
-  layout4: 'Grid 4 Layout',
-  layout5: 'Grid 5 Layout',
-  layout6: 'Grid 6 Layout',
-  layout7: 'Grid 7 Layout',
-  layout8: 'Grid 8 Layout',
+  layout1: 'Layout: single pane',
+  layout2: 'Layout: 2 panes',
+  layout3: 'Layout: 1 + 2 panes',
+  layout4: 'Layout: 2 x 2 grid',
+  layout5: 'Layout: 3 x 2 grid',
+  layout6: 'Layout: 3 x 2 grid (6 panes)',
+  layout7: 'Layout: 4 x 2 grid',
+  layout8: 'Layout: 4 x 2 grid (8 panes)',
   toggleSidebar: 'Toggle Sidebar',
   commandPalette: 'Command Palette',
   closeTab: 'Close Tab',

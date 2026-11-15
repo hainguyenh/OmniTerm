@@ -6,10 +6,6 @@
 //! serialization are all exercised together.
 
 use super::with_invoke_handler;
-use crate::{
-    adhoc::AdhocRegistry, plugin_host::PluginHost, pty::PtyManager, rdp_embed::RdpSessionManager,
-    terminal_window::DetachRegistry,
-};
 use serde_json::Value;
 use std::{fs, path::PathBuf, sync::MutexGuard};
 use tauri::{test::MockRuntime, Manager};
@@ -17,16 +13,14 @@ use tauri::{test::MockRuntime, Manager};
 #[cfg(target_os = "linux")]
 #[path = "ipc_dialog_tests.rs"]
 mod dialogs;
-#[path = "ipc_git_tests.rs"]
-mod git_ipc;
+#[path = "ipc_ide_tests.rs"]
+mod ide_ipc;
 #[path = "ipc_persistence_tests.rs"]
 mod persistence;
 #[path = "ipc_runtime_tests.rs"]
 mod runtime;
 #[path = "ipc_temp_note_tests.rs"]
 mod temp_note_ipc;
-#[path = "ipc_text_file_tests.rs"]
-mod text_file_ipc;
 
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
@@ -48,12 +42,7 @@ impl IpcApp {
         context.config_mut().identifier = "com.omniterm.ipc-tests".to_string();
 
         let app = with_invoke_handler(
-            tauri::test::mock_builder()
-                .manage(PtyManager::new())
-                .manage(AdhocRegistry::new())
-                .manage(DetachRegistry::new())
-                .manage(PluginHost::new())
-                .manage(RdpSessionManager::new())
+            crate::app_state::manage_state(tauri::test::mock_builder())
                 .manage(crate::os_actions::ExternalLauncherState::test()),
         )
         .build(context)

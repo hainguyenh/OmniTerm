@@ -1,58 +1,248 @@
-//! Native auto-update over GitHub Releases via `tauri-plugin-updater`.
-//!
-//! Release artifacts are minisign-signed and described by `latest.json` published alongside them
-//! (see `scripts/publish-update.mjs`). The signing key pair is generated once per maintainer
-//! machine (`pnpm tauri signer generate`) and the private key NEVER leaves it or enters the repo;
-//! only the public key is embedded, injected into `tauri.conf.json` by
-//! `scripts/configure-tauri-updater.mjs` at build time from the environment.
-//!
-//! Unsigned/dev builds have no `plugins.updater` config: every command here degrades to a typed
-//! "unavailable" result instead of erroring, so local builds stay quiet.
+//! Native auto-update over GitHub Releases and CNB release endpoints via `tauri-plugin-updater`.
 
+use crate::ide::requests::Requests;
+use crate::update_coordinator::UpdatesCoordinator;
+use crate::update_progress::{source_endpoints, ProgressThrottle, UpdateProgress};
+use ide_core::updates::{UpdateCheck, UpdateInfo, UpdateSource, UpdateStatus};
+use ide_core::{IdeError, IdeResult, RequestId};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Runtime};
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::ipc::Channel;
+use tauri::{AppHandle, Manager, Runtime, State};
 use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(test)]
 #[path = "update_manager_tests.rs"]
 mod tests;
 
-/// Whether this build can use the native updater at all (config present = signed release build).
-///
-/// `UpdaterExt::updater()` *panics* when the plugin never registered its state — which is exactly
-/// the unsigned-dev case, where the conf carries no `plugins.updater` and lib.rs skips nothing but
-/// the endpoints are absent. Catch that panic and report "not configured" instead.
-pub fn updater_configured<R: Runtime>(app: &AppHandle<R>) -> bool {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.updater().is_ok()))
-        .unwrap_or(false)
+static INSTALLING: AtomicBool = AtomicBool::new(false);
+
+pub struct InstallingGuard;
+
+impl InstallingGuard {
+    pub fn acquire() -> Option<Self> {
+        (!INSTALLING.swap(true, Ordering::SeqCst)).then_some(Self)
+    }
+
+    #[cfg(test)]
+    pub fn is_installing() -> bool {
+        INSTALLING.load(Ordering::SeqCst)
+    }
 }
 
-/// Check GitHub Releases for a newer signed version.
+impl Drop for InstallingGuard {
+    fn drop(&mut self) {
+        INSTALLING.store(false, Ordering::SeqCst);
+    }
+}
+
+pub fn update_endpoint_env() -> Option<String> {
+    std::env::var("OMNITERM_UPDATE_ENDPOINT")
+        .or_else(|_| std::env::var("OMNITERM_UPDATE_ENDPOINT"))
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// Whether `lib.rs` registered the updater plugin. Asking the plugin itself is not an option:
+/// `app.updater()` panics when the plugin was never registered (development builds).
+pub struct UpdaterRegistered(pub bool);
+
+pub fn updater_configured<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<UpdaterRegistered>().is_some_and(|registered| registered.0)
+}
+
+fn config_endpoints<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
+    app.config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|u| u.get("endpoints"))
+        .and_then(|e| e.as_array())
+        .map(|e| e.iter().filter_map(|u| u.as_str().map(String::from)).collect())
+        .unwrap_or_default()
+}
+
+fn resolve_updater<R: Runtime>(
+    app: &AppHandle<R>,
+    source: UpdateSource,
+) -> IdeResult<Option<tauri_plugin_updater::Updater>> {
+    if !updater_configured(app) {
+        return Ok(None);
+    }
+    let endpoints = source_endpoints(config_endpoints(app), source, update_endpoint_env());
+    let endpoints = endpoints
+        .iter()
+        .map(|u| u.parse().map_err(|e| IdeError::invalid(format!("endpoint {u}: {e}"))))
+        .collect::<IdeResult<Vec<_>>>()?;
+    app.updater_builder()
+        .endpoints(endpoints)
+        .map_err(|e| IdeError::invalid(e.to_string()))?
+        .build()
+        .map(Some)
+        .map_err(|e| IdeError::unavailable(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn app_check_update<R: Runtime>(
+    app: AppHandle<R>,
+    source: Option<UpdateSource>,
+) -> IdeResult<UpdateCheck> {
+    perform_check(&app, source).await
+}
+
+pub async fn perform_check<R: Runtime>(
+    app: &AppHandle<R>,
+    source: Option<UpdateSource>,
+) -> IdeResult<UpdateCheck> {
+    let source = source.unwrap_or_default();
+    let Some(updater) = resolve_updater(app, source)? else {
+        return Ok(UpdateCheck {
+            enabled: false,
+            update: None,
+        });
+    };
+    let update = tokio::time::timeout(std::time::Duration::from_secs(60), updater.check())
+        .await
+        .map_err(|e| IdeError::unavailable(e.to_string()))?
+        .map_err(|e| IdeError::unavailable(e.to_string()))?;
+    Ok(UpdateCheck {
+        enabled: true,
+        update: update.map(|u| UpdateInfo {
+            version: u.version.clone(),
+            current_version: u.current_version.clone(),
+            notes: u.body.clone(),
+            date: u.date.map(|d| d.to_string()),
+        }),
+    })
+}
+
+#[tauri::command]
+pub async fn app_install_update<R: Runtime>(
+    app: AppHandle<R>,
+    requests: State<'_, Requests>,
+    source: Option<UpdateSource>,
+    request: Option<RequestId>,
+    on_progress: Channel<UpdateProgress>,
+) -> IdeResult<()> {
+    let _guard = InstallingGuard::acquire().ok_or_else(|| {
+        IdeError::unavailable("InstallingGuard: Another update installation is already in progress")
+    })?;
+    let request_id = request.unwrap_or(RequestId(0));
+    let token = requests.begin(request_id);
+    let result = async {
+        let updater = resolve_updater(&app, source.unwrap_or_default())?
+            .ok_or_else(|| IdeError::unavailable("Native updates are disabled in this build."))?;
+        let update = tokio::select! {
+            r = updater.check() => r.map_err(|e| IdeError::unavailable(e.to_string()))?,
+            _ = token.cancelled() => return Err(IdeError::cancelled()),
+        }
+        .ok_or_else(|| IdeError::not_found("no update available"))?;
+
+        let mut throttle = ProgressThrottle::default();
+        let progress = on_progress.clone();
+        let download = update.download(
+            move |len, total| {
+                if let Some(p) = throttle.chunk(len, total) {
+                    let _ = progress.send(p);
+                }
+            },
+            || {},
+        );
+        let bytes = tokio::select! {
+            r = download => r.map_err(|e| IdeError::unavailable(e.to_string()))?,
+            _ = token.cancelled() => return Err(IdeError::cancelled()),
+        };
+        let _ = on_progress.send(UpdateProgress::Installing);
+        tauri::async_runtime::spawn_blocking(move || update.install(bytes))
+            .await
+            .map_err(|e| IdeError::internal(e.to_string()))?
+            .map_err(|e| IdeError::internal(e.to_string()))
+    }
+    .await;
+    requests.end(request_id);
+    result
+}
+
+#[tauri::command]
+pub fn app_cancel_update(
+    requests: State<'_, Requests>,
+    token: Option<String>,
+) -> IdeResult<Value> {
+    if let Some(ref t) = token {
+        if let Ok(id) = t.parse::<u32>() {
+            requests.cancel(RequestId(id));
+        }
+    }
+    Ok(json!({ "cancelled": true, "token": token }))
+}
+
+#[tauri::command]
+pub fn app_update_window_ready<R: Runtime>(
+    app: AppHandle<R>,
+    coordinator: State<'_, UpdatesCoordinator>,
+    window: tauri::WebviewWindow<R>,
+    ready: bool,
+    system_locale: String,
+) -> IdeResult<()> {
+    coordinator.window_ready(&app, window.label(), ready, system_locale);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_update_status(coordinator: State<'_, UpdatesCoordinator>) -> IdeResult<UpdateStatus> {
+    Ok(coordinator
+        .state
+        .lock()
+        .map(|s| s.policy.status.clone())
+        .unwrap_or_default())
+}
+
+#[tauri::command]
+pub fn app_update_announcement(
+    coordinator: State<'_, UpdatesCoordinator>,
+    version: String,
+    automatic: bool,
+) -> IdeResult<bool> {
+    let claimed = coordinator
+        .state
+        .lock()
+        .map(|mut s| s.policy.announce(&version))
+        .unwrap_or(false);
+    Ok(!automatic || claimed)
+}
+
+#[tauri::command]
+pub fn app_restart<R: Runtime>(app: AppHandle<R>) -> Value {
+    app.request_restart();
+    json!({ "restarting": true })
+}
+
 #[tauri::command]
 pub async fn check_for_native_update<R: Runtime>(app: AppHandle<R>) -> Result<Value, String> {
     if !updater_configured(&app) {
         return Ok(json!({ "available": false, "reason": "updater-disabled" }));
     }
-    let update = app
+    match app
         .updater()
         .map_err(|e| e.to_string())?
         .check()
         .await
-        .map_err(|e| e.to_string())?;
-    match update {
-        Some(update) => Ok(json!({
+        .map_err(|e| e.to_string())?
+    {
+        Some(u) => Ok(json!({
             "available": true,
-            "version": update.version,
-            "notes": update.body.clone().unwrap_or_default(),
+            "version": u.version,
+            "notes": u.body.unwrap_or_default(),
         })),
         None => Ok(json!({ "available": false, "reason": "up-to-date" })),
     }
 }
 
-/// Download the signed bundle, verify it against the embedded public key, install it natively,
-/// and relaunch the app (`restart()` never returns on success).
 #[tauri::command]
 pub async fn download_and_install_update<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let _guard = InstallingGuard::acquire().ok_or_else(|| {
+        "InstallingGuard: Another update installation is already in progress".to_string()
+    })?;
     if !updater_configured(&app) {
         return Err("Native updates are disabled in this build.".to_string());
     }
@@ -63,90 +253,9 @@ pub async fn download_and_install_update<R: Runtime>(app: AppHandle<R>) -> Resul
         .await
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Already up to date.".to_string())?;
-    // Progress reporting rides the renderer's existing state machine in v1: the UI shows an
-    // indeterminate installing state while this future runs.
     update
         .download_and_install(|_, _| {}, || {})
         .await
         .map_err(|e| e.to_string())?;
     app.restart();
-}
-
-/** Restrict browser downloads to official GitHub release pages and their assets. */
-fn valid_release_url(url: &str) -> bool {
-    const BASE: &str = "https://github.com/hainguyenh/OmniTerm/releases/";
-    let Some(path) = url.strip_prefix(BASE) else {
-        return false;
-    };
-    if path == "latest" {
-        return true;
-    }
-    let mut parts = path.split('/');
-    let Some(kind) = parts.next() else {
-        return false;
-    };
-    let Some(tag) = parts.next() else {
-        return false;
-    };
-    if !tag.starts_with('v')
-        || !tag[1..].chars().all(|c| c.is_ascii_digit() || c == '.')
-        || tag[1..].is_empty()
-    {
-        return false;
-    }
-    match kind {
-        "tag" => parts.next().is_none(),
-        "download" => {
-            let Some(filename) = parts.next() else {
-                return false;
-            };
-            !filename.is_empty()
-                && filename != ".."
-                && filename
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
-                && [".exe", ".msi", ".zip", ".dmg", ".deb", ".AppImage"]
-                    .iter()
-                    .any(|ext| filename.ends_with(ext))
-                && parts.next().is_none()
-        }
-        _ => false,
-    }
-}
-
-/// For unsigned builds, ask the system browser to fetch the exact official release asset.
-/// This never executes downloads or writes a binary inside OmniTerm.
-#[tauri::command]
-pub async fn open_update_release_link(url: String) -> Result<(), String> {
-    if !valid_release_url(&url) {
-        return Err("Update link must be an official OmniTerm GitHub release URL.".into());
-    }
-    opener::open(&url).map_err(|e| e.to_string())
-}
-
-#[cfg(test)]
-mod manual_release_tests {
-    use super::valid_release_url;
-
-    #[test]
-    fn allows_only_official_release_assets_and_pages() {
-        assert!(valid_release_url(
-            "https://github.com/hainguyenh/OmniTerm/releases/latest"
-        ));
-        assert!(valid_release_url(
-            "https://github.com/hainguyenh/OmniTerm/releases/tag/v0.1.14"
-        ));
-        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/OmniTerm_0.1.14_x64-setup.exe"));
-        assert!(valid_release_url("https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/OmniTerm_0.1.14_x64-portable.zip"));
-        for invalid in [
-            "https://github.com@evil.test/hainguyenh/OmniTerm/releases/latest",
-            "https://github.com/hainguyenh/Other/releases/latest",
-            "http://github.com/hainguyenh/OmniTerm/releases/latest",
-            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/a.exe?evil=1",
-            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/../a.exe",
-            "https://github.com/hainguyenh/OmniTerm/releases/download/v0.1.14/a.exe/extra",
-        ] {
-            assert!(!valid_release_url(invalid), "{invalid}");
-        }
-    }
 }

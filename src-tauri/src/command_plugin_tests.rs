@@ -10,12 +10,17 @@ fn plugin_commands_smoke_test() {
     let available = block_on(plugin_available(app.clone(), host.clone()));
     assert!(available.is_ok());
 
-    // Test plugin_list
-    let list = block_on(plugin_list(app.clone(), host.clone()));
+    // Test omni_plugin_list (named apart from the IDE backend's own plugin_list)
+    let list = block_on(omni_plugin_list(app.clone(), host.clone()));
     assert!(list.is_ok());
 
-    // Test plugin_set_enabled
-    let set_enabled = block_on(plugin_set_enabled(host.clone(), "test".to_string(), true));
+    // Test omni_plugin_set_enabled
+    let set_enabled = block_on(omni_plugin_set_enabled(
+        app.clone(),
+        host.clone(),
+        "test".to_string(),
+        true,
+    ));
     assert!(set_enabled.is_ok() || set_enabled.is_err()); // Either way, we hit the code path
 
     // Test plugin_select_connection_provider

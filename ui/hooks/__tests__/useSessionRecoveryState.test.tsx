@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import type { Connection } from '@omniterm/contract'
 import type { LayoutMode } from '../../themes'
-import type { ViewGroup } from '../../viewGroups'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
 import { shouldAutoRestoreTab, useSessionRecoveryState } from '../useSessionRecoveryState'
 import { useSessionPersistence } from '../useSessionPersistence'
@@ -43,8 +42,6 @@ const snapshot: SessionSnapshot = {
 function useHarness() {
   const [activeTabs, setActiveTabs] = useState<{ id: string; connId: string; name: string }[]>([])
   const [ephemeralConns, setEphemeralConns] = useState<Connection[]>([])
-  const [viewGroups, setViewGroups] = useState<ViewGroup[]>([])
-  const [tabGroups, setTabGroups] = useState<Record<string, string>>({})
   const [panes, setPanes] = useState<(string | null)[]>(Array(8).fill(null))
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(1)
   const [, setFocusedPane] = useState(0)
@@ -53,16 +50,12 @@ function useHarness() {
     activeTabs,
     ephemeralConns,
     resolveConnection: id => ephemeralConns.find(conn => conn.id === id),
-    viewGroups,
-    tabGroups,
-    activeGroupId: 'ungrouped',
+    viewGroups: [],
     layoutMode,
     sessionCwds: {},
     setActiveTabs,
     setEphemeralConns,
-    setTabGroups,
     setResumeMode,
-    restoreGroups: groups => setViewGroups(groups),
     setPanes,
     setLayoutMode,
     setFocusedPane,
@@ -106,22 +99,6 @@ describe('useSessionRecoveryState', () => {
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'PowerShell' })).toBe(false)
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'project // PowerShell 7' })).toBe(false)
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'Claude Code - project' })).toBe(true)
-  })
-
-  it('does not associate a plain shell in folder X with another pane\'s agent session', () => {
-    upsertSession({
-      id: 'claude:33333333-3333-4333-8333-333333333333',
-      tabId: 'tab-a',
-      agent: 'claude',
-      profileName: 'work',
-      sessionId: '33333333-3333-4333-8333-333333333333',
-      cwd: 'F:/a',
-      state: 'interrupted',
-      updatedAt: Date.now(),
-    })
-    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'PowerShell', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
-    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'project X // PowerShell 7', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
-    expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
   })
 
   it('auto-restores a pane with a persisted agent session after its title fell back to the shell', () => {

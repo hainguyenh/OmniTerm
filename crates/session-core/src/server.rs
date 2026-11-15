@@ -4,7 +4,7 @@ use std::sync::Arc;
 use session_protocol::{ClientRequest, ServerMessage, PROTOCOL_VERSION};
 #[cfg(test)]
 use tokio::sync::watch;
-use tokio::sync::{broadcast, Notify};
+use tokio::sync::Notify;
 
 use crate::activity;
 use crate::manager::SessionManager;
@@ -114,8 +114,9 @@ async fn handle_connection_inner<S>(
         ClientRequest::Attach {
             client_id,
             session_id,
+            binary_data,
         } => match manager.attach(&client_id, &session_id) {
-            Ok(mut attached) => {
+            Ok(attached) => {
                 if write_frame(
                     &mut stream,
                     &ServerMessage::Attached {
@@ -128,27 +129,7 @@ async fn handle_connection_inner<S>(
                 {
                     return;
                 }
-                loop {
-                    match attached.receiver.recv().await {
-                        Ok(message) => {
-                            if write_frame(&mut stream, &message).await.is_err() {
-                                return;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            let _ = write_frame(
-                                &mut stream,
-                                &ServerMessage::Error {
-                                    message: "Session stream fell behind; reattach to replay buffered output."
-                                        .to_string(),
-                                },
-                            )
-                            .await;
-                            return;
-                        }
-                        Err(broadcast::error::RecvError::Closed) => return,
-                    }
-                }
+                crate::forward::forward(&mut stream, attached.receiver, binary_data).await;
             }
             Err(message) => {
                 let _ = write_frame(&mut stream, &ServerMessage::Error { message }).await;

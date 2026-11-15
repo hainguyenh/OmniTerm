@@ -8,12 +8,10 @@ import { TOKYO_NIGHT } from "../../themes";
 
 import ConfirmDialog from "../ConfirmDialog";
 import ConnectionForm from "../ConnectionForm";
-import FileBrowser from "../FileBrowser";
 import OverlayBar from "../OverlayBar";
 import RDPView from "../RDPView";
 import SessionMetricsChips from "../SessionMetricsChips";
 import { ThemeRemixModal } from "../ThemeRemixModal";
-import { TitleBar } from "../TitleBar";
 
 const sampleConnection = {
   id: "c1",
@@ -91,11 +89,6 @@ describe("component rendering smoke tests", () => {
     expect(screen.getByRole("option", { name: "infra / deploy / prod" })).toBeInTheDocument();
   });
 
-  it("renders FileBrowser header", async () => {
-    render(<FileBrowser id="c1" connectionName="Server" active />);
-    await waitFor(() => expect(screen.getByText(/Server/)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /home/i })).toBeInTheDocument();
-  });
 
   it("renders OverlayBar", async () => {
     render(<OverlayBar />);
@@ -150,21 +143,4 @@ describe("component rendering smoke tests", () => {
     await waitFor(() => expect(screen.getByText("Theme Remix")).toBeInTheDocument());
   });
 
-  it("renders TitleBar", async () => {
-    render(
-      <TitleBar
-        appSettings={{
-          themeId: "tokyo-night",
-          fontSize: 14,
-          smartColors: true,
-          checkUpdatesOnStartup: true,
-          darkMode: true,
-        }}
-        setAppSettings={vi.fn()}
-        themes={[]}
-        setThemeRemixOpen={vi.fn()}
-      />,
-    );
-    await waitFor(() => expect(screen.getByText("OmniTerm")).toBeInTheDocument());
-  });
 });

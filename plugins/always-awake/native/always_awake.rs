@@ -41,6 +41,9 @@ pub struct AlwaysAwakeState {
     last_emitted: Mutex<Option<EmittedKey>>,
     /// Set from the app's exit event; the poller hands the sleep request back and stops.
     shutting_down: AtomicBool,
+    /// Set while the user has switched the feature off in the Plugins dialog: nothing is asserted,
+    /// whatever schedule is saved, and the schedule is kept for when it is switched back on.
+    feature_off: AtomicBool,
 }
 
 /// Everything about a status the frontend can see: enabled, mode, deadline, active session count,
@@ -59,7 +62,18 @@ impl AlwaysAwakeState {
             poller_started: AtomicBool::new(false),
             last_emitted: Mutex::new(None),
             shutting_down: AtomicBool::new(false),
+            feature_off: AtomicBool::new(false),
         }
+    }
+
+    /// Follow the feature's on/off state from the Plugins dialog. Off releases the sleep request on
+    /// the poller's next tick.
+    pub fn set_feature_enabled(&self, enabled: bool) {
+        self.feature_off.store(!enabled, Ordering::Release);
+    }
+
+    pub fn feature_enabled(&self) -> bool {
+        !self.feature_off.load(Ordering::Acquire)
     }
 
     /// Stop keeping the machine awake and end the poller.
@@ -229,7 +243,7 @@ fn reconcile<R: Runtime>(
             Err(_) => return,
         };
     }
-    let should_assert = should_keep_awake(&stored, active_count);
+    let should_assert = state.feature_enabled() && should_keep_awake(&stored, active_count);
     drop(stored);
 
     let currently_asserted = state.native_asserted.load(Ordering::Acquire);
@@ -271,12 +285,23 @@ fn reconcile<R: Runtime>(
     emit_status(app, state, active_count);
 }
 
+fn feature_enabled<R: Runtime>(app: &AppHandle<R>) -> bool {
+    crate::builtin_features::is_enabled(app, app_core::builtin_features::ALWAYS_AWAKE)
+}
+
+/// Whether the built-in feature is switched on; the frontend shows Always Awake only then.
+#[tauri::command]
+pub async fn always_awake_info<R: Runtime>(app: AppHandle<R>) -> bool {
+    feature_enabled(&app)
+}
+
 #[tauri::command]
 pub async fn get_state<R: Runtime>(
     app: AppHandle<R>,
     state: tauri::State<'_, AlwaysAwakeState>,
 ) -> Result<AwakeStatus, String> {
     load_state(&app, &state)?;
+    state.set_feature_enabled(feature_enabled(&app));
     ensure_poller(&app, &state);
     status(&app, &state, 0)
 }
@@ -290,6 +315,9 @@ pub async fn set_state<R: Runtime>(
     expires_at_ms: i64,
 ) -> Result<AwakeStatus, String> {
     load_state(&app, &state)?;
+    if enabled && !feature_enabled(&app) {
+        return Err("Always Awake is turned off in Plugins.".to_string());
+    }
     if enabled && expires_at_ms <= now_ms() {
         return Err("Always Awake expiry must be in the future.".to_string());
     }

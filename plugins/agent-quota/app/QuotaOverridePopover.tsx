@@ -2,13 +2,13 @@ import { AlarmClock, Check, Globe, Play, RotateCcw, SlidersHorizontal, X } from 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
-import type { WindowKind } from '../src/types'
+import type { WindowKind } from './usage/types'
 import type { AgentOverride, WakeMode } from './quotaConfig'
 import type { TerminalAgent } from './quotaStore'
 
 import ToggleRow from '../../../ui/components/ToggleRow'
 import { confirmDisableSuspend, confirmResumeNow } from './dangerConfirm'
-import { isSafePrompt } from '../src/prompt'
+import { isSafePrompt } from './usage/prompt'
 import { AGENT_LABELS, clampLimit, effectiveConfig, pruneOverride, wakeConfigWithEnabled, WINDOW_LABELS } from './quotaConfig'
 import { isHeld } from './quotaGuard'
 import { clearManualPause, quotaCommands, setEditing, setOverride, useQuota } from './quotaStore'

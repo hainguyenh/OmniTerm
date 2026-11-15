@@ -7,7 +7,7 @@
  * `claude -p /usage` cannot stand in for this: a profile with no 5-hour session running answers
  * it without the limits panel, while the interactive `/usage` always draws it.
  */
-import type { AgentKind, QuotaSnapshot } from '../src/types'
+import type { AgentKind, QuotaSnapshot } from './usage/types'
 import type { HiddenTerminal } from '../../../ui/utils/hiddenTerminal'
 import type { DriveIO, OutputWatch } from './usageProbeCore'
 
@@ -22,7 +22,7 @@ export interface HiddenProbeTarget {
 }
 
 export interface HiddenProbeDeps {
-  /** The scratch folder to start agents in; null when the sidecar cannot provide one. */
+  /** The scratch folder to start agents in; null when the app cannot provide one. */
   probeDir(): Promise<string | null>
   open(cwd: string | null): Promise<HiddenTerminal | null>
   now(): number
@@ -37,7 +37,7 @@ const AGENT_START_MS = 30_000
 const EXIT_QUIET_MS = 1_000
 const EXIT_MAX_MS = 10_000
 const SHELL_PROMPT = /^(?:PS [^>]*>|[A-Za-z]:\\[^>]*>|.*[$#%])\s*$/
-/** Mirrors `DEFAULT_PROFILE_DIR` in profileKey.ts: the default profile starts with the bare agent. */
+/** Matches `DEFAULT_PROFILE_DIR` in profileKey.ts: the default profile starts with the bare agent. */
 const DEFAULT_DIR: Record<AgentKind, string> = { claude: '.claude', codex: '.codex', agy: '.gemini' }
 const PROFILE_ENV: Record<AgentKind, string> = { claude: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME', agy: 'AGY_HOME' }
 
@@ -178,7 +178,7 @@ export async function probeProfilesHidden(
   return skipped
 }
 
-/** The live hidden terminal, with the sidecar's scratch folder. */
+/** The live hidden terminal, with the app's scratch folder. */
 export function liveHiddenProbeDeps(probeDir: () => Promise<string | null>): HiddenProbeDeps {
   return {
     probeDir,

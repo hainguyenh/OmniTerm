@@ -186,11 +186,8 @@ describe('useSessionPersistence snapshot building', () => {
       ],
       ephemeralConns: [localConn({ localCwd: 'C:/x', shell: 'cmd' })],
       resolveConnection,
-      tabGroups: { 'tab-1': 'g1', 'gone-tab': 'g1' },
-      activeGroupId: 'g1',
       viewGroups: [
-        group({ id: 'g1', color: '#fff', persistent: false, panes: ['tab-1', 'gone-tab', null] }),
-        group({ id: 'g2' }),
+        group({ id: 'ungrouped', color: '#fff', persistent: false, layoutMode: 2, panes: ['tab-1', 'gone-tab', null] }),
       ],
       layoutMode: 2,
     }))
@@ -199,12 +196,11 @@ describe('useSessionPersistence snapshot building', () => {
       { id: 'conn-1', name: 'PowerShell', type: 'LOCAL', ephemeral: true, shell: 'cmd', localCwd: 'C:/x' },
       { id: 'saved', name: 'Saved', type: 'SSH', ephemeral: false, workspaceId: 'ws', host: 'h', port: '2222', user: 'u' },
     ])
-    expect(snapshot?.tabGroups).toEqual({ 'tab-1': 'g1' })
-    expect(snapshot?.activeGroupId).toBe('g1')
+    expect(snapshot?.tabGroups).toEqual({})
+    expect(snapshot?.activeGroupId).toBe('ungrouped')
+    expect(snapshot?.viewGroups).toHaveLength(1)
     expect(snapshot?.layoutMode).toBe(2)
-    expect(snapshot?.viewGroups[0]).toMatchObject({ color: '#fff', persistent: false, panes: ['tab-1', null, null] })
-    expect(snapshot?.viewGroups[1]).not.toHaveProperty('color')
-    expect(snapshot?.viewGroups[1]).not.toHaveProperty('persistent')
+    expect(snapshot?.viewGroups[0]).toMatchObject({ id: 'ungrouped', panes: ['tab-1', null, null] })
   })
 
   it('checkpoints again on beforeunload and stops listening after unmount', () => {

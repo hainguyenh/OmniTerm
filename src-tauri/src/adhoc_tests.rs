@@ -284,3 +284,4 @@ fn quick_shell_command_rejects_unsupported_renderer_input() {
     ));
     assert!(result.is_err());
 }
+

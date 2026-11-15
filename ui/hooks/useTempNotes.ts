@@ -1,41 +1,28 @@
 import { useCallback, useEffect } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
-import type { WorkspaceScript } from '@omniterm/contract'
 
-interface UseTempNotesParams {
-  activeTabs: { id: string; connId: string; name: string }[]
-  setActiveTabs: Dispatch<SetStateAction<{ id: string; connId: string; name: string }[]>>
-  setEditorTabs: Dispatch<SetStateAction<Record<string, { workspaceId: string; script: WorkspaceScript }>>>
-  showTab: (id: string, opts?: { autoFillOnly?: boolean; newTab?: boolean }) => void
+import { diag } from '../diag'
+import { editorService } from '../ide/workbench/contributions'
+
+/** Note ids come from window events: only plain ids are opened. */
+const NOTE_ID = /^[A-Za-z0-9_-]{1,100}$/
+
+/** Opens a temporary note as an editor tab of the `notes` kind (one tab per note). */
+export function openNoteTab(noteId: string, title?: string): void {
+  if (!NOTE_ID.test(noteId)) return
+  editorService()
+    .openInput({ kind: 'notes', key: `notes:${noteId}`, data: { noteId, title: title || 'Sticky Note' } }, { focus: true })
+    .catch((error: unknown) => diag.warn('[notes] could not open the note', error))
 }
 
-export function useTempNotes({
-  setActiveTabs,
-  setEditorTabs,
-  showTab,
-}: UseTempNotesParams) {
-  const openTempTab = useCallback((noteId: string, title?: string) => {
-    const tabId = `temp:${noteId}`
-    const displayTitle = title || 'Sticky Note'
-    const script: WorkspaceScript = {
-      id: noteId,
-      name: displayTitle,
-      path: `temp://${noteId}`,
-      kind: 'txt',
-      editable: true,
-      viewable: true,
-    }
-    setEditorTabs((prev) => ({ ...prev, [tabId]: { workspaceId: '__temp__', script } }))
-    setActiveTabs((prev) => (prev.some((t) => t.id === tabId) ? prev : [...prev, { id: tabId, connId: tabId, name: displayTitle }]))
-    showTab(tabId, { autoFillOnly: true, newTab: true })
-  }, [setEditorTabs, setActiveTabs, showTab])
+export function useTempNotes() {
+  const openTempTab = useCallback((noteId: string, title?: string) => openNoteTab(noteId, title), [])
 
   useEffect(() => {
     const handleNewTempNote = () => {
       const noteId = `note-${Date.now()}`
       void window.omnitermAPI.tempNotes.write(noteId, '').then(() => {
         window.dispatchEvent(new CustomEvent('omniterm:temp-notes-changed'))
-        openTempTab(noteId, 'Untitled')
+        openNoteTab(noteId, 'Untitled')
       })
     }
 
@@ -43,7 +30,7 @@ export function useTempNotes({
       const custom = e as CustomEvent<{ id: string; title?: string; content?: string }>
       if (custom.detail?.id) {
         const preview = custom.detail.title || custom.detail.content?.split('\n').find((l) => l.trim().length > 0)?.trim()
-        openTempTab(custom.detail.id, preview || 'Sticky Note')
+        openNoteTab(custom.detail.id, preview || 'Sticky Note')
       }
     }
 
@@ -54,7 +41,7 @@ export function useTempNotes({
       window.removeEventListener('omniterm:new-temp-note', handleNewTempNote)
       window.removeEventListener('omniterm:open-temp-tab', handleOpenTempTab)
     }
-  }, [openTempTab])
+  }, [])
 
   return { openTempTab }
 }

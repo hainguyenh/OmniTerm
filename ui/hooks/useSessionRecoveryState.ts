@@ -25,9 +25,12 @@ export function shouldAutoRestoreTab(tab: PersistedTab): boolean {
   // A process-tree scan may have captured the agent before its terminal title changed back to a
   // shell title. The persisted session binding is stronger evidence than that transient title.
   if (findSessionByTabId(tab.id)) return true
-  // Another pane may run an agent in this same folder: cwd is not an agent identity.
-  if (tab.recovery.agentSessionId && loadStoredSessions().some(item => item.sessionId === tab.recovery.agentSessionId)) return true
-  if (tab.recovery.agent) return true
+  if (tab.recovery.cwd) {
+    const cwd = tab.recovery.cwd.toLowerCase()
+    if (loadStoredSessions().some(item => (item.state === 'interrupted' || item.state === 'active') && item.cwd && item.cwd.toLowerCase() === cwd)) {
+      return true
+    }
+  }
   if (parseAgentTitle(tab.name)) return true
   const title = tab.name.trim().toLowerCase().replace(/^\/\/\s*/, '')
   const shellTitle = title.split(/\s+\/\/\s+/).at(-1) ?? title
@@ -40,15 +43,11 @@ interface SessionRecoveryStateInput {
   ephemeralConns: Connection[]
   resolveConnection: (id?: string) => Connection | undefined
   viewGroups: ViewGroup[]
-  tabGroups: Record<string, string>
-  activeGroupId: string
   layoutMode: LayoutMode
   sessionCwds: Record<string, string>
   setActiveTabs: (fn: (prev: SessionTab[]) => SessionTab[]) => void
   setEphemeralConns: (fn: (prev: Connection[]) => Connection[]) => void
-  setTabGroups: (fn: (prev: Record<string, string>) => Record<string, string>) => void
   setResumeMode: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void
-  restoreGroups: (groups: ViewGroup[], activeId: string) => void
   setPanes: (panes: (string | null)[]) => void
   setLayoutMode: (mode: LayoutMode) => void
   setFocusedPane: (pane: number) => void
@@ -71,8 +70,6 @@ export function useSessionRecoveryState(input: SessionRecoveryStateInput): {
     ephemeralConns: input.ephemeralConns,
     resolveConnection: input.resolveConnection,
     viewGroups: input.viewGroups,
-    tabGroups: input.tabGroups,
-    activeGroupId: input.activeGroupId,
     layoutMode: input.layoutMode,
     sessionCwds: input.sessionCwds,
     pendingSnapshot: pendingRestoreSnapshot,
@@ -166,10 +163,8 @@ export function useSessionRecoveryState(input: SessionRecoveryStateInput): {
     shouldRestoreTab: shouldAutoRestoreTab,
     setActiveTabs: input.setActiveTabs,
     setEphemeralConns: input.setEphemeralConns,
-    setTabGroups: input.setTabGroups,
     setResumeMode: input.setResumeMode,
     resolveConnection: input.resolveConnection,
-    restoreGroups: input.restoreGroups,
     setPanes: input.setPanes,
     setLayoutMode: input.setLayoutMode,
     setFocusedPane: input.setFocusedPane,

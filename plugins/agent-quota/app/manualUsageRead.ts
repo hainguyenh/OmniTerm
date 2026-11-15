@@ -7,7 +7,7 @@
  * The click-time read of the whole screen found nothing, so any panel that parses later was drawn
  * since — no old reading is taken for a fresh one.
  */
-import type { QuotaSnapshot } from '../src/types'
+import type { QuotaSnapshot } from './usage/types'
 import type { TerminalAgent } from './quotaStore'
 
 import { AGENT_LABELS } from './quotaConfig'

@@ -1,7 +1,7 @@
 import type React from 'react'
 import { useRef } from 'react'
 
-import type { QuotaWindow } from '../src/types'
+import type { QuotaWindow } from './usage/types'
 import type { LineSize } from './quotaConfig'
 import { iconForAgent, type AgentBrand } from './agentBrand'
 

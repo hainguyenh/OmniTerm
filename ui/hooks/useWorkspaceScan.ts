@@ -8,7 +8,7 @@ export interface FolderPageInfo {
   hasMore: boolean
 }
 
-/** Default files per folder page, mirroring the backend's `DEFAULT_PAGE_SIZE`. */
+/** Default files per folder page, matching the backend's `DEFAULT_PAGE_SIZE`. */
 const PAGE_SIZE = 2000
 
 /**
@@ -28,7 +28,7 @@ export function useWorkspaceScan() {
   const [scanning, setScanning] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState<{ wsId: string; folder: string } | null>(null)
   const [loadingAll, setLoadingAll] = useState<string | null>(null)
-  // Per-folder "first page in flight" state, for the row's own spinner — a state mirror of
+  // Per-folder "first page in flight" state, for the row's own spinner — reflects
   // `inFlight` below, which is a ref and so cannot drive a render.
   const [loadingFolders, setLoadingFolders] = useState<Set<string>>(new Set())
 

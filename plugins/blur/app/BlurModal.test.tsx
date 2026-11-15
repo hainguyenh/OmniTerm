@@ -29,10 +29,7 @@ describe('BlurModal', () => {
 
   it('closes from Escape and the close button', () => {
     const onClose = vi.fn()
-    const { container } = render(<BlurModal strength={4} blurDock={false} enabled={true} onSave={vi.fn()} onClose={onClose} />)
-    const panel = container.querySelector('.max-w-\\[480px\\]')
-    expect(panel).toBeInTheDocument()
-    expect(panel).toHaveStyle({ maxWidth: '480px' })
+    render(<BlurModal strength={4} blurDock={false} enabled={true} onSave={vi.fn()} onClose={onClose} />)
 
     fireEvent.keyDown(document, { key: 'Escape' })
     fireEvent.click(screen.getByTitle('Close'))

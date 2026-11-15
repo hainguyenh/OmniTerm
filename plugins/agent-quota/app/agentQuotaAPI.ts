@@ -1,6 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 
-import type { AgentKind, DiscoveredProfile, FetchUsageRequest, QuotaSnapshot, QuotaWindow, WakeRequest, WakeResult } from '../src/types'
+import { scanPaneAgents } from '../../../ui/utils/paneAgentScan'
+
+import type { AgentKind, DiscoveredProfile, FetchUsageRequest, QuotaSnapshot, QuotaWindow, WakeRequest, WakeResult } from './usage/types'
 
 /** The main agent Rust found in a terminal session (`agent_quota_detect`). */
 export interface SessionAgent {
@@ -73,9 +76,9 @@ function parseWindow(value: unknown): QuotaWindow | null {
   }
 }
 
-/** Validate a sidecar snapshot. Anything unreadable becomes an error snapshot the guard ignores. */
+/** Validate a quota snapshot. Anything unreadable becomes an error snapshot the guard ignores. */
 export function parseSnapshot(value: unknown, now: number = Date.now()): QuotaSnapshot {
-  if (!isRecord(value)) return { windows: [], fetchedAt: now, error: 'failed', message: 'The Agent Quota plugin did not answer.' }
+  if (!isRecord(value)) return { windows: [], fetchedAt: now, error: 'failed', message: 'Agent Quota did not answer.' }
   const windows = Array.isArray(value.windows) ? value.windows.map(parseWindow).filter((w): w is QuotaWindow => w !== null) : []
   const snapshot: QuotaSnapshot = {
     windows,
@@ -121,7 +124,7 @@ function parseReport(value: unknown): SuspendReport {
 const count = (value: unknown) => (isInt(value) ? value : 0)
 
 /**
- * Validate `agentQuota.listProfiles`: a launcher must be a bare name for its own agent, the name a
+ * Validate `agent_quota_list_profiles`: a launcher must be a bare name for its own agent, the name a
  * short label, the directory a plain string. Anything else is dropped, never shown or probed.
  */
 export function parseDiscoveredProfiles(value: unknown): DiscoveredProfile[] {
@@ -138,14 +141,17 @@ export function parseDiscoveredProfiles(value: unknown): DiscoveredProfile[] {
   })
 }
 
-/** Every profile the user can start (the Profiles dashboard); an absent or failing sidecar lists none. */
+/** Every profile the user can start (the Profiles dashboard); a failing or switched-off feature lists none. */
 export function listAgentProfiles(): Promise<DiscoveredProfile[]> {
-  return invoke<unknown>('plugin_invoke', { method: 'agentQuota.listProfiles', args: [] }).then(parseDiscoveredProfiles, () => [])
+  return invoke<unknown>('agent_quota_list_profiles').then(parseDiscoveredProfiles, () => [])
 }
 
 export interface AgentQuotaAPI {
   info(): Promise<boolean>
-  detect(): Promise<SessionAgent[]>
+  /** `fresh`: walk the process table now instead of reusing a reading a few seconds old. */
+  detect(fresh?: boolean): Promise<SessionAgent[]>
+  /** A plugin or built-in feature was switched: whether Agent Quota is on may have changed. */
+  onPluginsChanged?(listener: () => void): () => void
   suspend(sessionId: string, pid: number, startTime: number): Promise<SuspendReport>
   resume(sessionId: string): Promise<number>
   resumeAll(): Promise<number>
@@ -155,31 +161,48 @@ export interface AgentQuotaAPI {
   fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
   wake(request: WakeRequest): Promise<WakeResult>
   listProfiles?(): Promise<DiscoveredProfile[]>
-  /** The sidecar's scratch folder for the hidden profile probe; null when it cannot say. */
+  /** The app's scratch folder for the hidden profile probe; null when it cannot say. */
   probeDir?(): Promise<string | null>
 }
 
+/** Broadcast by Rust when a plugin or built-in feature is switched or removed (plugin_commands.rs). */
+const PLUGINS_CHANGED_EVENT = 'omniterm://plugins-changed'
+
 export function createAgentQuotaAPI(): AgentQuotaAPI {
-  const plugin = (method: string, payload?: unknown) => invoke<unknown>('plugin_invoke', { method, args: payload === undefined ? [] : [payload] })
   return {
-    info: () => plugin('agentQuota.info').then((info) => isRecord(info), () => false),
-    detect: () => invoke<unknown>('agent_quota_detect').then(parseSessionAgents),
+    /** Whether the built-in feature is switched on in the Plugins dialog. */
+    info: () => invoke<unknown>('agent_quota_info').then((enabled) => enabled === true, () => false),
+    detect: (fresh) => scanPaneAgents(fresh ? 0 : undefined).then(parseSessionAgents),
+    onPluginsChanged: (listener) => {
+      let unlisten: (() => void) | null = null
+      let cancelled = false
+      void listen(PLUGINS_CHANGED_EVENT, () => listener())
+        .then((fn) => {
+          if (cancelled) fn()
+          else unlisten = fn
+        })
+        .catch(() => {})
+      return () => {
+        cancelled = true
+        unlisten?.()
+      }
+    },
     suspend: (sessionId, pid, startTime) => invoke<unknown>('agent_quota_suspend', { sessionId, pid, startTime }).then(parseReport),
     resume: (sessionId) => invoke<unknown>('agent_quota_resume', { sessionId }).then(count),
     resumeAll: () => invoke<unknown>('agent_quota_resume_all').then(count),
     resumePid: (sessionId, pid) => invoke<unknown>('agent_quota_resume_pid', { sessionId, pid }).then((res) => res === true, () => false),
     getHeld: (sessionId) => invoke<unknown>('agent_quota_get_held', { sessionId: sessionId ?? null }).then(parseFrozenList, () => []),
     terminate: (sessionId, pid, startTime) => invoke<unknown>('agent_quota_terminate', { sessionId, pid, startTime }).then(count),
-    fetchUsage: (request) => plugin('agentQuota.fetchUsage', request).then(
+    fetchUsage: (request) => invoke<unknown>('agent_quota_fetch_usage', { request }).then(
       (value) => parseSnapshot(value),
       (error: unknown) => ({ windows: [], fetchedAt: Date.now(), error: 'failed' as const, message: String(error).slice(0, 300) }),
     ),
-    wake: (request) => plugin('agentQuota.wake', request).then(
+    wake: (request) => invoke<unknown>('agent_quota_wake', { request }).then(
       (value) => (isRecord(value) ? { ok: value.ok === true, message: typeof value.message === 'string' ? value.message : undefined } : { ok: false, message: 'No answer.' }),
       (error: unknown) => ({ ok: false, message: String(error).slice(0, 300) }),
     ),
     listProfiles: () => listAgentProfiles(),
-    probeDir: () => plugin('agentQuota.probeDir').then(
+    probeDir: () => invoke<unknown>('agent_quota_probe_dir').then(
       (value) => (typeof value === 'string' && value.length > 0 && value.length <= 1024 && !value.includes('\0') ? value : null),
       () => null,
     ),

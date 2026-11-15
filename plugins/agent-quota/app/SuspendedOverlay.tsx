@@ -3,7 +3,7 @@ import { Clock, ShieldAlert, Snowflake, X } from 'lucide-react'
 
 import { AGENT_LABELS, effectiveConfig, WINDOW_LABELS } from './quotaConfig'
 import { formatCountdown } from './quotaPolicy'
-import { setReviewSession, useQuota } from './quotaStore'
+import { setReviewSession, useQuota, useQuotaNow } from './quotaStore'
 import { FROZEN_OVERLAY_EVENT } from './frozenOverlayEvents'
 
 /** Covers a terminal whose agent the guard froze, while allowing the user to inspect the frozen output. */
@@ -13,7 +13,7 @@ export function SuspendedOverlay({ sessionId }: { sessionId: string }) {
   const global = useQuota((state) => (terminal ? state.config.agents[terminal.agent] : undefined))
   const override = useQuota((state) => (terminal ? state.overrides[terminal.instanceKey] : undefined))
   const profile = useQuota((state) => (terminal ? state.profiles[terminal.profileKey] : undefined))
-  const now = useQuota((state) => state.now)
+  const now = useQuotaNow()
   const [hidden, setHidden] = useState(false)
 
   useEffect(() => {

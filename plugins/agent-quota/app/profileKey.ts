@@ -1,4 +1,4 @@
-import type { AgentKind } from '../src/types'
+import type { AgentKind } from './usage/types'
 import type { SessionAgent } from './agentQuotaAPI'
 
 /**
@@ -13,7 +13,7 @@ import type { SessionAgent } from './agentQuotaAPI'
  * default directory does not identify a launcher's profile; the launcher name keys it then.
  */
 
-/** Mirrors `DEFAULT_DIR` in src/launcher.ts, which is sidecar-only (it imports Node modules). */
+/** Matches `AgentKind::default_dir` in crates/app-core/src/agent_quota/types.rs. */
 const DEFAULT_PROFILE_DIR: Record<AgentKind, string> = { claude: '.claude', codex: '.codex', agy: '.gemini' }
 
 /** Session + pid + start time: a new agent process in the same terminal is a new instance. */
