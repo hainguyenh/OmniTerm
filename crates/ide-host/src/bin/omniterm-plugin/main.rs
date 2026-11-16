@@ -797,7 +797,7 @@ mod tests {
         let tree = dunce::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).unwrap();
         assert_eq!(
             sdk_dependency(None, &tree.join("plugins/official/new")).unwrap(),
-            "{ path = \"../../../sdk/rust/omniterm-plugin\" }"
+            "{ path = \"../../sdk/rust/omniterm-plugin\" }"
         );
         let outside = dunce::canonicalize(std::env::temp_dir()).unwrap().join("my-plugin");
         assert_eq!(
