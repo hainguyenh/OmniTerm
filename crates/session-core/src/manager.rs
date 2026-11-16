@@ -119,6 +119,11 @@ impl SessionManager {
                 .map_err(|error| format!("Could not resolve working directory {cwd}: {error}"))?;
             cmd.cwd(cwd);
         }
+        // The daemon keeps the environment it started with, even across app restarts: give a
+        // new session the user's current variables, then the launch's own.
+        for (key, value) in ide_core::user_env::refreshed_vars() {
+            cmd.env(key, value);
+        }
         for (key, value) in &launch.env {
             cmd.env(key, value);
         }

@@ -6825,6 +6825,7 @@ version = "0.1.4"
 dependencies = [
  "dashmap",
  "dunce",
+ "ide-core",
  "libc",
  "log",
  "omniterm-core",

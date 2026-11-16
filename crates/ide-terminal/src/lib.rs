@@ -151,6 +151,11 @@ impl TerminalManager {
         } else {
             resolve_cwd(&options.cwd)
         });
+        // The variables the user set since OmniTerm started (a new `Path` entry, ...); the
+        // host fixes and the terminal's own variables below still win.
+        for (k, v) in ide_core::user_env::refreshed_vars() {
+            cmd.env(k, v);
+        }
         for (k, v) in ide_core::process::host_env_fixes() {
             match v {
                 Some(v) => cmd.env(k, v),
