@@ -1,5 +1,4 @@
 use super::*;
-use serde_json::json;
 
 #[test]
 fn app_and_plugin_commands_cover_safe_no_side_effect_paths() {
@@ -11,18 +10,9 @@ fn app_and_plugin_commands_cover_safe_no_side_effect_paths() {
         .unwrap()
         .is_empty());
 
-    let host = fixture.app.state::<PluginHost>();
-    assert!(!block_on(plugin_available(app.clone(), host.clone())).unwrap());
-    // No plugin host runs here, so only the built-in features are listed.
-    let listed = block_on(omni_plugin_list(app.clone(), host.clone())).unwrap();
+    let listed = omni_plugin_list(app.clone());
     let ids: Vec<&str> = listed.iter().filter_map(|row| row["id"].as_str()).collect();
     assert_eq!(ids, ["omniterm.agent-quota", "omniterm.always-awake"]);
-    assert!(block_on(plugin_management::remove_plugin(
-        app.clone(),
-        host,
-        "../unsafe".to_string(),
-    ))
-    .is_err());
 
     handle_second_instance(&app, &["omniterm".to_string()]);
     handle_second_instance(
@@ -97,36 +87,6 @@ fn setup_launcher_idempotently_writes_all_three_shims_into_app_data() {
 }
 
 #[test]
-fn plugin_command_wrappers_preserve_stopped_host_fallbacks_and_errors() {
-    let fixture = MockApp::new();
-    let host = fixture.app.state::<PluginHost>();
-
-    assert_eq!(
-        block_on(connection_provider_capabilities(host.clone())).unwrap(),
-        None
-    );
-    assert!(block_on(plugin_auth_gate(host.clone())).unwrap());
-    assert!(block_on(omni_plugin_set_enabled(
-        fixture.handle(),
-        host.clone(),
-        "missing".to_string(),
-        true,
-    ))
-    .is_err());
-    assert!(block_on(plugin_select_connection_provider(
-        host.clone(),
-        Some("missing".to_string()),
-    ))
-    .is_err());
-    assert!(block_on(plugin_invoke(
-        host,
-        "missing.method".to_string(),
-        vec![json!({"covered": true})],
-    ))
-    .is_err());
-}
-
-#[test]
 fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
     let fixture = MockApp::new();
     let app = fixture.handle();
@@ -143,7 +103,6 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
 
     block_on(connections::save_connections(
         app.clone(),
-        fixture.app.state::<PluginHost>(),
         connections::ConnectionTree {
             connections: vec![local],
             folders: vec![],
@@ -164,11 +123,7 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
     ))
     .is_err());
 
-    let loaded = block_on(connections::load_connections(
-        app.clone(),
-        fixture.app.state::<PluginHost>(),
-    ))
-    .unwrap();
+    let loaded = block_on(connections::load_connections(app.clone())).unwrap();
     assert_eq!(loaded.connections.len(), 1);
     assert_eq!(loaded.connections[0].name, "Connection local-rdp-check");
 

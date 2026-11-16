@@ -1,6 +1,6 @@
 import { Fragment, useLayoutEffect, useRef, useState } from 'react'
 
-import { dockShowsFooter } from '../../plugins/agent-quota/app/quotaDock'
+import { dockShowsFooter } from '../features/agent-quota/quotaDock'
 import { Icon } from '../ide/ui'
 
 import { toggleQuotaPopup, useQuotaDock, useQuotaPopup } from './quota/quotaDockState'

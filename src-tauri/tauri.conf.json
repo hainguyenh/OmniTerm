@@ -54,7 +54,6 @@
     ],
     "resources": [
       "builtinThemes/*",
-      "sidecar/*.cjs",
       "builtin-plugins/**/*"
     ],
     "windows": {

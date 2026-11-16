@@ -16,12 +16,9 @@ describe('activateOmniTermSettings', () => {
     vi.stubGlobal('omnitermAPI', {
       agentQuota: { info: () => Promise.resolve(false) },
       plugin: {
-        invoke: () => Promise.reject(new Error('no plugin')),
         list: () => Promise.resolve([]),
         builtinIds: () => Promise.resolve(['omniterm.todo-finder']),
         onChanged: () => () => {},
-        installPackage: () => Promise.resolve(null),
-        restartApp: () => Promise.resolve(),
         setEnabled: () => Promise.resolve(null),
       },
     })

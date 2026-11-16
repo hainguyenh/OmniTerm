@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { Connection, Workspace } from '@omniterm/contract'
+import type { Connection, Workspace } from '../../domain'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clearStoredSessions, loadStoredSessions, upsertSession } from '../../utils/agentSessionStorage'

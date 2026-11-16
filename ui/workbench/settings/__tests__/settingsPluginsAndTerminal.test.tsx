@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../../../components/GeneralSettings', () => ({ default: () => <div>general settings</div> }))
 vi.mock('../../../shellOptions', () => ({ loadShellOptions: () => Promise.resolve([]) }))
 
-const { NodePluginsPage, TerminalPage } = await import('../OmniTermPages')
+const { BuiltinPluginsPage, TerminalPage } = await import('../OmniTermPages')
 
 const save = vi.fn(() => Promise.resolve())
 const setEnabled = vi.fn(() => Promise.resolve())
@@ -13,9 +13,8 @@ const setEnabled = vi.fn(() => Promise.resolve())
 function plugin(id: string, name: string, enabled: boolean): PluginDescriptor {
   return {
     id, name, version: '0.1.0', description: `${name} plugin`, source: 'bundled', enabled,
-    status: enabled ? 'loaded' : 'disabled', permissions: [], error: null,
-    activeConnectionProvider: false, selectedConnectionProvider: false,
-  } as unknown as PluginDescriptor
+    status: enabled ? 'loaded' : 'disabled', permissions: [],
+  }
 }
 
 beforeEach(() => {
@@ -29,9 +28,8 @@ beforeEach(() => {
     plugin: {
       list: vi.fn(() => Promise.resolve([
         plugin('omniterm.agent-quota', 'Agent quota', true),
-        plugin('@omniterm/blur', 'Blur', false),
+        plugin('omniterm.always-awake', 'Always awake', false),
       ])),
-      connectionCapabilities: vi.fn(() => Promise.resolve({ importExport: false })),
       setEnabled,
     },
   }
@@ -40,18 +38,17 @@ afterEach(() => vi.clearAllMocks())
 
 describe('Settings › Plugins › Installed', () => {
   it('lists OmniTerm\'s bundled plugins with an enable switch each', async () => {
-    render(<NodePluginsPage />)
+    render(<BuiltinPluginsPage />)
     expect(await screen.findByText('Agent quota')).toBeTruthy()
-    expect(screen.getByText('Blur')).toBeTruthy()
+    expect(screen.getByText('Always awake')).toBeTruthy()
     expect(screen.getAllByText('Bundled')).toHaveLength(2)
     const quota = screen.getByRole('switch', { name: 'Disable Agent quota' })
     expect(quota.getAttribute('aria-checked')).toBe('true')
-    expect(screen.getByRole('switch', { name: 'Enable Blur' }).getAttribute('aria-checked')).toBe('false')
-    expect(screen.getByRole('tab', { name: /Installed \(2\)/ })).toBeTruthy()
+    expect(screen.getByRole('switch', { name: 'Enable Always awake' }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('asks before it disables a plugin, then switches it', async () => {
-    render(<NodePluginsPage />)
+    render(<BuiltinPluginsPage />)
     fireEvent.click(await screen.findByRole('switch', { name: 'Disable Agent quota' }))
     fireEvent.click(await screen.findByRole('button', { name: 'Disable' }))
     await waitFor(() => expect(setEnabled).toHaveBeenCalledWith('omniterm.agent-quota', false))

@@ -75,13 +75,7 @@ fn an_unknown_package_is_not_found() {
 #[test]
 fn background_and_niche_plugins_are_not_built_in() {
     // Built-in plugins are reinstalled on every start, so these must stay off the list to stay uninstalled.
-    for id in [
-        "git-toolbox",
-        "license-header",
-        "solidity",
-        "checkstyle",
-        "container-runner",
-    ] {
+    for id in ["git-toolbox", "license-header", "solidity"] {
         assert!(!BUILTIN_PLUGINS.contains(&id), "{id} is built in");
     }
     assert_eq!(BUILTIN_PLUGINS.len(), 8);

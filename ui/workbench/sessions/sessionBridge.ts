@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-import type { SessionStatus } from '@omniterm/contract'
+import type { SessionStatus } from '../../domain'
 
 /** What the editor side knows about one terminal / RDP session of this window. */
 export interface SessionInfo {

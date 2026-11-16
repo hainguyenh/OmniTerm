@@ -3,7 +3,7 @@
  * shell line that runs an agent, and when session restore starts a pane with an agent's resume
  * command. The Agent Quota plugin listens and freezes the pane right away, so the user cannot type
  * into the agent's first screen while it answers the folder-trust dialog and reads `/usage`
- * (plugins/agent-quota/app/inlineUsageProbe.ts). Without it the freeze waited for the next
+ * (ui/features/agent-quota/inlineUsageProbe.ts). Without it the freeze waited for the next
  * process-tree scan, seconds after the agent was already on screen and taking input.
  *
  * The line is read back from the pane's screen at Enter time rather than rebuilt from keystrokes,

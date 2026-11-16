@@ -23,13 +23,8 @@ plugins/
    ├─ material-icons/         # data only: a file icon theme
    ├─ solidity/               # language + syntax provider + run configurations
    ├─ string-tools/           # 26 text commands, versioned multi-cursor edits
-   ├─ key-promoter/           # action events, storage
    ├─ git-toolbox/            # on-schedule fetch, tasks, VCS, status bar item
-   ├─ checkstyle/             # one-shot process, diagnostics, quick fixes
-   ├─ ai-completion/          # inline completion over the network, secrets
-   ├─ mybatis/                # navigation, gutter markers, completion across files
    ├─ csv-editor/             # custom editor sharing the text document
-   ├─ graphviz/               # web view with code: live preview, problems from the page, a language
    ├─ regex-tester/           # html view talking to its code, settings, the editor's selection
    └─ license-header/         # file-opened events, quick fix, project scan in a task
 sdk/rust/omniterm-plugin/     # the Rust SDK (host API, Plugin trait, mock host)
@@ -485,8 +480,7 @@ working. New in 1.4:
   `mcp-provider` export, trust/confirmation rules and `mcp.stdio-command`.
 
 Small runnable API examples: [blame annotations](official/blame-annotations/),
-[container wrapper](official/container-runner/), [test runner](official/test-runner/)
-and [TODO finder](official/todo-finder/). These demonstrate extension points;
+[test runner](official/test-runner/) and [TODO finder](official/todo-finder/). These demonstrate extension points;
 see [official and community plugins](#81-official-and-community-plugins).
 
 `omniterm-plugin new` writes this for you. `Cargo.toml`:
@@ -1630,11 +1624,9 @@ For example, a page can reserve the corner in its own toolbar:
 }
 ```
 
-`plugins/official/graphviz` is a complete example: a Vite + React page in
-`web-src/`, built into `web/` by `plugins/build.sh`, paired with code — the page renders (Graphviz compiled to WebAssembly) and
-sends what Graphviz reports to the plugin, which publishes it as problems. The built page is not
-checked in (it is tens of MB): run `plugins/build.sh official/graphviz`
-before installing the plugin from the repository.
+A page can be a Vite (or other pnpm) project in `web-src/`: `plugins/build.sh`
+builds it into `web/` before the component, so the built page need not be
+checked in.
 
 ### Web frame PTYs (API 1.3)
 
@@ -2347,7 +2339,7 @@ It lists two kinds of plugins:
   and publishes its index, which `plugins-index.yml` merges into the release's
   within the hour. Its README has the rules.
 
-The four `blame-annotations`, `container-runner`, `test-runner` and `todo-finder`
+The three `blame-annotations`, `test-runner` and `todo-finder`
 packages are small API 1.4 examples, with native tests and checked-in components,
 rather than feature plugins. Their fake executables and protocols are for adapting
 the examples to a real tool.

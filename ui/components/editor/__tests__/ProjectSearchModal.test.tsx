@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../../domain'
 
 import { ProjectSearchModal } from '../ProjectSearchModal'
 import { mockOmnitermAPI } from '../../../testUtils'

@@ -1,7 +1,7 @@
 //! Code plugins of a remote project run on the
 //! server. The desktop's plugin host syncs its live
-//! code plugins over the remote protocol; Checkstyle then checks the file on
-//! the server's disk when it is saved, and secrets come from the desktop.
+//! code plugins over the remote protocol; License Header then checks the file
+//! on the server's disk when it is saved, and secrets come from the desktop.
 #![recursion_limit = "256"]
 
 #![cfg(unix)]
@@ -43,7 +43,7 @@ impl Handler for Client {
     fn on_request(&self, method: &str, params: Value) -> Result<Value, (i64, String)> {
         if method == SECRET_REQUEST {
             let r: SecretRequest = serde_json::from_value(params).unwrap();
-            let value = (r.name == "api-key").then(|| "sk-desktop".to_owned());
+            let value = (r.name == "token").then(|| "sk-desktop".to_owned());
             self.secret_requests.lock().push(r);
             return Ok(serde_json::to_value(value).unwrap());
         }
@@ -87,20 +87,6 @@ fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../ide-plugin/tests/fixtures").join(name)
 }
 
-/// A `checkstyle` that reports a tab on line 2 of the file it is given.
-fn fake_checkstyle(bin: &Path) {
-    std::fs::create_dir_all(bin).unwrap();
-    std::fs::write(
-        bin.join("checkstyle"),
-        "#!/bin/sh\nfor a; do file=\"$a\"; done\ngrep -q '\t' \"$file\" || { echo '<checkstyle/>'; exit 0; }\n\
-         echo '<?xml version=\"1.0\"?><checkstyle><file name=\"'\"$file\"'\">'\n\
-         echo '<error line=\"2\" column=\"1\" severity=\"warning\" message=\"Line contains a tab character.\" source=\"com.puppycrawl.tools.checkstyle.checks.whitespace.FileTabCharacterCheck\"/>'\n\
-         echo '</file></checkstyle>'\nexit 1\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(bin.join("checkstyle"), std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
 async fn until(what: &str, secs: u64, mut done: impl FnMut() -> bool) {
     for _ in 0..secs * 50 {
         if done() {
@@ -114,20 +100,14 @@ async fn until(what: &str, secs: u64, mut done: impl FnMut() -> bool) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn remote_projects_run_the_desktops_code_plugins_on_the_server() {
     let tmp = tempfile::tempdir().unwrap();
-    let bin = tmp.path().join("bin");
-    fake_checkstyle(&bin);
-    let path_var = {
-        let bin = bin.clone();
-        Arc::new(move || Some(bin.clone().into_os_string()))
-    };
 
-    // The desktop: Checkstyle and AI Completion installed and granted.
+    // The desktop: License Header and the `api14` fixture (a declared secret,
+    // optional capabilities) installed and granted.
     let desktop =
         PluginHost::new(tmp.path().join("desktop/plugins"), Arc::new(|_: Option<&str>, _| {}), Limits::default())
             .unwrap();
-    desktop.set_program_path(path_var.clone());
-    for name in ["checkstyle", "ai-completion"] {
-        let info = desktop.install_from_dir(&official(name), &Consent::all()).unwrap();
+    for package in [official("license-header"), fixture("api14")] {
+        let info = desktop.install_from_dir(&package, &Consent::all()).unwrap();
         assert_eq!(info.status, PluginStatus::Inactive, "{:?}", info.error);
     }
 
@@ -151,7 +131,6 @@ async fn remote_projects_run_the_desktops_code_plugins_on_the_server() {
         project_environment: false,
     }));
     let plugins = RemotePlugins::start(&base.join("data"), &host, peer_slot.clone()).unwrap();
-    plugins.host().set_program_path(path_var);
     let mut dispatcher = Dispatcher::standard();
     plugins.register(&mut dispatcher);
     let (client_io, server_io) = tokio::io::duplex(1 << 20);
@@ -166,14 +145,16 @@ async fn remote_projects_run_the_desktops_code_plugins_on_the_server() {
 
     // Digests first; then the files of what the server lacks; then nothing to do.
     let first = sync(&peer, &desktop, &[]).await;
-    assert_eq!(first.missing, ["omniterm.ai-completion", "omniterm.checkstyle"], "{first:?}");
-    let second = sync(&peer, &desktop, &["omniterm.ai-completion", "omniterm.checkstyle"]).await;
+    assert_eq!(first.missing, ["api14", "omniterm.license-header"], "{first:?}");
+    let second = sync(&peer, &desktop, &["api14", "omniterm.license-header"]).await;
     assert_eq!(second.installed.len(), 2, "{second:?}");
     assert!(second.failed.is_empty(), "{second:?}");
     assert_eq!(sync(&peer, &desktop, &[]).await, PackageSyncReport::default());
-    let remote = plugins.host().info_of("omniterm.checkstyle").unwrap();
+    let remote = plugins.host().info_of("omniterm.license-header").unwrap();
     assert_eq!(remote.status, PluginStatus::Inactive, "{:?}", remote.error);
-    assert!(remote.capabilities.iter().any(|c| c.id == "process:checkstyle" && c.granted));
+    // The desktop's grants of optional capabilities follow the package.
+    let remote = plugins.host().info_of("api14").unwrap();
+    assert!(remote.capabilities.iter().any(|c| c.id == "net:localhost" && c.granted), "{:?}", remote.capabilities);
 
     // The remote window's UI routes the run-time commands to the server.
     let kinds = invoke(&peer, "plugin_event_kinds", json!({})).await.unwrap();
@@ -182,34 +163,34 @@ async fn remote_projects_run_the_desktops_code_plugins_on_the_server() {
     invoke(&peer, "plugin_set_ui_locale", json!({ "tag": "fr" })).await.unwrap();
     assert_eq!(plugins.host().ui_locale(), "fr");
 
-    // Saving a file that exists only on the server: Checkstyle reads that file.
+    // Saving a file that exists only on the server: License Header reads that file.
     let java = project.join("src/A.java");
     std::fs::write(&java, "class A {\n\tint x;\n}\n").unwrap();
     let saved = WorkbenchEvent::FileSaved(java.to_string_lossy().into_owned());
     invoke(&peer, "plugin_post_events", json!({ "events": [saved] })).await.unwrap();
     let published = || {
         client.events.lock().iter().find_map(|m| match &m.event {
-            IdeEvent::Diagnostics { path, source, items } if source == "plugin:omniterm.checkstyle" => {
+            IdeEvent::Diagnostics { path, source, items } if source == "plugin:omniterm.license-header" => {
                 Some((path.0.clone(), items.clone()))
             }
             _ => None,
         })
     };
-    until("remote checkstyle diagnostics", 20, || published().is_some()).await;
+    until("remote license header diagnostics", 20, || published().is_some()).await;
     let (path, items) = published().unwrap();
     assert_eq!(path, java);
-    assert_eq!((items.len(), items[0].range.start.line), (1, 1));
+    assert_eq!((items.len(), items[0].range.start.line), (1, 0));
 
     // Secrets stay on the desktop: the server asks for them when used.
-    let secrets = plugins.host().secrets("omniterm.ai-completion").unwrap();
-    assert_eq!(secrets, [("api-key".to_owned(), true)]);
-    assert_eq!(client.secret_requests.lock()[0].plugin, "omniterm.ai-completion");
+    let secrets = plugins.host().secrets("api14").unwrap();
+    assert_eq!(secrets, [("token".to_owned(), true)]);
+    assert_eq!(client.secret_requests.lock()[0].plugin, "api14");
 
     // A command of a remote plugin, with this window as its client.
     invoke(
         &peer,
         "plugin_run_command",
-        json!({ "pluginId": "omniterm.ai-completion", "commandId": "toggle", "arg": null, "editor": null }),
+        json!({ "pluginId": "omniterm.license-header", "commandId": "scan", "arg": null, "editor": null }),
     )
     .await
     .unwrap();
@@ -223,10 +204,10 @@ async fn remote_projects_run_the_desktops_code_plugins_on_the_server() {
     .await;
 
     // Disabled on the desktop: retained but stopped on the server.
-    desktop.set_enabled("omniterm.checkstyle", false).unwrap();
+    desktop.set_enabled("omniterm.license-header", false).unwrap();
     let removed = sync(&peer, &desktop, &[]).await;
     assert!(removed.removed.is_empty());
-    assert_eq!(plugins.host().info_of("omniterm.checkstyle").unwrap().status, PluginStatus::Disabled);
+    assert_eq!(plugins.host().info_of("omniterm.license-header").unwrap().status, PluginStatus::Disabled);
     plugins.host().shutdown();
 }
 

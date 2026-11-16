@@ -4,7 +4,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import type { LayoutMode } from '../../themes'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
 import { shouldAutoRestoreTab, useSessionRecoveryState } from '../useSessionRecoveryState'

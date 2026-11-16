@@ -93,9 +93,7 @@ describe('createWorkspaceAPI', () => {
     const api = createWorkspaceAPI()
     invoke.mockRejectedValueOnce(new Error('x'))
     await expect(api.loadConnections('w')).resolves.toEqual([])
-    await api.saveConnections('w', [])
-    await api.deleteConnection('w', 'c')
-    expect(invoke).toHaveBeenLastCalledWith('delete_workspace_connection', { workspaceId: 'w', connectionId: 'c' })
+    expect(invoke).toHaveBeenLastCalledWith('load_workspace_connections', { workspaceId: 'w' })
   })
 })
 

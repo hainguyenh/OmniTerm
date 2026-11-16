@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileCode, FileText, Loader2, Search, X } from 'lucide-react'
-import type { Workspace, WorkspaceScript } from '@omniterm/contract'
+import type { Workspace, WorkspaceScript } from '../../domain'
 
 import { getOrIndexWorkspace, type IndexedFile } from '../../utils/projectIndexer'
 

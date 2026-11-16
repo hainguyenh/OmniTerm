@@ -1,4 +1,4 @@
-import type { Workspace, WorkspaceEntry, WorkspaceScript } from '@omniterm/contract'
+import type { Workspace, WorkspaceEntry, WorkspaceScript } from '../domain'
 
 export interface IndexedFile {
   id: string

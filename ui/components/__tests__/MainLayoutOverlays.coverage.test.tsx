@@ -24,8 +24,7 @@ const connection = { id: 'ssh', name: 'Server', type: 'SSH', host: 'server', por
 function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
   return {
     appSettings: { themeId: 'tokyo-night', fontSize: 14, smartColors: true, darkMode: true, shortcuts: {} },
-    setAppSettings: vi.fn(), updateState: { current: '1.2.3' }, hasConnectionProvider: true,
-    setHasConnectionProvider: vi.fn(), setConnectionCapabilities: vi.fn(), activeTabs: [
+    setAppSettings: vi.fn(), updateState: { current: '1.2.3' }, activeTabs: [
       { id: 'a', connId: 'ssh', name: 'A' }, { id: 'b', connId: 'ssh', name: 'B' }, { id: 'c', connId: 'ssh', name: 'C' },
     ], savedConnections: [connection], tabMenu: null, setTabMenu: vi.fn(), shellMenu: null, setShellMenu: vi.fn(),
     pendingCloseTabIds: null, setPendingCloseTabIds: vi.fn(), skipCloseConfirmRef: { current: false },
@@ -43,7 +42,6 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
 
 beforeEach(() => {
   mockOmnitermAPI({
-    plugin: { connectionCapabilities: vi.fn(async () => ({ sftp: true })) },
     settings: { save: vi.fn(async () => {}) },
   })
 })

@@ -1,6 +1,6 @@
 /** Recreate saved pane/tab layout with fresh terminal processes at the saved working directories. */
 import { useEffect, useRef } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
 import { type PersistedConn, type PersistedTab, type SessionSnapshot } from '../utils/sessionStore'

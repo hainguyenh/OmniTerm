@@ -157,16 +157,13 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
 
     let _guard = lock();
     let app = test_support::mock_app();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
     assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
     assert!(app.manage(RdpSessionManager::new()));
     let handle = app.handle().clone();
 
     {
-        let host = handle.state::<crate::plugin_host::PluginHost>();
         tauri::async_runtime::block_on(crate::connections::save_connections(
             handle.clone(),
-            host.clone(),
             crate::connections::ConnectionTree {
                 connections: vec![rdp_conn()],
                 folders: vec![],
@@ -272,7 +269,6 @@ fn connect_rdp_rejects_non_rdp_connections() {
     use tauri::Manager;
     let _guard = test_support::lock();
     let app = test_support::mock_app();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
     assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
     let handle = app.handle().clone();
 
@@ -281,7 +277,6 @@ fn connect_rdp_rejects_non_rdp_connections() {
 
     tauri::async_runtime::block_on(crate::connections::save_connections(
         handle.clone(),
-        app.state::<crate::plugin_host::PluginHost>().clone(),
         crate::connections::ConnectionTree {
             connections: vec![conn],
             folders: vec![],

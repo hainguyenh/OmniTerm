@@ -1,4 +1,4 @@
-import type { QuotaDock } from '../../../plugins/agent-quota/app/quotaDock'
+import type { QuotaDock } from '../../features/agent-quota/quotaDock'
 import { Icon } from '../../ide/ui'
 import { SESSIONS_ICON } from '../shellIcons'
 import { useSessionBridge } from '../sessions/sessionBridge'

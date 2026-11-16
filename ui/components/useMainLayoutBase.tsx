@@ -1,11 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, SessionStatus, WorkspaceScript } from '../domain'
 import type { ActivityView } from './ActivityBar'
-import type { WorkspaceConnectionTarget } from './WorkspacePanel'
 import { useDialog } from '../hooks/useDialog'
 import { openNewSession } from '../newSession'
 import { loadShellOptions, pickShell, type ShellOption } from '../shellOptions'
-import { upsertWorkspaceConnection } from '../utils/workspaceConnections'
 import { diag } from '../diag'
 import { MAX_PLANES, type MainLayoutProps } from './mainLayoutShared'
 import { useCustomArt } from '../hooks/useCustomArt'
@@ -51,29 +49,6 @@ export function useMainLayoutBase({
           handleConnectRef.current({ ...(conn as Connection), workspaceId: targetWorkspaceId ?? undefined })
       }, targetWorkspaceId, folderId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
   }, [workspaceCatalog.workspaces])
-  const [hasConnectionProvider, setHasConnectionProvider] = useState(false);
-  const [connectionCapabilities, setConnectionCapabilities] = useState<ConnectionProviderCapabilities | null>(null);
-  // Which connection provider plugin is on is read again whenever the settings change (the Settings
-  // window enables and disables plugins) and when this window gets focus back.
-  useEffect(() => {
-      let cancelled = false;
-      const read = () => {
-          Promise.all([window.omnitermAPI.plugin.list(), window.omnitermAPI.plugin.connectionCapabilities()])
-              .then(([plugins, capabilities]) => {
-                  if (cancelled) return;
-                  setHasConnectionProvider(plugins.some(p => p.selectedConnectionProvider && p.enabled));
-                  setConnectionCapabilities(capabilities);
-              }).catch(diag.error);
-      };
-      read();
-      const stopSettings = window.omnitermAPI.settings.onChanged(read);
-      window.addEventListener('focus', read);
-      return () => {
-          cancelled = true;
-          stopSettings();
-          window.removeEventListener('focus', read);
-      };
-  }, []);
   const [activeTabs, setActiveTabs] = useState<{
       id: string;
       connId: string;
@@ -207,16 +182,6 @@ export function useMainLayoutBase({
   }, [onSettingsReload, panes, setFocusedPane]);
   const focusTerminal = (id: string) => {
       window.dispatchEvent(new CustomEvent('omniterm:focus-terminal', { detail: { id } }));
-  };
-  const [connFormOpen, setConnFormOpen] = useState(false);
-  const [connFormInitial, setConnFormInitial] = useState<Connection | undefined>(undefined);
-  const [connFormTarget, setConnFormTarget] = useState<WorkspaceConnectionTarget | null>(null);
-  const wsConnFormRef = useRef<string | null>(null);
-  const [wsConnectionsRevision, setWsConnectionsRevision] = useState(0);
-  const openConnectionForm = (target: WorkspaceConnectionTarget) => {
-      setConnFormTarget(target);
-      wsConnFormRef.current = target.workspaceId;
-      setConnFormOpen(true);
   };
   const { dialogState, showAlert, showConfirm } = useDialog();
   const [dataMenuOpen, setDataMenuOpen] = useState(false);
@@ -385,7 +350,7 @@ export function useMainLayoutBase({
           }
       })();
       return () => { cancelled = true; };
-  }, [wsConnectionsRevision]);
+  }, []);
   useEffect(() => {
       if (!dataMenuOpen)
           return;
@@ -403,28 +368,5 @@ export function useMainLayoutBase({
       return () => { window.removeEventListener('keydown', onKey); window.removeEventListener('mousedown', onClick); };
   }, [dataMenuOpen]);
   const [shellOptions, setShellOptions] = useState<ShellOption[]>([]);
-  const handleSaveConnection = async (conn: Connection) => {
-      const wsId = wsConnFormRef.current;
-      if (!wsId)
-          return;
-      wsConnFormRef.current = null;
-      try {
-          await upsertWorkspaceConnection(wsId, conn, !!connFormInitial);
-          setWsConnectionsRevision(v => v + 1);
-          setEphemeralConns(prev => prev.map(c => (c.id === conn.id ? { ...c, ...conn } : c)));
-          setActiveTabs(prev => {
-              let instanceIdx = 0;
-              return prev.map(t => {
-                  if (t.connId !== conn.id)
-                      return t;
-                  instanceIdx++;
-                  return { ...t, name: instanceIdx > 1 ? `${conn.name} (${instanceIdx})` : conn.name };
-              });
-          });
-      }
-      catch (error) {
-          await showAlert(`Could not save the connection: ${error instanceof Error ? error.message : String(error)}`, { title: 'Workspace connection', tone: 'error' });
-      }
-  };
-  return { ...workspaceCatalog, chromeHidden, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, hasConnectionProvider, setHasConnectionProvider, connectionCapabilities, setConnectionCapabilities, activeTabs, setActiveTabs, viewGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, pulsePaneId, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, connFormOpen, setConnFormOpen, connFormInitial, setConnFormInitial, connFormTarget, wsConnFormRef, wsConnectionsRevision, setWsConnectionsRevision, openConnectionForm, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, handleSaveConnection, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
+  return { ...workspaceCatalog, chromeHidden, appSettings, setAppSettings, currentTheme, themes, zoomFactor, onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply, onSettingsReload, layoutMode, setLayoutMode, activeTabs, setActiveTabs, viewGroups, ephemeralConns, setEphemeralConns, savedConnections, setSavedConnections, panes, setPanes, focusedPane, setFocusedPane, pulsePaneId, activeTabId, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, statuses, setStatuses, reconnectKeys, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut, resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, setLatency, setMetric, activity, setActivity, setBusy, connById, toggleDetach, canDetachWindow, updateFontSize, popOutTerminal, reattachTerminal, focusTerminal, dialogState, showAlert, showConfirm, dataMenuOpen, setDataMenuOpen, dataMenuRef, dataMenuBtnRef, sidebarWidth, setSidebarWidth, sidebarWidthRef, isResizing, activeView, setActiveView, lastViewRef, sidebarVisible, editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, keepTab, commandPaletteOpen, setCommandPaletteOpen, handleResizeDragStart, handleViewChange, revealRequest, setRevealRequest, revealNonce, revealInWorkspace, shellOptions, setShellOptions, shellOptionsRef, selectedWorkspaceId, requestNewSession, handleConnectRef, idleArtUrl, loadingArtUrl, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, alwaysAwakeAvailable }
 }

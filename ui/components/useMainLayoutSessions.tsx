@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, SessionStatus, WorkspaceScript } from '../domain'
 import { useDetachControl } from '../hooks/useDetachControl'
 import { editorTabId, useScriptRuns } from '../hooks/useScriptRuns'
 import { isScriptFileOpen, openScriptFile, pairRunWithFile } from '../workbench/sessions/scriptRunLayout'
@@ -10,7 +10,7 @@ import { closeSessionFromEvent } from '../workbench/sessions/sessionClose'
 import { useSessionRecoveryState } from '../hooks/useSessionRecoveryState'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
-  const { onActiveTerminalChange, layoutMode, setLayoutMode, activeTabs = [], setActiveTabs = () => {}, viewGroups = [], ephemeralConns = [], setEphemeralConns = () => {}, panes = [], setPanes = () => {}, focusedPane = 0, setFocusedPane = () => {}, activeTabId, setPendingCloseTabIds = () => {}, skipCloseConfirmRef, statuses = {}, setStatuses = () => {}, setReconnectKeys = () => {}, setLatencies = () => {}, detached = {}, setDetached = () => {}, poppedOut = {}, setPoppedOut = () => {}, setResumeMode = () => {}, setMetrics = () => {}, setConnectedAt = () => {}, setStatus = () => {}, setActivity = () => {}, activity = {}, connById = () => undefined, toggleDetach = () => {}, canDetachWindow = false, popOutTerminal = () => {}, reattachTerminal = () => {}, focusTerminal = () => {}, connFormOpen = false, showAlert, showConfirm, dataMenuOpen = false, activeView, setActiveView = () => {}, editorTabs = {}, setEditorTabs = () => {}, editorDirty = {}, setEditorDirty = () => {}, previewTabId = null, setPreviewTabId = () => {}, handleConnectRef } = base
+  const { onActiveTerminalChange, layoutMode, setLayoutMode, activeTabs = [], setActiveTabs = () => {}, viewGroups = [], ephemeralConns = [], setEphemeralConns = () => {}, panes = [], setPanes = () => {}, focusedPane = 0, setFocusedPane = () => {}, activeTabId, setPendingCloseTabIds = () => {}, skipCloseConfirmRef, statuses = {}, setStatuses = () => {}, setReconnectKeys = () => {}, setLatencies = () => {}, detached = {}, setDetached = () => {}, poppedOut = {}, setPoppedOut = () => {}, setResumeMode = () => {}, setMetrics = () => {}, setConnectedAt = () => {}, setStatus = () => {}, setActivity = () => {}, activity = {}, connById = () => undefined, toggleDetach = () => {}, canDetachWindow = false, popOutTerminal = () => {}, reattachTerminal = () => {}, focusTerminal = () => {}, showAlert, showConfirm, dataMenuOpen = false, activeView, setActiveView = () => {}, editorTabs = {}, setEditorTabs = () => {}, editorDirty = {}, setEditorDirty = () => {}, previewTabId = null, setPreviewTabId = () => {}, handleConnectRef } = base
 
   const { clearPendingRestore, retryRestore, markRestoreReady, markRestoreFailed, restoreOutcomes } = useSessionRecoveryState({
     activeTabs,
@@ -244,7 +244,7 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
       if (!prev || STATUS_RANK[s] > STATUS_RANK[prev])
           connStatuses[t.connId] = s;
   }
-  const isOverlayOpen = connFormOpen || dataMenuOpen;
+  const isOverlayOpen = dataMenuOpen;
   useEffect(() => {
       window.omnitermAPI.connect.rdpSetOverlay(isOverlayOpen);
   }, [isOverlayOpen]);

@@ -1,5 +1,5 @@
 //! Wire types of the agent quota commands. Field names follow the renderer's TypeScript types in
-//! `plugins/agent-quota/app/usage/types.ts`.
+//! `ui/features/agent-quota/usage/types.ts`.
 
 use std::path::PathBuf;
 

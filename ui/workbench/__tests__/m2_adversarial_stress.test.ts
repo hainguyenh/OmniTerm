@@ -3,27 +3,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { FileEntry, ProjectInfo } from '../../ide/bindings'
+import type { FileEntry } from '../../ide/bindings'
 import { executeAction, getAction, registerAction } from '../../ide/platform/actions'
-import { useProject } from '../../ide/platform/project'
-import { useProjectViewRoots } from '../../ide/workbench/contributions'
-import { useWorkspaceStore } from '../../platform/workspaceStore'
 import {
   initProjectTree,
   useProjectTree,
   applyFsChange,
 } from '../../ide/features/project-tree/store'
-import {
-  isConnectionsVisible,
-  loadWorkspaceConnections,
-  registerWorkspaceConnectionsRoot,
-  setConnectionsHost,
-  setConnectionsVisibility,
-  toggleConnectionsVisibility,
-  useWorkspaceConnectionsStore,
-  type ConnectionItem,
-} from '../connections/workspaceConnectionsRoot'
-import { MONITOR_ICON, PLUG_ICON } from '../shellIcons'
 import { registerProjectTreeActions } from '../projectTreeActions'
 
 describe('Milestone 2 Adversarial Stress Testing', () => {
@@ -32,7 +18,6 @@ describe('Milestone 2 Adversarial Stress Testing', () => {
 
     beforeEach(() => {
       disposeActions = registerProjectTreeActions()
-      setConnectionsVisibility(true)
     })
 
     afterEach(() => {
@@ -127,27 +112,6 @@ describe('Milestone 2 Adversarial Stress Testing', () => {
       }
     })
 
-    it('guarantees state symmetry and no leakage across 1,000 rapid toggle cycles', () => {
-      const action = getAction('p5.tree.toolbar.toggleConnections')
-      expect(action).toBeDefined()
-
-      expect(isConnectionsVisible()).toBe(true)
-
-      for (let i = 0; i < 1000; i++) {
-        if (i % 2 === 0) {
-          action?.run({ ctx: {} })
-        } else {
-          toggleConnectionsVisibility()
-        }
-        const expected = i % 2 !== 0
-        expect(isConnectionsVisible()).toBe(expected)
-        expect(action?.toggled?.()).toBe(expected)
-      }
-
-      // After 1000 toggles (even number), it should be back to true
-      expect(isConnectionsVisible()).toBe(true)
-    })
-
     it('survives rapid registration and disposal cycles without memory leaks', () => {
       disposeActions?.()
       disposeActions = null
@@ -156,145 +120,8 @@ describe('Milestone 2 Adversarial Stress Testing', () => {
         const dispose = registerProjectTreeActions()
         expect(getAction('terminal.openAt')).toBeDefined()
         expect(getAction('p5.tree.toolbar.locate')).toBeDefined()
-        expect(getAction('p5.tree.toolbar.toggleConnections')).toBeDefined()
         dispose()
         expect(getAction('terminal.openAt')).toBeUndefined()
-      }
-    })
-  })
-
-  describe('workspaceConnectionsRoot stress and boundary testing', () => {
-    let disposeRoot: (() => void) | null = null
-
-    beforeEach(() => {
-      setConnectionsVisibility(true)
-      setConnectionsHost(true, null)
-      useWorkspaceConnectionsStore.getState().setConnections([])
-      disposeRoot = registerWorkspaceConnectionsRoot()
-    })
-
-    afterEach(() => {
-      if (disposeRoot) {
-        disposeRoot()
-        disposeRoot = null
-      }
-      useWorkspaceConnectionsStore.getState().setConnections([])
-      setConnectionsHost(false, null)
-    })
-
-    it('handles rapid updates with empty, single, and massive 5,000-item connection lists', () => {
-      // 1. Empty list
-      useWorkspaceConnectionsStore.getState().setConnections([])
-      let root = useProjectViewRoots.getState().roots.get('omniterm.connections')
-      expect(root?.children).toHaveLength(1)
-      expect(root?.children?.[0]?.label).toBe('Add connection…')
-
-      // 2. Large list: 5,000 items, half SSH and half Remote Desktop
-      const largeList: ConnectionItem[] = []
-      for (let i = 0; i < 5000; i++) {
-        largeList.push({
-          id: `conn-${i}`,
-          name: `Server ${i}`,
-          type: i % 2 === 0 ? 'SSH' : 'RDP',
-          host: `10.0.0.${i % 250}`,
-          port: i % 2 === 0 ? '22' : '3389',
-          user: `user${i}`,
-        })
-      }
-
-      useWorkspaceConnectionsStore.getState().setConnections(largeList)
-      root = useProjectViewRoots.getState().roots.get('omniterm.connections')
-      expect(root?.children?.map((group) => group.label)).toEqual(['SSH', 'Remote Desktop'])
-      expect(root?.children?.[0]?.children).toHaveLength(2500)
-      expect(root?.children?.[1]?.children).toHaveLength(2500)
-      expect(root?.children?.[0]?.children?.[0]?.icon).toBe(PLUG_ICON)
-      expect(root?.children?.[1]?.children?.[0]?.icon).toBe(MONITOR_ICON)
-
-      // 3. Rapid back-to-back replacement cycles
-      for (let cycle = 0; cycle < 50; cycle++) {
-        const count = cycle % 2 === 0 ? 0 : 20
-        useWorkspaceConnectionsStore.getState().setConnections(largeList.slice(0, count))
-      }
-
-      root = useProjectViewRoots.getState().roots.get('omniterm.connections')
-      expect(root).toBeDefined()
-      // The last cycle (49) leaves 20 alternating rows: 10 per group.
-      expect(root?.children?.[0]?.children).toHaveLength(10)
-      expect(useProjectViewRoots.getState().roots.size).toBe(1)
-    })
-
-    it('drops malformed connections read from the provider and still formats the valid ones', async () => {
-      // The provider is a plugin: its data is untrusted, so it is typed `unknown` and validated on load.
-      const malformedList: unknown[] = [
-        null,
-        'not an object',
-        { id: '', name: 'empty id', type: 'SSH' },
-        { id: 'c1', name: '', type: 'SSH', host: 'only.host', port: 7, user: null },
-        { id: 'c2', name: '', type: 'CUSTOM', host: 'custom.host.io', user: 'ops' },
-        { id: 'c3', name: '<script>alert(1)</script>', type: 'SSH', host: '127.0.0.1' },
-        { id: 'c4', name: 'Very Long Name '.repeat(100), type: 'SFTP', host: 'host'.repeat(50) },
-        { id: 'c5', type: 'LOCAL' },
-      ]
-      ;(window as unknown as { omnitermAPI: unknown }).omnitermAPI = {
-        workspace: { loadConnections: vi.fn().mockResolvedValue(malformedList) },
-      }
-      useWorkspaceStore.setState({ selection: 'ws-m::f' })
-
-      try {
-        await expect(loadWorkspaceConnections('ws-m')).resolves.toBeUndefined()
-      } finally {
-        delete (window as unknown as { omnitermAPI?: unknown }).omnitermAPI
-      }
-
-      expect(useWorkspaceConnectionsStore.getState().connections.map((c) => c.id)).toEqual(['c1', 'c3', 'c5'])
-      const root = useProjectViewRoots.getState().roots.get('omniterm.connections')
-      expect(root?.children?.map((group) => group.label)).toEqual(['SSH', 'Local shells'])
-      const ssh = root?.children?.[0]?.children
-      // A nameless connection shows its address instead of an empty label.
-      expect(ssh?.[0]?.label).toBe('only.host')
-      expect(ssh?.[1]?.label).toBe('<script>alert(1)</script>')
-      expect(root?.children?.[1]?.children?.[0]?.label).toBe('c5')
-    })
-
-    it('survives rapid project changes and IPC failures during loadWorkspaceConnections', async () => {
-      let callCount = 0
-      const mockLoad = vi.fn().mockImplementation(async (id: string) => {
-        callCount++
-        if (callCount % 3 === 0) {
-          throw new Error(`Simulated IPC failure for ${id}`)
-        }
-        return [
-          { id: `c-${id}`, name: `Conn for ${id}`, type: 'SSH', host: 'localhost' },
-        ]
-      })
-
-      ;(window as unknown as { omnitermAPI: unknown }).omnitermAPI = {
-        workspace: { loadConnections: mockLoad },
-      }
-
-      try {
-        // Rapidly change project 50 times
-        for (let i = 0; i < 50; i++) {
-          const wsName = i % 5 === 0 ? null : `ws-${i}`
-          useProject.setState({
-            project: wsName
-              ? ({
-                  name: wsName,
-                  root: `/workspace/${wsName}`,
-                  trusted: true,
-                  isGit: false,
-                  settings: { exclude: [] },
-                } as unknown as ProjectInfo)
-              : null,
-          })
-          await loadWorkspaceConnections(wsName)
-        }
-
-        // Final state verification
-        const state = useWorkspaceConnectionsStore.getState()
-        expect(state.connections).toBeDefined()
-      } finally {
-        delete (window as unknown as { omnitermAPI?: unknown }).omnitermAPI
       }
     })
   })

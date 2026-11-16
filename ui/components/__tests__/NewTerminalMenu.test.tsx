@@ -2,7 +2,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 import type { ShellOption } from '../../shellOptions'
 import NewTerminalMenu from '../NewTerminalMenu'
 

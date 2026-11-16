@@ -1,6 +1,6 @@
 /** Persist renderer layout metadata, each terminal's last working directory, and resumable Claude sessions. */
 import { useEffect, useRef } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 import type { LayoutMode } from '../themes'
 import { DEFAULT_VIEW_GROUP_ID, type ViewGroup } from '../viewGroups'
 import {

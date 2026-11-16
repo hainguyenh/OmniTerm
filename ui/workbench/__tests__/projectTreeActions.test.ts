@@ -8,10 +8,6 @@ import {
   getAction,
   registerAction,
 } from '../../ide/platform/actions'
-import {
-  isConnectionsVisible,
-  setConnectionsVisibility,
-} from '../connections/workspaceConnectionsRoot'
 import { registerProjectTreeActions } from '../projectTreeActions'
 
 describe('projectTreeActions', () => {
@@ -19,7 +15,6 @@ describe('projectTreeActions', () => {
 
   beforeEach(() => {
     dispose = registerProjectTreeActions()
-    setConnectionsVisibility(true)
   })
 
   afterEach(() => {
@@ -72,35 +67,14 @@ describe('projectTreeActions', () => {
     }
   })
 
-  it('registers p5.tree.toolbar.toggleConnections and toggles connections visibility', () => {
-    const action = getAction('p5.tree.toolbar.toggleConnections')
-    expect(action).toBeDefined()
-    expect(action?.title).toBe('Toggle Connections')
-
-    expect(action?.toggled?.()).toBe(true)
-    expect(isConnectionsVisible()).toBe(true)
-
-    // Run toggle
-    action?.run({ ctx: {} })
-    expect(action?.toggled?.()).toBe(false)
-    expect(isConnectionsVisible()).toBe(false)
-
-    // Run toggle again
-    action?.run({ ctx: {} })
-    expect(action?.toggled?.()).toBe(true)
-    expect(isConnectionsVisible()).toBe(true)
-  })
-
   it('disposes all registered actions cleanly', () => {
     expect(getAction('terminal.openAt')).toBeDefined()
     expect(getAction('p5.tree.toolbar.locate')).toBeDefined()
-    expect(getAction('p5.tree.toolbar.toggleConnections')).toBeDefined()
 
     dispose?.()
     dispose = null
 
     expect(getAction('terminal.openAt')).toBeUndefined()
     expect(getAction('p5.tree.toolbar.locate')).toBeUndefined()
-    expect(getAction('p5.tree.toolbar.toggleConnections')).toBeUndefined()
   })
 })

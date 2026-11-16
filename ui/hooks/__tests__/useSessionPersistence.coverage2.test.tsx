@@ -3,7 +3,7 @@
  */
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 
 import { useSessionPersistence } from '../useSessionPersistence'
 import { loadSnapshot, SNAPSHOT_KEY, SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'

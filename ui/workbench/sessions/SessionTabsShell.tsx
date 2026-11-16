@@ -11,12 +11,12 @@ import { SessionSurfaces } from './SessionSurfaces'
  * into their tab surfaces, zoomed with the layout), the layout controls on the right stripe and the
  * window-level layout wiring.
  */
-export function SessionTabsShell({ model, blurAvailable }: { model: MainLayoutModel; blurAvailable: boolean }) {
+export function SessionTabsShell({ model }: { model: MainLayoutModel }) {
   useLayoutPresetEffects(true)
   const zoom = useSessionZoomModel()
   return (
     <>
-      <SessionSurfaces model={model} blurAvailable={blurAvailable} zoom={zoom.zoom} />
+      <SessionSurfaces model={model} zoom={zoom.zoom} />
       <StripePortal side="right">
         <QuotaStripVertical />
         <SessionLayoutControls zoom={zoom} />

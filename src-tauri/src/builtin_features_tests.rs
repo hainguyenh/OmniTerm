@@ -48,7 +48,7 @@ fn leaves_node_plugin_ids_to_the_plugin_host() {
     let _guard = crate::test_support::lock();
     let app = fresh_app();
     assert_eq!(
-        set_enabled(app.handle(), "@omniterm/blur", false).expect("no error"),
+        set_enabled(app.handle(), "acme.unknown", false).expect("no error"),
         None
     );
 }

@@ -113,12 +113,13 @@ test('the release workflow stamps the resolved version before building', () => {
   assert.ok(stamp < build, 'the version must be stamped before Tauri names the installer')
 })
 
-test('the release passes the bundle config through pnpm without an npm-style separator', () => {
-  assert.match(
-    workflow,
-    /run: pnpm build:tauri:nsis --config \.omniterm-build\/tauri\.bundle-plugin\.json/,
-  )
-  assert.doesNotMatch(workflow, /pnpm build:tauri:nsis -- --config/)
+test('the release builds the single app from tauri.conf.json without an extra bundle config', () => {
+  // The resources the app needs (themes, built-in IDE plugins) are declared in tauri.conf.json, and
+  // the pnpm scripts stage the built-in plugins first; no per-flavor overlay config is generated.
+  assert.match(workflow, /run: pnpm build:tauri:nsis\r?\n/)
+  assert.match(workflow, /run: pnpm tauri:build\r?\n/)
+  assert.doesNotMatch(workflow, /--config/)
+  assert.doesNotMatch(workflow, /\.omniterm-build/)
 })
 
 test('the tag is pushed only after the build job succeeded, and master is never written to', () => {
@@ -176,16 +177,16 @@ test('every job downstream of the skipped gate re-states the condition, not just
   }
 })
 
-test('the release publishes the installer and portable package with the bundled plugin', () => {
+test('the release publishes the installer and portable package of the single app build', () => {
   for (const name of ['OmniTerm-Tauri-Windows-nsis', 'OmniTerm-Windows-portable']) {
     assert.match(workflow, new RegExp(`name: ${name}\\b`), `${name} is never uploaded`)
   }
-  assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-always-awake\\b/)
-  assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-blur\\b/)
-  assert.match(workflow, /-Plugins @\([\s\S]*Name = 'blur'/)
-  // Agent Quota and Always Awake are built into the app, so neither is packaged as a plugin.
-  assert.doesNotMatch(workflow, /plugins\/(?:always-awake|agent-quota)/)
-  assert.doesNotMatch(workflow, /name: OmniTerm-Plugin-agent-quota\b/)
+  // Node.js sidecar plugins no longer exist: nothing is built, staged, or shipped as a plugin package.
+  assert.doesNotMatch(workflow, /OmniTerm-Plugin-/)
+  assert.doesNotMatch(workflow, /build:plugin/)
+  assert.doesNotMatch(workflow, /-Plugins\b/)
+  assert.doesNotMatch(workflow, /plugins\//)
+  assert.doesNotMatch(workflow, /sidecar\/\*\.cjs/)
 
   const publish = workflow.slice(workflow.indexOf('Publish GitHub release'))
   for (const glob of ['release-artifacts/**/*.exe', 'release-artifacts/**/*.zip']) {
@@ -203,22 +204,28 @@ test('packaging goes through the same functions the local wizard uses', () => {
   const wizard = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'Build-OmniTerm.ps1'), 'utf8')
   assert.match(wizard, /ReleasePackaging\.ps1/)
   assert.match(wizard, /New-PortablePackage/)
-  assert.match(wizard, /New-PluginPackage/)
-  assert.match(wizard, /Get-DefaultPortablePlugins/)
-  assert.match(wizard, /Copy-PortableArtifacts[\s\S]*PortablePlugins/)
-  assert.match(wizard, /Blur \(inactive-window privacy filter\)/)
-  assert.doesNotMatch(wizard, /plugins\\(?:always-awake|agent-quota)/)
+  // One app build: the wizard offers output format and profile, but no plugin flavors.
+  assert.match(wizard, /Select output format/)
+  assert.match(wizard, /Select build profile/)
+  assert.match(wizard, /'tauri:build'/)
+  assert.doesNotMatch(wizard, /Select-Plugin|Select build target|build:plugin|New-PluginPackage/)
+  assert.doesNotMatch(wizard, /plugins\\|\.omniterm-build/)
 })
 
-test('portable packaging verifies the bundled plugin is present in the archive', () => {
+test('portable packaging ships the bundled resources and verifies them in the archive', () => {
   const packaging = fs.readFileSync(path.join(DEFAULT_ROOT, 'scripts', 'ReleasePackaging.ps1'), 'utf8')
   assert.match(packaging, /System\.IO\.Compression\.FileSystem/)
-  assert.match(packaging, /Portable package is missing sidecar\\plugin-host\.cjs/)
-  assert.match(packaging, /Portable archive is missing required sidecar entry/)
-  assert.match(packaging, /Portable archive is missing bundled plugin entry/)
-  assert.match(packaging, /dist\/index\.js/)
-  assert.match(packaging, /plugins\\blur/)
-  assert.doesNotMatch(packaging, /plugins\\(?:always-awake|agent-quota)/)
+  assert.match(packaging, /@\('builtinThemes', 'builtin-plugins'\)/)
+  assert.match(packaging, /Portable archive is missing resource folder/)
+  assert.match(packaging, /Portable archive is missing required entry 'OmniTerm\.exe'/)
+  // The Node.js plugin host and its plugin packages are gone.
+  assert.doesNotMatch(packaging, /sidecar\\|plugin-host|New-PluginPackage|Get-DefaultPortablePlugins/)
+
+  // The portable layout mirrors the installer's resources, so the two cannot drift.
+  const tauriConfig = JSON.parse(fs.readFileSync(path.join(DEFAULT_ROOT, 'src-tauri', 'tauri.conf.json'), 'utf8'))
+  for (const resource of tauriConfig.bundle.resources) {
+    assert.ok(packaging.includes(`'${resource.split('/')[0]}'`), `${resource} is not packaged for portable`)
+  }
 })
 
 test('release notes generator extracts exact target tag and falls back to Unreleased', () => {

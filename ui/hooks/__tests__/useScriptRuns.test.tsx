@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import type { WorkspaceScript } from '@omniterm/contract'
+import type { WorkspaceScript } from '../../domain'
 import { useScriptRuns, editorTabId } from '../useScriptRuns'
 
 const script: WorkspaceScript = {

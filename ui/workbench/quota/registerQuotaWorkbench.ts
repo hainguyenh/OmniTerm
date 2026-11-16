@@ -1,5 +1,5 @@
-import { dockToolWindowSide } from '../../../plugins/agent-quota/app/quotaDock'
-import { getQuotaState, subscribeQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { dockToolWindowSide } from '../../features/agent-quota/quotaDock'
+import { getQuotaState, subscribeQuota } from '../../features/agent-quota/quotaStore'
 import { registerOverlay, registerToolWindow } from '../../ide/workbench/contributions'
 import { registerStripeItem } from '../../ide/workbench/toolwindows/stripeItems'
 import { QuotaStripVertical } from '../QuotaStripVertical'

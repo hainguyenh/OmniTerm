@@ -1,6 +1,6 @@
 import { RotateCw, Sparkles, Unplug } from 'lucide-react'
 
-import { FrozenSessionStatus } from '../../plugins/agent-quota/app/paneHosts'
+import { FrozenSessionStatus } from '../features/agent-quota/paneHosts'
 import { AttachmentsFooterButton } from '../components/AttachmentsFooterButton'
 import MetricsChips from '../components/SessionMetricsChips'
 import { useTabs } from '../ide/editor/core/controller'

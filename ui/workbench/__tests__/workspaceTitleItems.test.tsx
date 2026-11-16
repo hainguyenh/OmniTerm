@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createRef } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 
 vi.mock('../../ide/features/welcome/RecentList', () => ({ ProjectBadge: ({ name }: { name: string }) => <i>{name[0]}</i> }))
 vi.mock('../../ide/workbench/inputDialogs', () => ({ promptInput: vi.fn().mockResolvedValue('New one') }))

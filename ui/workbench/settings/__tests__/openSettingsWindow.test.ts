@@ -11,7 +11,7 @@ vi.mock('../../../diag', () => ({ diag: { warn, error: vi.fn() } }))
 
 const { openSettingsWindow } = await import('../openSettingsWindow')
 const { useSettingsWindowRedirect } = await import('../useSettingsWindowRedirect')
-const { SETTINGS_TAB_EVENT } = await import('../../../../plugins/agent-quota/app/AgentQuotaRoot')
+const { SETTINGS_TAB_EVENT } = await import('../../../features/agent-quota/AgentQuotaRoot')
 const { OMNITERM_SETTINGS_PAGES } = await import('../settingsPageIds')
 
 const quotaTab = () => window.dispatchEvent(new CustomEvent(SETTINGS_TAB_EVENT, { detail: { tab: 'quota' } }))

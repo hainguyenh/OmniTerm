@@ -17,11 +17,6 @@ vi.mock('../titlebar/workspaceActions', () => workspaceActions)
 import { useProjectTree } from '../../ide/features/project-tree/store'
 import { useContributions } from '../../ide/workbench/contributions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
-import {
-  setConnectionsHost,
-  setConnectionsVisibility,
-  useWorkspaceConnectionsStore,
-} from '../connections/workspaceConnectionsRoot'
 import { ProjectToolWindow } from '../ProjectToolWindow'
 import { registerShellToolWindows } from '../registerShellToolWindows'
 import { useTreeViewport } from './treeViewport'
@@ -32,9 +27,6 @@ describe('ProjectToolWindow', () => {
   beforeEach(() => {
     act(() => {
       useProjectTree.setState({ root: null })
-      setConnectionsVisibility(true)
-      setConnectionsHost(true, null)
-      useWorkspaceConnectionsStore.getState().setConnections([])
       useWorkspaceStore.setState({ workspaces: [], selection: null })
     })
     vi.clearAllMocks()
@@ -43,7 +35,6 @@ describe('ProjectToolWindow', () => {
   afterEach(() => {
     act(() => {
       useProjectTree.setState({ root: null })
-      setConnectionsHost(false, null)
     })
   })
 
@@ -90,47 +81,6 @@ describe('ProjectToolWindow', () => {
     expect(screen.getByTestId('project-tool-window')).toBeTruthy()
     expect(screen.getByTestId('upstream-project-view')).toBeTruthy()
     expect(screen.queryByTestId('project-empty-state')).toBeNull()
-  })
-
-  it('renders standalone connections grouped by kind and opens one on double click', () => {
-    const connect = vi.fn()
-    const connection = { id: 'ssh-node', name: 'My SSH Box', type: 'SSH' as const, host: '10.0.0.5', port: '22', user: 'ops' }
-    act(() => {
-      setConnectionsHost(true, { connect, add: vi.fn() })
-      useWorkspaceConnectionsStore.getState().setConnections([connection])
-    })
-
-    render(<ProjectToolWindow />)
-
-    expect(screen.getByTestId('project-standalone-connections')).toBeTruthy()
-    expect(screen.getByText('SSH')).toBeTruthy()
-    expect(screen.getByText('My SSH Box')).toBeTruthy()
-
-    fireEvent.doubleClick(screen.getByTestId('connection-row-ssh-node'))
-    expect(connect).toHaveBeenCalledWith(connection)
-  })
-
-  it('hides standalone connections while no connection provider is active', () => {
-    act(() => {
-      useWorkspaceConnectionsStore.getState().setConnections([
-        { id: 'ssh-node', name: 'My SSH Box', type: 'SSH', host: '10.0.0.5', port: '22', user: 'ops' },
-      ])
-      setConnectionsHost(false, null)
-    })
-
-    render(<ProjectToolWindow />)
-
-    expect(screen.queryByTestId('project-standalone-connections')).toBeNull()
-  })
-
-  it('hides standalone connections when toggled off', () => {
-    act(() => {
-      setConnectionsVisibility(false)
-    })
-
-    render(<ProjectToolWindow />)
-
-    expect(screen.queryByTestId('project-standalone-connections')).toBeNull()
   })
 
   it('registers project tool window with order 0 and requiresProject: false', () => {

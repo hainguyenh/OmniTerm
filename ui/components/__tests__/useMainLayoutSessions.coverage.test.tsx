@@ -4,7 +4,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection, SessionStatus, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, SessionStatus, WorkspaceScript } from '../../domain'
 import { TOKYO_NIGHT, type LayoutMode } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import { useMainLayoutSessions } from '../useMainLayoutSessions'
@@ -106,7 +106,7 @@ function useHarness(initial: Initial = {}) {
     statuses, setStatuses, setReconnectKeys, latencies, setLatencies, detached, setDetached, poppedOut, setPoppedOut,
     resumeMode, setResumeMode, metrics, setMetrics, connectedAt, setConnectedAt, setStatus, activity, setActivity,
     connById, toggleDetach: vi.fn(), canDetachWindow: true, popOutTerminal: vi.fn(), reattachTerminal: vi.fn(), focusTerminal,
-    connFormOpen: false, showAlert, showConfirm, dataMenuOpen: initial.dataMenuOpen ?? false, activeView, setActiveView,
+    showAlert, showConfirm, dataMenuOpen: initial.dataMenuOpen ?? false, activeView, setActiveView,
     editorTabs, setEditorTabs, editorDirty, setEditorDirty, previewTabId, setPreviewTabId, handleConnectRef,
   }
   const sessions = useMainLayoutSessions(base)

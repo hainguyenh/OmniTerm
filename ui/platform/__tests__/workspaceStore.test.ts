@@ -3,7 +3,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 
 import {
   isAllScope,

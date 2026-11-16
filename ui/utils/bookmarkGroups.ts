@@ -8,7 +8,7 @@ import { pinIdFor } from './agentBookmarkPins'
 import { isBookmarked, type StoredAgentSession } from './agentSessionStorage'
 import { sessionFolderName } from './storedSessionResume'
 
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export interface FolderGroup {
   /** Stable key: the pin id for this profile + folder. */

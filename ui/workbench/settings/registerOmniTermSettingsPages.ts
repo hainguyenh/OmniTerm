@@ -90,8 +90,8 @@ export function registerOmniTermSettingsPages(): () => void {
       id: ids.nodePlugins,
       title: 'Installed',
       order: 10,
-      keywords: ['plugins', 'omniterm plugins', 'node', 'bundled', 'connection provider', 'enable', 'disable', 'ssh', 'rdp'],
-      component: lazyComponent(() => pages().then((m) => m.NodePluginsPage)),
+      keywords: ['plugins', 'omniterm plugins', 'bundled', 'built-in', 'enable', 'disable'],
+      component: lazyComponent(() => pages().then((m) => m.BuiltinPluginsPage)),
     }),
     registerSettingsPage({
       id: ids.about,

@@ -1,15 +1,9 @@
 import { executeAction, registerAction } from '../ide/platform/actions'
 
-import {
-  isConnectionsVisible,
-  toggleConnectionsVisibility,
-} from './connections/workspaceConnectionsRoot'
-
 /**
  * Registers project tree actions for OmniTerm:
  * - `terminal.openAt`: opens a terminal session in the folder via `omniterm:new-session`
  * - `p5.tree.toolbar.locate`: alias executing `navigate.selectInProjectView`
- * - `p5.tree.toolbar.toggleConnections`: toggles workspace connections visibility
  */
 export function registerProjectTreeActions(): () => void {
   const disposers = [
@@ -36,17 +30,6 @@ export function registerProjectTreeActions(): () => void {
       icon: 'locate',
       run: ({ arg }) => {
         void executeAction('navigate.selectInProjectView', arg)
-      },
-    }),
-    registerAction({
-      id: 'p5.tree.toolbar.toggleConnections',
-      title: 'Toggle Connections',
-      category: 'View',
-      description: 'Show or hide workspace connections in the project view',
-      icon: 'network',
-      toggled: () => isConnectionsVisible(),
-      run: () => {
-        toggleConnectionsVisibility()
       },
     }),
   ]

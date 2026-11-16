@@ -1,8 +1,8 @@
-#[path = "../../plugins/agent-quota/native/agent_quota.rs"]
+#[path = "agent_quota/agent_quota.rs"]
 pub mod agent_quota;
 pub mod agent_session;
 mod agent_session_cleanup;
-#[path = "../../plugins/always-awake/native/always_awake.rs"]
+#[path = "always_awake/always_awake.rs"]
 pub mod always_awake;
 mod app_utils;
 pub use app_utils::handle_second_instance;
@@ -19,13 +19,13 @@ mod update_manager;
 mod update_progress;
 mod window_control;
 
-#[cfg(test)]
-mod command_coverage_tests;
 mod app_state;
 mod builtin_features;
 mod builtin_plugins;
-mod idea_host;
+#[cfg(test)]
+mod command_coverage_tests;
 pub mod ide;
+mod idea_host;
 mod invoke_handlers;
 #[cfg(test)]
 use invoke_handlers::with_invoke_handler;
@@ -53,9 +53,6 @@ pub mod safepath_command;
 pub use app_core::safepath;
 pub use app_core::workspace_scan;
 pub mod custom_art;
-pub mod plugin_host;
-pub mod plugin_host_api;
-pub mod plugin_management;
 pub mod rdp_embed;
 pub mod shell_probe;
 pub mod terminal_window;
@@ -70,11 +67,10 @@ use agent_quota::AgentQuotaState;
 // Only the command tests name these through `use super::*`; the state itself is registered in `app_state`.
 #[cfg(test)]
 use adhoc::AdhocRegistry;
+use always_awake::AlwaysAwakeState;
+use pty::PtyManager;
 #[cfg(test)]
 use rdp_embed::RdpSessionManager;
-use always_awake::AlwaysAwakeState;
-use plugin_host::PluginHost;
-use pty::PtyManager;
 use tauri::{Emitter, Manager, RunEvent};
 use terminal_window::DetachRegistry;
 
@@ -136,20 +132,6 @@ pub fn run() {
                     .level_for("tao", log::LevelFilter::Info)
                     .build(),
             )?;
-
-            // Start the Node.js plugin host sidecar.
-            //
-            // Spawned, not `block_on`-ed: this runs inside `setup()`, so blocking here held the window
-            // closed until a Node process had started — a cost paid on every launch, including builds
-            // and machines with no plugins at all. Nothing in the first frame needs the host, and every
-            // caller already handles it not being up yet.
-            let host_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let host = host_handle.state::<PluginHost>();
-                if let Err(e) = host.start(&host_handle).await {
-                    log::warn!("[setup] plugin host did not start: {e}");
-                }
-            });
 
             // A missing main window is a packaging error, not a runtime condition to panic on.
             let Some(window) = app.get_webview_window("main") else {

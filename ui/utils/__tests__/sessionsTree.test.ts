@@ -1,4 +1,4 @@
-import type { Connection, Workspace } from '@omniterm/contract'
+import type { Connection, Workspace } from '../../domain'
 import { describe, expect, it } from 'vitest'
 
 import type { StoredAgentSession } from '../agentSessionStorage'

@@ -41,11 +41,9 @@ import type { TerminalViewProps } from './TerminalView.types'
 
 export { DEFAULT_MONO_STACK }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
-  const [isFocused, setIsFocused] = React.useState(false)
-  const [isHovered, setIsHovered] = React.useState(false)
   const [sessionUnavailable, setSessionUnavailable] = React.useState(false)
   const [ctrlCHintTick, setCtrlCHintTick] = React.useState(0)
   // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
@@ -237,11 +235,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       copyTracker.noteInput(data)
       api.input(data)
     })
-    const onFocusIn = () => setIsFocused(true)
-    const onFocusOut = () => setIsFocused(false)
-    terminalRef.current?.addEventListener('focusin', onFocusIn)
-    terminalRef.current?.addEventListener('focusout', onFocusOut)
-
     // Selection auto-copy + paste. The key bindings that reach these live in the handler below.
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
@@ -389,8 +382,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       remeasureCoalescer.cancel()
       disposeResizeObserver()
       clipboard.dispose()
-      terminalRef.current?.removeEventListener('focusin', onFocusIn)
-      terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
       for (const disposable of paneDisposables) disposable.dispose()
@@ -464,14 +455,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   return (
     <div
       className="terminal-pane relative h-full w-full"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         background: theme?.background ?? '#1a1b26',
         padding: 'var(--theme-padding-sm)',
         '--pane-font-mono': resolveTerminalFontFamily(fontFamilyMono),
-        filter: blurStrength > 0 && !isFocused && !isHovered ? `blur(${blurStrength}px)` : 'none',
-        transition: 'filter 120ms ease-out',
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />

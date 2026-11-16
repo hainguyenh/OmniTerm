@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 
-import { useQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { useQuota } from '../../features/agent-quota/quotaStore'
 import { Icon } from '../../ide/ui/icons'
 import { formatAttachmentPaths, saveAttachmentFiles } from '../../utils/attachmentInput'
 import { agentBrandFor } from '../../utils/agentIdentity'

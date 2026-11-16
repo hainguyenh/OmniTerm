@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../domain'
 
 import { Icon } from '../ide/ui'
 import { QUICK_START_AGENTS, quickStartProjects, type QuickStartProject } from '../utils/sessionQuickStart'

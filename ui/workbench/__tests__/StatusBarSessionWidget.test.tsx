@@ -13,7 +13,7 @@ const h = vi.hoisted(() => ({
   chips: vi.fn(),
 }))
 
-vi.mock('../../../plugins/agent-quota/app/paneHosts', () => ({ FrozenSessionStatus: () => <i data-testid="frozen" /> }))
+vi.mock('../../features/agent-quota/paneHosts', () => ({ FrozenSessionStatus: () => <i data-testid="frozen" /> }))
 vi.mock('../../components/AttachmentsFooterButton', () => ({ AttachmentsFooterButton: () => <i data-testid="attachments" /> }))
 vi.mock('../../components/SessionMetricsChips', () => ({
   default: (props: unknown) => {

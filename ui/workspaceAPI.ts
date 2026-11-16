@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import type { Connection, Workspace, WorkspaceScript } from '@omniterm/contract'
+import type { Connection, Workspace, WorkspaceScript } from './domain'
 
 type WorkspaceWire = Omit<Workspace, 'pins'> & { pins?: Workspace['pins'] }
 
@@ -92,9 +92,5 @@ export function createWorkspaceAPI() {
     ...treeEdits,
     loadConnections: (workspaceId: string) =>
       invoke<Connection[]>('load_workspace_connections', { workspaceId }).catch(() => []),
-    saveConnections: (workspaceId: string, data: Connection[]) =>
-      invoke<void>('save_workspace_connections', { workspaceId, data }),
-    deleteConnection: (workspaceId: string, connectionId: string) =>
-      invoke<void>('delete_workspace_connection', { workspaceId, connectionId }),
   }
 }

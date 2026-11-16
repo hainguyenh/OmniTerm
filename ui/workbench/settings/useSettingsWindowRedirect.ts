@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-import { SETTINGS_TAB_EVENT } from '../../../plugins/agent-quota/app/AgentQuotaRoot'
+import { SETTINGS_TAB_EVENT } from '../../features/agent-quota/AgentQuotaRoot'
 
 import { LEGACY_TAB_PAGES, openSettingsWindow } from './openSettingsWindow'
 

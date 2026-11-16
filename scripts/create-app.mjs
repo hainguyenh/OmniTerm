@@ -9,8 +9,9 @@
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
-import { root } from './plugin-paths.mjs'
+import { fileURLToPath } from 'node:url'
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const runIt = process.argv.includes('--run')
 
 /** Probe a tool, returning its reported version or null. */
@@ -21,7 +22,7 @@ function probe(cmd, args) {
 }
 
 const checks = [
-  { name: 'Node.js', got: probe('node', ['--version']), need: '>=24', why: 'builds the frontend, and runs the plugin host sidecar at runtime' },
+  { name: 'Node.js', got: probe('node', ['--version']), need: '>=24', why: 'builds the frontend; not needed at runtime' },
   { name: 'pnpm', got: probe('pnpm', ['--version']), need: '11.9.0', why: 'the package manager this repo pins' },
   { name: 'Rust (cargo)', got: probe('cargo', ['--version']), need: 'stable', why: 'compiles the Tauri backend' },
   { name: 'Tauri CLI', got: probe('pnpm', ['tauri', '--version']), need: 'v2', why: 'bundles the installer' },
@@ -67,7 +68,6 @@ console.log(`
 for (const [cmd, why] of steps) console.log(`    ${cmd.padEnd(26)} # ${why}`)
 console.log(`
   For a dev run instead of an installer: pnpm tauri:dev
-  To scaffold a plugin:                  pnpm create:plugin <name>
 `)
 
 if (!runIt) {

@@ -3,7 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import { useSessionRestore } from '../useSessionRestore'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
 import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'

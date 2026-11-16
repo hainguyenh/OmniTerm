@@ -8,7 +8,6 @@ import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
 import { recentlyInterrupted } from '../terminal/ctrlCGuard'
 import { resolveEnterModes } from '../utils/enterKeys'
-import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { useWindowRounding } from '../hooks/useWindowRounding'
 
 interface DetachedTerminalWindowProps {
@@ -51,10 +50,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
   const [restartKey, setRestartKey] = useState(0)
-  const [windowActive, setWindowActive] = useState(true)
   const lastReportedCwd = useRef<string | undefined>(undefined)
   const lastReportedTitle = useRef<string | undefined>(undefined)
-  const { available: blurAvailable } = useBlurPlugin()
   // Double Ctrl+C in the terminal asks to close its session; here the session is the whole window.
   useEffect(() => {
     const close = () => { void window.omnitermAPI.windowControl.close() }
@@ -63,13 +60,6 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   }, [])
   const windowRounded = useWindowRounding()
 
-  useEffect(() => {
-    const onFocus = () => setWindowActive(true)
-    const onBlur = () => setWindowActive(false)
-    window.addEventListener('focus', onFocus)
-    window.addEventListener('blur', onBlur)
-    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur) }
-  }, [])
   useEffect(() => {
     window.omnitermAPI.terminalWindow.bootstrap().then((m) => {
       if (m?.sessionId) {
@@ -180,15 +170,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
           </button>
         </div>
       </div>
-      <div
-        className="flex-1 min-h-0 relative"
-        style={{
-          filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0
-            ? `blur(${appSettings.blurInactiveWindow}px)`
-            : 'none',
-          transition: 'filter 120ms ease-out',
-        }}
-      >
+      <div className="flex-1 min-h-0 relative">
         {missing ? (
           <div className="h-full w-full flex items-center justify-center text-sm text-theme-error select-none">
             This session is no longer available.

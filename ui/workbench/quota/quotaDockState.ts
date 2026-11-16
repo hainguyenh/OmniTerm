@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
-import { dockToolWindowSide, type QuotaDock } from '../../../plugins/agent-quota/app/quotaDock'
-import { getQuotaState, quotaCommands, useQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { dockToolWindowSide, type QuotaDock } from '../../features/agent-quota/quotaDock'
+import { getQuotaState, quotaCommands, useQuota } from '../../features/agent-quota/quotaStore'
 import { toolWindowService } from '../../ide/workbench/contributions'
 
 export const QUOTA_TOOL_WINDOW = 'omniterm.agentQuota'

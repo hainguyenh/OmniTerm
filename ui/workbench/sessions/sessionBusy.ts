@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@omniterm/contract'
+import type { SessionStatus } from '../../domain'
 
 /**
  * Whether closing a session would terminate something the user may care about. A connected local

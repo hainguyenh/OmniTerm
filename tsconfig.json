@@ -25,7 +25,7 @@
     /* TypeScript 6 no longer loads every @types package; tests and the plugin probes use Node globals. */
     "types": ["node", "vite/client"]
   },
-  "include": ["ui", "plugins/always-awake/app", "plugins/agent-quota/app"],
+  "include": ["ui"],
   /* Ambient module declarations of the IDE modules, which `exclude` would otherwise drop. */
   "files": ["ui/ide/emmet.d.ts"],
   "exclude": ["ui/ide"],

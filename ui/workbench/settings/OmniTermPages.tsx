@@ -1,11 +1,11 @@
 import { AlertTriangle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import AgentQuotaSettings from '../../../plugins/agent-quota/app/AgentQuotaSettings'
-import { parseQuotaConfig } from '../../../plugins/agent-quota/app/quotaConfig'
-import { registerQuotaCommands, updateQuota } from '../../../plugins/agent-quota/app/quotaStore'
-import AlwaysAwakeModal from '../../../plugins/always-awake/app/AlwaysAwakeModal'
-import { formatDeadline } from '../../../plugins/always-awake/app/awakeSchedule'
+import AgentQuotaSettings from '../../features/agent-quota/AgentQuotaSettings'
+import { parseQuotaConfig } from '../../features/agent-quota/quotaConfig'
+import { registerQuotaCommands, updateQuota } from '../../features/agent-quota/quotaStore'
+import AlwaysAwakeModal from '../../features/always-awake/AlwaysAwakeModal'
+import { formatDeadline } from '../../features/always-awake/awakeSchedule'
 import { appLogo } from '../../assets/appLogo'
 import { selectPage } from '../../ide/features/settings/model/staging'
 import { useSettingsPages } from '../../ide/workbench/contributions'
@@ -135,10 +135,10 @@ const PLUGIN_SETTINGS_PAGES: Readonly<Record<string, string>> = {
 }
 
 /**
- * Settings › Plugins › Installed (and the Plugins dialog's OmniTerm tab): OmniTerm's own Node
- * plugins, one card each. `openPage` shows a plugin's settings page; inside Settings it selects it.
+ * Settings › Plugins › Installed (and the Plugins dialog's OmniTerm tab): OmniTerm's built-in
+ * features, one card each. `openPage` shows a plugin's settings page; inside Settings it selects it.
  */
-export function NodePluginsPage({
+export function BuiltinPluginsPage({
   openPage = selectPage,
   onlyPluginId,
 }: {
@@ -155,8 +155,6 @@ export function NodePluginsPage({
   return (
     <>
       <PluginManager
-        activeSessionCount={0}
-        onProviderStatusChanged={noop}
         showAlert={showAlert}
         showConfirm={showConfirm}
         configureAction={configureAction}
@@ -229,13 +227,9 @@ export function AboutPage() {
   const { appSettings, setAppSettings } = useAppSettings()
   const { showAlert, host } = useDialogHost()
   const [updateState, setUpdateState] = useState<UpdateState | null>(null)
-  const [hasProvider, setHasProvider] = useState(false)
   const actions = useUpdateActions({ updateState, setUpdateState, showAlert })
   useEffect(() => {
     void window.omnitermAPI.updates.state().then(setUpdateState).catch(diag.error)
-    void window.omnitermAPI.plugin.list()
-      .then((plugins) => setHasProvider(plugins.some((p) => p.selectedConnectionProvider && p.enabled)))
-      .catch(diag.error)
     return window.omnitermAPI.updates.onState(setUpdateState)
   }, [])
   if (!appSettings) return null
@@ -253,9 +247,7 @@ export function AboutPage() {
             </span>
           </div>
           <p className="text-[11px] text-theme-dim leading-relaxed">
-            {hasProvider
-              ? 'Local terminals and optional remote connections. Nothing leaves this machine unless you connect it somewhere.'
-              : 'A plugin-free local terminal and project workspace. Install and select a connection provider to add SSH or RDP.'}
+            A local terminal and project workspace. Nothing leaves this machine unless you connect it somewhere.
           </p>
         </div>
       </div>

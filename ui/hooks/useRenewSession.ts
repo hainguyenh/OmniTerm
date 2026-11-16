@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 import { findSessionByTabId, clearActiveForTab } from '../utils/agentSessionStorage'
 import { getPanePresence } from '../utils/agentPresenceStore'
 import { formatAgentProfileCommand } from '../utils/agentRegistry'

@@ -1,7 +1,7 @@
 import { useEffect, type CSSProperties } from 'react'
 
-import { dockShowsFooter, dockStripSide, type QuotaDock } from '../../../plugins/agent-quota/app/quotaDock'
-import { quotaCommands } from '../../../plugins/agent-quota/app/quotaStore'
+import { dockShowsFooter, dockStripSide, type QuotaDock } from '../../features/agent-quota/quotaDock'
+import { quotaCommands } from '../../features/agent-quota/quotaStore'
 
 import { closeQuotaPopup, useQuotaDock, useQuotaPopup } from './quotaDockState'
 import { QuotaBody, QuotaDockButtons } from './QuotaPanel'

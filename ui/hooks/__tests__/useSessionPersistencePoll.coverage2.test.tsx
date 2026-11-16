@@ -3,7 +3,7 @@
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 
 import { useSessionPersistence } from '../useSessionPersistence'
 import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../../utils/agentSessionDetector'

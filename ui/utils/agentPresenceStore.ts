@@ -8,7 +8,7 @@
  * spawned yet when the first poll runs, and that empty first answer must not end their tracking.
  */
 import { useSyncExternalStore } from 'react'
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export interface AgentModelSummary {
   model: string

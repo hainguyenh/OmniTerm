@@ -1,15 +1,7 @@
-import { Button } from '../ide/ui'
-
-import { Tooltip } from './Tooltip'
-
-/** Letter tiles of the bundled plugins (`PLUGINS` palette); others use their initial. */
+/** Letter tiles of the built-in features; others use their initial. */
 const PLUGIN_LETTERS: Readonly<Record<string, string>> = {
   'omniterm.agent-quota': 'Q',
-  '@omniterm/full-connection-manager': 'C',
-  '@omniterm/native-batch-connections': 'B',
-  '@omniterm/markdown-explorer': 'M',
   'omniterm.always-awake': 'A',
-  '@omniterm/blur': 'U',
 }
 
 const PILL = 'rounded-lg px-1.5 text-[10.5px] leading-4 bg-[var(--bg-hover)] text-[var(--fg-secondary)]'
@@ -26,21 +18,17 @@ function StatusPill({ plugin }: { plugin: PluginDescriptor }) {
 interface PluginCardProps {
   plugin: PluginDescriptor
   busy: boolean
-  anyBusy: boolean
   /** Opens the plugin's settings page; absent when it has none (or it is not available now). */
   onConfigure?: () => void
   onToggle(): void
-  onSelectProvider(): void
-  onRemove(): void
 }
 
 /**
- * One installed Node plugin, after the prototype's `.plug` row: letter tile, name, version, source and
+ * One built-in feature, after the prototype's `.plug` row: letter tile, name, version, source and
  * state pills, description, package id, a Configure link and the enable switch. Disabled plugins dim.
  */
-export function PluginCard({ plugin, busy, anyBusy, onConfigure, onToggle, onSelectProvider, onRemove }: PluginCardProps) {
+export function PluginCard({ plugin, busy, onConfigure, onToggle }: PluginCardProps) {
   const letter = PLUGIN_LETTERS[plugin.id] ?? (plugin.name.trim()[0] ?? '?').toUpperCase()
-  const providerReady = plugin.activeConnectionProvider && plugin.enabled && plugin.status === 'loaded'
   return (
     <div
       data-testid="plugin-card"
@@ -55,7 +43,6 @@ export function PluginCard({ plugin, busy, anyBusy, onConfigure, onToggle, onSel
           <span className="text-[var(--fg-subtle)]">{plugin.version}</span>
           <span className={PILL}>{plugin.source === 'bundled' ? 'Bundled' : 'User'}</span>
           <StatusPill plugin={plugin} />
-          {plugin.selectedConnectionProvider && <span className={PILL}>Connection provider</span>}
         </div>
         {plugin.description && <div className="text-xs text-[var(--fg-muted)]">{plugin.description}</div>}
         {plugin.error && <div className="text-xs text-[var(--danger)]">{plugin.error}</div>}
@@ -63,27 +50,6 @@ export function PluginCard({ plugin, busy, anyBusy, onConfigure, onToggle, onSel
           {plugin.id}
           {plugin.permissions.length > 0 && ` · ${plugin.permissions.join(', ')}`}
         </div>
-        {(providerReady || plugin.source === 'user') && (
-          <div className="mt-1 flex flex-wrap gap-2">
-            {providerReady && (
-              <Tooltip
-                content={plugin.selectedConnectionProvider ? 'Currently active connection provider' : 'Select this plugin as the active connection provider'}
-                placement="bottom"
-              >
-                <Button size="small" disabled={busy || plugin.selectedConnectionProvider} onClick={onSelectProvider}>
-                  {plugin.selectedConnectionProvider ? 'Active connection provider' : 'Use for connections'}
-                </Button>
-              </Tooltip>
-            )}
-            {plugin.source === 'user' && (
-              <Tooltip content={`Remove “${plugin.name}” from computer`} placement="bottom">
-                <Button size="small" disabled={anyBusy} onClick={onRemove} className="text-[var(--danger)]">
-                  Remove plugin
-                </Button>
-              </Tooltip>
-            )}
-          </div>
-        )}
       </div>
       {onConfigure && (
         <button type="button" onClick={onConfigure} className="flex-none text-[var(--link)] hover:underline">
@@ -95,7 +61,7 @@ export function PluginCard({ plugin, busy, anyBusy, onConfigure, onToggle, onSel
         role="switch"
         aria-checked={plugin.enabled}
         aria-label={`${plugin.enabled ? 'Disable' : 'Enable'} ${plugin.name}`}
-        title="Enable or disable the plugin (starts or stops its sidecar)"
+        title="Enable or disable the plugin"
         disabled={busy || plugin.status === 'incompatible'}
         onClick={onToggle}
         className={`relative h-[18px] w-[34px] flex-none rounded-full transition-colors disabled:opacity-50 ${plugin.enabled ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)]'}`}

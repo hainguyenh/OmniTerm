@@ -2,7 +2,7 @@ import type { Terminal } from '@xterm/xterm'
 
 /**
  * What each pane in this window currently shows, as text. The inline quota probe
- * (plugins/agent-quota/app/inlineUsageProbe.ts) reads it to tell an agent's prompt from a picker or
+ * (ui/features/agent-quota/inlineUsageProbe.ts) reads it to tell an agent's prompt from a picker or
  * a dialog, and to parse the panel `/usage` or `/status` draws. Reading the rendered screen instead
  * of the byte stream works for TUIs that paint with cursor moves rather than newlines (codex).
  *

@@ -36,7 +36,7 @@ vi.mock('../StatusBarSessionWidget', () => ({ StatusBarSessionWidget: () => null
 
 import { registerStatusBarWidgets } from '../registerStatusBarWidgets'
 import { StatusBarQuotaChips } from '../StatusBarQuotaChips'
-import { initialQuotaState, updateQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { initialQuotaState, updateQuota } from '../../features/agent-quota/quotaStore'
 
 describe('StatusBarWidgets', () => {
   beforeEach(() => {

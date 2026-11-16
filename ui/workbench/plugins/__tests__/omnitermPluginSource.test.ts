@@ -1,23 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { usePluginsDialog } from '../../../ide/features/plugins/pluginsDialogStore'
-import { registerOmniTermPluginSource, toHostPlugin, type NodePluginAPI } from '../omnitermPluginSource'
+import { registerOmniTermPluginSource, toHostPlugin, type BuiltinFeatureAPI } from '../omnitermPluginSource'
 
 const descriptor = (overrides: Partial<PluginDescriptor> = {}): PluginDescriptor => ({
   id: 'omniterm.agent-quota',
   name: 'Agent Quota',
   description: 'Quota guard',
   version: '1.0.0',
-  apiVersion: 1,
-  hostVersion: '1',
   permissions: [],
   source: 'bundled',
   enabled: true,
   status: 'loaded',
-  activeConnectionProvider: false,
-  selectedConnectionProvider: false,
-  activeAuthProvider: false,
-  activeInvokeHandler: false,
   ...overrides,
 })
 
@@ -25,7 +19,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 function fakeApi(list: PluginDescriptor[]) {
   let changed: () => void = () => {}
-  const api: NodePluginAPI = {
+  const api: BuiltinFeatureAPI = {
     list: vi.fn(() => Promise.resolve(list)),
     setEnabled: vi.fn(() => Promise.resolve(null)),
     builtinIds: () => Promise.resolve(['omniterm.todo-finder']),
@@ -33,8 +27,6 @@ function fakeApi(list: PluginDescriptor[]) {
       changed = callback
       return () => { changed = () => {} }
     },
-    installPackage: () => Promise.resolve(null),
-    restartApp: () => Promise.resolve(),
   }
   return { api, fireChanged: () => changed() }
 }
@@ -42,11 +34,10 @@ function fakeApi(list: PluginDescriptor[]) {
 afterEach(() => usePluginsDialog.setState({ open: false, source: null }))
 
 describe('OmniTerm plugins in the Plugins dialog', () => {
-  it('lists bundled plugins as built in and user packages as installed, without the plugin host', async () => {
+  it('lists bundled features as built in and other rows as installed', async () => {
     const list = [
       descriptor(),
       descriptor({ id: 'acme.extra', name: 'Extra', source: 'user', enabled: false }),
-      descriptor({ id: 'omniterm.plugin-host', name: 'Host' }),
     ]
     const { api } = fakeApi(list)
     const stop = registerOmniTermPluginSource(api, () => null)

@@ -13,7 +13,7 @@ vi.mock('../TerminalView', () => ({
 vi.mock('../RDPView', () => ({ default: () => <div data-testid="rdp" /> }))
 vi.mock('../ConnectingOverlay', () => ({ default: () => null }))
 vi.mock('../PaneSessionOverlayHost', () => ({ PaneSessionOverlayHost: () => null }))
-vi.mock('../../../plugins/agent-quota/app/paneHosts', () => ({
+vi.mock('../../features/agent-quota/paneHosts', () => ({
   QuotaPaneLines: () => null,
   SuspendedOverlay: () => null,
   UsageProbeOverlay: () => null,
@@ -43,7 +43,6 @@ function renderPane(connById: (id: string) => unknown) {
       active
       layoutEpoch="0"
       zoom={1}
-      blurAvailable={false}
       onNewSession={() => {}}
     />,
   )

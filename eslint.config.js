@@ -28,7 +28,6 @@ export default [
       '**/node_modules/**',
       '.pnpm-store',
       '**/.pnpm-store/**',
-      'plugins/markdown-explorer',
       // IDE modules with their own code style; see scripts/ide-modules.mjs.
       ...IDE_MODULE_ROOTS.flatMap(root => [root, `${root}/**`]),
     ],

@@ -1,5 +1,5 @@
 /** Name and brand of an AI agent, shared by every surface that shows one (see AgentBadge). */
-import { agentBrandFromName, type AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import { agentBrandFromName, type AgentBrand } from '../features/agent-quota/agentBrand'
 
 const AGENT_LABELS: Record<AgentBrand, string> = {
   claude: 'Claude Code',

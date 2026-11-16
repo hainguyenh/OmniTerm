@@ -10,8 +10,8 @@ import LargeTextPasteModalHost from './LargeTextPasteModalHost'
 import { StickyNoteHost } from './StickyNoteHost'
 // Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
 // parses it — the overlay is only ever mounted once `alwaysAwake.info()` says the feature is on.
-const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
-import { AgentQuotaRoot } from '../../plugins/agent-quota/app/AgentQuotaRoot'
+const AlwaysAwakeModal = lazy(() => import('../features/always-awake/AlwaysAwakeModal'))
+import { AgentQuotaRoot } from '../features/agent-quota/AgentQuotaRoot'
 import { CtxItem } from './mainLayoutShared'
 import { pickShell } from '../shellOptions'
 import { openSettingsWindow } from '../workbench/settings/openSettingsWindow'

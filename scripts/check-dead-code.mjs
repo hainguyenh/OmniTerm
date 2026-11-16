@@ -22,7 +22,7 @@ function walk(dir, found = []) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
       if (isIdeModule(full)) continue
-      if (!['node_modules', 'dist', 'coverage', 'target', '__tests__', 'markdown-explorer', 'vendor'].includes(entry.name)) walk(full, found)
+      if (!['node_modules', 'dist', 'coverage', 'target', '__tests__', 'vendor'].includes(entry.name)) walk(full, found)
       continue
     }
     if (!isIdeModule(full) && SOURCE_EXTENSIONS.includes(path.extname(entry.name)) && !/\.(?:test|spec)\.tsx?$/.test(entry.name)) {
@@ -217,14 +217,9 @@ export function findUnreferencedTauriCommands({
 }
 
 export function checkRepository(root = process.cwd()) {
-  const pluginEntries = fs.existsSync(path.join(root, 'plugins'))
-    ? fs.readdirSync(path.join(root, 'plugins'), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && entry.name !== 'markdown-explorer')
-      .map((entry) => `plugins/${entry.name}/src/index.ts`)
-    : []
   const orphans = findOrphanModules({
     root,
-    sourceRoots: ['ui', 'contract', 'plugins'],
+    sourceRoots: ['ui'],
     entrypoints: [
       'ui/main.tsx',
       'ui/testSetup.ts',
@@ -232,15 +227,13 @@ export function checkRepository(root = process.cwd()) {
       'ui/vite-env.d.ts',
       'ui/editorSettings.d.ts',
       'ui/workbenchSettings.d.ts',
-      'contract/index.ts',
-      ...pluginEntries,
     ],
   })
   const rustOrphans = findOrphanRustModules({ root })
   const noopCommands = findNoopTauriCommands({ root })
   const unreferencedCommands = findUnreferencedTauriCommands({
     root,
-    frontendRoots: ['ui', 'plugins'],
+    frontendRoots: ['ui'],
   })
   const problems = []
   if (orphans.length) {

@@ -3,8 +3,7 @@
 
 use crate::{
     adhoc::AdhocRegistry, agent_quota::AgentQuotaState, always_awake::AlwaysAwakeState, ide,
-    plugin_host::PluginHost, pty::PtyManager, rdp_embed::RdpSessionManager,
-    terminal_window::DetachRegistry,
+    pty::PtyManager, rdp_embed::RdpSessionManager, terminal_window::DetachRegistry,
 };
 
 /// Registers the state shared by every window. The platform-specific launcher state is left to the
@@ -15,7 +14,6 @@ pub(crate) fn manage_state<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tau
         .manage(ide::requests::Requests::default())
         .manage(AdhocRegistry::new())
         .manage(DetachRegistry::new())
-        .manage(PluginHost::new())
         .manage(RdpSessionManager::new())
         .manage(AlwaysAwakeState::new())
         .manage(AgentQuotaState::new())

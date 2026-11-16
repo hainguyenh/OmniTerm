@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { Bookmark, Eye, FolderOpen, FolderGit2, Gauge, GitBranch, MoonStar, Settings, Sparkles, StickyNote } from 'lucide-react'
-import { useQuotaActivityEntry } from '../../plugins/agent-quota/app/activityEntry'
+import { Bookmark, FolderOpen, FolderGit2, Gauge, GitBranch, MoonStar, Settings, Sparkles, StickyNote } from 'lucide-react'
+import { useQuotaActivityEntry } from '../features/agent-quota/activityEntry'
 import { Tooltip } from './Tooltip'
 import { TempNotesPopover } from './TempNotesPopover'
 
@@ -24,9 +24,6 @@ interface ActivityBarProps {
   alwaysAwakeEnabled?: boolean
   alwaysAwakeKeepingAwake?: boolean
   onAlwaysAwakeClick?: () => void
-  blurAvailable?: boolean
-  blurEnabled?: boolean
-  onBlurClick?: () => void
 }
 
 /** A narrow icon rail (48 px) pinned to the left edge of the app — modelled after
@@ -41,9 +38,6 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
   alwaysAwakeEnabled = false,
   alwaysAwakeKeepingAwake = false,
   onAlwaysAwakeClick = () => {},
-  blurAvailable = false,
-  blurEnabled = false,
-  onBlurClick = () => {},
 }) => {
   // Pinned by the Agent Quota plugin; null without the plugin or once the user unpins it.
   const quota = useQuotaActivityEntry()
@@ -141,14 +135,6 @@ const ActivityBar: React.FC<ActivityBarProps> = ({
         {/* Always Awake sits with Settings rather than with the panel views: it opens a modal and toggles
             a machine-wide setting, it does not switch the secondary panel. */}
         <div className="mt-auto flex flex-col items-center gap-1 pb-2 w-full">
-          {blurAvailable && (
-            <ActivityIcon
-              icon={<Eye className="w-5 h-5" />}
-              label={blurEnabled ? 'Blur inactive windows (on)' : 'Blur inactive windows'}
-              active={blurEnabled}
-              onClick={onBlurClick}
-            />
-          )}
           {quota && (
             <ActivityIcon
               icon={(

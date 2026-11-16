@@ -4,13 +4,16 @@
 use crate::*;
 
 #[cfg(test)]
-pub(crate) fn with_invoke_handler<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+pub(crate) fn with_invoke_handler<R: tauri::Runtime>(
+    builder: tauri::Builder<R>,
+) -> tauri::Builder<R> {
     builder.invoke_handler(local_invoke_handler())
 }
 
 /// Every command in this file's table, in the shape `Builder::invoke_handler` takes, so the embedded
 /// omniterm backend (`idea_host`) can route the commands it does not answer itself.
-pub(crate) fn local_invoke_handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
+) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         // The workbench's project follows the active workspace; every other workbench command is
         // answered by the embedded backend (idea_host.rs).
@@ -104,8 +107,6 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::I
         temp_note_commands::save_temp_note_as,
         safepath_command::system_excluded_view_exts,
         workspace_connections::load_workspace_connections,
-        workspace_connections::save_workspace_connections,
-        workspace_connections::delete_workspace_connection,
         // App utils
         app_utils::reveal_log,
         app_utils::clear_log,
@@ -117,18 +118,10 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>() -> impl Fn(tauri::ipc::I
         adhoc::open_quick_shell,
         shell_probe::list_available_shells,
         launcher::setup_launcher,
-        // Plugin host commands
-        plugin_available,
+        // Built-in features and bundled IDE plugins
         omni_plugin_list,
         crate::builtin_plugins::builtin_plugin_ids,
-        plugin_management::install_plugin_package,
-        plugin_management::remove_plugin,
-        plugin_management::restart_app,
         omni_plugin_set_enabled,
-        plugin_select_connection_provider,
-        connection_provider_capabilities,
-        plugin_invoke,
-        plugin_auth_gate,
         always_awake::get_state,
         always_awake::set_state,
         always_awake::disable,

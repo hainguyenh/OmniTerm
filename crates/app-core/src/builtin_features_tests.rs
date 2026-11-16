@@ -32,7 +32,7 @@ fn toggling_writes_a_sparse_sorted_list_of_the_features_that_are_off() {
 
 #[test]
 fn ignores_ids_that_are_not_built_in_features() {
-    assert_eq!(enabled_patch(&json!({}), "@omniterm/blur", false), None);
+    assert_eq!(enabled_patch(&json!({}), "acme.unknown", false), None);
     assert!(find("omniterm.plugin-host").is_none());
 }
 

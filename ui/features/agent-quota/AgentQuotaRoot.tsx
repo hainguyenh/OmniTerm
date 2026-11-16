@@ -1,0 +1,175 @@
+import { useEffect, useRef } from 'react'
+
+import type { AgentKind } from './usage/types'
+import type { AgentQuotaAPI } from './agentQuotaAPI'
+import type { QuotaConfig } from './quotaConfig'
+
+import { diag } from '../../diag'
+import { onAgentLaunch } from '../../utils/agentLaunchSignal'
+import { readPaneScreen } from '../../utils/paneScreens'
+import { setDashboardOpen, useProfileDashboard } from './profileDashboard'
+import { clearOverrides, getQuotaState, registerQuotaCommands, setQuickOpen, updateQuota, useQuota } from './quotaStore'
+import { parseQuotaConfig } from './quotaConfig'
+import { QuotaEngine } from './quotaEngine'
+import { holdForLaunch, LIVE_PROBE_IO, probeUsageInline, releaseLaunchHold } from './inlineUsageProbe'
+import { clearAllResumeRecovery } from './resumeRecovery'
+import { DangerConfirmDialog, QuotaNotices } from './QuotaOverlays'
+import { QuotaProfilesDashboard } from './QuotaProfilesDashboard'
+import { QuotaQuickPopover } from './QuotaQuickPopover'
+import { FrozenProcessesDialog } from './FrozenProcessesDialog'
+
+export interface AgentQuotaRootProps {
+  api: AgentQuotaAPI
+  appSettings: AppSettings
+  setAppSettings: (settings: AppSettings) => void
+  sessionIds: readonly string[]
+  busy: Readonly<Record<string, boolean>>
+  openSettings: () => void
+}
+
+/** The feature switch is read over IPC; an early failure is retried with back-off. */
+const PROBE_DELAYS = [0, 500, 1_000, 2_000, 4_000]
+
+const windowVisible = () => document.visibilityState !== 'hidden'
+
+/** Window event the `agentQuota` shortcut dispatches to toggle quick settings. */
+export const QUICK_SETTINGS_EVENT = 'omniterm:agent-quota'
+/** Asks the settings modal to show the Agent Quota tab. */
+export const SETTINGS_TAB_EVENT = 'omniterm:settings-tab'
+
+const isMonitoredAgent = (agent: string): agent is AgentKind => agent === 'claude' || agent === 'codex' || agent === 'agy'
+
+/**
+ * Mounted once in the main window. Probes for the plugin, feeds the global configuration into the
+ * quota store, runs the engine while the plugin is present, and renders the window-level surfaces.
+ */
+export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, busy, openSettings }: AgentQuotaRootProps) {
+  const available = useQuota((state) => state.available)
+  const quickOpen = useQuota((state) => state.quickOpen)
+  const dashboardOpen = useProfileDashboard((state) => state.open)
+  const engineRef = useRef<QuotaEngine | null>(null)
+  const latest = useRef({ appSettings, setAppSettings, openSettings })
+  latest.current = { appSettings, setAppSettings, openSettings }
+
+  useEffect(() => {
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const setAvailable = (present: boolean) => {
+      if (getQuotaState().available === present) return
+      updateQuota((state) => ({ ...state, available: present }))
+    }
+    const probe = (attempt: number) => {
+      void api.info().then((present) => {
+        if (cancelled) return
+        if (present) setAvailable(true)
+        else if (attempt + 1 < PROBE_DELAYS.length) timer = setTimeout(() => probe(attempt + 1), PROBE_DELAYS[attempt + 1])
+      })
+    }
+    probe(0)
+    // The Plugins dialog switching the built-in feature (in any window) is announced, so the icon,
+    // engine and any frozen agent follow it at once — disabling stops the engine and thaws what it
+    // froze — without polling while nothing changes.
+    const stopWatching = api.onPluginsChanged?.(() => {
+      void api.info().then((present) => {
+        if (!cancelled) setAvailable(present)
+      })
+    })
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      stopWatching?.()
+    }
+  }, [api])
+
+  const rawConfig = appSettings.agentQuota
+  useEffect(() => {
+    const config = parseQuotaConfig(rawConfig)
+    updateQuota((state) => ({ ...state, config }))
+    // Switched back on: run now rather than at the switched-off loop's next, distant tick.
+    if (config.enabled) engineRef.current?.poke()
+  }, [rawConfig])
+
+  useEffect(() => {
+    if (!available) return
+    const engine = new QuotaEngine({
+      api,
+      now: () => Date.now(),
+      random: Math.random,
+      setTimer: (run, ms) => setTimeout(run, ms),
+      clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      inlineProbe: (terminal) => probeUsageInline(terminal, LIVE_PROBE_IO),
+      launchHold: { hold: (sessionId) => holdForLaunch(sessionId), release: (sessionId) => releaseLaunchHold(sessionId) },
+      readScreen: readPaneScreen,
+      visible: windowVisible,
+    })
+    engineRef.current = engine
+    // Back on screen: bring the stood-still countdowns up to date at once.
+    const onVisibility = () => {
+      if (windowVisible()) engine.poke()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    const stopLaunchWatch = onAgentLaunch((sessionId, agent) => {
+      if (isMonitoredAgent(agent)) engine.noteLaunch(sessionId, agent)
+    })
+    const unregister = registerQuotaCommands({
+      saveConfig: (config: QuotaConfig) => {
+        const { appSettings: current, setAppSettings: set } = latest.current
+        set({ ...current, agentQuota: config })
+        void window.omnitermAPI.settings.save({ agentQuota: config })
+      },
+      refresh: (profileKey) => engine.refresh(profileKey),
+      wake: (target) => engine.wake(target),
+      suspend: (sessionId) => engine.suspend(sessionId),
+      resume: (sessionId) => engine.resume(sessionId),
+      resumeAll: () => engine.resumeAll(),
+      readUsage: (sessionId) => engine.readUsage(sessionId),
+      cancelUsageRead: (sessionId) => engine.cancelUsageRead(sessionId),
+      recordReading: (profileKey, snapshot) => engine.recordReading(profileKey, snapshot),
+      openSettings: () => {
+        setQuickOpen(false)
+        latest.current.openSettings()
+        window.dispatchEvent(new CustomEvent(SETTINGS_TAB_EVENT, { detail: { tab: 'quota' } }))
+      },
+    })
+    engine.start()
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      stopLaunchWatch()
+      engine.stop()
+      unregister()
+      engineRef.current = null
+      clearOverrides()
+      clearAllResumeRecovery()
+      // Leaving (plugin disabled, window closing): nothing may stay frozen without a guard to thaw it.
+      void api.resumeAll().catch((error: unknown) => diag.error('[agentQuota] resume-all on shutdown failed', error))
+    }
+  }, [available, api])
+
+  useEffect(() => {
+    engineRef.current?.setInputs({ sessionIds, busy })
+  }, [sessionIds, busy, available])
+
+  useEffect(() => {
+    const toggle = () => {
+      if (getQuotaState().available) setQuickOpen(!getQuotaState().quickOpen)
+    }
+    window.addEventListener(QUICK_SETTINGS_EVENT, toggle)
+    return () => window.removeEventListener(QUICK_SETTINGS_EVENT, toggle)
+  }, [])
+
+  // The dashboard belongs to the plugin: it closes with it rather than reopening stale later.
+  useEffect(() => {
+    if (!available) setDashboardOpen(false)
+  }, [available])
+
+  if (!available) return null
+  return (
+    <>
+      {quickOpen && <QuotaQuickPopover />}
+      {dashboardOpen && <QuotaProfilesDashboard />}
+      <FrozenProcessesDialog />
+      <DangerConfirmDialog />
+      <QuotaNotices />
+    </>
+  )
+}

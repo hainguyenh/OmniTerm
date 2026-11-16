@@ -6,14 +6,13 @@ import { registerOverlay, registerToolWindow } from '../ide/workbench/contributi
 import { NOTIFICATIONS_TOOL_WINDOW } from '../ide/workbench/Notifications'
 import { setDefaultStripeWindows } from '../ide/workbench/toolwindows/store'
 
-import { ConnectionsHeaderActions, ConnectionsToolWindow } from './connections/ConnectionsToolWindow'
 import { ProblemsToolWindow } from './problems/ProblemsToolWindow'
 import { useProblemsStore } from './problems/problemsStore'
 import { OmniTermProjectHeaderActions, ProjectToolWindow } from './ProjectToolWindow'
 import { QUOTA_TOOL_WINDOW } from './quota/quotaDockState'
 import { SessionCleanupOverlay } from './sessions/SessionCleanupDialog'
 import { SessionsHeaderActions, SessionsToolWindow } from './ShellToolWindows'
-import { CONNECTIONS_ICON, registerShellIcons, SESSIONS_ICON } from './shellIcons'
+import { registerShellIcons, SESSIONS_ICON } from './shellIcons'
 import { TERMINAL_WINDOW } from './terminalDock/terminalDockActions'
 
 /**
@@ -27,7 +26,6 @@ export const STRIPE_WINDOWS: readonly string[] = [
   'bookmarks',
   QUOTA_TOOL_WINDOW,
   'omniterm.sessions',
-  'connections',
   TERMINAL_WINDOW,
   'run',
   'debug',
@@ -37,7 +35,7 @@ export const STRIPE_WINDOWS: readonly string[] = [
 ]
 
 /**
- * Shell tool windows (Project, Sessions, Connections, and Problems). Session bookmarks live inside
+ * Shell tool windows (Project, Sessions, and Problems). Session bookmarks live inside
  * Sessions; the Bookmarks stripe button belongs to the editor (editor bookmarks).
  * They have `requiresProject: false`, so they remain accessible even when no workspace is open.
  */
@@ -56,16 +54,6 @@ export function registerShellToolWindows(): () => void {
       headerActions: OmniTermProjectHeaderActions,
       headerMenu: useProjectHeaderMenu,
       titleMenu: useProjectTitleMenu,
-    }),
-    registerToolWindow({
-      id: 'connections',
-      title: 'Connections',
-      icon: CONNECTIONS_ICON,
-      anchor: 'left',
-      order: 35,
-      requiresProject: false,
-      component: ConnectionsToolWindow,
-      headerActions: ConnectionsHeaderActions,
     }),
     registerToolWindow({
       id: 'omniterm.sessions',

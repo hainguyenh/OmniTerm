@@ -27,7 +27,6 @@ import { activateWorkbench } from '../ide/workbench/activate'
 
 import { activateAppFeature } from './appFeature'
 import { activateOmniTermSettings } from './settings/activateOmniTermSettings'
-import { registerWorkspaceConnectionsRoot } from './connections/workspaceConnectionsRoot'
 import { registerDebuggerWorkbench } from './debugger/registerDebuggerWorkbench'
 import { registerLspWorkbench } from './lsp/lspWorkbenchActions'
 import { registerProjectTreeActions } from './projectTreeActions'
@@ -72,7 +71,6 @@ export const WORKBENCH_STEPS: ReadonlyArray<readonly [string, Activate]> = [
   ['app', activateAppFeature],
   ['project-tree', projectTree],
   ['project-tree-actions', registerProjectTreeActions],
-  ['workspace-connections', registerWorkspaceConnectionsRoot],
   ['shell-tool-windows', registerShellToolWindows],
   ['terminal-tool-window', registerTerminalToolWindow],
   ['search', search],

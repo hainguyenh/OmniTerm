@@ -233,11 +233,9 @@ async fn official_api_examples_install_and_render_real_component_contributions()
     assert!(items[0].label.contains("TODO example"));
     #[cfg(unix)]
     {
-        let path = std::env::join_paths([official.join("container-runner"), official.join("test-runner")]).unwrap();
+        let path = official.join("test-runner").into_os_string();
         f.plugins.set_program_path(Arc::new(move || Some(path.clone())));
-        for name in ["container-runner", "test-runner"] {
-            f.plugins.install_from_dir(&official.join(name), &Consent::all()).unwrap();
-        }
+        f.plugins.install_from_dir(&official.join("test-runner"), &Consent::all()).unwrap();
         std::fs::write(f.root.join("example.tests"), "test adds\n").unwrap();
         let doc =
             ide_plugin::ProviderDocument { path: f.root.join("example.tests"), text: "test adds\n".into(), ..doc };

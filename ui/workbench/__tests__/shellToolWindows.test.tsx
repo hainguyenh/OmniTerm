@@ -52,16 +52,15 @@ describe('shell tool windows', () => {
     document.body.innerHTML = ''
   })
 
-  it('registers Project, Connections, Sessions and Problems; bookmarks are not a second stripe button', () => {
+  it('registers Project, Sessions and Problems; bookmarks are not a second stripe button', () => {
     registerShellToolWindows()
     expect(registered.items.map((i) => i.id)).toEqual([
       'project',
-      'connections',
       'omniterm.sessions',
       'problems',
     ])
     const leftWindows = registered.items.filter((i) => i.anchor === 'left')
-    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'connections', 'omniterm.sessions'])
+    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'omniterm.sessions'])
     expect(leftWindows.every((i) => i.requiresProject === false)).toBe(true)
     expect(leftWindows[0]?.order).toBe(0)
 
@@ -75,10 +74,10 @@ describe('shell tool windows', () => {
   it('gives only the windows of the mock a stripe button by default, and the user choice still wins', () => {
     const off = registerShellToolWindows()
     const tw = (id: string, stripe?: 'onUse') => ({ id, stripe }) as never
-    for (const id of ['project', 'commit', 'bookmarks', 'omniterm.sessions', 'connections', 'omniterm.terminal', 'run', 'debug', 'git', 'problems', 'notifications']) {
+    for (const id of ['project', 'commit', 'bookmarks', 'omniterm.sessions', 'omniterm.terminal', 'run', 'debug', 'git', 'problems', 'notifications']) {
       expect(hasStripeButton(tw(id), {}), id).toBe(true)
     }
-    for (const id of ['structure', 'todo', 'find', 'database', 'agents', 'inspection']) {
+    for (const id of ['structure', 'todo', 'find', 'database', 'agents', 'inspection', 'connections']) {
       expect(hasStripeButton(tw(id), {}), id).toBe(false)
     }
     expect(hasStripeButton(tw('structure'), { structure: true })).toBe(true)

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 import type { LayoutMode } from '../themes'
 import type { ViewGroup } from '../viewGroups'
 import { useSessionPersistence } from './useSessionPersistence'

@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { iconForAgent, type AgentBrand } from '../../../plugins/agent-quota/app/agentBrand'
+import { iconForAgent, type AgentBrand } from '../../features/agent-quota/agentBrand'
 import { registerExternalIcons } from '../../ide/ui/icons'
 import { notifyTabTitlesChanged } from '../../ide/workbench/contributions'
 import { agentBrandFor } from '../../utils/agentIdentity'

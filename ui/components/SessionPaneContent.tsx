@@ -1,6 +1,6 @@
-import type { SessionStatus } from '@omniterm/contract'
+import type { SessionStatus } from '../domain'
 
-import { QuotaPaneLines, SuspendedOverlay, UsageProbeOverlay } from '../../plugins/agent-quota/app/paneHosts'
+import { QuotaPaneLines, SuspendedOverlay, UsageProbeOverlay } from '../features/agent-quota/paneHosts'
 import { isRenewing } from '../hooks/useRenewSession'
 import { closesOnExit } from '../sessionExit'
 import { recentlyInterrupted } from '../terminal/ctrlCGuard'
@@ -26,7 +26,6 @@ interface SessionPaneContentProps {
   /** Multiplier applied to the font size (the grid's zoom). */
   zoom: number
   roundedBottom?: boolean
-  blurAvailable: boolean
   onNewSession: () => void
 }
 
@@ -35,7 +34,7 @@ interface SessionPaneContentProps {
  * pane grid and by the session editor tabs, which render it through a portal into the session's
  * surface (see workbench/sessions).
  */
-export function SessionPaneContent({ model, tab, active, layoutEpoch, zoom, roundedBottom, blurAvailable, onNewSession }: SessionPaneContentProps) {
+export function SessionPaneContent({ model, tab, active, layoutEpoch, zoom, roundedBottom, onNewSession }: SessionPaneContentProps) {
   const {
     appSettings, currentTheme, themes, resolveAppearance, onFontSizeChange, connById, reconnectKeys, statuses,
     poppedOut, resumeMode, restoreOutcomes = {}, retryRestore = () => {}, isOverlayOpen, setLatency, setMetric,
@@ -94,7 +93,6 @@ export function SessionPaneContent({ model, tab, active, layoutEpoch, zoom, roun
       active={active}
       layoutEpoch={layoutEpoch}
       darkMode={appSettings.darkMode}
-      blurStrength={blurAvailable && (appSettings.blurEnabled ?? true) && appSettings.blurInactiveDock ? appSettings.blurInactiveWindow ?? 0 : 0}
       // The process a renew replaces ends on purpose; its closed/error is not the pane's state.
       onStatus={(status: SessionStatus) => { if (!(isRenewing(tab.id) && (status === 'closed' || status === 'error'))) handleRestoreStatus(tab.id, status) }}
       onMetrics={(m) => setMetric(tab.id, m)}

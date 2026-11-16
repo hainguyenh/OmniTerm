@@ -24,7 +24,6 @@ impl MockApp {
         let guard = test_support::lock();
         let app = test_support::mock_app();
         assert!(app.manage(AdhocRegistry::new()));
-        assert!(app.manage(PluginHost::new()));
         assert!(app.manage(terminal_window::DetachRegistry::new()));
         assert!(app.manage(rdp_embed::RdpSessionManager::new()));
         assert!(app.manage(PtyManager::new()));
@@ -93,6 +92,3 @@ mod temp_note_commands;
 mod workspace_commands;
 #[path = "command_workspace_file_tests.rs"]
 mod workspace_file_commands;
-
-#[path = "command_plugin_tests.rs"]
-mod plugin_commands;

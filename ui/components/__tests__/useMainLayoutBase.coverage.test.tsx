@@ -3,7 +3,7 @@
  */
 import { act, fireEvent, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import type { MainLayoutProps } from '../mainLayoutShared'
@@ -12,7 +12,6 @@ import { useMainLayoutBase } from '../useMainLayoutBase'
 const showAlert = vi.fn(async () => {})
 const showConfirm = vi.fn(async () => true)
 const openNewSession = vi.fn(async (_shell: string, connect: (conn: unknown) => void) => connect({ id: 'new', type: 'LOCAL' }))
-const upsertWorkspaceConnection = vi.fn(async (_wId?: any, _target?: any, _conn?: any) => {})
 const loadShellOptions = vi.fn(async () => [{ id: 'powershell', label: 'PowerShell' }])
 vi.mock('../../hooks/useDialog', () => ({ useDialog: () => ({ dialogState: null, showAlert, showConfirm }) }))
 const openNewSessionCwd = vi.fn()
@@ -26,7 +25,6 @@ vi.mock('../../shellOptions', () => ({
   loadShellOptions: () => loadShellOptions(),
   pickShell: (options: Array<{ id: string }>, requested?: string) => options.some(o => o.id === requested) ? requested : options[0]?.id ?? 'powershell',
 }))
-vi.mock('../../utils/workspaceConnections', () => ({ upsertWorkspaceConnection: (wId: any, target: any, conn: any) => upsertWorkspaceConnection(wId, target, conn) }))
 
 const settings: AppSettings = {
   themeId: TOKYO_NIGHT.id, fontSize: 14, smartColors: true, checkUpdatesOnStartup: true, darkMode: true,
@@ -52,10 +50,9 @@ let emitReattached: ((id: string) => void) | undefined
 beforeEach(() => {
   localStorage.clear()
   showAlert.mockClear(); showConfirm.mockClear();
-  openNewSession.mockClear(); upsertWorkspaceConnection.mockClear(); loadShellOptions.mockClear()
+  openNewSession.mockClear(); loadShellOptions.mockClear()
   emitDetached = undefined; emitReattached = undefined
   mockOmnitermAPI({
-    plugin: { list: vi.fn(async () => [{ selectedConnectionProvider: true, enabled: true }]), connectionCapabilities: vi.fn(async () => ({ sftp: true })) },
     customArt: { get: vi.fn(async (slot: string) => `blob:${slot}`) },
     workspace: { list: vi.fn(async () => [{ id: 'w' }]), loadConnections: vi.fn(async () => [ssh]) },
     connect: {
@@ -90,7 +87,6 @@ describe('useMainLayoutBase complete behavior', () => {
       alwaysAwake: { info: vi.fn(async () => on), getState, onState },
     })
     const { result, unmount } = renderHook(() => useMainLayoutBase(props()))
-    await waitFor(() => expect(result.current.hasConnectionProvider).toBeDefined())
     await waitFor(() => expect(window.omnitermAPI.alwaysAwake.info).toHaveBeenCalled())
     expect(result.current.alwaysAwakeAvailable).toBe(false)
     expect(getState).not.toHaveBeenCalled()
@@ -109,46 +105,22 @@ describe('useMainLayoutBase complete behavior', () => {
     unmount()
   })
 
-  it('loads provider state, shell options, workspace connections, and all custom art modes', async () => {
+  it('loads shell options, workspace connections, and all custom art modes', async () => {
     const { result } = renderHook(() => useMainLayoutBase(props()))
-    await waitFor(() => expect(result.current.hasConnectionProvider).toBe(true))
-    expect(result.current.connectionCapabilities).toEqual({ sftp: true })
-    expect(result.current.savedConnections).toEqual([{ ...ssh, workspaceId: 'w' }])
+    await waitFor(() => expect(result.current.savedConnections).toEqual([{ ...ssh, workspaceId: 'w' }]))
     expect(result.current.shellOptions).toEqual([{ id: 'powershell', label: 'PowerShell' }])
     expect(result.current.idleArtUrl).toBe('blob:idle-dark')
     expect(result.current.loadingArtUrl).toBe('blob:loading-dark')
   })
 
-  it('reads the connection provider again when the settings change or the window regains focus', async () => {
-    const changed: Array<() => void> = []
-    let providerOn = false
-    const list = vi.fn(async () => [{ selectedConnectionProvider: true, enabled: providerOn }])
-    mockOmnitermAPI({
-      plugin: { list, connectionCapabilities: vi.fn(async () => ({ sftp: providerOn })) },
-      settings: { save: vi.fn(async () => {}), onChanged: vi.fn((fn: () => void) => { changed.push(fn); return vi.fn() }) },
-    })
-    const { result } = renderHook(() => useMainLayoutBase(props()))
-    await waitFor(() => expect(list).toHaveBeenCalledTimes(1))
-    expect(result.current.hasConnectionProvider).toBe(false)
-    providerOn = true
-    act(() => changed.forEach(fn => fn()))
-    await waitFor(() => expect(result.current.hasConnectionProvider).toBe(true))
-    expect(result.current.connectionCapabilities).toEqual({ sftp: true })
-    providerOn = false
-    act(() => { window.dispatchEvent(new Event('focus')) })
-    await waitFor(() => expect(result.current.hasConnectionProvider).toBe(false))
-  })
-
-  it('handles provider, art, and workspace load errors without crashing', async () => {
+  it('handles art and workspace load errors without crashing', async () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     mockOmnitermAPI({
-      plugin: { list: vi.fn(async () => { throw new Error('host') }), connectionCapabilities: vi.fn() },
       customArt: { get: vi.fn(async () => { throw new Error('missing') }) },
       workspace: { list: vi.fn(async () => { throw new Error('disk') }) },
     })
     const { result } = renderHook(() => useMainLayoutBase(props({ appSettings: { ...settings, darkMode: false } })))
     await waitFor(() => expect(result.current.idleArtUrlLight).toBeNull())
-    expect(result.current.hasConnectionProvider).toBe(false)
     expect(result.current.savedConnections).toEqual([])
     expect(error).toHaveBeenCalled()
   })
@@ -320,31 +292,13 @@ describe('useMainLayoutBase complete behavior', () => {
   })
 
 
-  it('bounds font size and saves workspace connections with renaming, revision, and errors', async () => {
+  it('bounds font size', () => {
     const p = props({ setAppSettings: vi.fn() })
     const { result } = renderHook(() => useMainLayoutBase(p))
     act(() => result.current.updateFontSize(100))
     expect(p.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 48 }))
     act(() => result.current.updateFontSize(-100))
     expect(p.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 8 }))
-
-    await act(() => result.current.handleSaveConnection(ssh))
-    expect(upsertWorkspaceConnection).not.toHaveBeenCalled()
-    act(() => {
-      result.current.openConnectionForm({ workspaceId: 'w', folders: [], rootLabel: 'W' } as any)
-      result.current.setConnFormInitial(ssh)
-      result.current.setEphemeralConns([ssh])
-      result.current.setActiveTabs([{ id: 's1', connId: ssh.id, name: 'old' }, { id: 's2', connId: ssh.id, name: 'old2' }])
-    })
-    await act(() => result.current.handleSaveConnection({ ...ssh, name: 'Renamed' }))
-    expect(upsertWorkspaceConnection).toHaveBeenCalledWith('w', expect.objectContaining({ name: 'Renamed' }), true)
-    expect(result.current.activeTabs.map((t: { name: string }) => t.name)).toEqual(['Renamed', 'Renamed (2)'])
-    expect(result.current.wsConnectionsRevision).toBe(1)
-
-    upsertWorkspaceConnection.mockRejectedValueOnce(new Error('read only'))
-    act(() => result.current.openConnectionForm({ workspaceId: 'w', folders: [], rootLabel: 'W' } as any))
-    await act(() => result.current.handleSaveConnection(ssh))
-    expect(showAlert).toHaveBeenCalledWith('Could not save the connection: read only', expect.anything())
   })
 
 })

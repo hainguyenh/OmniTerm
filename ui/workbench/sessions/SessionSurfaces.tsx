@@ -9,12 +9,10 @@ import { disposeSurface, surfaceHost, useSurfaceState } from './surfaceRegistry'
 function SessionSurface({
   model,
   tab,
-  blurAvailable,
   zoom,
 }: {
   model: MainLayoutModel
   tab: { id: string; connId: string; name: string }
-  blurAvailable: boolean
   zoom: number
 }) {
   const state = useSurfaceState((all) => all[tab.id])
@@ -25,7 +23,6 @@ function SessionSurface({
       active={!!state?.attached && state.shown}
       layoutEpoch={`surface:${state?.epoch ?? 0}`}
       zoom={zoom}
-      blurAvailable={blurAvailable}
       onNewSession={() => model.requestNewSession(undefined, model.selectedWorkspaceId)}
     />,
     surfaceHost(tab.id),
@@ -37,7 +34,7 @@ function SessionSurface({
  * the React parent of a terminal never changes while its tab moves between panes, splits or
  * workspaces. Mounted once, inside the persistent shell of the workbench frame.
  */
-export function SessionSurfaces({ model, blurAvailable, zoom }: { model: MainLayoutModel; blurAvailable: boolean; zoom: number }) {
+export function SessionSurfaces({ model, zoom }: { model: MainLayoutModel; zoom: number }) {
   const tabs = model.activeTabs.filter((tab) => !model.editorTabs[tab.id])
   const previous = useRef<Set<string>>(new Set())
   const ids = tabs.map((tab) => tab.id).join('\u0000')
@@ -50,7 +47,7 @@ export function SessionSurfaces({ model, blurAvailable, zoom }: { model: MainLay
   return (
     <>
       {tabs.map((tab) => (
-        <SessionSurface key={tab.id} model={model} tab={tab} blurAvailable={blurAvailable} zoom={zoom} />
+        <SessionSurface key={tab.id} model={model} tab={tab} zoom={zoom} />
       ))}
     </>
   )

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Terminal, Monitor, HardDrive, Star, Clock } from 'lucide-react';
-import type { Connection } from '@omniterm/contract';
+import type { Connection } from '../domain';
 import { useConnectionMeta } from '../hooks/useConnectionMeta';
 
 interface CommandPaletteProps {

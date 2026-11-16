@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Bot, Database, FileText, GitBranch, Info, Lock, Plus, SquareTerminal, X } from 'lucide-react'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../domain'
 import { pickShell, type ShellOption } from '../shellOptions'
 import type { UseDialogReturn } from '../hooks/useDialog'
 import {

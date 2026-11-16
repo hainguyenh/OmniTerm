@@ -81,7 +81,7 @@ import type { ZoomModel } from '../layout/useLayoutPreset'
 import {
   initialQuotaState,
   updateQuota,
-} from '../../../plugins/agent-quota/app/quotaStore'
+} from '../../features/agent-quota/quotaStore'
 import { QuotaStripVertical } from '../QuotaStripVertical'
 import { useQuotaPopup } from '../quota/quotaDockState'
 import { StatusBarQuotaChips } from '../StatusBarQuotaChips'

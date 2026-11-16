@@ -1,4 +1,4 @@
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 import { describe, expect, it } from 'vitest'
 
 import { QUICK_START_AGENTS, quickStartProjects } from '../sessionQuickStart'

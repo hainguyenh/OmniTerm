@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 
-import { getQuotaNow, useCoarseNow, useQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { getQuotaNow, useCoarseNow, useQuota } from '../../features/agent-quota/quotaStore'
 
 import { activeQuotaSession, nearestReset, quotaGroups } from './quotaModel'
 import { useActiveSessionId } from './useActiveSessionId'

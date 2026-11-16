@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
-import type { Connection, Workspace } from '@omniterm/contract'
+import type { Connection, Workspace } from '../domain'
 
 import { useStoredSessions, type StoredAgentSession } from '../utils/agentSessionStorage'
 import { useAllPanePresence } from '../utils/agentPresenceStore'

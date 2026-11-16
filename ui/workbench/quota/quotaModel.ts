@@ -1,7 +1,7 @@
-import type { AgentKind, QuotaWindow } from '../../../plugins/agent-quota/app/usage/types'
-import { AGENT_KINDS } from '../../../plugins/agent-quota/app/quotaConfig'
-import { formatReset } from '../../../plugins/agent-quota/app/quotaPolicy'
-import type { QuotaState } from '../../../plugins/agent-quota/app/quotaStore'
+import type { AgentKind, QuotaWindow } from '../../features/agent-quota/usage/types'
+import { AGENT_KINDS } from '../../features/agent-quota/quotaConfig'
+import { formatReset } from '../../features/agent-quota/quotaPolicy'
+import type { QuotaState } from '../../features/agent-quota/quotaStore'
 
 /** Agent names as the workbench shows them (the mock's "Claude", "Codex", "Gemini"). */
 export const AGENT_NAMES: Record<AgentKind, string> = { claude: 'Claude', codex: 'Codex', agy: 'Antigravity' }

@@ -1,4 +1,4 @@
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 
 import { diag } from '../../diag'
 import { encodeWorkspaceSelection } from '../../utils/workspaceSelection'

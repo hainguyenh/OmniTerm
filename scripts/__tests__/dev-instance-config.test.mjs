@@ -11,7 +11,7 @@ const viteConfig = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8')
 test('development Tauri commands use an isolated application identifier', () => {
   assert.equal(devConfig.identifier, 'com.omniterm.dev')
   assert.notEqual(devConfig.identifier, 'com.omniterm.app')
-  for (const scriptName of ['tauri:dev:basic', 'tauri:dev:full', 'tauri:dev:limited']) {
+  for (const scriptName of ['tauri:dev:basic']) {
     assert.match(packageJson.scripts[scriptName], /--config src-tauri\/tauri\.dev\.conf\.json/)
   }
 })

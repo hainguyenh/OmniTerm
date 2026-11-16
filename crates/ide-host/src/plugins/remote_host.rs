@@ -945,7 +945,7 @@ mod tests {
         for bad in ["", "../x", "/etc/passwd", "a/../../b", "./x"] {
             assert!(safe_relative(bad).is_err(), "{bad}");
         }
-        assert!(valid_id("ai-completion"));
+        assert!(valid_id("csv-editor"));
         assert!(!valid_id("../x") && !valid_id(".data") && !valid_id(""));
     }
 }

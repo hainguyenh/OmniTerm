@@ -86,20 +86,12 @@ const defaults: Api = {
     remove: async () => {},
   },
   plugin: {
-    available: async () => false,
     list: async () => [],
     builtinIds: async () => [],
     onChanged: () => () => {},
     setEnabled: async () => {
       throw new Error('Unknown plugin')
     },
-    selectConnectionProvider: async () => [],
-    connectionCapabilities: async () => null,
-    invoke: async () => undefined,
-    authGate: async () => true,
-    installPackage: async () => null,
-    remove: async () => true,
-    restartApp: async () => {},
   },
   // Absent plugin by default: `info` answers false, so no quota UI mounts in unrelated tests.
   agentQuota: {
@@ -153,10 +145,10 @@ const defaults: Api = {
     importFile: async () => null,
     remove: async () => {},
     rename: async (id: string, name: string) => ({ id, name, folders: [], order: 0, pins: [] }),
-    setAppearance: async (id: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => ({
+    setAppearance: async (id: string, color?: import('./domain').Workspace['color'], icon?: import('./domain').Workspace['icon']) => ({
       id, name: 'workspace', folders: [], order: 0, pins: [], color, icon,
     }),
-    setFolderColor: async (id: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => ({
+    setFolderColor: async (id: string, folderId: string, color?: import('./domain').WorkspaceFolder['color']) => ({
       id, name: 'workspace', folders: [{ id: folderId, name: 'folder', path: 'C:/workspace', color }], order: 0, pins: [],
     }),
     move: async () => [],
@@ -177,8 +169,6 @@ const defaults: Api = {
     moveFile: async (_wsId: string, _from: string, to: string) => to,
     deleteFile: async () => {},
     loadConnections: async () => [],
-    saveConnections: async () => {},
-    deleteConnection: async () => {},
   },
   connect: {
     rdp: async () => ({ ok: true }),

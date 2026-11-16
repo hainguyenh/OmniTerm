@@ -295,18 +295,10 @@ describe('settings and plugins', () => {
     expect(lastInvoke()).toEqual(['save_settings', { settings: { fontSize: 18 } }])
   })
 
-  it('invokes a plugin method with its args collected into an array', async () => {
-    invokeMock.mockResolvedValueOnce(null)
-    await api.plugin.invoke('vault.list', 'a', 2)
-    expect(lastInvoke()).toEqual(['plugin_invoke', { method: 'vault.list', args: ['a', 2] }])
-  })
-
   it('degrades to safe values when a plugin command fails', async () => {
     invokeMock.mockRejectedValue('no host')
-    await expect(api.plugin.available()).resolves.toBe(false)
     await expect(api.plugin.list()).resolves.toEqual([])
-    await expect(api.plugin.authGate()).resolves.toBe(true)
-    await expect(api.plugin.invoke('x')).resolves.toBeNull()
+    await expect(api.plugin.builtinIds()).resolves.toEqual([])
   })
 
   it('forwards theme and window-control calls with matching argument names', async () => {

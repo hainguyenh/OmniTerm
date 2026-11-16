@@ -18,8 +18,8 @@ import { homeDir } from '@tauri-apps/api/path'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { attachSession } from './tauriSessions'
 import { diag } from './diag'
-import { createAgentQuotaAPI } from '../plugins/agent-quota/app/agentQuotaAPI'
-import { createAlwaysAwakeAPI } from '../plugins/always-awake/app/alwaysAwakeAPI'
+import { createAgentQuotaAPI } from './features/agent-quota/agentQuotaAPI'
+import { createAlwaysAwakeAPI } from './features/always-awake/alwaysAwakeAPI'
 import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
 import { createTempNotesAPI } from './tempNotesAPI'
@@ -109,24 +109,12 @@ function createTauriAPI(): any {
     },
 
     plugin: {
-      available: () => invoke<boolean>('plugin_available').catch(() => false),
       list: () => invoke<any[]>('omni_plugin_list').catch(() => []),
       /** Ids of the IDE plugins the app ships (listed as built in by the Plugins dialog). */
       builtinIds: () => invoke<string[]>('builtin_plugin_ids').catch(() => [] as string[]),
       setEnabled: (id: string, enabled: boolean) =>
         invoke<any>('omni_plugin_set_enabled', { id, enabled }).catch(() => null),
-      selectConnectionProvider: (id: string | null) =>
-        invoke<any[]>('plugin_select_connection_provider', { id }),
-      connectionCapabilities: () =>
-        invoke<any>('connection_provider_capabilities').catch(() => null),
-      // Keep plugin arguments as one typed Tauri command payload.
-      invoke: (method: string, ...args: unknown[]) =>
-        invoke<unknown>('plugin_invoke', { method, args }).catch(() => null),
-      authGate: () => invoke<boolean>('plugin_auth_gate').catch(() => true),
-      installPackage: () => invoke<any>('install_plugin_package'),
-      remove: (id: string) => invoke<boolean>('remove_plugin', { id }),
-      restartApp: () => invoke<void>('restart_app'),
-      /** A Node plugin was enabled, disabled or removed (in any window). */
+      /** A built-in feature was enabled or disabled (in any window). */
       onChanged: (callback: () => void) => onEvent<unknown>('omniterm://plugins-changed', () => callback()),
     },
 

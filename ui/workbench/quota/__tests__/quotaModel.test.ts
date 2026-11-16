@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { NOW, profile, reading } from '../../../../plugins/agent-quota/app/__tests__/quotaFixtures'
+import { NOW, profile, reading } from '../../../features/agent-quota/__tests__/quotaFixtures'
 import { nearestReset, quotaGroups } from '../quotaModel'
 
 describe('nearestReset', () => {

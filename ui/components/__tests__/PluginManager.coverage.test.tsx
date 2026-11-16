@@ -2,307 +2,113 @@
  * @vitest-environment jsdom
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
 import { mockOmnitermAPI } from '../../testUtils'
 import PluginManager from '../PluginManager'
 
-const full: PluginDescriptor = {
-  id: '@omniterm/full-connection-manager', name: 'Full Manager', description: 'Full provider', version: '1.0.0',
-  apiVersion: 1, hostVersion: '1', permissions: ['connections', 'workspace'], source: 'bundled', enabled: true,
-  status: 'loaded', activeConnectionProvider: true, selectedConnectionProvider: true,
-  activeAuthProvider: false, activeInvokeHandler: false,
+const quota: PluginDescriptor = {
+  id: 'omniterm.agent-quota', name: 'Agent Quota', description: 'Quota lines', version: '1.0.0',
+  permissions: ['renderer'], source: 'bundled', enabled: true, status: 'loaded',
 }
-const batch: PluginDescriptor = {
-  ...full, id: '@omniterm/native-batch-connections', name: 'Native Batch', source: 'user',
-  selectedConnectionProvider: false, description: undefined,
+const awake: PluginDescriptor = {
+  ...quota, id: 'omniterm.always-awake', name: 'Always Awake', description: undefined, enabled: false, status: 'disabled',
 }
-const custom: PluginDescriptor = {
-  ...full, id: 'custom-plugin', name: 'Custom', permissions: ['openExternal', 'clipboard'], source: 'user',
-  enabled: false, status: 'error', error: 'broken', activeConnectionProvider: false, selectedConnectionProvider: false,
-  description: undefined,
-}
-const incompatible: PluginDescriptor = {
-  ...custom, id: 'old-plugin', name: 'Old', status: 'incompatible', error: undefined,
-}
-const host: PluginDescriptor = { ...full, id: 'omniterm.plugin-host', name: 'Host', activeConnectionProvider: false, selectedConnectionProvider: false, description: undefined }
-const capabilities: ConnectionProviderCapabilities = {
-  protocols: ['SSH', 'RDP'], credentialPolicy: 'prompt-every-time', scopes: ['personal', 'workspace'], sftp: true, importExport: true,
+const broken: PluginDescriptor = {
+  ...quota, id: 'custom-plugin', name: 'Custom', source: 'user', status: 'error', error: 'broken',
 }
 
 function api(overrides: Record<string, unknown> = {}) {
   const plugin = {
-    list: vi.fn(async () => [full, batch, custom, incompatible, host]),
-    connectionCapabilities: vi.fn(async () => capabilities),
-    installPackage: vi.fn(async () => null),
-    remove: vi.fn(async () => {}),
-    restartApp: vi.fn(async () => {}),
+    list: vi.fn(async () => [quota, awake, broken]),
     setEnabled: vi.fn(async () => ({})),
-    selectConnectionProvider: vi.fn(async () => [full, batch]),
-    ...((overrides.plugin as object) ?? {}),
+    ...overrides,
   }
-  const connections = {
-    load: vi.fn(async () => ({ connections: [], folders: [] })),
-    save: vi.fn(async () => {}),
-    ...((overrides.connections as object) ?? {}),
-  }
-  const files = {
-    exportJson: vi.fn(async () => true),
-    importFile: vi.fn(async () => null),
-    ...((overrides.files as object) ?? {}),
-  }
-  mockOmnitermAPI({ plugin, connections, files })
-  return { plugin, connections, files }
+  mockOmnitermAPI({ plugin })
+  return plugin
 }
 
-function setup({ activeSessionCount = 0, confirmations = [true], showAlert = vi.fn(async () => {}) } = {}) {
-  const onProviderStatusChanged = vi.fn()
+function setup({ confirmations = [true], onlyPluginId }: { confirmations?: boolean[]; onlyPluginId?: string } = {}) {
   const answers = [...confirmations]
   const showConfirm = vi.fn(async () => answers.shift() ?? false)
-  const view = render(<PluginManager activeSessionCount={activeSessionCount}
-    onProviderStatusChanged={onProviderStatusChanged} showAlert={showAlert} showConfirm={showConfirm} />)
-  return { ...view, showAlert, showConfirm, onProviderStatusChanged }
+  const showAlert = vi.fn(async () => {})
+  const configure = vi.fn()
+  render(
+    <PluginManager
+      showAlert={showAlert}
+      showConfirm={showConfirm}
+      configureAction={(id) => (id === quota.id ? configure : undefined)}
+      onlyPluginId={onlyPluginId}
+    />,
+  )
+  return { showAlert, showConfirm, configure }
 }
 
-beforeEach(() => vi.clearAllMocks())
-afterEach(() => vi.restoreAllMocks())
-
-describe('PluginManager complete behavior', () => {
-  it('offers Installed and a Marketplace tab that is not available yet', async () => {
-    api()
-    setup()
-    await screen.findByText('Full Manager')
-    expect(screen.getByRole('tab', { name: 'Installed (4)' }).getAttribute('aria-selected')).toBe('true')
-    const marketplace = screen.getByRole('tab', { name: /Marketplace/ })
-    expect(marketplace.getAttribute('aria-disabled')).toBe('true')
-    expect(marketplace.getAttribute('aria-selected')).toBe('false')
-  })
-
-  it('refreshes descriptors, summaries, errors, capabilities, and reports provider state', async () => {
-    api()
-    const x = setup()
-    await screen.findByText('Full Manager')
-    expect(screen.getByRole('tab', { name: 'Installed (4)' })).toBeInTheDocument()
-    // Each card names its package and the permissions it holds.
-    expect(screen.getByText(`${custom.id} · openExternal, clipboard`)).toBeInTheDocument()
-    expect(screen.getAllByText('Bundled').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Running').length).toBeGreaterThan(0)
-    expect(screen.getByText('Error')).toBeInTheDocument()
-    expect(screen.getByText('Incompatible')).toBeInTheDocument()
-    expect(screen.getByText('broken')).toBeInTheDocument()
-    expect(screen.getByText('Full provider')).toBeInTheDocument()
-    expect(screen.getByRole('switch', { name: 'Enable Old' })).toBeDisabled()
-    expect(screen.getByText('Active connection provider')).toBeDisabled()
-    expect(screen.getByText('Import metadata')).toBeInTheDocument()
-    expect(screen.getByText('Export metadata')).toBeInTheDocument()
-    expect(x.onProviderStatusChanged).toHaveBeenCalledWith(true)
-  })
-
-  it('reports refresh failures for Error and non-Error values and renders empty state', async () => {
-    api({ plugin: { list: vi.fn(async () => { throw new Error('offline') }) } })
-    const first = setup()
-    await waitFor(() => expect(first.showAlert).toHaveBeenCalledWith('Could not load plugins: offline', expect.objectContaining({ tone: 'error' })))
-    expect(screen.getByText('No compatible plugins discovered.')).toBeInTheDocument()
-    first.unmount()
-
-    api({ plugin: { list: vi.fn(async () => { throw 'plain failure' }) } })
-    const second = setup()
-    await waitFor(() => expect(second.showAlert).toHaveBeenCalledWith('Could not load plugins: plain failure', expect.anything()))
-  })
-
-  it('installs canceled, ready, restart-required, and failed packages', async () => {
-    const canceled = api()
-    const x = setup()
-    await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install from disk…'))
-    await waitFor(() => expect(canceled.plugin.installPackage).toHaveBeenCalled())
-    expect(x.showAlert).not.toHaveBeenCalled()
-    x.unmount()
-
-    const ready = api({ plugin: { installPackage: vi.fn(async () => ({ name: 'Ready', version: '2.0', restartRequired: false })) } })
-    const readyView = setup()
-    await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install from disk…'))
-    await waitFor(() => expect(readyView.showAlert).toHaveBeenCalledWith(expect.stringContaining('ready to configure'), expect.anything()))
-    expect(ready.plugin.list).toHaveBeenCalledTimes(2)
-    readyView.unmount()
-
-    api({ plugin: { installPackage: vi.fn(async () => ({ name: 'Restarted', version: '3.0', restartRequired: true })) } })
-    const restart = setup({ confirmations: [true] })
-    await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install from disk…'))
-    await screen.findByText('Restart required to finish plugin changes.')
-    fireEvent.click(screen.getByText('Restart now'))
-    await waitFor(() => expect(window.omnitermAPI.plugin.restartApp).toHaveBeenCalled())
-    restart.unmount()
-
-    api({ plugin: { installPackage: vi.fn(async () => { throw 'bad zip' }) } })
-    const failed = setup()
-    await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByText('Install from disk…'))
-    await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not install plugin: bad zip', expect.anything()))
-  })
-
-  it('guards, cancels, removes, and reports removal failures', async () => {
-    api()
-    const active = setup({ activeSessionCount: 1 })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getAllByText('Remove plugin')[0])
-    await waitFor(() => expect(active.showAlert).toHaveBeenCalledWith(expect.stringContaining('Close all active sessions'), expect.anything()))
-    expect(window.omnitermAPI.plugin.remove).not.toHaveBeenCalled()
-    active.unmount()
-
-    api()
-    const canceled = setup({ confirmations: [false] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getAllByText('Remove plugin')[0])
-    await waitFor(() => expect(canceled.showConfirm).toHaveBeenCalled())
-    expect(window.omnitermAPI.plugin.remove).not.toHaveBeenCalled()
-    canceled.unmount()
-
-    const good = api()
-    const removed = setup({ confirmations: [true] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getAllByText('Remove plugin')[0])
-    await waitFor(() => expect(good.plugin.remove).toHaveBeenCalledWith(batch.id))
-    expect(good.plugin.list).toHaveBeenCalledTimes(2)
-    removed.unmount()
-
-    api({ plugin: { remove: vi.fn(async () => { throw new Error('locked') }) } })
-    const failed = setup({ confirmations: [true] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getAllByText('Remove plugin')[0])
-    await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not remove plugin: locked', expect.anything()))
-  })
-
-  it('guards, cancels, enables, disables, and reports toggle failures', async () => {
-    api()
-    const active = setup({ activeSessionCount: 1 })
-    await screen.findByText('Custom')
-    fireEvent.click(screen.getByRole('switch', { name: 'Disable Full Manager' }))
-    await waitFor(() => expect(active.showAlert).toHaveBeenCalledWith(expect.stringContaining('changing a connection-provider'), expect.anything()))
-    active.unmount()
-
-    api()
-    const canceled = setup({ confirmations: [false] })
-    await screen.findByText('Custom')
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Custom' }))
-    await waitFor(() => expect(canceled.showConfirm).toHaveBeenCalledWith(expect.stringContaining('Enable “Custom”'), expect.anything()))
-    expect(window.omnitermAPI.plugin.setEnabled).not.toHaveBeenCalled()
-    canceled.unmount()
-
-    const list = vi.fn()
-      .mockResolvedValueOnce([full, batch, custom, incompatible, host])
-      .mockResolvedValueOnce([{ ...custom, enabled: true, selectedConnectionProvider: true }])
-    const good = api({ plugin: { list } })
-    const enabled = setup({ confirmations: [true] })
-    await screen.findByText('Custom')
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Custom' }))
-    await waitFor(() => expect(good.plugin.setEnabled).toHaveBeenCalledWith(custom.id, true))
-    expect(enabled.onProviderStatusChanged).toHaveBeenLastCalledWith(true)
-    enabled.unmount()
-
-    const disableList = vi.fn()
-      .mockResolvedValueOnce([full])
-      .mockResolvedValueOnce([{ ...full, enabled: false, selectedConnectionProvider: false }])
-    const disabledApi = api({ plugin: { list: disableList } })
-    const disabled = setup({ confirmations: [true] })
-    await screen.findByText('Full Manager')
-    fireEvent.click(screen.getByRole('switch', { name: 'Disable Full Manager' }))
-    await waitFor(() => expect(disabledApi.plugin.setEnabled).toHaveBeenCalledWith(full.id, false))
-    expect(disabled.onProviderStatusChanged).toHaveBeenLastCalledWith(false)
-    disabled.unmount()
-
-    api({ plugin: { setEnabled: vi.fn(async () => { throw 'denied' }) } })
-    const failed = setup({ confirmations: [true] })
-    await screen.findByText('Custom')
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Custom' }))
-    await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not enable plugin: denied', expect.anything()))
-  })
-
-  it('switches providers with optional migration and handles active, canceled, and failed selection', async () => {
-    api()
-    const active = setup({ activeSessionCount: 1 })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getByText('Use for connections'))
-    await waitFor(() => expect(active.showAlert).toHaveBeenCalledWith(expect.stringContaining('switching connection providers'), expect.anything()))
-    active.unmount()
-
-    api()
-    const canceled = setup({ confirmations: [false] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getByText('Use for connections'))
-    await waitFor(() => expect(canceled.showConfirm).toHaveBeenCalled())
-    expect(window.omnitermAPI.plugin.selectConnectionProvider).not.toHaveBeenCalled()
-    canceled.unmount()
-
-    const migrated = api({ connections: { load: vi.fn(async () => ({ connections: [{ id: 'one' }], folders: [] })) } })
-    const switched = setup({ confirmations: [true, true] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getByText('Use for connections'))
-    await waitFor(() => expect(migrated.plugin.selectConnectionProvider).toHaveBeenCalledWith(batch.id))
-    expect(migrated.connections.save).toHaveBeenCalledWith(expect.objectContaining({ connections: [{ id: 'one' }] }))
-    expect(switched.onProviderStatusChanged).toHaveBeenLastCalledWith(true)
-    switched.unmount()
-
-    api({ plugin: { selectConnectionProvider: vi.fn(async () => { throw new Error('host down') }) } })
-    const failed = setup({ confirmations: [true] })
-    await screen.findByText('Native Batch')
-    fireEvent.click(screen.getByText('Use for connections'))
-    await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not select the provider: host down', expect.anything()))
-  })
-
-  it('exports and imports metadata across success, cancel, missing-file, and failure branches', async () => {
-    const good = api({
-      connections: { load: vi.fn(async () => ({ connections: [{ id: 'one' }], folders: [{ id: 'f' }] })) },
-      files: { importFile: vi.fn(async () => ({ connections: [{ id: 'two' }], folders: [] })) },
-    })
-    const x = setup({ confirmations: [true] })
-    await screen.findByText('Export metadata')
-    fireEvent.click(screen.getByText('Export metadata'))
-    await waitFor(() => expect(good.files.exportJson).toHaveBeenCalled())
-    const exported = JSON.parse((good.files.exportJson.mock.calls as any)[0][0].content)
-    expect(exported).toMatchObject({ format: 'omniterm-connections', version: 1, provider: full.id })
-    fireEvent.click(screen.getByText('Import metadata'))
-    await waitFor(() => expect(good.connections.save).toHaveBeenCalledWith({ connections: [{ id: 'two' }], folders: [] }))
-    x.unmount()
-
-    api({ files: { importFile: vi.fn(async () => null) } })
-    const empty = setup()
-    await screen.findByText('Import metadata')
-    fireEvent.click(screen.getByText('Import metadata'))
-    await waitFor(() => expect(window.omnitermAPI.files.importFile).toHaveBeenCalled())
-    expect(window.omnitermAPI.connections.save).not.toHaveBeenCalled()
-    empty.unmount()
-
-    api({ files: { importFile: vi.fn(async () => ({ connections: [], folders: [] })) } })
-    const canceled = setup({ confirmations: [false] })
-    await screen.findByText('Import metadata')
-    fireEvent.click(screen.getByText('Import metadata'))
-    await waitFor(() => expect(canceled.showConfirm).toHaveBeenCalled())
-    expect(window.omnitermAPI.connections.save).not.toHaveBeenCalled()
-    canceled.unmount()
-
-    api({ files: { importFile: vi.fn(async () => { throw 'bad json' }) } })
-    const failed = setup()
-    await screen.findByText('Import metadata')
-    fireEvent.click(screen.getByText('Import metadata'))
-    await waitFor(() => expect(failed.showAlert).toHaveBeenCalledWith('Could not import metadata: bad json', expect.anything()))
-  })
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
-describe('PluginManager cards', () => {
-  it('shows Configure only for enabled plugins that have a settings page', async () => {
+describe('PluginManager', () => {
+  it('lists every built-in feature with its version, source and state', async () => {
     api()
-    const configure = vi.fn()
-    const configureAction = vi.fn((id: string) => (id === full.id ? configure : undefined))
-    render(<PluginManager activeSessionCount={0} onProviderStatusChanged={vi.fn()} showAlert={vi.fn(async () => {})}
-      showConfirm={vi.fn(async () => true)} configureAction={configureAction} />)
-    await screen.findByText('Full Manager')
-    const links = screen.getAllByRole('button', { name: 'Configure' })
-    expect(links).toHaveLength(1)
-    fireEvent.click(links[0]!)
+    setup()
+    expect(await screen.findByText('Agent Quota')).toBeTruthy()
+    expect(screen.getByText('Always Awake')).toBeTruthy()
+    expect(screen.getAllByText('Bundled')).toHaveLength(2)
+    expect(screen.getByText('User')).toBeTruthy()
+    expect(screen.getByText('Running')).toBeTruthy()
+    expect(screen.getByText('Disabled')).toBeTruthy()
+    expect(screen.getByText('broken')).toBeTruthy()
+  })
+
+  it('shows only the requested plugin in the details pane', async () => {
+    api()
+    setup({ onlyPluginId: awake.id })
+    expect(await screen.findByText('Always Awake')).toBeTruthy()
+    expect(screen.queryByText('Agent Quota')).toBeNull()
+  })
+
+  it('says so when nothing is listed', async () => {
+    api({ list: vi.fn(async () => []) })
+    setup()
+    expect(await screen.findByText('No compatible plugins discovered.')).toBeTruthy()
+  })
+
+  it('offers Configure only for an enabled plugin with a settings page', async () => {
+    api()
+    const { configure } = setup()
+    fireEvent.click(await screen.findByText('Configure'))
     expect(configure).toHaveBeenCalled()
-    // A disabled plugin's page is not offered.
-    expect(configureAction).not.toHaveBeenCalledWith(custom.id)
+    expect(screen.getAllByText('Configure')).toHaveLength(1)
+  })
+
+  it('switches a feature after confirmation and reloads the list', async () => {
+    const plugin = api()
+    const { showConfirm } = setup()
+    fireEvent.click(await screen.findByRole('switch', { name: 'Enable Always Awake' }))
+    await waitFor(() => expect(plugin.setEnabled).toHaveBeenCalledWith(awake.id, true))
+    expect(showConfirm).toHaveBeenCalledWith(expect.stringContaining('Enable “Always Awake”'), expect.objectContaining({ confirmLabel: 'Enable' }))
+    expect(plugin.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves the feature alone when the confirmation is declined', async () => {
+    const plugin = api()
+    setup({ confirmations: [false] })
+    fireEvent.click(await screen.findByRole('switch', { name: 'Disable Agent Quota' }))
+    await waitFor(() => expect(plugin.list).toHaveBeenCalledTimes(1))
+    expect(plugin.setEnabled).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed switch', async () => {
+    api({ setEnabled: vi.fn(async () => { throw new Error('denied') }) })
+    const { showAlert } = setup()
+    fireEvent.click(await screen.findByRole('switch', { name: 'Disable Agent Quota' }))
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith('Could not disable plugin: denied', expect.objectContaining({ tone: 'error' })))
+  })
+
+  it('reports a list that cannot be loaded', async () => {
+    api({ list: vi.fn(async () => { throw 'offline' }) })
+    const { showAlert } = setup()
+    await waitFor(() => expect(showAlert).toHaveBeenCalledWith('Could not load plugins: offline', expect.objectContaining({ tone: 'error' })))
   })
 })

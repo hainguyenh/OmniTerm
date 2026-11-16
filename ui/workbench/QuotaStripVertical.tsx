@@ -1,4 +1,4 @@
-import { dockStripSide } from '../../plugins/agent-quota/app/quotaDock'
+import { dockStripSide } from '../features/agent-quota/quotaDock'
 
 import { toggleQuotaPopup, useQuotaDock, useQuotaPopup } from './quota/quotaDockState'
 import { usageColor } from './quota/quotaModel'

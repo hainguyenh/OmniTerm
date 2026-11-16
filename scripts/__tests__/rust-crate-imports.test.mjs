@@ -38,7 +38,7 @@ test('native crates used by packaged Tauri modules remain runtime dependencies',
   const runtimeDependencies = manifest.match(/\[dependencies\]([\s\S]*?)(?:\n\[|$)/)?.[1] ?? ''
   const devDependencies = manifest.match(/\[dev-dependencies\]([\s\S]*?)(?:\n\[|$)/)?.[1] ?? ''
   const alwaysAwake = await readFile(
-    new URL('../../plugins/always-awake/native/always_awake.rs', import.meta.url),
+    new URL('../../src-tauri/src/always_awake/always_awake.rs', import.meta.url),
     'utf8',
   )
 

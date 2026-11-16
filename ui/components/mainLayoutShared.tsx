@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type React from 'react'
-import type { Connection, Folder, LocalShell, SessionStatus } from '@omniterm/contract'
+import type { Connection, Folder, LocalShell, SessionStatus } from '../domain'
 import type { AppTheme, LayoutMode } from '../themes'
 
 export type { Connection, Folder, LocalShell, SessionStatus }

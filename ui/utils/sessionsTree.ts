@@ -1,4 +1,4 @@
-import type { Connection, Workspace, WorkspaceFolder } from '@omniterm/contract'
+import type { Connection, Workspace, WorkspaceFolder } from '../domain'
 
 import type { StoredAgentSession } from './agentSessionStorage'
 import { workspaceForConnection } from './workspaceIdentity'

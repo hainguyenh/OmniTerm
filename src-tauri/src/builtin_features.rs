@@ -1,6 +1,6 @@
 //! Desktop side of the built-in features (Agent Quota, Always Awake): their on/off state lives in
-//! the app settings (`app_core::builtin_features`), and they appear in the plugin list next to the
-//! Node plugins so the Plugins dialog can switch them.
+//! the app settings (`app_core::builtin_features`), and they appear in the plugin list so the
+//! Plugins dialog can switch them.
 
 use app_core::builtin_features as features;
 use serde_json::Value;
@@ -18,7 +18,7 @@ pub(crate) fn descriptors<R: Runtime>(app: &AppHandle<R>) -> Vec<Value> {
     features::descriptors(&read_settings(app), &app.package_info().version.to_string())
 }
 
-/// Switch a built-in feature; `Ok(None)` when `id` is not one, so the caller asks the plugin host.
+/// Switch a built-in feature; `Ok(None)` when `id` is not one.
 pub(crate) fn set_enabled<R: Runtime>(
     app: &AppHandle<R>,
     id: &str,

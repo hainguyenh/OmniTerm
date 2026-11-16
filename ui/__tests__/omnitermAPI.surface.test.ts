@@ -49,25 +49,15 @@ describe('omnitermAPI surface', () => {
   it('falls back when plugin commands are unavailable', async () => {
     state.invoke.mockRejectedValue(new Error('missing'))
     const { plugin } = api()
-    await expect(plugin.available()).resolves.toBe(false)
     await expect(plugin.list()).resolves.toEqual([])
     await expect(plugin.builtinIds()).resolves.toEqual([])
     await expect(plugin.setEnabled('a', true)).resolves.toBeNull()
-    await expect(plugin.connectionCapabilities()).resolves.toBeNull()
-    await expect(plugin.invoke('m', 1, 2)).resolves.toBeNull()
-    await expect(plugin.authGate()).resolves.toBe(true)
   })
 
   it('forwards plugin commands with their arguments', async () => {
     const { plugin } = api()
-    await plugin.selectConnectionProvider('p')
-    await plugin.installPackage()
-    await plugin.remove('p')
-    await plugin.restartApp()
-    expect(state.invoke).toHaveBeenCalledWith('plugin_select_connection_provider', { id: 'p' })
-    expect(state.invoke).toHaveBeenCalledWith('install_plugin_package')
-    expect(state.invoke).toHaveBeenCalledWith('remove_plugin', { id: 'p' })
-    expect(state.invoke).toHaveBeenCalledWith('restart_app')
+    await plugin.setEnabled('p', false)
+    expect(state.invoke).toHaveBeenCalledWith('omni_plugin_set_enabled', { id: 'p', enabled: false })
   })
 
   it('delivers broadcast events and unsubscribes synchronously', async () => {

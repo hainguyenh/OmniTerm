@@ -2,12 +2,11 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import { TOKYO_NIGHT } from "../../themes";
 
 import ConfirmDialog from "../ConfirmDialog";
-import ConnectionForm from "../ConnectionForm";
 import OverlayBar from "../OverlayBar";
 import RDPView from "../RDPView";
 import SessionMetricsChips from "../SessionMetricsChips";
@@ -40,55 +39,6 @@ describe("component rendering smoke tests", () => {
     expect(screen.getByText("You have unsaved changes.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Discard" })).toBeInTheDocument();
   });
-
-  it("renders ConnectionForm in create mode", async () => {
-    render(<ConnectionForm folders={[]} onClose={vi.fn()} onSave={vi.fn()} />);
-    await act(async () => {});
-    expect(screen.getByPlaceholderText("My Server")).toBeInTheDocument();
-    expect(screen.getByText("SSH")).toBeInTheDocument();
-    expect(screen.getByText("RDP")).toBeInTheDocument();
-    // Port defaults to 22 but lives in Advanced, which starts collapsed on a new connection.
-    expect(screen.queryByDisplayValue("22")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
-    expect(screen.getByDisplayValue("22")).toBeInTheDocument();
-  });
-
-  it("names the Parent Folder root after the workspace", async () => {
-    render(
-      <ConnectionForm
-        folders={[{ id: "scripts", name: "scripts" }]}
-        rootLabel="MyProject"
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
-    await act(async () => {});
-    fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
-    expect(screen.getByRole("option", { name: "MyProject" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Root" })).not.toBeInTheDocument();
-  });
-
-  /** An <option> collapses leading whitespace, so a nested folder has to spell out its own path. */
-  it("labels each Parent Folder option with its full path", async () => {
-    render(
-      <ConnectionForm
-        folders={[
-          { id: "f1", name: "infra" },
-          { id: "f2", name: "deploy", parentId: "f1" },
-          { id: "f3", name: "prod", parentId: "f2" },
-        ]}
-        rootLabel="MyProject"
-        onClose={vi.fn()}
-        onSave={vi.fn()}
-      />,
-    );
-    await act(async () => {});
-    fireEvent.click(screen.getByRole("button", { name: /advanced/i }));
-    expect(screen.getByRole("option", { name: "infra" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "infra / deploy" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "infra / deploy / prod" })).toBeInTheDocument();
-  });
-
 
   it("renders OverlayBar", async () => {
     render(<OverlayBar />);

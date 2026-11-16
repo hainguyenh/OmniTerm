@@ -217,25 +217,18 @@ fn ipc_manages_workspaces_and_workspace_connections() {
         ),
         json!([])
     );
-    assert_eq!(
-        fixture.ok(
-            "save_workspace_connections",
-            json!({ "workspaceId": workspace_id, "data": [connection("workspace-ssh")] }),
-        ),
-        Value::Null
-    );
+    let config_dir = workspace_dir.path().join(".omniterm");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(
+        config_dir.join("connections.json"),
+        json!({ "connections": [connection("workspace-ssh")] }).to_string(),
+    )
+    .unwrap();
     let saved = fixture.ok(
         "load_workspace_connections",
         json!({ "workspaceId": workspace_id }),
     );
     assert_eq!(saved[0]["id"], "workspace-ssh");
-    assert_eq!(
-        fixture.ok(
-            "delete_workspace_connection",
-            json!({ "workspaceId": workspace_id, "connectionId": "workspace-ssh" }),
-        ),
-        Value::Null
-    );
     assert_eq!(
         fixture.ok("remove_workspace", json!({ "id": workspace_id }),),
         Value::Null
@@ -278,14 +271,6 @@ fn ipc_rejects_operations_for_an_unknown_workspace() {
         (
             "load_workspace_connections",
             json!({ "workspaceId": unknown }),
-        ),
-        (
-            "save_workspace_connections",
-            json!({ "workspaceId": unknown, "data": [] }),
-        ),
-        (
-            "delete_workspace_connection",
-            json!({ "workspaceId": unknown, "connectionId": "missing" }),
         ),
     ];
 

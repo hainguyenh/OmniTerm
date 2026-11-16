@@ -43,25 +43,19 @@ describe("styling regression check", () => {
   });
 
   // A renderer component that Tailwind does not scan still renders — with none of its classes defined.
-  // Nothing else catches that: unit tests assert markup, not the generated stylesheet, so a plugin
+  // Nothing else catches that: unit tests assert markup, not the generated stylesheet, so a feature
   // modal styled as `max-w-md` came out full-width in the real app and every test stayed green. The
   // config is therefore expanded against the filesystem here rather than string-matched.
-  it("scans every plugin renderer component, not just ui/", () => {
+  it("scans every built-in feature component", () => {
     const config = fs.readFileSync(path.join(ROOT, "tailwind.config.js"), "utf8");
     const contentGlobs = [...config.matchAll(/"\.\/([^"]+)"/g)].map((match) => match[1]);
     const scanned = new Set(contentGlobs.flatMap((glob) => globSync(glob, { cwd: ROOT })));
 
-    const pluginRoot = path.join(ROOT, "plugins");
-    const pluginComponents = fs
-      .readdirSync(pluginRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(pluginRoot, entry.name, "app")))
-      .flatMap((entry) =>
-        globSync(`plugins/${entry.name}/app/**/*.{ts,tsx}`, { cwd: ROOT }),
-      );
+    const featureComponents = globSync("ui/features/*/**/*.tsx", { cwd: ROOT })
 
-    // The suite is worthless if it silently stops finding plugin components.
-    expect(pluginComponents.length).toBeGreaterThan(0);
-    for (const component of pluginComponents) {
+    // The suite is worthless if it silently stops finding feature components.
+    expect(featureComponents.length).toBeGreaterThan(0);
+    for (const component of featureComponents) {
       expect(scanned, `${component} is not covered by a Tailwind content glob`).toContain(component);
     }
   });

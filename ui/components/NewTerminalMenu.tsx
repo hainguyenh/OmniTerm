@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, FolderOpen, Search, Terminal } from 'lucide-react'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../domain'
 
 import type { ShellOption } from '../shellOptions'
 import { orderedWorkspaceRows } from '../utils/workspaceHierarchy'

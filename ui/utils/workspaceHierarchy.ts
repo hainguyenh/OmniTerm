@@ -1,4 +1,4 @@
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../domain'
 
 export interface WorkspaceHierarchyNode {
   workspace: Workspace

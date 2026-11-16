@@ -20,7 +20,7 @@ import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPre
 import { glyphGrid } from '../layout/layoutGlyphs'
 import { LayoutPresetPicker } from '../layout/LayoutPresetPicker'
 import { registerPaneTitleActions, TOGGLE_MAXIMIZE_PANE } from '../layout/paneTitleActions'
-import { resetQuotaStore, updateQuota } from '../../../plugins/agent-quota/app/quotaStore'
+import { resetQuotaStore, updateQuota } from '../../features/agent-quota/quotaStore'
 import { SessionAgentBadge } from '../sessions/SessionAgentBadge'
 import { SessionAgentHeader } from '../sessions/SessionAgentHeader'
 import { useSessionBridge } from '../sessions/sessionBridge'

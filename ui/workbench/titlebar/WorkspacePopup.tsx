@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 
 import { ProjectBadge } from '../../ide/features/welcome/RecentList'
 import { promptInput } from '../../ide/workbench/inputDialogs'

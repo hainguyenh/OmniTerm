@@ -1,5 +1,5 @@
 use super::IpcApp;
-use crate::{plugin_host::PluginHost, pty::PtyManager};
+use crate::pty::PtyManager;
 use serde_json::{json, Value};
 use std::path::Path;
 use tauri::Manager;
@@ -94,9 +94,13 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
         .to_string()
         .contains("Unsupported"));
 
-    assert_eq!(fixture.ok("plugin_available", json!({})), json!(false));
     let listed = fixture.ok("omni_plugin_list", json!({}));
-    let ids: Vec<&str> = listed.as_array().into_iter().flatten().filter_map(|row| row["id"].as_str()).collect();
+    let ids: Vec<&str> = listed
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|row| row["id"].as_str())
+        .collect();
     assert_eq!(ids, ["omniterm.agent-quota", "omniterm.always-awake"]);
     assert!(fixture
         .error(
@@ -104,27 +108,7 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
             json!({ "id": "missing", "enabled": true }),
         )
         .to_string()
-        .to_lowercase()
-        .contains("plugin host"));
-    assert!(fixture
-        .error("plugin_select_connection_provider", json!({ "id": null }))
-        .to_string()
-        .to_lowercase()
-        .contains("plugin host"));
-    assert_eq!(
-        fixture.ok("connection_provider_capabilities", json!({})),
-        Value::Null
-    );
-    assert!(fixture
-        .error("plugin_invoke", json!({ "method": "missing", "args": [] }))
-        .to_string()
-        .to_lowercase()
-        .contains("plugin host"));
-    assert_eq!(fixture.ok("plugin_auth_gate", json!({})), json!(true));
-    assert!(fixture
-        .error("remove_plugin", json!({ "id": "../escape" }))
-        .to_string()
-        .contains("plugin"));
+        .contains("Unknown built-in feature"));
 
     assert_eq!(fixture.ok("is_maximized", json!({})), json!(false));
     assert_eq!(fixture.ok("toggle_maximize", json!({})), Value::Null);
@@ -141,7 +125,6 @@ fn ipc_exposes_safe_runtime_and_failure_contracts() {
 
     let handle = fixture.handle();
     assert!(handle.try_state::<PtyManager>().is_some());
-    assert!(handle.try_state::<PluginHost>().is_some());
 }
 
 #[test]
@@ -213,20 +196,12 @@ fn ipc_rejects_malformed_payloads_before_commands_can_act() {
             json!({ "workspaceId": "x", "path": "a.sh", "content": 2 }),
         ),
         ("load_workspace_connections", json!({ "workspaceId": 2 })),
-        (
-            "save_workspace_connections",
-            json!({ "workspaceId": "x", "data": {} }),
-        ),
-        (
-            "delete_workspace_connection",
-            json!({ "workspaceId": "x", "connectionId": 2 }),
-        ),
         ("shells_release", json!({ "connId": 2 })),
         ("open_quick_shell", json!({ "shell": 2 })),
-        ("omni_plugin_set_enabled", json!({ "id": "x", "enabled": "yes" })),
-        ("plugin_select_connection_provider", json!({ "id": 2 })),
-        ("plugin_invoke", json!({ "method": "x", "args": {} })),
-        ("remove_plugin", json!({ "id": true })),
+        (
+            "omni_plugin_set_enabled",
+            json!({ "id": "x", "enabled": "yes" }),
+        ),
     ];
 
     for (command, body) in malformed {
@@ -272,15 +247,4 @@ fn ipc_runs_a_quick_shell_lifecycle() {
         registry.get(&id).is_none(),
         "released shell must leave the registry"
     );
-}
-
-#[test]
-#[should_panic(expected = "not implemented")]
-fn ipc_reaches_the_mock_runtime_restart_boundary() {
-    let fixture = IpcApp::new();
-
-    // Tauri 2.11.5 deliberately leaves restart unimplemented in MockRuntime. The expected panic
-    // proves the real IPC adapter reached the runtime boundary without pretending a mock restart
-    // can complete normally.
-    fixture.ok("restart_app", json!({}));
 }

@@ -80,7 +80,7 @@ pub fn strip_patch(patch: &mut Value) {
     }
 }
 
-/// The features as rows of the plugin list, shaped like the plugin host's descriptors.
+/// The features as rows of the plugin list.
 pub fn descriptors(settings: &Value, version: &str) -> Vec<Value> {
     FEATURES
         .iter()
@@ -91,16 +91,10 @@ pub fn descriptors(settings: &Value, version: &str) -> Vec<Value> {
                 "name": feature.name,
                 "description": feature.description,
                 "version": version,
-                "apiVersion": 2,
-                "hostVersion": version,
                 "permissions": ["renderer"],
                 "source": "bundled",
                 "enabled": enabled,
                 "status": if enabled { "loaded" } else { "disabled" },
-                "activeConnectionProvider": false,
-                "selectedConnectionProvider": false,
-                "activeAuthProvider": false,
-                "activeInvokeHandler": enabled,
             })
         })
         .collect()

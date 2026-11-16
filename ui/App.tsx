@@ -10,7 +10,6 @@ import { useThemeSync } from './platform/theme/useThemeSync'
 import { diag } from './diag'
 import { useTitleControlsProps } from './workbench/titleControlsStore'
 import { setLargePasteThresholds } from './utils/largeTextPaste'
-import { useBlurPlugin } from './hooks/useBlurPlugin'
 import { useSettingsWindowRedirect } from './workbench/settings/useSettingsWindowRedirect'
 import type { DefaultWorkspaceSetting } from './utils/workspaceSelection'
 import { useWindowRounding } from './hooks/useWindowRounding'
@@ -34,9 +33,6 @@ interface AppSettings {
   defaultWorkspace?: DefaultWorkspaceSetting
   shortcuts?: ShortcutBindings
   zoomFactor?: number
-  blurInactiveWindow?: number
-  blurInactiveDock?: boolean
-  blurEnabled?: boolean
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
   /** Large-paste thresholds; validated by utils/largeTextPaste.ts resolveLargePaste. */
   largePaste?: { promptChars?: number; attachChars?: number }
@@ -80,7 +76,6 @@ function App() {
   const [tabAppearance, setTabAppearance] = useState<Record<string, TerminalAppearance>>({})
   // Which terminal the TitleBar's theme/font controls target — reported up by MainLayout.
   const [activeTerminal, setActiveTerminal] = useState<{ id: string; connId: string } | null>(null)
-  const [windowActive, setWindowActive] = useState(true)
   // Whole-app fullscreen: native OS fullscreen plus chrome hidden. Not persisted — a fresh launch
   // always starts windowed, matching browser/terminal conventions. Escape is the secondary exit.
   const [chromeFullscreen, setChromeFullscreen] = useState(false)
@@ -95,16 +90,8 @@ function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [chromeFullscreen])
-  const { available: blurAvailable } = useBlurPlugin()
   const windowRounded = useWindowRounding() && !chromeFullscreen
   const startupUpdateChecked = useRef(false)
-  useEffect(() => {
-    const onFocus = () => setWindowActive(true)
-    const onBlur = () => setWindowActive(false)
-    window.addEventListener('focus', onFocus)
-    window.addEventListener('blur', onBlur)
-    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur) }
-  }, [])
 
   useEffect(() => {
     if (!appSettings.checkUpdatesOnStartup || startupUpdateChecked.current) return
@@ -351,7 +338,7 @@ function App() {
   return (
     <div className={`h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       <div className="flex-1 min-h-0 relative">
-        <div className="h-full w-full" style={{ filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0 ? `blur(${appSettings.blurInactiveWindow}px)` : 'none', transition: 'filter 120ms ease-out' }}>
+        <div className="h-full w-full">
           <MainLayout
           chromeHidden={chromeFullscreen}
           appSettings={appSettings}

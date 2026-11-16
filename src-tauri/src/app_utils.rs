@@ -1,4 +1,4 @@
-//! Log helpers, version/platform reporting, and plugin URL validation.
+//! Log helpers and version/platform reporting.
 //!
 //! Ports the implemented `app:*` handlers from electron/main.ts. Unimplemented update and RDP
 //! cleanup placeholders are deliberately not registered as production commands.
@@ -9,30 +9,6 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(test)]
 #[path = "app_utils_tests.rs"]
 mod tests;
-
-/// True if `url` may be handed to the OS on a *plugin's* behalf.
-///
-/// The host cannot know which approved documentation or company vault a deployment uses, so the host is not the allowlist.
-///
-/// What it still refuses is the part that made the unguarded version arbitrary program execution: any
-/// scheme other than https (no `file:`, no custom protocol handler, no bare Windows path), and any
-/// authority carrying credentials or a `@` — `https://github.com@evil.test/…` reads as `github.com`
-/// to a human and resolves to `evil.test`.
-pub fn is_allowed_plugin_url(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else {
-        return false;
-    };
-    // Authority is everything up to the first `/`, `?` or `#`; a URL may legitimately have no path.
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    if authority.is_empty() || authority.contains('@') {
-        return false;
-    }
-    // A control character or whitespace in the authority means the string was not a URL to begin
-    // with; some openers split on it and act on the remainder.
-    !authority
-        .chars()
-        .any(|c| c.is_whitespace() || c.is_control())
-}
 
 /// Whether this build keeps a log at all — true only with debug assertions on.
 ///
@@ -97,7 +73,7 @@ pub async fn get_version<R: Runtime>(_app: AppHandle<R>) -> Result<String, Strin
 /// URLs are refused absolutely: the renderer's link/path overlay menu (see `createTerminalContextMenu`
 /// / `TerminalViewLinkMenuHost.openUrl`) routes `https://…` through its own path, and `file:///…` /
 /// `mailto:…` / custom schemes would otherwise become arbitrary program execution via the OS's
-/// registered protocol handler (see `is_allowed_plugin_url` for the same risk on the plugin side).
+/// registered protocol handler.
 fn validate_path_for_open(path: &str) -> Result<&str, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {

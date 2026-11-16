@@ -48,7 +48,7 @@ interface SettingsTransferEnvelope {
     appSettings?: Partial<AppSettings>
     connections?: { connections?: unknown[]; folders?: unknown[] }
     themes?: Array<Record<string, unknown>>
-    workspaces?: import('@omniterm/contract').Workspace[]
+    workspaces?: import('./domain').Workspace[]
   }
 }
 
@@ -85,15 +85,12 @@ interface AppSettings {
   excludedViewableExts?: string[]
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
-  blurInactiveWindow?: number
-  blurInactiveDock?: boolean
-  blurEnabled?: boolean
   /** What Shift+Enter / Ctrl+Enter send: 'esc-cr' (ESC+CR for AI agents), 'lf' or 'off'. */
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
   ctrlEnter?: 'esc-cr' | 'lf' | 'off'
   /** AI agent session renewal: 'reopen' (restart profile in folder) or 'new-command' (send /new). */
   agentRenewStrategy?: 'reopen' | 'new-command'
-  /** Agent Quota plugin settings; validated by plugins/agent-quota/app/quotaConfig.ts. */
+  /** Agent Quota plugin settings; validated by ui/features/agent-quota/quotaConfig.ts. */
   agentQuota?: unknown
   /** Bumped by the Settings window when custom artwork changes, so other windows re-read it. */
   customArtRevision?: number
@@ -120,20 +117,13 @@ interface PluginDescriptor {
   name: string
   description?: string
   version: string
-  apiVersion: number
-  hostVersion: string
-  permissions: Array<'connections' | 'auth' | 'renderer' | 'openExternal' | 'clipboard' | 'workspace'>
+  permissions: string[]
   source: 'bundled' | 'user'
   enabled: boolean
   status: 'disabled' | 'loaded' | 'error' | 'incompatible'
   error?: string
-  activeConnectionProvider: boolean
-  selectedConnectionProvider: boolean
-  activeAuthProvider: boolean
-  activeInvokeHandler: boolean
 }
 
-type ConnectionProviderCapabilities = import('@omniterm/contract').ConnectionProviderCapabilities
 /** Update-checker state pushed from main via 'updates:state'. */
 interface UpdateState {
   current: string
@@ -175,17 +165,9 @@ interface Window {
       save: (data: any) => Promise<void>
     }
     plugin: {
-      available: () => Promise<boolean>
       list: () => Promise<PluginDescriptor[]>
       builtinIds: () => Promise<string[]>
       setEnabled: (id: string, enabled: boolean) => Promise<PluginDescriptor>
-      selectConnectionProvider: (id: string | null) => Promise<PluginDescriptor[]>
-      connectionCapabilities: () => Promise<import('@omniterm/contract').ConnectionProviderCapabilities | null>
-      invoke: (method: string, ...args: any[]) => Promise<any>
-      authGate: () => Promise<boolean>
-      installPackage: () => Promise<null | { installed: boolean; id: string; name: string; version: string; restartRequired: boolean }>
-      remove: (id: string) => Promise<boolean>
-      restartApp: () => Promise<void>
       onChanged: (callback: () => void) => () => void
     }
     connect: {
@@ -308,31 +290,29 @@ interface Window {
     }
     // Workspace view: composite containers of real folder roots, nested by stable workspace id.
     workspace: import('./workspaceAPI').WorkspaceTreeEditAPI & {
-      list: () => Promise<import('@omniterm/contract').Workspace[]>
-      create: (name: string) => Promise<import('@omniterm/contract').Workspace>
-      add: () => Promise<import('@omniterm/contract').Workspace | null>
-      addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
-      removeFolder: (workspaceId: string, folderId: string) => Promise<import('@omniterm/contract').Workspace>
-      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
-      importFile: () => Promise<import('@omniterm/contract').Workspace | null>
+      list: () => Promise<import('./domain').Workspace[]>
+      create: (name: string) => Promise<import('./domain').Workspace>
+      add: () => Promise<import('./domain').Workspace | null>
+      addFolder: (workspaceId: string) => Promise<import('./domain').Workspace | null>
+      removeFolder: (workspaceId: string, folderId: string) => Promise<import('./domain').Workspace>
+      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('./domain').Workspace>
+      importFile: () => Promise<import('./domain').Workspace | null>
       remove: (id: string) => Promise<void>
-      rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
-      setAppearance: (workspaceId: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => Promise<import('@omniterm/contract').Workspace>
-      setFolderColor: (workspaceId: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => Promise<import('@omniterm/contract').Workspace>
-      move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('@omniterm/contract').Workspace[]>
-      setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('@omniterm/contract').Workspace>
-      scanScripts: (id: string) => Promise<import('@omniterm/contract').WorkspaceScript[]>
+      rename: (workspaceId: string, name: string) => Promise<import('./domain').Workspace>
+      setAppearance: (workspaceId: string, color?: import('./domain').Workspace['color'], icon?: import('./domain').Workspace['icon']) => Promise<import('./domain').Workspace>
+      setFolderColor: (workspaceId: string, folderId: string, color?: import('./domain').WorkspaceFolder['color']) => Promise<import('./domain').Workspace>
+      move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('./domain').Workspace[]>
+      setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('./domain').Workspace>
+      scanScripts: (id: string) => Promise<import('./domain').WorkspaceScript[]>
       // The whole directory skeleton of a workspace — every folder, no files — shown up front.
-      scanFolders: (id: string) => Promise<import('@omniterm/contract').WorkspaceEntry[]>
+      scanFolders: (id: string) => Promise<import('./domain').WorkspaceEntry[]>
       // One page directly under a logical `<folderId>/<relativePath>` location. An empty folder
       // addresses the composite virtual root and therefore contains no filesystem entries.
-      scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('@omniterm/contract').WorkspaceEntryPage>
-      run: (payload: { workspaceId: string; script?: import('@omniterm/contract').WorkspaceScript; subPath?: string }) => Promise<boolean>
+      scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('./domain').WorkspaceEntryPage>
+      run: (payload: { workspaceId: string; script?: import('./domain').WorkspaceScript; subPath?: string }) => Promise<boolean>
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>
-      loadConnections: (workspaceId: string) => Promise<import('@omniterm/contract').Connection[]>
-      saveConnections: (workspaceId: string, connections: import('@omniterm/contract').Connection[]) => Promise<void>
-      deleteConnection: (workspaceId: string, connectionId: string) => Promise<void>
+      loadConnections: (workspaceId: string) => Promise<import('./domain').Connection[]>
     }
     tempNotes: import('./tempNotesAPI').TempNotesAPI
     updates: {
@@ -354,7 +334,7 @@ interface Window {
       save: (theme: import('./themes').AppTheme) => Promise<void>
       delete: (id: string) => Promise<void>
     }
-    agentQuota: import('../plugins/agent-quota/app/agentQuotaAPI').AgentQuotaAPI
+    agentQuota: import('./features/agent-quota/agentQuotaAPI').AgentQuotaAPI
     alwaysAwake: {
       info: () => Promise<boolean>
       getState: () => Promise<AlwaysAwakeStatus>

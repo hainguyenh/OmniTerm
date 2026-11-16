@@ -2398,12 +2398,21 @@ fn official_string_tools() {
     assert_eq!(f.workspace.document(&editor.path).unwrap().0, before + 1, "both selections in one change");
 }
 
-/// Key Promoter: action events are batched; an idle plugin is
-/// woken once per batch, and its counts persist in storage.
+/// Action events (`events.input`) are batched: a plugin the manifest
+/// subscribes is woken once per batch, not per action, and uninstalling it
+/// removes its data and its subscription.
 #[test]
-fn official_key_promoter() {
+fn action_events_wake_an_idle_plugin_once_per_batch() {
     let f = fixture(Limits::default());
-    f.install(&official("key-promoter"));
+    // `files-events` stores what its events handler saw; subscribed to actions instead.
+    let pkg = f._tmp.path().join("action-events");
+    copy_dir(&sample("files-events"), &pkg);
+    let manifest = std::fs::read_to_string(pkg.join("plugin.toml"))
+        .unwrap()
+        .replace("\"on-event:files-changed\"", "\"on-event:action-performed\"")
+        .replace("required = [\"events\", \"storage\"]", "required = [\"events.input\", \"storage\"]");
+    std::fs::write(pkg.join("plugin.toml"), manifest).unwrap();
+    f.install(&pkg);
     assert!(f.host.event_kinds().contains(&EventKind::ActionPerformed), "subscribed by its manifest");
     let menu = |action: &str| {
         WorkbenchEvent::ActionPerformed(ActionPerformed {
@@ -2427,25 +2436,14 @@ fn official_key_promoter() {
     f.host.post_events(Some("main"), vec![menu("code.duplicate"), menu("code.duplicate")]);
     f.host.flush_events_at(now + Duration::from_secs(3));
     assert!(f.host.wait_events(Duration::from_secs(10)));
-    let info = f.host.info_of("omniterm.key-promoter").unwrap();
+    let info = f.host.info_of("files-events").unwrap();
     assert_eq!((info.status, info.stats.activations, info.stats.calls), (PluginStatus::Active, 1, 1), "one wake-up");
-    let tips: Vec<_> = f
-        .take_events()
-        .into_iter()
-        .filter_map(|(client, e)| match e {
-            PluginEvent::Notification { title, body, .. } => Some((client, title, body)),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(tips.len(), 1, "{tips:?}");
-    assert_eq!(tips[0].0.as_deref(), Some("main"), "shown in the window the actions came from");
-    assert!(tips[0].1.contains("Ctrl+D") && tips[0].2.contains("3 times"), "{tips:?}");
-    let stored = stored(&f, "omniterm.key-promoter");
-    assert!(stored.contains(&("count:code.duplicate".into(), "3".into())), "{stored:?}");
+    let stored = stored(&f, "files-events");
+    assert!(stored.contains(&("events".into(), "[]".into())), "the handler ran: {stored:?}");
 
     // Uninstalling removes its data.
-    f.host.uninstall("omniterm.key-promoter").unwrap();
-    assert!(!f.plugins_dir.join(".data/omniterm.key-promoter").exists());
+    f.host.uninstall("files-events").unwrap();
+    assert!(!f.plugins_dir.join(".data/files-events").exists());
     assert!(f.host.event_kinds().is_empty());
 }
 
@@ -2618,126 +2616,6 @@ fn http_server(
     (port, seen)
 }
 
-/// AI Completion: typing on cancels the previous request (the fetch
-/// returns `cancelled`, the instance stays); the plugin's own work stays
-/// within the edit-path budget.
-#[test]
-fn official_ai_completion_cancels_superseded_requests() {
-    let f = fixture(Limits::default());
-    f.install(&official("ai-completion"));
-    let (port, seen) = http_server(r#"{"choices":[{"text":"a + b\n"}]}"#, |n| {
-        if n == 0 { Duration::from_secs(3) } else { Duration::ZERO }
-    });
-    f.run("omniterm.ai-completion", "set-endpoint", Some(&format!("http://localhost:{port}"))).unwrap();
-    let doc = ide_plugin::ProviderDocument {
-        path: f.project.join("src/a.rs"),
-        language: "rust".into(),
-        version: 1,
-        text: "fn add(a: i32, b: i32) -> i32 {\n    \n}\n".into(),
-    };
-    let at = ide_core::Pos::new(1, 4);
-    let host = Arc::new(f);
-    // A slow request, superseded by the next keystroke's once the server has it
-    // (starting the instance comes first, and takes longer on a slow runner).
-    let first = ide_core::CancellationToken::new();
-    let slow = {
-        let (host, doc, first) = (host.clone(), doc.clone(), first.clone());
-        std::thread::spawn(move || (host.host.provide_inline_completion(&doc, at, &first), Instant::now()))
-    };
-    assert!(eventually(|| seen.lock().len() == 1), "the first request reaches the server");
-    let cancelled = Instant::now();
-    first.cancel();
-    let started = Instant::now();
-    let second = host.host.provide_inline_completion(&doc, at, &ide_core::CancellationToken::new());
-    let took = started.elapsed();
-    let (old, old_done) = slow.join().unwrap();
-    let old_took = old_done.saturating_duration_since(cancelled);
-    assert!(old.is_none(), "the superseded request yields nothing");
-    assert!(old_took < Duration::from_secs(1), "cancelled, not waited out: {old_took:?}");
-    assert_eq!(second.map(|(_, s)| s.insert_text).as_deref(), Some("a + b"));
-    eprintln!("inline completion after cancelling the previous request: {took:?}");
-    let info = host.host.info_of("omniterm.ai-completion").unwrap();
-    assert_eq!((info.stats.crashes, info.stats.activations), (0, 1), "cooperative: same instance");
-    assert!(seen.lock()[1].contains("\"prompt\":\"fn add(a: i32, b: i32) -> i32 {\\n    \""), "{:?}", seen.lock());
-
-    // The plugin's own share of a call (local server, no delay): edit-path budget.
-    let mut times = Vec::new();
-    for _ in 0..10 {
-        let started = Instant::now();
-        assert!(host.host.provide_inline_completion(&doc, at, &ide_core::CancellationToken::new()).is_some());
-        times.push(started.elapsed());
-    }
-    times.sort();
-    eprintln!("inline completion round trip p95 (local server): {:?}", times[9]);
-    assert!(times[9] < Duration::from_millis(500), "{times:?}");
-}
-
-/// Checkstyle: a save runs the approved `checkstyle` and publishes
-/// diagnostics; quick fixes come through the code-action provider; saving
-/// again cancels the check still running.
-#[cfg(unix)]
-#[test]
-fn official_checkstyle_checks_on_save() {
-    use std::os::unix::fs::PermissionsExt;
-    let f = fixture(Limits::default());
-    let bin = f.plugins_dir.parent().unwrap().join("bin");
-    std::fs::create_dir_all(&bin).unwrap();
-    // Reports a tab on line 2; files containing SLOW take 5 s.
-    std::fs::write(
-        bin.join("checkstyle"),
-        "#!/bin/sh\nfor a; do file=\"$a\"; done\ngrep -q SLOW \"$file\" && sleep 5\n\
-         echo '<?xml version=\"1.0\"?><checkstyle><file name=\"'\"$file\"'\">'\n\
-         echo '<error line=\"2\" column=\"1\" severity=\"warning\" message=\"Line contains a tab character.\" source=\"com.puppycrawl.tools.checkstyle.checks.whitespace.FileTabCharacterCheck\"/>'\n\
-         echo '</file></checkstyle>'\nexit 1\n",
-    )
-    .unwrap();
-    std::fs::set_permissions(bin.join("checkstyle"), std::fs::Permissions::from_mode(0o755)).unwrap();
-    let path = bin.clone();
-    f.host.set_program_path(Arc::new(move || Some(path.clone().into_os_string())));
-    let info = f.install(&official("checkstyle"));
-    assert_eq!(info.status, PluginStatus::Inactive, "{:?}", info.error);
-
-    let java = f.project.join("src/A.java");
-    std::fs::write(&java, "class A {\n\tint x;\n}\n").unwrap();
-    let saved = |f: &Fixture| {
-        f.host.post_events(Some("main"), vec![WorkbenchEvent::FileSaved(to_ipc(&java))]);
-        f.host.flush_events_at(Instant::now() + Duration::from_secs(3));
-    };
-    saved(&f);
-    assert!(f.host.wait_events(Duration::from_secs(20)));
-    let diagnostics =
-        |f: &Fixture| f.workspace.diagnostics.lock().get(&("omniterm.checkstyle".into(), java.clone())).cloned();
-    let d = diagnostics(&f).expect("published");
-    assert_eq!((d.len(), d[0].code.as_deref(), d[0].range.start.line), (1, Some("FileTabCharacter"), 1));
-
-    // The quick fix, through the provider (as the editor asks for it).
-    let doc = ide_plugin::ProviderDocument {
-        path: java.clone(),
-        language: "java".into(),
-        version: 1,
-        text: std::fs::read_to_string(&java).unwrap(),
-    };
-    let range = ide_core::Range::new(ide_core::Pos::new(1, 0), ide_core::Pos::new(1, 0));
-    let actions = f.host.provide_code_actions(&doc, range);
-    assert_eq!(actions.len(), 1, "{actions:?}");
-    assert_eq!(actions[0].1.title, "Checkstyle: Replace tabs with spaces");
-    assert_eq!(actions[0].1.edits[0].1[0].new_text, "    int x;");
-
-    // A slow check is cancelled by the next save.
-    f.workspace.diagnostics.lock().clear();
-    std::fs::write(&java, "class A { // SLOW\n\tint x;\n}\n").unwrap();
-    let started = Instant::now();
-    saved(&f);
-    std::thread::sleep(Duration::from_millis(300));
-    std::fs::write(&java, "class A {\n\tint y;\n}\n").unwrap();
-    saved(&f);
-    assert!(f.host.wait_events(Duration::from_secs(20)));
-    assert!(started.elapsed() < Duration::from_secs(4), "the slow run was killed: {:?}", started.elapsed());
-    assert_eq!(diagnostics(&f).map(|d| d.len()), Some(1), "published by the second check");
-    let info = f.host.info_of("omniterm.checkstyle").unwrap();
-    assert_eq!(info.stats.crashes, 0);
-}
-
 /// License Header: reported when a file opens, fixed through the provider,
 /// and a project scan in a task reports the rest.
 #[test]
@@ -2786,79 +2664,6 @@ fn official_license_header_reports_fixes_and_scans() {
     // Disabling the plugin withdraws the problems it still shows.
     f.host.set_enabled("omniterm.license-header", false).unwrap();
     assert_eq!(diagnostics(&b).map(|d| d.len()), Some(0), "withdrawn with the plugin");
-}
-
-/// MyBatis Navigator: interface ↔ XML through the providers, on a
-/// real project tree (`find-files`), within the edit-path budget.
-#[test]
-fn official_mybatis_navigates_between_interface_and_xml() {
-    let f = fixture(Limits::default());
-    f.install(&official("mybatis"));
-    let java_path = f.project.join("src/main/java/com/acme/UserMapper.java");
-    let xml_path = f.project.join("src/main/resources/mapper/UserMapper.xml");
-    std::fs::create_dir_all(java_path.parent().unwrap()).unwrap();
-    std::fs::create_dir_all(xml_path.parent().unwrap()).unwrap();
-    let java = "package com.acme;\n\npublic interface UserMapper {\n    User findById(long id);\n}\n";
-    let xml = "<mapper namespace=\"com.acme.UserMapper\">\n  <select id=\"findById\">select 1</select>\n</mapper>\n";
-    std::fs::write(&java_path, java).unwrap();
-    std::fs::write(&xml_path, xml).unwrap();
-    // Noise: other mappers, some large, that the lookup must not read one by one.
-    let filler = "  <select id=\"q\">select 1</select>\n".repeat(3000);
-    for i in 0..600 {
-        let body = if i % 50 == 0 { filler.as_str() } else { "" };
-        let other = format!("<mapper namespace=\"com.acme.Other{i}\">\n{body}</mapper>\n");
-        std::fs::write(f.project.join(format!("src/f{i}.xml")), other).unwrap();
-    }
-    let doc = |path: &Path, language: &str, text: &str| ide_plugin::ProviderDocument {
-        path: path.to_path_buf(),
-        language: language.into(),
-        version: 1,
-        text: text.into(),
-    };
-    let jdoc = doc(&java_path, "java", java);
-    // The first call searches the XML files; on a slow machine that can run past the
-    // edit-path budget, so the answer is dropped and calls queued behind it are
-    // skipped. The editor asks again; so does this.
-    let deadline = Instant::now() + Duration::from_secs(10);
-    let markers = loop {
-        let markers = f.host.provide_line_markers(&jdoc);
-        if !markers.is_empty() || Instant::now() > deadline {
-            break markers;
-        }
-        std::thread::sleep(Duration::from_millis(50));
-    };
-    assert_eq!(markers.len(), 1, "{markers:?}");
-    let target = markers[0].1.target.clone().unwrap();
-    assert_eq!((target.path, target.range.start), (xml_path.clone(), ide_core::Pos::new(1, 14)));
-
-    let xdoc = doc(&xml_path, "xml", xml);
-    // Reads the interface from disk: on a slow machine that too can run past the budget.
-    let mut to_java = Vec::new();
-    assert!(eventually(|| {
-        to_java = f.host.provide_definition(&xdoc, ide_core::Pos::new(1, 16));
-        !to_java.is_empty()
-    }));
-    assert_eq!(
-        to_java.iter().map(|l| (l.path.clone(), l.range.start)).collect::<Vec<_>>(),
-        [(java_path.clone(), ide_core::Pos::new(3, 9))]
-    );
-    assert!(
-        f.host.provide_definition(&doc(&f.project.join("src/a.rs"), "rust", ""), ide_core::Pos::new(0, 0)).is_empty(),
-        "not its language"
-    );
-
-    // Warm (lookup cached): well inside the edit-path budget.
-    let slow = f.host.info_of("omniterm.mybatis").unwrap().stats.slow_calls;
-    let mut times = Vec::new();
-    for _ in 0..20 {
-        let started = Instant::now();
-        assert_eq!(f.host.provide_line_markers(&jdoc).len(), 1);
-        times.push(started.elapsed());
-    }
-    times.sort();
-    eprintln!("mybatis line markers p95: {:?}", times[18]);
-    assert!(times[18] < Duration::from_millis(50), "{times:?}");
-    assert_eq!(f.host.info_of("omniterm.mybatis").unwrap().stats.slow_calls, slow);
 }
 
 /// CSV Editor: a custom editor renders the document as a table (the
@@ -3785,77 +3590,6 @@ fn listing_while_projects_change_does_not_deadlock() {
     }
 }
 
-/// A copy of the official plugin at `src` in `dir`, with a stand-in for its
-/// built page (`web/` is built by plugins/build.sh, not checked in; build.sh
-/// checks what the build produces): an entry loading a script and a font by
-/// relative URL.
-fn with_stand_in_page(src: &Path, dir: &Path) -> PathBuf {
-    let pkg = dir.join(src.file_name().unwrap());
-    std::fs::create_dir_all(&pkg).unwrap();
-    for entry in std::fs::read_dir(src).unwrap().flatten() {
-        let name = entry.file_name();
-        if ["web", "web-src", "web.sources", "target"].iter().any(|n| name == *n) {
-            continue;
-        }
-        let to = pkg.join(&name);
-        if entry.path().is_dir() {
-            copy_dir(&entry.path(), &to)
-        } else {
-            std::fs::copy(entry.path(), to).map(|_| ()).unwrap()
-        }
-    }
-    std::fs::create_dir_all(pkg.join("web/assets")).unwrap();
-    std::fs::create_dir_all(pkg.join("web/fonts/Virgil")).unwrap();
-    std::fs::write(
-        pkg.join("web/index.html"),
-        r#"<!doctype html><html><head><script type="module" src="./assets/index.js"></script></head></html>"#,
-    )
-    .unwrap();
-    std::fs::write(pkg.join("web/assets/index.js"), "export {};").unwrap();
-    std::fs::write(pkg.join("web/fonts/Virgil/Virgil-Regular.woff2"), b"wOF2").unwrap();
-    pkg
-}
-
-/// Graphviz: a web view with code. What the page reports about the graph
-/// becomes the previewed file's problems.
-#[test]
-fn official_graphviz_turns_its_pages_reports_into_problems() {
-    let tmp = tempfile::tempdir().unwrap();
-    let f = fixture(Limits::default());
-    let info = f.install(&with_stand_in_page(&official("graphviz"), tmp.path()));
-    assert_eq!(info.status, PluginStatus::Inactive, "{:?}", info.error);
-    assert_eq!(f.host.ui_items("customEditors")[0].decl["layout"], "split");
-    assert!(f.host.languages().iter().any(|l| l.id.as_str() == "dot"));
-    assert_eq!(f.host.assets("omniterm.graphviz", "fileIcon/graphviz/").unwrap().len(), 2);
-    let page = f.host.web_page("omniterm.graphviz", "preview").unwrap();
-    let (rev, entry) = page.path.strip_prefix("omniterm.graphviz/").unwrap().split_once('/').unwrap();
-    assert_eq!(entry, "web/index.html");
-    let html = f.host.web_file("omniterm.graphviz", &format!("{rev}/{entry}")).unwrap();
-    let html = String::from_utf8(html.bytes).unwrap();
-    // Relative URLs only: the page is served from the package.
-    let script = html.split("src=\"").nth(1).unwrap().split('"').next().unwrap();
-    assert!(script.starts_with("./assets/"), "{script}");
-    assert!(f.host.web_file("omniterm.graphviz", &format!("{rev}/web/{}", &script[2..])).is_ok());
-    let font = f.host.web_file("omniterm.graphviz", &format!("{rev}/web/fonts/Virgil/Virgil-Regular.woff2")).unwrap();
-    assert_eq!(font.mime, "font/woff2");
-
-    std::fs::write(f.project.join("flow.dot"), "digraph {\n  a -> \n}\n").unwrap();
-    let editor = f.workspace.open("flow.dot", &[]);
-    let inv = Invocation { editor: Some(editor), ..f.inv() };
-    let report =
-        r#"{"op":"problems","items":[{"line":3,"message":"syntax error in line 3 near '}'","level":"error"}]}"#;
-    let event = ide_plugin::ViewEvent::Message { text: report.into() };
-    f.host.view_event("omniterm.graphviz", "preview", event, inv.clone()).unwrap();
-    let path = f.project.join("flow.dot");
-    let problems =
-        |f: &Fixture| f.workspace.diagnostics.lock().get(&("omniterm.graphviz".into(), path.clone())).cloned();
-    let d = problems(&f).expect("published");
-    assert_eq!((d.len(), d[0].range.start.line), (1, 2));
-    let cleared = ide_plugin::ViewEvent::Message { text: r#"{"op":"problems","items":[]}"#.into() };
-    f.host.view_event("omniterm.graphviz", "preview", cleared, inv).unwrap();
-    assert_eq!(problems(&f).map(|d| d.len()), Some(0));
-}
-
 /// Zips `dir` as an archiver does: the folder itself at the top, plus macOS metadata.
 fn zip_folder(dir: &Path, out: &Path) {
     use std::io::Write;
@@ -3976,10 +3710,10 @@ fn uninstalling_deletes_the_plugins_secrets() {
     let f = fixture(Limits::default());
     let keychain = Arc::new(Keychain::default());
     f.host.set_secret_store(keychain.clone());
-    f.install(&official("ai-completion"));
-    f.host.set_secret("omniterm.ai-completion", "api-key", Some("sk-test")).unwrap();
-    assert!(keychain.get("omniterm.ai-completion", "api-key").is_some());
-    f.host.uninstall("omniterm.ai-completion").unwrap();
+    f.install(&sample("api14"));
+    f.host.set_secret("api14", "token", Some("sk-test")).unwrap();
+    assert!(keychain.get("api14", "token").is_some());
+    f.host.uninstall("api14").unwrap();
     assert!(keychain.0.lock().is_empty(), "{:?}", keychain.0.lock().keys().collect::<Vec<_>>());
 }
 

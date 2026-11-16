@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 
-import type { WorkspaceFolder } from '@omniterm/contract'
+import type { WorkspaceFolder } from '../../domain'
 
 import { BarButton, Icon } from '../../ide/ui'
 import styles from '../../ide/workbench/TitleBar.module.css'
