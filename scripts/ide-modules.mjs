@@ -101,9 +101,7 @@ export const IDE_MODULE_ROOTS = Object.freeze([
   'languages',
   'fixtures',
   'wit',
-  'ide-plugins/plugins',
-  'ide-plugins/sdk',
-  'ide-plugins/wit',
+  'plugins',
 ])
 
 /** True when a repo-relative path lives inside an IDE module directory (or is one of its files). */

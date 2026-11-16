@@ -37,7 +37,7 @@ fn components() -> Vec<PathBuf> {
         repo().join("crates/ide-plugin/tests/fixtures/api14/dist/plugin.wasm"),
         repo().join("crates/ide-plugin/tests/fixtures/execution/dist/plugin.wasm"),
     ];
-    let official = repo().join("ide-plugins/plugins/official");
+    let official = repo().join("plugins/official");
     let mut dirs: Vec<_> = std::fs::read_dir(&official).unwrap().map(|e| e.unwrap().path()).collect();
     dirs.sort();
     out.extend(dirs.into_iter().map(|d| d.join("dist/plugin.wasm")).filter(|p| p.is_file()));
@@ -81,7 +81,7 @@ fn the_sdk_carries_the_hosts_wit() {
         files
     };
     let host = read(repo().join("wit"));
-    let sdk = read(repo().join("ide-plugins/sdk/rust/omniterm-plugin/wit"));
+    let sdk = read(repo().join("plugins/sdk/rust/omniterm-plugin/wit"));
     let names = |f: &[(String, String)]| f.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>();
     assert_eq!(names(&sdk), names(&host), "sdk/rust/omniterm-plugin/wit has other files than wit/");
     for ((name, a), (_, b)) in host.iter().zip(&sdk) {

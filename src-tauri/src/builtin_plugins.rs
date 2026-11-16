@@ -1,7 +1,7 @@
 //! Official IDE plugins that ship inside OmniTerm and are installed on first start, so the git,
 //! run/test and editor features they provide work without a trip to the plugin market.
 //!
-//! The packages are staged (prebuilt components included) from `ide-plugins/` into `builtin-plugins/` and bundled as
+//! The packages are staged (prebuilt components included) from `plugins/` into `builtin-plugins/` and bundled as
 //! resources. Installing goes through the same `install_from_dir` the market uses, so they appear in
 //! the plugin list, can be disabled, and are replaced whenever the bundled files change. A plugin the user uninstalls
 //! is installed again on the next start: shipping it built in means it is part of the app.
@@ -13,7 +13,7 @@ use ide_app::state::AppState;
 use ide_host::plugins::Consent;
 use tauri::{AppHandle, Manager, Wry};
 
-/// Git, run/test and editor plugins. The other official plugins in `ide-plugins/` are left out on
+/// Git, run/test and editor plugins. The other official plugins in `plugins/` are left out on
 /// purpose and stay installable by hand: `git-toolbox` only fetches every few minutes (the `vcs`
 /// feature already shows ahead/behind), `license-header` checks every file on open and save, and
 /// `solidity` serves a language few OmniTerm users write.

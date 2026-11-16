@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/min.wasm (probe-min) and dist/full.wasm (probe-full).
 set -euo pipefail
-# Stable, not a nightly default: see ide-plugins/plugins/build.sh.
+# Stable, not a nightly default: see plugins/build.sh.
 export RUSTUP_TOOLCHAIN="${PLUGIN_TOOLCHAIN:-stable}"
 here="$(cd "$(dirname "$0")" && pwd)"
 export CARGO_TARGET_DIR="$here/target"

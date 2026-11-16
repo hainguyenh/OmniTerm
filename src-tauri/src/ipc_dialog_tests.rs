@@ -4,7 +4,6 @@ use std::ffi::OsString;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
 
 struct EnvRestore {
     key: &'static str,

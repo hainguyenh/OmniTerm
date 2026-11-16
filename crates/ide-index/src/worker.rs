@@ -128,9 +128,12 @@ impl Shared {
     }
 
     pub(crate) fn release(&self) {
-        let _q = self.queue.lock();
+        let mut q = self.queue.lock();
         if self.held.swap(false, Ordering::SeqCst) {
             self.indexing.store(true, Ordering::SeqCst);
+            // Busy until the worker wakes and scans, so a `wait_idle` right after
+            // the release waits for the scan instead of seeing the held idle state.
+            q.busy = true;
             self.wake.notify_all();
         }
     }
@@ -183,9 +186,12 @@ impl Shared {
     pub(crate) fn wait_idle(&self, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;
         let mut q = self.queue.lock();
-        while !(q.started && !q.busy && q.jobs.is_empty()) {
+        // A held index runs no jobs until its release, so the ones it keeps
+        // (`SaveRecent`) don't make it busy.
+        let idle = |q: &Queue| q.started && !q.busy && (q.jobs.is_empty() || self.is_held());
+        while !idle(&q) {
             if self.is_cancelled() || self.idle.wait_until(&mut q, deadline).timed_out() {
-                return q.started && !q.busy && q.jobs.is_empty();
+                return idle(&q);
             }
         }
         true

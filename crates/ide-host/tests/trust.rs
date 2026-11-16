@@ -265,7 +265,7 @@ async fn malicious_project_stays_editable_then_starts_in_place_after_trust() {
     let doc = ops::doc::open(&host, "main", root.join("main.py")).await.unwrap();
     ops::doc::save(&host, "main", doc.id).await.unwrap();
     assert!(project.index.wait_idle(Duration::from_secs(10)));
-    assert!(project.index.status().files > 0);
+    assert_eq!(project.index.status().files, 0, "a restricted project is not indexed");
     let sync = || {
         ops::build::build_sync(
             &host,

@@ -2,8 +2,8 @@
 /**
  * Stages the built-in IDE plugins into `src-tauri/builtin-plugins/` (bundled as app resources).
  *
- * Sources and components come from `ide-plugins/` (plugin sources, built with
- * `ide-plugins/plugins/build.sh`). Only what the host loads is staged: the manifest, the component
+ * Sources and components come from `plugins/` (plugin sources, built with
+ * `plugins/build.sh`). Only what the host loads is staged: the manifest, the component
  * and the data files the manifest points at, never Rust sources, lockfiles or build output.
  * Which plugins ship is the `BUILTIN_PLUGINS` and `OPTIONAL_PLUGINS` lists in
  * `src-tauri/src/builtin_plugins.rs`.
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { isMain } from './is-main.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const SOURCE = path.join(ROOT, 'ide-plugins', 'plugins', 'official')
+const SOURCE = path.join(ROOT, 'plugins', 'official')
 const TARGET = path.join(ROOT, 'src-tauri', 'builtin-plugins')
 const LIST_FILE = path.join(ROOT, 'src-tauri', 'src', 'builtin_plugins.rs')
 const NOT_SHIPPED = new Set(['src', 'target', 'web-src', 'Cargo.toml', 'Cargo.lock', 'example.tests'])
@@ -52,7 +52,7 @@ export function stage({ ids = builtinPluginIds(), source = SOURCE, target = TARG
     const manifest = readFileSync(path.join(dir, 'plugin.toml'), 'utf8')
     const wasm = /^wasm\s*=\s*"([^"]+)"/m.exec(manifest)?.[1]
     if (wasm && !existsSync(path.join(dir, wasm))) {
-      throw new Error(`${id}: ${wasm} is not built; run ide-plugins/plugins/build.sh official/${id}`)
+      throw new Error(`${id}: ${wasm} is not built; run plugins/build.sh official/${id}`)
     }
     for (const file of shippedFiles(dir)) {
       mkdirSync(path.dirname(path.join(target, id, file)), { recursive: true })

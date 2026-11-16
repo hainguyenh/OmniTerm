@@ -14,7 +14,7 @@ diagnostics-first = []
 diagnostics-last = []
 
 [dependencies]
-omniterm-plugin = { path = "../../../../../ide-plugins/sdk/rust/omniterm-plugin" }
+omniterm-plugin = { path = "../../../../../plugins/sdk/rust/omniterm-plugin" }
 
 [profile.release]
 opt-level = "s"

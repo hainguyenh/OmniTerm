@@ -209,7 +209,7 @@ async fn official_api_examples_install_and_render_real_component_contributions()
     // The real examples' first calls compile and scan; 250 ms is too tight on Windows runners.
     let f = Harness::with_timeout(Duration::from_secs(10));
     f.host.set_project_trust(&f.root, true, false).await.unwrap();
-    let official = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ide-plugins/plugins/official");
+    let official = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/official");
     for name in ["blame-annotations", "todo-finder"] {
         f.plugins.install_from_dir(&official.join(name), &Consent::all()).unwrap();
     }

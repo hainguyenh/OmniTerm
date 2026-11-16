@@ -3,12 +3,10 @@
 An offline, multi-window SSH/RDP/local terminal and connection manager.
 
 Built with Tauri (Rust) + React. Native PTY backend, zero credential storage,
-detachable multi-window panes, and an optional plugin system for connection
-metadata, workspace content, and app-open auth gates.
+detachable multi-window panes, and WebAssembly IDE plugins.
 
 For installation, prerequisites, building, and development workflows, see
-[GUIDELINE.md](GUIDELINE.md). For markdown-engine details, see
-[plugins/markdown-explorer/GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+[GUIDELINE.md](GUIDELINE.md).
 
 ---
 
@@ -27,28 +25,19 @@ browser engine for a single pane. OmniTerm takes a different approach:
 - **Layout restart** -- OmniTerm saves terminal pane/view-group placement and each pane's latest
   working directory. Closing the app terminates its terminal processes; the next launch recreates
   fresh shells in the saved directories instead of resuming process state or terminal output.
-- **Plugin system** -- Unsandboxed Node.js sidecar. Plugins provide connection metadata,
-  workspace content, app-open auth gates, and selected app features. Install only trusted packages.
+- **Plugin system** -- Sandboxed WebAssembly components (`wasm32-wasip2`) loaded by the IDE
+  plugin host. Official plugins live in `plugins/official`; the Rust SDK is in `plugins/sdk`.
 
 ---
 
 ## Plugins
 
-OmniTerm plugins are unsigned Node.js packages loaded by a sidecar process.
-Three optional provider types exist:
+OmniTerm plugins are WebAssembly components built against the `wit/` worlds. Official plugins
+are in `plugins/official`, built with `bash plugins/build.sh`, and bundled into the app by
+`scripts/stage-builtin-plugins.mjs`. See [plugins/README.md](plugins/README.md).
 
-- **ConnectionProvider** -- Connection metadata tree and connection profiles
-- **WorkspaceProvider** -- Workspace scripts, file scanning, and path management
-- **AuthProvider** -- Optional app-open gate before revealing the workspace
-
-Bundled providers:
-- `plugins/full-connection-manager` -- workspace-aware SSH/RDP profiles with credential scrubbing
-- `plugins/native-batch-connections` -- batch-launched SSH/RDP profiles via native client flows
-- `plugins/blur` -- Blur inactive windows with an adjustable live-preview control
-
-Agent Quota and Always Awake are built into the app and listed as built-in plugins in the Plugins
-dialog, where each can be switched off. Release installers and Windows portable archives include
-Blur automatically. No separate plugin installation is required for those distributions.
+Agent Quota and Always Awake are built into the app and listed as built-in features in the Plugins
+dialog, where each can be switched off.
 
 ### Always Awake
 
@@ -57,16 +46,7 @@ always** and **Keep awake when active** modes, with schedules ending today, 24 h
 next Monday at 08:00 local time. Active-only mode uses LOCAL process-tree activity and conservatively
 treats a connected SSH PTY as active; the feature is Windows-first.
 
-Plugins are **unsandboxed** (access to `fs`, `net`, and `child_process`). Install only
-trusted packages. Manage plugins via **Settings > Plugins** or CLI commands in [GUIDELINE.md](GUIDELINE.md).
-
----
-
-## Integration
-
-OmniTerm does not embed [markdown-explorer](https://github.com/the-long-ride/markdown-explorer).
-It uses the markdown-explorer submodule at `plugins/markdown-explorer` to power Markdown
-and Mermaid preview inside the file viewer. See the markdown-explorer [GUIDELINE.md](plugins/markdown-explorer/GUIDELINE.md).
+Manage plugins via **Settings > Plugins**.
 
 ## Themes
 

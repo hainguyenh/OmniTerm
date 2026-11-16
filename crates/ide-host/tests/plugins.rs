@@ -205,7 +205,7 @@ fn sample(name: &str) -> PathBuf {
 }
 
 fn theme_template() -> PathBuf {
-    repo().join("ide-plugins/plugins/official/harbor-night")
+    repo().join("plugins/official/harbor-night")
 }
 
 fn misbehave_pkg() -> PathBuf {
@@ -2001,7 +2001,7 @@ fn plugin_syntax_for_languages_without_a_grammar() {
     host.load_all();
     host.startup_finished();
     let info =
-        host.install_from_dir(&repo().join("ide-plugins/plugins/official/solidity"), &Consent::default()).unwrap();
+        host.install_from_dir(&repo().join("plugins/official/solidity"), &Consent::default()).unwrap();
     assert_eq!(info.status, PluginStatus::Inactive, "{:?}", info.error);
     assert!(info.capabilities.iter().all(|c| c.optional && !c.granted), "language servers were refused");
 
@@ -2240,10 +2240,10 @@ fn icon_themes_are_a_contribution_type_like_any_other() {
 #[test]
 fn official_material_icons_install() {
     let f = fixture(Limits::default());
-    let info = f.install(&repo().join("ide-plugins/plugins/official/material-icons"));
+    let info = f.install(&repo().join("plugins/official/material-icons"));
     assert_eq!(info.status, PluginStatus::Static, "{:?}", info.error);
     let theme: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(repo().join("ide-plugins/plugins/official/material-icons/icons/theme.json")).unwrap(),
+        &std::fs::read_to_string(repo().join("plugins/official/material-icons/icons/theme.json")).unwrap(),
     )
     .unwrap();
     let defined = theme["iconDefinitions"].as_object().unwrap().len();
@@ -2356,7 +2356,7 @@ fn catalog_lists_sample_packages() {
 
     let catalog = f.host.catalog(&[
         repo().join("crates/ide-plugin/tests/fixtures"),
-        repo().join("ide-plugins/plugins/official"),
+        repo().join("plugins/official"),
         tmp.path().to_path_buf(),
     ]);
     let ids: Vec<&str> = catalog.iter().map(|c| c.id.as_str()).collect();
@@ -2374,7 +2374,7 @@ fn catalog_lists_sample_packages() {
 }
 
 fn official(name: &str) -> PathBuf {
-    repo().join("ide-plugins/plugins/official").join(name)
+    repo().join("plugins/official").join(name)
 }
 
 /// String Tools: 26 commands show before the code loads; one command

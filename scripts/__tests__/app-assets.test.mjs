@@ -12,7 +12,7 @@ const IGNORED_DIR_NAMES = new Set([
 ])
 
 /**
- * Plugin packages bundled with the app (built from ide-plugins/ and installed on
+ * Plugin packages bundled with the app (built from plugins/ and installed on
  * first start, see src-tauri/src/builtin_plugins.rs) carry their own icon themes; they are not app logos.
  */
 const isBundledPlugin = (relative) => relative === 'src-tauri/builtin-plugins' || relative.startsWith('src-tauri/builtin-plugins/')

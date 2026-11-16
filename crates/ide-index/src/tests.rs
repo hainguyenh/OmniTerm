@@ -911,6 +911,20 @@ fn a_held_index_reads_nothing_until_it_is_released() {
 }
 
 #[test]
+fn a_held_index_with_a_recent_file_is_idle_and_scans_before_idle_after_the_release() {
+    let fx = sample();
+    let idx = open_options(&fx, IndexOptions { held: true, threads: 1, ..Default::default() });
+    // Opening a file while held queues `SaveRecent`, which only runs after the release.
+    idx.mark_recent(&fx.root.join("src/order/OrderController.java"));
+    assert!(idx.wait_idle(Duration::from_millis(500)), "a held index with a queued recent file must report idle");
+
+    idx.release();
+    // No sleep: idle right after the release must mean the scan already ran.
+    assert!(idx.wait_idle(WAIT), "indexing did not finish after the release");
+    assert_eq!(idx.status().files, 8, "wait_idle returned before the scan");
+}
+
+#[test]
 fn closing_a_held_index_does_not_wait_for_a_release() {
     let fx = sample();
     let idx = open_options(&fx, IndexOptions { held: true, ..Default::default() });

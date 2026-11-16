@@ -312,7 +312,7 @@ pub async fn plugin_catalog(app: AppHandle, state: State<'_, AppState>) -> IdeRe
     let mut dirs: Vec<PathBuf> = app.path().resource_dir().map(|d| vec![d.join("plugins")]).unwrap_or_default();
     if cfg!(debug_assertions) {
         let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        dirs.push(repo.join("../ide-plugins/plugins/official"));
+        dirs.push(repo.join("../plugins/official"));
     }
     let host = state.plugins.clone();
     blocking(move || Ok(host.catalog(&dirs))).await

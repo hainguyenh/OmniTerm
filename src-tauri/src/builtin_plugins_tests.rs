@@ -40,7 +40,7 @@ fn plugins_with_code_ship_their_component() {
 #[test]
 fn staged_components_match_the_official_builds() {
     // A stale staged copy ships an old component: `pnpm stage:plugins` refreshes it.
-    let official = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ide-plugins/plugins/official");
+    let official = Path::new(env!("CARGO_MANIFEST_DIR")).join("../plugins/official");
     for id in shipped() {
         let staged = packages_dir().join(id).join("dist/plugin.wasm");
         if !staged.is_file() {

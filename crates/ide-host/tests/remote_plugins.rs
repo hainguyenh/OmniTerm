@@ -79,7 +79,7 @@ async fn sync(peer: &Peer, desktop: &PluginHost, files: &[&str]) -> PackageSyncR
 }
 
 fn official(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ide-plugins/plugins/official").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/official").join(name)
 }
 
 /// A test fixture plugin (`crates/ide-plugin/tests/fixtures/<name>`).

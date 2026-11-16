@@ -241,7 +241,7 @@ fn sdk_dependency(explicit: Option<&str>, plugin_dir: &Path) -> Result<String, S
     let sdk = match explicit {
         Some(p) => PathBuf::from(p),
         None => match dunce::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")) {
-            Ok(tree) if plugin_dir.starts_with(&tree) => tree.join("ide-plugins/sdk/rust/omniterm-plugin"),
+            Ok(tree) if plugin_dir.starts_with(&tree) => tree.join("plugins/sdk/rust/omniterm-plugin"),
             _ => return Ok(format!("{{ git = \"{REPOSITORY}\", tag = \"v{}\" }}", env!("CARGO_PKG_VERSION"))),
         },
     };
@@ -796,7 +796,7 @@ mod tests {
     fn new_plugins_depend_on_the_sdk_by_path_only_in_its_source_tree() {
         let tree = dunce::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).unwrap();
         assert_eq!(
-            sdk_dependency(None, &tree.join("ide-plugins/plugins/official/new")).unwrap(),
+            sdk_dependency(None, &tree.join("plugins/official/new")).unwrap(),
             "{ path = \"../../../sdk/rust/omniterm-plugin\" }"
         );
         let outside = dunce::canonicalize(std::env::temp_dir()).unwrap().join("my-plugin");
@@ -804,7 +804,7 @@ mod tests {
             sdk_dependency(None, &outside).unwrap(),
             format!("{{ git = \"https://github.com/hainguyenh/OmniTerm\", tag = \"v{}\" }}", env!("CARGO_PKG_VERSION"))
         );
-        let sdk = tree.join("ide-plugins/sdk/rust/omniterm-plugin");
+        let sdk = tree.join("plugins/sdk/rust/omniterm-plugin");
         assert!(sdk_dependency(Some(sdk.to_str().unwrap()), &outside).unwrap().starts_with("{ path = "));
         assert!(
             sdk_dependency(Some(tree.join("wit").to_str().unwrap()), &outside)
@@ -978,7 +978,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let dir = dunce::canonicalize(&dir).unwrap();
         let plugin = dir.join("plugin");
-        let sdk = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ide-plugins/sdk/rust/omniterm-plugin");
+        let sdk = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/sdk/rust/omniterm-plugin");
         let sdk = sdk_dependency(Some(sdk), &plugin).unwrap();
         let vars = templates::Vars { id: "acme.sample", name: "Sample", sdk: Some(&sdk) };
         for (rel, content) in templates::render(templates::Template::Command, &vars) {
@@ -988,7 +988,7 @@ mod tests {
         }
         // The SDK's lockfile keeps the versions its own CI builds with (the resolver also
         // looks up the wasm-only dependencies, which may not be downloaded yet).
-        let sdk_lock = concat!(env!("CARGO_MANIFEST_DIR"), "/../../ide-plugins/sdk/rust/omniterm-plugin/Cargo.lock");
+        let sdk_lock = concat!(env!("CARGO_MANIFEST_DIR"), "/../../plugins/sdk/rust/omniterm-plugin/Cargo.lock");
         std::fs::copy(sdk_lock, plugin.join("Cargo.lock")).unwrap();
         let out = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
             .args(["test", "--manifest-path"])
