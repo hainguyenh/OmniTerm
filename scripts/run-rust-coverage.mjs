@@ -138,7 +138,14 @@ try {
   run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--json', '--summary-only', '--output-path', jsonPath])
   const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
   fs.writeFileSync(jsonPath, `${JSON.stringify(filterCoverageReport(report))}\n`)
-  run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--lcov', '--output-path', path.join(outputDir, 'lcov.info')])
+  // lcov.info is a convenience artifact for editors and viewers; the gate reads only the JSON
+  // summary above. llvm-cov from nightly 2026-11-16 (LLVM 23.1) crashes in `export -format=lcov`
+  // on this workspace after the JSON report succeeds, so a failed export must not fail the job.
+  try {
+    run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--lcov', '--output-path', path.join(outputDir, 'lcov.info')])
+  } catch (error) {
+    console.warn(`lcov export skipped: ${error instanceof Error ? error.message : String(error)}`)
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))
   process.exitCode = 1
