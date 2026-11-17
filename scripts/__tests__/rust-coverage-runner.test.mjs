@@ -40,7 +40,8 @@ test('Rust coverage excludes only explicit adapter paths', () => {
 test('Rust coverage removes test and dependency records before writing the gate summary', () => {
   assert.ok(coverageScript.includes('_tests?\\\\.rs'))
   assert.match(coverageScript, /cargo.*registry/)
-  assert.match(coverageScript, /report\.data\?\.\[0\]/)
+  assert.match(coverageScript, /splitCoverageReport\(report, root, COVERAGE_FILENAME_REGEX\)/)
+  assert.match(coverageScript, /coverage-ide-summary\.json/)
 })
 
 test('Rust binary coverage smoke runs with a virtual X display in CI', () => {

@@ -197,7 +197,9 @@ jobs:
           node scripts/check-coverage.mjs \
             --js artifacts/coverage-js/coverage-summary.json \
             --rust artifacts/coverage-rust/coverage-summary.json \
+            --rust-ide artifacts/coverage-rust/coverage-ide-summary.json \
             --threshold 85 \
+            --branch-threshold 80 \
             --output coverage-final.json
       - uses: actions/upload-artifact@v6
         if: always()

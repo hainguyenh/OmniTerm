@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { splitCoverageReport } from './rust-coverage-summary.mjs'
+
 const root = process.cwd()
 const outputDir = path.join(root, 'coverage-rust')
 const cargoEnv = process.env.CARGO_TARGET_DIR
@@ -55,6 +57,8 @@ const IGNORED_FILENAME_REGEX = [
 const NON_PRODUCT_FILENAME_REGEX = [
   '(?:^|[/\\\\])(?:tests?[/\\\\]|[^/\\\\]+_tests?\\.rs$)',
   'cargo[/\\\\]registry',
+  // Standard-library code inlined from the toolchain (`/rustc/<hash>/library/...`).
+  '^[/\\\\]rustc[/\\\\]',
 ].join('|')
 const COVERAGE_FILENAME_REGEX = new RegExp(
   `${IGNORED_FILENAME_REGEX}|${NON_PRODUCT_FILENAME_REGEX}`,
@@ -95,34 +99,6 @@ function run(args) {
   if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
 }
 
-function filterCoverageReport(report) {
-  const data = report.data?.[0]
-  if (!data || !Array.isArray(data.files)) return report
-
-  const files = data.files.filter((file) => !COVERAGE_FILENAME_REGEX.test(file.filename))
-  const totals = {}
-  for (const metric of ['branches', 'functions', 'instantiations', 'lines', 'mcdc', 'regions']) {
-    const summaries = files
-      .map((file) => file.summary?.[metric])
-      .filter((summary) => summary !== undefined)
-    const count = summaries.reduce((total, summary) => total + summary.count, 0)
-    const covered = summaries.reduce((total, summary) => total + summary.covered, 0)
-    const total = {
-      count,
-      covered,
-      percent: count === 0 ? 100 : (covered * 100) / count,
-    }
-    if (summaries.some((summary) => 'notcovered' in summary)) {
-      total.notcovered = count - covered
-    }
-    totals[metric] = total
-  }
-
-  data.files = files
-  data.totals = totals
-  return report
-}
-
 try {
   fs.rmSync(outputDir, { recursive: true, force: true })
   fs.mkdirSync(outputDir, { recursive: true })
@@ -137,7 +113,9 @@ try {
   const jsonPath = path.join(outputDir, 'coverage-summary.json')
   run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--json', '--summary-only', '--output-path', jsonPath])
   const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-  fs.writeFileSync(jsonPath, `${JSON.stringify(filterCoverageReport(report))}\n`)
+  const { gated, ide } = splitCoverageReport(report, root, COVERAGE_FILENAME_REGEX)
+  fs.writeFileSync(jsonPath, `${JSON.stringify(gated)}\n`)
+  fs.writeFileSync(path.join(outputDir, 'coverage-ide-summary.json'), `${JSON.stringify(ide)}\n`)
   // lcov.info is a convenience artifact for editors and viewers; the gate reads only the JSON
   // summary above. llvm-cov from nightly 2026-11-16 (LLVM 23.1) crashes in `export -format=lcov`
   // on this workspace after the JSON report succeeds, so a failed export must not fail the job.
