@@ -146,6 +146,8 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         agent_session_cleanup::agent_session_profiles_list,
         agent_session_cleanup::agent_session_files_list,
         agent_session_cleanup::agent_session_files_delete,
+        temp_cleanup::temp_cleanup_scan,
+        temp_cleanup::temp_cleanup_run,
         attachments::save_temp_image,
         attachments::save_attachment,
         attachments::import_clipboard_files,

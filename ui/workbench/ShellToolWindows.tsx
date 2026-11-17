@@ -3,6 +3,7 @@ import { IconButton } from '../ide/ui'
 import { isAllScope, useSelectedWorkspace, useWorkspaceStore } from '../platform/workspaceStore'
 
 import { useSessionCleanup } from './sessions/sessionCleanupStore'
+import { useTempCleanup } from './tempCleanup/tempCleanupStore'
 import { useShellPanels } from './shellPanelsStore'
 import { isGroupCollapsed, useSessionsView } from './sessionsViewStore'
 
@@ -52,6 +53,14 @@ export function SessionsHeaderActions() {
         onClick={() => useSessionCleanup.getState().setOpen(true)}
         data-feature="p2.sessions.cleanup"
         data-testid="sessions-cleanup-button"
+      />
+      <IconButton
+        icon="scratches"
+        title="Clean Temp Files…"
+        size="small"
+        onClick={() => useTempCleanup.getState().setOpen(true)}
+        data-feature="p2.sessions.cleanTemp"
+        data-testid="sessions-clean-temp-button"
       />
       <IconButton icon="collapse-all" title="Collapse All" size="small" onClick={collapseAll} data-feature="p2.sessions.collapse" />
     </>

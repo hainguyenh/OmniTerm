@@ -11,6 +11,7 @@ import { useProblemsStore } from './problems/problemsStore'
 import { OmniTermProjectHeaderActions, ProjectToolWindow } from './ProjectToolWindow'
 import { QUOTA_TOOL_WINDOW } from './quota/quotaDockState'
 import { SessionCleanupOverlay } from './sessions/SessionCleanupDialog'
+import { TempCleanupOverlay } from './tempCleanup/TempCleanupDialog'
 import { SessionsHeaderActions, SessionsToolWindow } from './ShellToolWindows'
 import { registerShellIcons, SESSIONS_ICON } from './shellIcons'
 import { TERMINAL_WINDOW } from './terminalDock/terminalDockActions'
@@ -66,6 +67,7 @@ export function registerShellToolWindows(): () => void {
       headerActions: SessionsHeaderActions,
     }),
     registerOverlay({ id: 'omniterm.sessions.cleanup', component: SessionCleanupOverlay }),
+    registerOverlay({ id: 'omniterm.temp.cleanup', component: TempCleanupOverlay }),
     registerToolWindow({
       id: 'problems',
       title: 'Problems',

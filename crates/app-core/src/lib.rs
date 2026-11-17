@@ -17,6 +17,7 @@ pub mod launch;
 pub mod proc_activity;
 pub mod rdp_launch;
 pub mod safepath;
+pub mod temp_cleanup;
 pub mod temp_notes;
 pub mod tree_validate;
 #[cfg(windows)]

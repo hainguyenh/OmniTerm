@@ -22,6 +22,8 @@ const MAX_SCAN: u32 = 5000;
 /// Files larger than this are skipped by a scan.
 const MAX_FILE: usize = 1 << 20;
 const CODE: &str = "missing-license-header";
+/// The copyright holder written when the user has not set one.
+const DEFAULT_OWNER: &str = "OmniTerm";
 
 /// How a file writes a header: line comments, or one block comment.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -169,7 +171,7 @@ pub fn year_of_day(day: i64) -> i64 {
 
 fn settings() -> (String, String) {
     (
-        host::setting_string("owner").unwrap_or_default(),
+        host::setting_string("owner").unwrap_or_else(|| DEFAULT_OWNER.into()),
         host::setting_string("license").unwrap_or_else(|| "Apache-2.0".into()),
     )
 }
@@ -372,6 +374,12 @@ mod tests {
         assert!(host.diagnostics().get("/project/src/c.rs").is_none_or(Vec::is_empty));
         p.handle_events(&[Event::FileSaved("/project/src/c.rs".into())], &host.invocation());
         assert_eq!(host.diagnostics()["/project/src/c.rs"].len(), 1);
+
+        // Without an owner setting the header names OmniTerm.
+        let by_default = p.code_actions(&doc("/project/src/a.rs", "fn a() {}
+"), Range::default());
+        assert!(by_default[0].edits[0].1[0].text.starts_with(&format!("// Copyright (c) {} OmniTerm
+", this_year())));
 
         host.set_setting("owner", "\"ACME\"");
         let actions = p.code_actions(&doc("/project/src/a.rs", "fn a() {}\n"), Range::default());
