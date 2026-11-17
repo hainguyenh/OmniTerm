@@ -38,12 +38,10 @@ fn every_state_an_ide_command_reads_is_registered_with_the_app() {
     let registered = include_str!("app_state.rs");
     let used = state_types_of_ide_commands();
     // Guards the scan itself: it must see the states the commands really read.
-    for known in ["Requests"] {
-        assert!(
-            used.iter().any(|name| name == known),
-            "scan did not find {known}: {used:?}"
-        );
-    }
+    assert!(
+        used.iter().any(|name| name == "Requests"),
+        "scan did not find Requests: {used:?}"
+    );
     let missing: Vec<_> = used
         .into_iter()
         .filter(|name| !registered.contains(name.as_str()))
