@@ -390,3 +390,6 @@ fn windows_argv_builder_is_tested_on_every_platform() {
 #[cfg(not(target_os = "windows"))]
 #[path = "launch_posix_tests.rs"]
 mod posix;
+
+#[path = "launch_extra_tests.rs"]
+mod launch_extra_tests;
