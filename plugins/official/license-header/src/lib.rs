@@ -94,6 +94,10 @@ pub fn render(comment: Comment, lines: &[String]) -> String {
 
 /// The line the header goes on: after a `#!` line and a Python encoding line.
 pub fn insert_line(text: &str) -> u32 {
+    // `@charset` is only valid as the very first thing in a stylesheet.
+    if text.starts_with("@charset") {
+        return 1;
+    }
     let mut line = 0;
     let mut lines = text.lines();
     if lines.next().is_some_and(|l| l.starts_with("#!")) {
@@ -122,6 +126,10 @@ pub fn header_edit(path: &str, text: &str, year: i64, owner: &str, license: &str
     // After a first line without a newline (a lone shebang).
     if at.line > 0 && text.lines().count() == at.line as usize && !text.ends_with('\n') {
         insert.insert(0, '\n');
+    }
+    // A CRLF file keeps one line ending throughout.
+    if text.contains("\r\n") {
+        insert = insert.replace('\n', "\r\n");
     }
     Some(TextEdit { range: Range::new(at, at), text: insert })
 }
@@ -189,6 +197,8 @@ impl LicenseHeader {
             return Ok(Some("The file already has a license header.".into()));
         };
         editor.apply_edits(doc.version, &[edit])?;
+        // The header now exists: drop the "No license header" report without waiting for a save.
+        host::publish_diagnostics(&path, &[])?;
         Ok(None)
     }
 
@@ -313,6 +323,15 @@ mod tests {
         assert_eq!(insert_line("# coding=latin-1\nx = 1\n"), 1);
         let e = header_edit("run.sh", "#!/bin/sh", 2026, "", "").unwrap();
         assert_eq!((e.range.start, e.text.as_str()), (Position::new(1, 0), "\n# Copyright (c) 2026\n\n"));
+    }
+
+    #[test]
+    fn crlf_files_get_crlf_headers_and_charset_stays_first() {
+        let e = header_edit("a.rs", "fn a() {}\r\n", 2026, "X", "MIT").unwrap();
+        assert_eq!(e.text, "// Copyright (c) 2026 X\r\n// SPDX-License-Identifier: MIT\r\n\r\n");
+        let css = header_edit("a.css", "@charset \"utf-8\";\nbody {}\n", 2026, "", "").unwrap();
+        assert_eq!(css.range.start, Position::new(1, 0));
+        assert!(css.text.starts_with("/*\n * Copyright (c) 2026\n"));
     }
 
     #[test]

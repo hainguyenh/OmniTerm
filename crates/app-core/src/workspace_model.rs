@@ -1,3 +1,4 @@
+use crate::workspace_hierarchy::{ensure_no_cycle, normalize_siblings};
 use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspaceImport, WorkspacePin};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -343,12 +344,8 @@ pub fn namespace_path(folder_id: &str, relative_path: &str) -> String {
 }
 
 fn resolve_import_path(base: &Path, raw: &str) -> PathBuf {
-    let path = Path::new(raw);
-    if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        base.join(path)
-    }
+    // `join` keeps an absolute `raw` as is and resolves a relative one against `base`.
+    base.join(raw)
 }
 
 fn display_name_for_path(path: &Path, fallback: &str) -> String {
@@ -356,51 +353,4 @@ fn display_name_for_path(path: &Path, fallback: &str) -> String {
         .map(|value| value.to_string_lossy().into_owned())
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| fallback.to_string())
-}
-
-fn ensure_no_cycle(
-    workspaces: &[Workspace],
-    workspace_id: &str,
-    parent_id: Option<&str>,
-) -> Result<(), String> {
-    let mut cursor = parent_id;
-    let mut visited = HashSet::new();
-    while let Some(parent) = cursor {
-        if parent == workspace_id {
-            return Err("A workspace cannot be moved into one of its descendants.".to_string());
-        }
-        if !visited.insert(parent) {
-            return Err("Workspace hierarchy contains a cycle.".to_string());
-        }
-        cursor = workspaces
-            .iter()
-            .find(|item| item.id == parent)
-            .and_then(|item| item.parent_id.as_deref());
-    }
-    Ok(())
-}
-
-fn normalize_siblings(
-    workspaces: &mut [Workspace],
-    parent_id: Option<&str>,
-    insertion: Option<(&str, usize)>,
-) {
-    let moving = insertion.map(|(id, _)| id);
-    let mut indices = workspaces
-        .iter()
-        .enumerate()
-        .filter(|(_, item)| {
-            item.parent_id.as_deref() == parent_id && Some(item.id.as_str()) != moving
-        })
-        .map(|(idx, _)| idx)
-        .collect::<Vec<_>>();
-    indices.sort_by_key(|idx| workspaces[*idx].order);
-    if let Some((id, target)) = insertion {
-        if let Some(moving_idx) = workspaces.iter().position(|item| item.id == id) {
-            indices.insert(target.min(indices.len()), moving_idx);
-        }
-    }
-    for (order, idx) in indices.into_iter().enumerate() {
-        workspaces[idx].order = order;
-    }
 }

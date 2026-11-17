@@ -1966,7 +1966,7 @@ mod performance_settings_tests {
         assert!(!options.held);
         let languages = options.symbol_languages.expect("the default extracts a fixed list");
         assert!(languages.contains("rust") && languages.contains("python") && !languages.contains("java"));
-        assert_eq!(options.scan_delay, Duration::from_secs(3));
+        assert_eq!(options.scan_delay, Duration::from_secs(10));
         assert!(options.threads >= 1);
 
         index.symbol_languages = vec!["*".into()];

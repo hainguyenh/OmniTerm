@@ -10,7 +10,8 @@
  * through `--cm-corner-inset` (`theme.ts`), the way the fixed line padding
  * already reserves room for the overview lane.
  */
-import { type EditorView, ViewPlugin } from "@codemirror/view";
+import type { EditorState } from "@codemirror/state";
+import { EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 
 /** Space between the corner's left edge and the end of a line. */
 const CORNER_GAP = 4;
@@ -18,12 +19,19 @@ const CORNER_GAP = 4;
 /** Width changes of the corner that matter: `getBoundingClientRect()` is fractional. */
 const round = (width: number) => Math.ceil(width);
 
+/** `EditorView.lineWrapping` is a content attribute (not a facet), and `view.lineWrapping` lags an update. */
+const wraps = (state: EditorState) =>
+  state.facet(EditorView.contentAttributes).some((a) => typeof a === "object" && /cm-lineWrapping/.test(String(a.class ?? "")));
+
 class CornerInset {
   private corner: HTMLElement | null = null;
   private observer: ResizeObserver | null = null;
   private inset = -1;
+  /** The state of the update in progress: `view.state` can still be the previous one inside a plugin. */
+  private state: EditorState;
 
   constructor(private readonly view: EditorView) {
+    this.state = view.state;
     this.sync();
   }
 
@@ -39,9 +47,11 @@ class CornerInset {
     this.measure();
   }
 
-  update() {
+  update(u: ViewUpdate) {
+    this.state = u.state;
     // The corner is created lazily, possibly after this plugin: catch it on the next update.
     if (!this.corner) this.sync();
+    else if (wraps(u.startState) !== wraps(u.state)) this.measure();
   }
 
   private sync() {
@@ -53,7 +63,9 @@ class CornerInset {
     const corner = this.corner;
     if (!corner) return;
     const width = corner.getBoundingClientRect().width;
-    let inset = width > 0 ? round(width) + CORNER_GAP : 0;
+    // Soft-wrapped text never scrolls sideways, so no line ends under the corner: padding every line
+    // would only narrow the text (by up to half in a split pane).
+    let inset = width > 0 && !wraps(this.state) ? round(width) + CORNER_GAP : 0;
     // A narrow window or a wide corner: keep at least half of the width for text.
     const room = this.view.scrollDOM.clientWidth;
     if (inset > 0 && room > 0) inset = Math.min(inset, Math.floor(room / 2));

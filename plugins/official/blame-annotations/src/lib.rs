@@ -1,13 +1,24 @@
-//! A command does repository work; its lens only offers the command.
+//! A command toggles the annotations of the focused file; its lens only offers the command.
+use std::collections::HashSet;
+
 use omniterm_plugin::language_features::{CodeLens, Document, LanguageFeatures};
 use omniterm_plugin::{Decoration, Error, Invocation, Plugin, Position, Range, host, register_plugin};
 
+const SET: &str = "blame";
+
 #[derive(Default)]
-pub struct BlameAnnotations;
+pub struct BlameAnnotations {
+    /// Files whose annotations are on, so the same command hides them again.
+    shown: HashSet<String>,
+}
 impl Plugin for BlameAnnotations {
     fn run_command(&mut self, _id: &str, ctx: &Invocation, _arg: Option<&str>) -> Result<Option<String>, Error> {
-        let project = ctx.project().ok_or("Open a project first")?;
         let editor = ctx.editor().ok_or("Open a text file first")?;
+        if self.shown.remove(&editor.path()) {
+            host::set_decorations(&editor.path(), SET, &[])?;
+            return Ok(None);
+        }
+        let project = ctx.project().ok_or("Open a project first")?;
         let text = editor.document()?.text;
         let lines: Vec<_> = text.lines().collect();
         let items = project
@@ -25,15 +36,17 @@ impl Plugin for BlameAnnotations {
                 })
             })
             .collect::<Vec<_>>();
-        host::set_decorations(&editor.path(), "blame", &items)?;
+        host::set_decorations(&editor.path(), SET, &items)?;
+        self.shown.insert(editor.path());
         Ok(None)
     }
 }
 impl LanguageFeatures for BlameAnnotations {
-    fn code_lenses(&mut self, _doc: &Document) -> Vec<CodeLens> {
+    fn code_lenses(&mut self, doc: &Document) -> Vec<CodeLens> {
+        let title = if self.shown.contains(&doc.path) { "Hide blame annotations" } else { "Show blame annotations" };
         vec![CodeLens {
             range: Range::default(),
-            title: "Show blame annotations".into(),
+            title: title.into(),
             command: "annotate".into(),
             argument: None,
         }]
@@ -48,6 +61,7 @@ mod tests {
     #[test]
     fn annotations_use_utf16_line_ends_and_require_vcs_permission() {
         let mock = MockHost::install();
+        let mut plugin = BlameAnnotations::default();
         mock.open_editor("/project/a.txt", "text", "😀x\n", &[]);
         mock.set_vcs_reads(
             vec![],
@@ -61,14 +75,25 @@ mod tests {
             }],
             None,
         );
-        BlameAnnotations.run_command("annotate", &mock.invocation(), None).unwrap();
+        plugin.run_command("annotate", &mock.invocation(), None).unwrap();
         let items = mock.decorations();
         let item = &items.values().next().unwrap()[0];
         assert_eq!(item.range.start.character, 3);
         assert_eq!(item.after.as_deref(), Some("  Ada · 12345678"));
+        let lens = |p: &mut BlameAnnotations| {
+            p.code_lenses(&Document { path: "/project/a.txt".into(), language: String::new(), version: 1, text: String::new() })
+                .remove(0)
+                .title
+        };
+        assert_eq!(lens(&mut plugin), "Hide blame annotations");
+        // Running it again hides them.
+        plugin.run_command("annotate", &mock.invocation(), None).unwrap();
+        assert!(mock.decorations().values().all(Vec::is_empty));
+        assert_eq!(lens(&mut plugin), "Show blame annotations");
         drop(mock);
+        let mut plugin = BlameAnnotations::default();
         let mock = MockHost::install().with_capabilities(&["project.read", "editor.read"]);
         mock.open_editor("/project/a.txt", "text", "x", &[]);
-        assert!(matches!(BlameAnnotations.run_command("annotate", &mock.invocation(), None), Err(Error::Denied(_))));
+        assert!(matches!(plugin.run_command("annotate", &mock.invocation(), None), Err(Error::Denied(_))));
     }
 }

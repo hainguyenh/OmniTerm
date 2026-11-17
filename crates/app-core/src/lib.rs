@@ -23,6 +23,7 @@ pub mod tree_validate;
 pub mod win_job;
 pub mod workspace_fs;
 pub mod workspace_launch;
+mod workspace_hierarchy;
 pub mod workspace_model;
 pub mod workspace_scan;
 

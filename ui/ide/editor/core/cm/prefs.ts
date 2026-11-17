@@ -430,12 +430,20 @@ export function resetAllEditorsFontZoom(): void {
     if (ed.view.state.field(fontZoom, false)) ed.view.dispatch({ effects: setFontZoom.of(0) });
 }
 
-/** Exported for tests: the ⌘/Ctrl+wheel handler of the prefs compartment. */
+/** Resets one editor's font zoom, leaving the other editors as they are. */
+export function resetFontZoom(view: EditorView): void {
+  if (view.state.field(fontZoom, false)) view.dispatch({ effects: setFontZoom.of(0) });
+}
+
+/**
+ * Exported for tests: the ⌘/Ctrl+wheel handler of the prefs compartment. It zooms only the editor
+ * under the pointer, so each window of a split layout keeps its own size.
+ */
 export const wheelZoom = EditorView.domEventHandlers({
   wheel(e, view) {
     if (!e.metaKey && !e.ctrlKey) return false;
     e.preventDefault();
-    stepAllEditorsFontZoom(view, e.deltaY < 0 ? 1 : -1);
+    stepFontZoom(view, e.deltaY < 0 ? 1 : -1);
     return true;
   },
 });

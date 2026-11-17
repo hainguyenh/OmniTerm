@@ -413,8 +413,8 @@ are always available. Calling a gated function without its capability returns
 
 ### API 1.5
 
-API 1.5.0 is planned for the next OmniTerm release. Use
-`engines.omniterm = "^1.5"` and the matching SDK. Released 1.4 plugins keep
+API 1.5.0 is the current API, not yet released with OmniTerm. Use
+`engines.omniterm = "^1.5"` and the matching SDK. 1.4 plugins keep
 working. New in 1.5:
 
 - [Notifications for a project](#notifications-with-commands):
@@ -443,8 +443,8 @@ working. New in 1.5:
 
 ### API 1.4
 
-API 1.4.0 shipped with OmniTerm 0.1.40. Use
-`engines.omniterm = "^1.4"` and the matching SDK. Released 1.3 plugins keep
+API 1.4.0 is an earlier revision of the API. Use
+`engines.omniterm = "^1.4"` and the matching SDK. 1.3 plugins keep
 working. New in 1.4:
 
 - [Permissions](#capabilities): `net.http:<host>` for unencrypted HTTP,
@@ -2376,9 +2376,8 @@ the API itself follows _Evolving the plugin API_ below.
 
 ## 10. Evolving the plugin API
 
-Released versions are frozen: 1.0.0 shipped with OmniTerm 0.1.36, 1.1.0
-with 0.1.37, 1.2.0 with 0.1.38, 1.3.0 with 0.1.39 and 1.4.0 with 0.1.40.
-API 1.5.0 is planned with the next release. wasmtime decides what stays compatible: it resolves interface names
+Earlier API revisions (1.0.0 to 1.4.0) are frozen; API 1.5.0 is the current,
+not yet released one. wasmtime decides what stays compatible: it resolves interface names
 by semver (a component importing `omniterm:plugin/x@1.0.0` links against a
 host defining `@1.1.0`, and the host finds its exports the same way), but
 function types must match exactly — a record with another field count, or a

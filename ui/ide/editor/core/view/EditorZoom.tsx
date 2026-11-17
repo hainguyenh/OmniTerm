@@ -1,13 +1,13 @@
 /**
  * OmniTerm: font size controls floating at the bottom-right of a pane (− / reset / +), for the
  * editor or the terminal shown in it, like the inspection widget floats at the top-right. A text
- * editor zooms every editor (IDEA's ⌘ + wheel); a terminal session or web view zooms itself.
+ * editor zooms only the one in its own pane, so split windows keep separate sizes; a terminal session or web view zooms itself.
  */
 import { useEffect, useState, type RefObject } from "react";
 import { EditorView } from "@codemirror/view";
 import { IconButton } from "@/ui";
 import { stepSurfaceFontZoomAt, stepSurfaceFontZoomWithin } from "@/workbench/contributions";
-import { resetAllEditorsFontZoom, stepAllEditorsFontZoom } from "../cm/prefs";
+import { resetFontZoom, stepFontZoom } from "../cm/prefs";
 import styles from "./EditorArea.module.css";
 
 /** The text editor shown in `root`, not one of a hidden kept-alive tab. */
@@ -23,8 +23,8 @@ export function stepPaneFontSize(root: Element, delta: number): boolean {
   if (stepSurfaceFontZoomWithin(root, delta)) return true;
   const view = shownEditor(root);
   if (!view) return false;
-  if (delta === 0) resetAllEditorsFontZoom();
-  else stepAllEditorsFontZoom(view, delta);
+  if (delta === 0) resetFontZoom(view);
+  else stepFontZoom(view, delta);
   return true;
 }
 
