@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
+
 
 import { Button, EmptyState, IconButton } from '../../ide/ui'
 import { showContextMenu } from '../../ide/ui/Menu'
+import { registerDropTarget } from '../../ide/ui/pointerDrag'
 import { Tabs, type TabItem } from '../../ide/ui/Tabs'
+import { EDITOR_TAB_MIME } from '../../ide/workbench/contributions'
 import { useToolWindowLayout } from '../../ide/workbench/toolwindows/store'
 import { loadShellOptions } from '../../shellOptions'
 import { useSessionBridge } from '../sessions/sessionBridge'
 import { confirmSessionClose } from '../sessions/sessionClose'
 import { SessionColorMark } from '../sessions/SessionColorMark'
+import { SESSION_DRAG } from '../sessions/sessionDrag'
 import { sessionInput } from '../sessions/sessionInput'
 import { showSessionTab } from '../sessions/sessionTabActions'
 import { SessionTabStatus } from '../sessions/SessionTabStatus'
-import { sessionTabTitle } from '../sessions/sessionTabTitle'
+import { agentProfileOf, sessionTabTitle } from '../sessions/sessionTabTitle'
 import { claimSurface, releaseSurface, setSurfaceShown } from '../sessions/surfaceRegistry'
 
-import { requestDockedTerminal, shellMenuItems, TERMINAL_WINDOW } from './terminalDockActions'
+import { draggedSession } from './draggedSession'
+import { moveSessionToTerminalWindow, projectMenuItems, requestDockedTerminal, shellMenuItems, TERMINAL_WINDOW } from './terminalDockActions'
 import { selectDocked, undockSession, useTerminalDock } from './terminalDockStore'
 
 /** Whether the Terminal tool window is the one its area shows (it stays mounted while hidden). */
@@ -43,19 +48,45 @@ function DockedSurface({ sessionId, shown }: { sessionId: string; shown: boolean
   return <div ref={ref} className="relative h-full w-full min-h-0 min-w-0" data-terminal-dock-surface={sessionId} />
 }
 
+/** Dropping a session's editor tab (or its Sessions row) on the window docks it here. */
+function useSessionDrop(ref: RefObject<HTMLDivElement | null>): boolean {
+  const [over, setOver] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return undefined
+    return registerDropTarget(el, {
+      accepts: (type) => type === EDITOR_TAB_MIME || type === SESSION_DRAG,
+      over: (data) => setOver(draggedSession(data.type, data.payload) !== null),
+      leave: () => setOver(false),
+      drop: (data) => {
+        setOver(false)
+        const id = draggedSession(data.type, data.payload)
+        if (id) moveSessionToTerminalWindow(id)
+      },
+    })
+  }, [ref])
+  return over
+}
+
 /** The Terminal tool window's content: the shown docked session, or a way to start one. */
 export function TerminalToolWindow() {
   const sessionId = useShownDocked()
   const shown = useTerminalWindowShown()
   const exists = useSessionBridge((state) => !!sessionId && state.sessions.some((session) => session.id === sessionId))
-  if (!sessionId || !exists) {
-    return (
-      <EmptyState title="No terminal sessions" actions={<Button onClick={() => requestDockedTerminal()}>New Terminal</Button>}>
-        Terminals opened here stay below the editor. Move one into the editor from its tab menu.
-      </EmptyState>
-    )
-  }
-  return <DockedSurface key={sessionId} sessionId={sessionId} shown={shown} />
+  const ref = useRef<HTMLDivElement>(null)
+  const over = useSessionDrop(ref)
+  return (
+    <div ref={ref} className="relative h-full w-full min-h-0 min-w-0" data-terminal-dock-drop={over ? 'over' : undefined}>
+      {sessionId && exists ? (
+        <DockedSurface key={sessionId} sessionId={sessionId} shown={shown} />
+      ) : (
+        <EmptyState title="No terminal sessions" actions={<Button onClick={() => requestDockedTerminal()}>New Terminal</Button>}>
+          Terminals opened here stay below the editor. Drag a terminal tab here, or move one from its tab menu.
+        </EmptyState>
+      )}
+      {over && <div aria-hidden className="pointer-events-none absolute inset-0 border-2 border-dashed border-[var(--accent)]" />}
+    </div>
+  )
 }
 
 async function closeDocked(id: string): Promise<void> {
@@ -77,7 +108,7 @@ export function TerminalDockTabs() {
   const items: TabItem[] = docked.flatMap((id) => {
     const session = sessions.find((item) => item.id === id)
     if (!session) return []
-    const title = sessionTabTitle(session, false)
+    const title = sessionTabTitle(session, agentProfileOf(id))
     return [{
       id,
       label: title,
@@ -128,5 +159,5 @@ export function TerminalDockTabs() {
 
 async function showShellMenu(anchor: DOMRect): Promise<void> {
   const options = await loadShellOptions()
-  showContextMenu({ x: anchor.left, y: anchor.bottom + 2 }, shellMenuItems(options))
+  showContextMenu({ x: anchor.left, y: anchor.bottom + 2 }, [...shellMenuItems(options), ...projectMenuItems(options)])
 }

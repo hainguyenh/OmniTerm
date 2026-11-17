@@ -988,3 +988,25 @@ exit 1
     let args = fs::read_to_string(log).unwrap();
     assert!(args.contains(&format!("--python {}", sdk.join("python3.14").display())), "{args}");
 }
+
+// Regression: installer children got a `PATH` naming every managed tool's folder, installed or not.
+// On Windows it outgrew cmd.exe's limit and `npm.cmd` failed with "'node' is not recognized".
+#[test]
+fn installer_children_get_only_existing_folders_on_their_path() {
+    let env = Env::new();
+    let tools = env.tools();
+    let installed = env.root.join("node_modules").join(".bin");
+    fs::create_dir_all(&installed).unwrap();
+    let cmd = tools.command("npm");
+    let path = cmd
+        .get_envs()
+        .find(|(key, _)| *key == "PATH")
+        .and_then(|(_, value)| value)
+        .expect("installer children get a PATH")
+        .to_owned();
+    let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
+    assert!(dirs.contains(&installed), "{dirs:?}");
+    assert!(dirs.contains(&env.sys), "{dirs:?}");
+    assert!(dirs.iter().all(|d| d.is_dir()), "{dirs:?}");
+    assert!(bin_dirs_in(&env.root, Platform::current()).len() > dirs.len());
+}

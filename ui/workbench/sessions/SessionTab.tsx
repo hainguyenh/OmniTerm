@@ -5,7 +5,7 @@ import { registerFontZoomSurface, useEditorShown, type EditorInput } from '../..
 import { useSessionBridge } from './sessionBridge'
 import { stepSessionFontSize } from './sessionFontSize'
 import { parseSessionInput } from './sessionInput'
-import { SessionAgentHeader } from './SessionAgentHeader'
+import { SessionAgentFooter, SessionAgentHeader } from './SessionAgentHeader'
 import { claimSurface, releaseSurface, setSurfaceShown } from './surfaceRegistry'
 
 /**
@@ -51,6 +51,7 @@ export function SessionTab({ input }: { input: EditorInput }) {
             This session is not running in this window.
           </div>
         )}
+        {sessionId && <SessionAgentFooter sessionId={sessionId} />}
       </div>
     </div>
   )

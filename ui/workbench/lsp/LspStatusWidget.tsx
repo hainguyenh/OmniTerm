@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 
-import { executeAction } from '../../ide/platform/actions'
+import { executeAction, getAction } from '../../ide/platform/actions'
 import {
   useLspServersStore,
   type LspServerRecord,
   type NormalizedLspStatus,
 } from './lspServersStore'
+
+/** Installs a language server by name (the tools feature; it restarts the server when done). */
+const INSTALL_ACTION = 'tools.install'
 
 function StatusIndicatorIcon({ status }: { status: NormalizedLspStatus }) {
   if (status === 'Starting') {
@@ -57,6 +60,7 @@ function ServerCard({
   onRestart: (id: number) => void
 }) {
   const [copied, setCopied] = useState(false)
+  const canInstall = server.status === 'Missing' && !!getAction(INSTALL_ACTION)
 
   const handleCopy = (text: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -93,14 +97,26 @@ function ServerCard({
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusBg}`}>
             {server.status}
           </span>
-          <button
-            type="button"
-            data-testid="lsp-restart-button"
-            onClick={() => onRestart(server.id)}
-            className="rounded bg-[var(--surface-hover,rgba(255,255,255,0.08))] px-1.5 py-0.5 text-[10px] text-[var(--foreground,#ddd)] hover:bg-[var(--surface-hover,rgba(255,255,255,0.15))]"
-          >
-            Restart
-          </button>
+          {canInstall ? (
+            // Restarting a server that is not on this machine changes nothing: offer the install.
+            <button
+              type="button"
+              data-testid="lsp-install-button"
+              onClick={() => void executeAction(INSTALL_ACTION, server.name)}
+              className="rounded bg-[var(--primary,#3b82f6)] px-1.5 py-0.5 text-[10px] font-medium text-white hover:opacity-90"
+            >
+              Install
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="lsp-restart-button"
+              onClick={() => onRestart(server.id)}
+              className="rounded bg-[var(--surface-hover,rgba(255,255,255,0.08))] px-1.5 py-0.5 text-[10px] text-[var(--foreground,#ddd)] hover:bg-[var(--surface-hover,rgba(255,255,255,0.15))]"
+            >
+              Restart
+            </button>
+          )}
         </div>
       </div>
 

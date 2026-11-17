@@ -20,6 +20,10 @@
 .search {
   margin: 8px;
 }
+.simple {
+  margin: 0 10px 6px;
+  color: var(--fg-muted);
+}
 .tree {
   flex: 1;
   min-height: 0;

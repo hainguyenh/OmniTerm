@@ -13,6 +13,11 @@ interface TerminalDockState {
   /** In tab order. */
   docked: readonly string[]
   active: string | null
+  /**
+   * Sessions that were docked when they ended (or when the app quit), newest last: resuming one of
+   * them puts the new session back in the dock instead of an editor tab.
+   */
+  ended: readonly string[]
   /** New sessions asked for from the tool window that have not shown up yet. */
   pending: number
   pendingSince: number
@@ -21,26 +26,35 @@ interface TerminalDockState {
 const STORAGE_KEY = 'omniterm.terminalDock'
 /** A requested shell that has not started within this time is no longer waited for. */
 export const PENDING_DOCK_MS = 15_000
+const ENDED_LIMIT = 50
 
 const validId = (value: unknown): value is string =>
   typeof value === 'string' && parseSessionInput(sessionInput(value)) === value
 
-function load(): Pick<TerminalDockState, 'docked' | 'active'> {
+type Saved = Pick<TerminalDockState, 'docked' | 'active' | 'ended'>
+
+const validIds = (value: unknown): string[] => (Array.isArray(value) ? [...new Set(value.filter(validId))] : [])
+
+function load(): Saved {
   try {
     const raw: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
-    if (typeof raw !== 'object' || raw === null) return { docked: [], active: null }
-    const { docked, active } = raw as { docked?: unknown; active?: unknown }
-    const ids = Array.isArray(docked) ? [...new Set(docked.filter(validId))].slice(0, 50) : []
-    return { docked: ids, active: validId(active) && ids.includes(active) ? active : ids[0] ?? null }
+    if (typeof raw !== 'object' || raw === null) return { docked: [], active: null, ended: [] }
+    const { docked, active, ended } = raw as { docked?: unknown; active?: unknown; ended?: unknown }
+    const ids = validIds(docked).slice(0, 50)
+    return {
+      docked: ids,
+      active: validId(active) && ids.includes(active) ? active : ids[0] ?? null,
+      ended: validIds(ended).slice(-ENDED_LIMIT),
+    }
   } catch (error) {
     diag.warn('[terminal-dock] ignoring unreadable saved state', error)
-    return { docked: [], active: null }
+    return { docked: [], active: null, ended: [] }
   }
 }
 
-function save(state: Pick<TerminalDockState, 'docked' | 'active'>): void {
+function save(state: Saved): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ docked: state.docked, active: state.active }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ docked: state.docked, active: state.active, ended: state.ended }))
   } catch (error) {
     diag.warn('[terminal-dock] could not save the docked sessions', error)
   }
@@ -50,7 +64,7 @@ export const useTerminalDock = create<TerminalDockState>(() => ({ ...load(), pen
 
 function update(next: Partial<TerminalDockState>): void {
   useTerminalDock.setState(next)
-  if ('docked' in next || 'active' in next) save(useTerminalDock.getState())
+  if ('docked' in next || 'active' in next || 'ended' in next) save(useTerminalDock.getState())
 }
 
 export function isDocked(id: string): boolean {
@@ -72,6 +86,18 @@ export function undockSession(id: string): void {
   const rest = docked.filter((item) => item !== id)
   const nextActive = active === id ? rest[Math.min(index, rest.length - 1)] ?? null : active
   update({ docked: rest, active: nextActive })
+}
+
+/** Whether `id` was docked when it ended: its resumed session belongs in the dock again. */
+export function endedDocked(id: string): boolean {
+  return useTerminalDock.getState().ended.includes(id)
+}
+
+/** A docked session ended (or did not come back after a restart): it leaves the dock, remembered. */
+function endDocked(id: string): void {
+  undockSession(id)
+  const ended = useTerminalDock.getState().ended.filter((item) => item !== id)
+  update({ ended: [...ended, id].slice(-ENDED_LIMIT) })
 }
 
 export function selectDocked(id: string): void {
@@ -105,7 +131,7 @@ export function startTerminalDockSync(now: () => number = Date.now): () => void 
       }
     }
     known = live
-    for (const id of useTerminalDock.getState().docked) if (!live.has(id)) undockSession(id)
+    for (const id of useTerminalDock.getState().docked) if (!live.has(id)) endDocked(id)
   }
   const read = () => {
     const state = useSessionBridge.getState()
@@ -117,7 +143,7 @@ export function startTerminalDockSync(now: () => number = Date.now): () => void 
 
 /** Test hook. */
 export function resetTerminalDock(): void {
-  useTerminalDock.setState({ docked: [], active: null, pending: 0, pendingSince: 0 })
+  useTerminalDock.setState({ docked: [], active: null, ended: [], pending: 0, pendingSince: 0 })
   try {
     localStorage.removeItem(STORAGE_KEY)
   } catch {

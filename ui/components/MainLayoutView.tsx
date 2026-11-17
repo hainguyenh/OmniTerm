@@ -4,6 +4,7 @@ import { useWorkbenchBridge } from '../platform/useWorkbenchBridge'
 import { WorkbenchFrame } from '../workbench/WorkbenchFrame'
 import { SessionTabsShell } from '../workbench/sessions/SessionTabsShell'
 import { showSessionTab } from '../workbench/sessions/sessionTabActions'
+import { resumeWhereItRan } from '../workbench/terminalDock/terminalDockActions'
 import { usePublishSessionBridge, useSyncEditorLayout } from '../workbench/sessions/usePublishSessionBridge'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import { usePublishShellPanels } from './usePublishShellPanels'
@@ -39,8 +40,12 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     sessionCwds: model.sessionCwds ?? {},
     activeTabId,
     onShowTab: showSessionTab,
-    onStart: (project, command) => requestNewSession(undefined, project?.workspaceId ?? model.selectedWorkspaceId, project?.cwd ?? null, command),
-    onResume: (session, command) => { consumeForResume(session); requestNewSession(undefined, null, session.cwd ?? null, command) },
+    onStart: (project, command) => requestNewSession(undefined, project?.workspaceId || model.selectedWorkspaceId, project?.cwd ?? null, command),
+    onResume: (session, command) => {
+      consumeForResume(session)
+      resumeWhereItRan(session.tabId)
+      requestNewSession(undefined, null, session.cwd ?? null, command)
+    },
   }
   const bookmarksPanelProps: BookmarksPanelProps = {
     onLaunch: (command, cwd) => requestNewSession(undefined, null, cwd ?? null, command),

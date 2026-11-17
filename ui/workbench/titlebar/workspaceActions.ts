@@ -1,8 +1,9 @@
-import type { Workspace } from '../../domain'
+import type { Workspace, WorkspaceFolder } from '../../domain'
 
 import { diag } from '../../diag'
 import { encodeWorkspaceSelection } from '../../utils/workspaceSelection'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
+import { useProjectFilterStore } from '../projectFilterStore'
 
 /** Reads the catalog again and selects `workspace` (the one just added or imported). */
 async function adopt(workspace: Workspace | null): Promise<void> {
@@ -47,5 +48,33 @@ export async function addFolderToWorkspace(workspaceId: string): Promise<void> {
     if (updated) await useWorkspaceStore.getState().refresh()
   } catch (error) {
     diag.error('[workspace] could not add a folder', error)
+  }
+}
+
+/** A path as both sides compare it: forward slashes, no trailing one, case-insensitive on Windows drives. */
+const comparable = (path: string): string => {
+  const normalized = path.replaceAll('\\', '/').replace(/\/+$/, '')
+  return /^[a-z]:/i.test(normalized) ? normalized.toLowerCase() : normalized
+}
+
+/** The folder of `workspace` at `path` (as the Project view or the project filter names it). */
+export function workspaceFolderAt(workspace: Workspace | null | undefined, path: string): WorkspaceFolder | null {
+  const target = comparable(path)
+  return workspace?.folders.find((folder) => comparable(folder.path) === target) ?? null
+}
+
+/**
+ * Takes a project folder out of workspace `workspaceId` (its files are untouched); the project
+ * bridge reopens the workspace with the folders that are left.
+ */
+export async function removeFolderFromWorkspace(workspaceId: string, folder: WorkspaceFolder): Promise<void> {
+  try {
+    await window.omnitermAPI.workspace.removeFolder(workspaceId, folder.id)
+    const filter = useProjectFilterStore.getState()
+    // The Project panel was showing only this folder: show the rest.
+    if (filter.filter !== 'all' && comparable(filter.filter) === comparable(folder.path)) filter.reset()
+    await useWorkspaceStore.getState().refresh()
+  } catch (error) {
+    diag.error('[workspace] could not remove a folder', error)
   }
 }

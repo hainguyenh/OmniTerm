@@ -15,6 +15,7 @@ import {
   registerMenuGroup,
   registerSettingsPage,
   registerStatusItem,
+  notifications,
   registerToolWindow,
   toolWindowService,
 } from "@/workbench/contributions";
@@ -61,9 +62,18 @@ export function activateSettingsPages(): () => void {
 }
 
 export function activate(): () => void {
+  // The agent backend connects once the window is idle: a project opening at launch shows its
+  // tree and terminals first, and nothing on screen waits for the task list.
+  let pending: (() => void) | undefined;
   const sync = (root: string | null | undefined) => {
+    pending?.();
+    pending = undefined;
     disconnect();
-    if (root) void connect().catch((e: unknown) => console.warn("agents unavailable", e));
+    if (root)
+      pending = whenIdle(() => {
+        pending = undefined;
+        void connect().catch((e: unknown) => console.warn("agents unavailable", e));
+      });
   };
   sync(useProject.getState().project?.root);
   const disposers = [
@@ -199,8 +209,17 @@ export function activate(): () => void {
         when: "projectOpen",
         keywords: ["agent", "chat", "context", "reference", "selection"],
         run: ({ arg }) => {
-          if (Array.isArray(arg)) sendPaths(arg.filter((p): p is string => typeof p === "string"));
-          else sendSelection();
+          const sent = Array.isArray(arg)
+            ? sendPaths(arg.filter((p): p is string => typeof p === "string"))
+            : sendSelection();
+          // A path outside every project folder has no `@` reference: say so rather than do nothing.
+          if (!sent)
+            notifications().notify({
+              level: "info",
+              title: "Only files and folders inside the project can be sent to an agent",
+              key: "agents.sendToAgent",
+              userInitiated: true,
+            });
         },
       },
       {
@@ -215,7 +234,18 @@ export function activate(): () => void {
     ]),
   ];
   return () => {
+    pending?.();
     disposers.reverse().forEach((d) => d());
     disconnect();
   };
+}
+
+/** Runs `run` when the window is idle (within two seconds); returns a cancel function. */
+function whenIdle(run: () => void): () => void {
+  if (typeof requestIdleCallback !== "function") {
+    const timer = setTimeout(run, 0);
+    return () => clearTimeout(timer);
+  }
+  const handle = requestIdleCallback(run, { timeout: 2000 });
+  return () => cancelIdleCallback(handle);
 }

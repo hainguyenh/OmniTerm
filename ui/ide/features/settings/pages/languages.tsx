@@ -10,11 +10,33 @@ import { ProjectStructurePage } from "../languages/ProjectStructurePage";
 import { PythonInterpreterPage } from "../languages/PythonInterpreterPage";
 import { GoBuildTagsPage, GO_BUILD_TAG_SECTIONS } from "../languages/GoBuildTags";
 import { GoModulesPage, GO_MODULE_SECTIONS } from "../languages/GoModules";
+import { LANGUAGE_FAMILIES } from "@/platform/languageFamilies";
 import type { PageSpec } from "./spec";
 
 export const LANGUAGES_GROUP = "Languages & Frameworks";
 
+/** OmniTerm: Settings › Code › Languages, the on/off switch of each language family. */
+export const LANGUAGE_FAMILIES_PAGE_ID = "languages.enabled";
+
 export const LANGUAGE_PAGES: PageSpec[] = [
+  {
+    id: LANGUAGE_FAMILIES_PAGE_ID,
+    title: "Languages",
+    group: LANGUAGES_GROUP,
+    order: 370,
+    keywords: ["enable", "disable", "language", "language server", "performance", "memory", "index"],
+    sections: [
+      {
+        title: "Languages in use",
+        options: LANGUAGE_FAMILIES.map((family) => ({
+          kind: "toggle" as const,
+          key: `languages.families.${family.name}`,
+          label: family.label,
+          hint: `${family.detail}. Off: no language server, no symbol index and no settings pages for it; its files stay highlighted text.`,
+        })),
+      },
+    ],
+  },
   {
     id: "python.interpreter",
     projectScope: true,

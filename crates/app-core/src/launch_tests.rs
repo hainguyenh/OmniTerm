@@ -26,15 +26,27 @@ fn interactive_ps_args(command_completion: bool) -> Vec<String> {
 
 #[test]
 fn override_shell_wins_over_the_saved_one() {
-    let native = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
-    let saved = if cfg!(target_os = "windows") { "powershell" } else { "bash" };
+    let native = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "sh"
+    };
+    let saved = if cfg!(target_os = "windows") {
+        "powershell"
+    } else {
+        "bash"
+    };
     let l = resolve_launch(Some(saved), Some(native), None, None, None, None).unwrap();
     assert_eq!(l.shell.as_str(), native);
 }
 
 #[test]
 fn falls_back_to_the_saved_shell_then_to_default() {
-    let saved = if cfg!(target_os = "windows") { "cmd" } else { "bash" };
+    let saved = if cfg!(target_os = "windows") {
+        "cmd"
+    } else {
+        "bash"
+    };
     assert_eq!(
         resolve_launch(Some(saved), None, None, None, None, None)
             .unwrap()
@@ -43,7 +55,9 @@ fn falls_back_to_the_saved_shell_then_to_default() {
         saved
     );
     assert_eq!(
-        resolve_launch(None, None, None, None, None, None).unwrap().shell,
+        resolve_launch(None, None, None, None, None, None)
+            .unwrap()
+            .shell,
         LocalShell::Default
     );
     // An empty override string is "no override", not "an unknown shell".
@@ -61,17 +75,20 @@ fn falls_back_to_the_saved_shell_then_to_default() {
 #[test]
 fn an_unrecognized_shell_is_an_error_not_an_executable() {
     for hostile in ["C:\\evil.exe", "calc.exe", "/bin/evil", "powershell.exe"] {
-        let err = resolve_launch(None, Some(hostile), None, None, None, None)
-            .expect_err("must reject");
+        let err =
+            resolve_launch(None, Some(hostile), None, None, None, None).expect_err("must reject");
         assert!(err.contains("Unsupported shell"), "{hostile}: got {err}");
     }
 }
 
 #[test]
 fn a_foreign_platform_shell_is_rejected() {
-    let foreign = if cfg!(target_os = "windows") { "zsh" } else { "cmd" };
-    let err =
-        resolve_launch(Some(foreign), None, None, None, None, None).expect_err("must reject");
+    let foreign = if cfg!(target_os = "windows") {
+        "zsh"
+    } else {
+        "cmd"
+    };
+    let err = resolve_launch(Some(foreign), None, None, None, None, None).expect_err("must reject");
     assert!(err.contains("not available on this platform"), "got {err}");
 }
 
@@ -93,8 +110,16 @@ fn blank_optional_fields_normalize_to_none() {
 
 #[test]
 fn keep_open_defaults_to_true_when_absent() {
-    assert!(resolve_launch(None, None, None, None, None, None).unwrap().keep_open);
-    assert!(!resolve_launch(None, None, None, None, None, Some(false)).unwrap().keep_open);
+    assert!(
+        resolve_launch(None, None, None, None, None, None)
+            .unwrap()
+            .keep_open
+    );
+    assert!(
+        !resolve_launch(None, None, None, None, None, Some(false))
+            .unwrap()
+            .keep_open
+    );
 }
 
 // ── Windows argv ─────────────────────────────────────────────────────────────
@@ -112,11 +137,10 @@ mod windows {
 
     #[test]
     fn a_bare_powershell_bootstraps_utf8_and_stays_interactive() {
-        let inv = launch(LocalShell::Powershell, None, true).invocation().unwrap();
-        assert_eq!(
-            inv.args,
-            interactive_ps_args(false)
-        );
+        let inv = launch(LocalShell::Powershell, None, true)
+            .invocation()
+            .unwrap();
+        assert_eq!(inv.args, interactive_ps_args(false));
     }
 
     /// `keepOpen` is the whole reason a script pane stays readable after it finishes.
@@ -126,9 +150,13 @@ mod windows {
     /// run failed. The bare command is quoted once by the spawner, and only that matters.
     #[test]
     fn cmd_uses_k_to_stay_open_and_c_to_exit() {
-        let stay = launch(LocalShell::Cmd, Some("build.bat"), true).invocation().unwrap();
+        let stay = launch(LocalShell::Cmd, Some("build.bat"), true)
+            .invocation()
+            .unwrap();
         assert_eq!(stay.args, vec!["/k", "build.bat"]);
-        let exit = launch(LocalShell::Cmd, Some("build.bat"), false).invocation().unwrap();
+        let exit = launch(LocalShell::Cmd, Some("build.bat"), false)
+            .invocation()
+            .unwrap();
         assert_eq!(exit.args, vec!["/c", "build.bat"]);
     }
 
@@ -159,8 +187,13 @@ mod windows {
     /// empty argv that would drop the command on the floor.
     #[test]
     fn default_shell_behaves_like_powershell() {
-        let inv = launch(LocalShell::Default, Some("echo hi"), false).invocation().unwrap();
-        assert_eq!(inv.args, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
+        let inv = launch(LocalShell::Default, Some("echo hi"), false)
+            .invocation()
+            .unwrap();
+        assert_eq!(
+            inv.args,
+            vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]
+        );
     }
 
     /// Extra args go before the command switch so they still apply when a command is set.
@@ -168,7 +201,10 @@ mod windows {
     fn extra_args_precede_the_command_switch() {
         let mut l = launch(LocalShell::Cmd, Some("build.bat"), true);
         l.args = Some("/v:on".to_string());
-        assert_eq!(l.invocation().unwrap().args, vec!["/v:on", "/k", "build.bat"]);
+        assert_eq!(
+            l.invocation().unwrap().args,
+            vec!["/v:on", "/k", "build.bat"]
+        );
 
         let mut ps = launch(LocalShell::Powershell, Some("x"), true);
         ps.args = Some("-NoProfile".to_string());
@@ -245,30 +281,37 @@ mod windows {
 #[path = "launch_completion_tests.rs"]
 mod launch_completion_tests;
 
-
 /// `windows_args` is ordinary platform-independent argv construction even though `invocation()`
 /// selects it only on Windows. Exercise it directly on Linux CI so every shell arm and keep-open
 /// branch remains covered instead of waiting for a Windows-only coverage job.
 #[test]
 fn windows_argv_builder_is_tested_on_every_platform() {
-    let cmd_keep = launch(LocalShell::Cmd, None, true)
-        .windows_args(vec!["/v:on".to_string()], Some("build.bat".to_string()), false);
+    let cmd_keep = launch(LocalShell::Cmd, None, true).windows_args(
+        vec!["/v:on".to_string()],
+        Some("build.bat".to_string()),
+        false,
+    );
     assert_eq!(cmd_keep, vec!["/v:on", "/k", "build.bat"]);
-    let cmd_exit = launch(LocalShell::Cmd, None, false)
-        .windows_args(Vec::new(), Some("build.bat".to_string()), false);
+    let cmd_exit = launch(LocalShell::Cmd, None, false).windows_args(
+        Vec::new(),
+        Some("build.bat".to_string()),
+        false,
+    );
     assert_eq!(cmd_exit, vec!["/c", "build.bat"]);
     assert_eq!(
         launch(LocalShell::Cmd, None, true).windows_args(Vec::new(), None, false),
         vec!["/k", "chcp 65001 >nul"]
     );
     assert_eq!(
-        launch(LocalShell::Cmd, None, true)
-            .windows_args(vec!["/v:on".to_string()], None, false),
+        launch(LocalShell::Cmd, None, true).windows_args(vec!["/v:on".to_string()], None, false),
         vec!["/v:on", "/k", "chcp 65001 >nul"]
     );
 
-    let ps_keep = launch(LocalShell::Powershell, None, true)
-        .windows_args(vec!["-NoProfile".to_string()], Some("echo hi".to_string()), false);
+    let ps_keep = launch(LocalShell::Powershell, None, true).windows_args(
+        vec!["-NoProfile".to_string()],
+        Some("echo hi".to_string()),
+        false,
+    );
     assert_eq!(
         ps_keep,
         vec![
@@ -279,9 +322,15 @@ fn windows_argv_builder_is_tested_on_every_platform() {
             format!("{}; echo hi", powershell_interactive_bootstrap(false))
         ]
     );
-    let ps_exit = launch(LocalShell::Default, None, false)
-        .windows_args(Vec::new(), Some("echo hi".to_string()), false);
-    assert_eq!(ps_exit, vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]);
+    let ps_exit = launch(LocalShell::Default, None, false).windows_args(
+        Vec::new(),
+        Some("echo hi".to_string()),
+        false,
+    );
+    assert_eq!(
+        ps_exit,
+        vec!["-NoLogo", "-Command", "chcp 65001 >$null; echo hi"]
+    );
     assert_eq!(
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, false),
         interactive_ps_args(false)
@@ -292,8 +341,11 @@ fn windows_argv_builder_is_tested_on_every_platform() {
         launch(LocalShell::Powershell, None, true).windows_args(Vec::new(), None, true),
         interactive_ps_args(true)
     );
-    let ps_completion_on_with_command = launch(LocalShell::Default, None, true)
-        .windows_args(Vec::new(), Some("echo hi".to_string()), true);
+    let ps_completion_on_with_command = launch(LocalShell::Default, None, true).windows_args(
+        Vec::new(),
+        Some("echo hi".to_string()),
+        true,
+    );
     assert_eq!(
         ps_completion_on_with_command.last().unwrap(),
         &format!("{}; echo hi", powershell_interactive_bootstrap(true))
@@ -308,18 +360,27 @@ fn windows_argv_builder_is_tested_on_every_platform() {
         wsl_keep,
         vec!["-d", "Ubuntu", "--", "bash", "-lc", "make; exec bash -l"]
     );
-    let wsl_exit = launch(LocalShell::Wsl, None, false)
-        .windows_args(Vec::new(), Some("make".to_string()), false);
+    let wsl_exit = launch(LocalShell::Wsl, None, false).windows_args(
+        Vec::new(),
+        Some("make".to_string()),
+        false,
+    );
     assert_eq!(wsl_exit, vec!["--", "bash", "-lc", "make"]);
     assert_eq!(
-        launch(LocalShell::Wsl, None, true)
-            .windows_args(vec!["-d".to_string(), "Debian".to_string()], None, false),
+        launch(LocalShell::Wsl, None, true).windows_args(
+            vec!["-d".to_string(), "Debian".to_string()],
+            None,
+            false
+        ),
         vec!["-d", "Debian"]
     );
 
     assert_eq!(
-        launch(LocalShell::Bash, None, true)
-            .windows_args(vec!["--norc".to_string()], Some("ignored".to_string()), false),
+        launch(LocalShell::Bash, None, true).windows_args(
+            vec!["--norc".to_string()],
+            Some("ignored".to_string()),
+            false
+        ),
         vec!["--norc"]
     );
 }
@@ -369,7 +430,12 @@ mod posix {
 
 #[test]
 fn test_posix_args() {
-    let args = super::posix_args("bash", vec!["-x".to_string()], Some("echo hello".to_string()), true);
+    let args = super::posix_args(
+        "bash",
+        vec!["-x".to_string()],
+        Some("echo hello".to_string()),
+        true,
+    );
     assert_eq!(args, vec!["-x", "-l", "-c", "echo hello; exec 'bash' -l"]);
 
     let args = super::posix_args("bash", vec![], Some("echo hello".to_string()), false);

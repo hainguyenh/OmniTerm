@@ -446,7 +446,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // xterm queues writes; wait for the queue before restoring a pane that was at the live tail.
     if ((becameActive || layoutChanged) && wasAtBottomRef.current) {
       term.scrollToBottom?.()
-      term.write('', () => term.scrollToBottom?.())
+      // xterm's write queue is not cancelled by dispose(): the callback still fires from a timer
+      // after the session closes or remounts, when scrolling would read the disposed renderer's
+      // `dimensions`. `termRef` is cleared (or replaced) on dispose, so it tells us the term is live.
+      term.write('', () => { if (termRef.current === term) term.scrollToBottom?.() })
     } else if (wasAtBottomRef.current) {
       term.scrollToBottom?.()
     }

@@ -269,7 +269,10 @@ fn a_renderer_save_never_overwrites_the_built_in_feature_state() {
     tauri::async_runtime::block_on(save_settings(app.handle().clone(), stale)).expect("save");
     let stored = read_settings(app.handle());
     assert_eq!(stored["fontSize"], json!(19));
-    assert_eq!(stored["disabledBuiltinFeatures"], json!(["omniterm.always-awake"]));
+    assert_eq!(
+        stored["disabledBuiltinFeatures"],
+        json!(["omniterm.always-awake"])
+    );
     let _ = std::fs::remove_file(path);
 }
 

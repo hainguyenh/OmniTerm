@@ -6,7 +6,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { EditorView } from "@codemirror/view";
 import { IconButton } from "@/ui";
-import { stepSurfaceFontZoomWithin } from "@/workbench/contributions";
+import { stepSurfaceFontZoomAt, stepSurfaceFontZoomWithin } from "@/workbench/contributions";
 import { resetAllEditorsFontZoom, stepAllEditorsFontZoom } from "../cm/prefs";
 import styles from "./EditorArea.module.css";
 
@@ -25,6 +25,22 @@ export function stepPaneFontSize(root: Element, delta: number): boolean {
   if (!view) return false;
   if (delta === 0) resetAllEditorsFontZoom();
   else stepAllEditorsFontZoom(view, delta);
+  return true;
+}
+
+/** An editor pane or a region marked zoomable on its own, such as the terminal tool window. */
+const FONT_ZOOM_REGION = "[data-pane-id], [data-font-zoom-region]";
+
+/**
+ * Ctrl/⌘+wheel at `target`: steps the font of the terminal under the pointer, else of what the
+ * editor pane or terminal dock around it shows, so the wheel never zooms the whole app from inside
+ * one of them. False outside those regions, where the app zoom still applies.
+ */
+export function stepFontZoomAt(target: Element, delta: number): boolean {
+  if (stepSurfaceFontZoomAt(target, delta)) return true;
+  const region = target.closest(FONT_ZOOM_REGION);
+  if (!region) return false;
+  stepPaneFontSize(region, delta);
   return true;
 }
 

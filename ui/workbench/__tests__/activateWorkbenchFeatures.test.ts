@@ -43,17 +43,25 @@ describe('activateWorkbenchFeatures', () => {
     expect(names[0]).toBe('shell')
     expect(names.at(-1)).toBe('keyboard')
     expect(names).toEqual(
-      expect.arrayContaining([
-        'editor',
-        'lsp',
-        'lsp-workbench',
-        'project-tree',
-        'search',
-        'vcs',
-        'run',
-        'debugger',
-      ]),
+      expect.arrayContaining(['editor', 'lsp', 'project-tree', 'session-tabs', 'terminal-tool-window', 'agents', 'vcs']),
     )
+  })
+
+  it('starts the project folder, terminals and agent sessions at launch and the rest once idle', () => {
+    const eager = WORKBENCH_STEPS.map(([name]) => name)
+    const deferred = DEFERRED_WORKBENCH_STEPS.map(([name]) => name)
+    for (const name of ['project-tree', 'session-tabs', 'terminal-tool-window', 'shell-tool-windows', 'agents']) {
+      expect(eager).toContain(name)
+    }
+    for (const name of ['lsp-workbench', 'code-insight', 'search', 'mcp', 'run', 'debugger', 'build', 'templates', 'tools', 'web', 'updater']) {
+      expect(deferred).toContain(name)
+    }
+  })
+
+  it('defers an OmniTerm adapter right behind the feature whose tool window it replaces', () => {
+    const deferred = DEFERRED_WORKBENCH_STEPS.map(([name]) => name)
+    expect(deferred.indexOf('run-workbench')).toBe(deferred.indexOf('run') + 1)
+    expect(deferred.indexOf('debugger-workbench')).toBe(deferred.indexOf('debugger') + 1)
   })
 
   it('mounts the coding, git, run, plugin, remote and agent features OmniTerm ports', () => {
@@ -69,9 +77,9 @@ describe('activateWorkbenchFeatures', () => {
   it('defers only the features whose contributions may arrive after the shell paints', () => {
     const eager = WORKBENCH_STEPS.map(([name]) => name)
     const deferred = DEFERRED_WORKBENCH_STEPS.map(([name]) => name)
-    expect(deferred).toEqual(['todo', 'scratch', 'libraries', 'analysis', 'github', 'ssh'])
+    expect(deferred).toEqual(expect.arrayContaining(['todo', 'scratch', 'libraries', 'analysis', 'github', 'ssh']))
     // Restorable editor kinds must exist before the session is saved or restored.
-    for (const name of ['editor', 'agents', 'plugins', 'vcs', 'templates', 'web', 'debugger']) {
+    for (const name of ['editor', 'session-tabs', 'agents', 'plugins', 'vcs', 'viewers']) {
       expect(eager).toContain(name)
     }
     expect(eager.filter((name) => deferred.includes(name))).toEqual([])
@@ -90,7 +98,6 @@ describe('activateWorkbenchFeatures', () => {
   it('activates the language features right after the editor core they extend', () => {
     const names = WORKBENCH_STEPS.map(([name]) => name)
     expect(names.indexOf('lsp')).toBe(names.indexOf('editor') + 1)
-    expect(names.indexOf('lsp-workbench')).toBe(names.indexOf('lsp') + 1)
   })
 
   it('activates in order and disposes in reverse when the last user releases', () => {

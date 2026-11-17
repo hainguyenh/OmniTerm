@@ -177,7 +177,15 @@ impl AgentQuotaState {
             .map_err(|_| "Agent Quota hold lock is poisoned".to_string())?;
         let entry = held.entry(session_id.to_string()).or_default();
         let home = agent_snapshot::home_dir();
-        agent_guard::suspend_session(self.ops.as_ref(), &rows, shell, pid, start_time, entry, home.as_deref())
+        agent_guard::suspend_session(
+            self.ops.as_ref(),
+            &rows,
+            shell,
+            pid,
+            start_time,
+            entry,
+            home.as_deref(),
+        )
     }
 
     fn terminate(
@@ -190,7 +198,15 @@ impl AgentQuotaState {
         let rows = self.source.action_rows(shell);
         let held = self.take_held(session_id);
         let home = agent_snapshot::home_dir();
-        agent_guard::terminate_session(self.ops.as_ref(), &rows, shell, pid, start_time, held, home.as_deref())
+        agent_guard::terminate_session(
+            self.ops.as_ref(),
+            &rows,
+            shell,
+            pid,
+            start_time,
+            held,
+            home.as_deref(),
+        )
     }
 }
 
@@ -289,10 +305,7 @@ pub async fn agent_quota_get_held<R: Runtime>(
     app: AppHandle<R>,
     session_id: Option<String>,
 ) -> Result<Vec<ProcTarget>, String> {
-    blocking(&app, move |state| {
-        Ok(state.get_held(session_id.as_deref()))
-    })
-    .await
+    blocking(&app, move |state| Ok(state.get_held(session_id.as_deref()))).await
 }
 
 #[tauri::command]
@@ -301,10 +314,7 @@ pub async fn agent_quota_resume_pid<R: Runtime>(
     session_id: String,
     pid: u32,
 ) -> Result<bool, String> {
-    blocking(&app, move |state| {
-        state.resume_pid(&session_id, pid)
-    })
-    .await
+    blocking(&app, move |state| state.resume_pid(&session_id, pid)).await
 }
 
 #[cfg(test)]

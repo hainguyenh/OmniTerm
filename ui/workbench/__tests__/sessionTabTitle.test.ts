@@ -20,21 +20,25 @@ describe('folderName', () => {
 
 describe('sessionTabTitle', () => {
   it('adds the folder a local shell works in', () => {
-    expect(sessionTabTitle(local('pwsh', 'D:\\work\\OmniTerm'), false)).toBe('pwsh — OmniTerm')
+    expect(sessionTabTitle(local('pwsh', 'D:\\work\\OmniTerm'), null)).toBe('pwsh — OmniTerm')
   })
 
   it('does not repeat a folder the name already holds', () => {
-    expect(sessionTabTitle(local('pwsh (omniterm)', 'D:\\work\\OmniTerm'), false)).toBe('pwsh (omniterm)')
+    expect(sessionTabTitle(local('pwsh (omniterm)', 'D:\\work\\OmniTerm'), null)).toBe('pwsh (omniterm)')
   })
 
-  it('shows the name alone for agents, remote sessions and shells without a folder', () => {
-    expect(sessionTabTitle(local('claude', 'D:\\work\\OmniTerm'), true)).toBe('claude')
-    expect(sessionTabTitle({ name: 'web-01', connType: 'SSH', cwd: '/srv/app' }, false)).toBe('web-01')
-    expect(sessionTabTitle(local('pwsh', 'C:\\'), false)).toBe('pwsh')
+  // The tab of an agent reads [icon] profile: the terminal's name and an "agent" pill said less.
+  it('names an agent tab after its profile', () => {
+    expect(sessionTabTitle(local('pwsh', 'D:\\work\\OmniTerm'), 'claude-work')).toBe('claude-work')
+  })
+
+  it('shows the name alone for remote sessions and shells without a folder', () => {
+    expect(sessionTabTitle({ name: 'web-01', connType: 'SSH', cwd: '/srv/app' }, null)).toBe('web-01')
+    expect(sessionTabTitle(local('pwsh', 'C:\\'), null)).toBe('pwsh')
   })
 
   it('falls back to Terminal when the session is unknown or unnamed', () => {
-    expect(sessionTabTitle(undefined, false)).toBe('Terminal')
-    expect(sessionTabTitle(local('', null), false)).toBe('Terminal')
+    expect(sessionTabTitle(undefined, null)).toBe('Terminal')
+    expect(sessionTabTitle(local('', null), null)).toBe('Terminal')
   })
 })

@@ -14,16 +14,26 @@ fn selected_source_comes_first_and_the_other_is_the_fallback() {
 #[test]
 fn only_an_https_custom_endpoint_replaces_the_official_ones() {
     let official = vec!["https://github.com/o/r/latest.json".to_owned()];
-    let custom = source_endpoints(official.clone(), UpdateSource::Github, Some(" https://example.com/u.json ".into()));
+    let custom = source_endpoints(
+        official.clone(),
+        UpdateSource::Github,
+        Some(" https://example.com/u.json ".into()),
+    );
     assert_eq!(custom[0], "https://example.com/u.json");
-    let rejected = source_endpoints(official.clone(), UpdateSource::Github, Some("http://example.com/u.json".into()));
+    let rejected = source_endpoints(
+        official.clone(),
+        UpdateSource::Github,
+        Some("http://example.com/u.json".into()),
+    );
     assert_eq!(rejected[0], official[0]);
 }
 
 #[test]
 fn known_totals_report_once_per_percent() {
     let mut throttle = ProgressThrottle::default();
-    let events = (0..1000).filter_map(|_| throttle.chunk(10, Some(10_000))).count();
+    let events = (0..1000)
+        .filter_map(|_| throttle.chunk(10, Some(10_000)))
+        .count();
     assert_eq!(events, 101, "0% through 100% inclusive");
     assert_eq!(throttle.downloaded(), 10_000);
 }
@@ -32,7 +42,13 @@ fn known_totals_report_once_per_percent() {
 fn unknown_totals_report_per_256_kib() {
     let mut throttle = ProgressThrottle::default();
     let first = throttle.chunk(16 * 1024, None);
-    assert_eq!(first, Some(UpdateProgress::Downloading { downloaded: Some(16 * 1024), total: None }));
+    assert_eq!(
+        first,
+        Some(UpdateProgress::Downloading {
+            downloaded: Some(16 * 1024),
+            total: None
+        })
+    );
     assert_eq!(throttle.chunk(16 * 1024, None), None);
 }
 

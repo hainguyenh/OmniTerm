@@ -5,10 +5,10 @@ import type { WorkspaceFolder } from '../../domain'
 import { BarButton, Icon } from '../../ide/ui'
 import styles from '../../ide/workbench/TitleBar.module.css'
 import { useSelectedWorkspace } from '../../platform/workspaceStore'
-import { useProjectFilterStore } from '../projectFilterStore'
+import { comparablePath, useProjectFilterStore } from '../projectFilterStore'
 
 import { TitlePopupList, type PopupEntry } from './TitlePopupList'
-import { addFolderToWorkspace } from './workspaceActions'
+import { addFolderToWorkspace, removeFolderFromWorkspace } from './workspaceActions'
 
 function folderName(folder: WorkspaceFolder): string {
   if (folder.name) return folder.name
@@ -43,10 +43,16 @@ export function ProjectFilterItem() {
   const workspace = useSelectedWorkspace()
   const filter = useProjectFilterStore((s) => s.filter)
   const setFilter = useProjectFilterStore((s) => s.setFilter)
+  const defaultPath = useProjectFilterStore((s) => (workspace ? s.defaults[workspace.id] : undefined))
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLButtonElement>(null)
   const folders = workspace?.folders ?? []
   const selected = filter === 'all' ? null : folders.find((folder) => folder.path === filter)
+
+  const defaultIndex = defaultPath
+    ? folders.findIndex((folder) => comparablePath(folder.path) === comparablePath(defaultPath))
+    : -1
+  const isDefault = (_folder: WorkspaceFolder, index: number) => index === Math.max(defaultIndex, 0)
 
   const entries = useMemo<PopupEntry[]>(
     () => [
@@ -57,10 +63,11 @@ export function ProjectFilterItem() {
         lead: <RadioMark on={!selected} />,
         run: () => setFilter('all'),
       },
-      ...folders.map((folder) => ({
+      ...folders.map((folder, index) => ({
         id: `filter:${folder.id || folder.path}`,
         label: folderName(folder),
-        detail: folder.path,
+        // New terminals and agents start in the default project; picking a project makes it that.
+        detail: isDefault(folder, index) ? `${folder.path} · default` : folder.path,
         lead: <RadioMark on={selected?.path === folder.path} />,
         run: () => setFilter(folder.path),
       })),
@@ -71,8 +78,16 @@ export function ProjectFilterItem() {
         header: '',
         run: () => workspace && void addFolderToWorkspace(workspace.id),
       },
+      // One row per project: the list above only picks what the panel shows.
+      ...folders.map((folder, index) => ({
+        id: `remove:${folder.id || folder.path}`,
+        label: `Remove ${folderName(folder)} from workspace`,
+        icon: 'close',
+        ...(index === 0 ? { header: '' } : {}),
+        run: () => workspace && void removeFolderFromWorkspace(workspace.id, folder),
+      })),
     ],
-    [folders, selected, setFilter, workspace],
+    [folders, selected, setFilter, workspace, defaultPath],
   )
 
   if (!workspace || folders.length === 0) return null

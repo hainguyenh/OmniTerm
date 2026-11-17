@@ -445,7 +445,13 @@ fn ts_steps(dir: &Path, kind: BuildKind) -> Vec<BuildStep> {
     if script && (kind == BuildKind::Artifacts || !dir.join("tsconfig.json").is_file()) {
         return vec![BuildStep::new(package_manager(dir), &["run", "build"], dir, Format::Tsc)];
     }
-    let local = dir.ancestors().map(|d| d.join("node_modules/.bin/tsc")).find(|p| p.is_file());
+    // On Windows the launcher is `tsc.cmd`: the extensionless `tsc` beside it is a shell
+    // script, which `CreateProcess` refuses (os error 193).
+    let names = ide_core::process::executable_names("tsc", cfg!(windows), std::env::var("PATHEXT").ok().as_deref());
+    let local = dir.ancestors().find_map(|d| {
+        let bin = d.join("node_modules").join(".bin");
+        names.iter().map(|name| bin.join(name)).find(|p| p.is_file())
+    });
     let program = local.map_or_else(|| "tsc".to_owned(), |p| p.to_string_lossy().into_owned());
     vec![BuildStep::new(program, &["--noEmit", "--pretty", "false", "-p", "."], dir, Format::Tsc)]
 }

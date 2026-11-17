@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { useProject } from "@/platform/project";
 import { SettingsFormContext, useSettingsPages, type SettingsPageContribution } from "@/workbench/contributions";
 import {
+  Checkbox,
   Dialog,
   EmptyState,
   Icon,
@@ -24,6 +25,7 @@ import {
 import { PageContext, useSettingsFormFor } from "../components/context";
 import { SearchLabel } from "../components/Form";
 import { breadcrumb, buildPageTree, filterPageTree, flatten, groupKey, type PageNode } from "../model/pages";
+import { hasSimpleView, setSimpleView, simplePageTree, useSimpleView } from "../model/simpleView";
 import {
   applySettings,
   closeSettings,
@@ -223,7 +225,14 @@ function SettingsLayout() {
   const { pageId, query, staged, stagedSecrets, stagedExternal, saving, pagesLoading } = useSettingsDialog();
   const treeRef = useRef<SettingsTreeHandle>(null);
 
-  const tree = useMemo(() => buildPageTree(pages.values()), [pages]);
+  const fullTree = useMemo(() => buildPageTree(pages.values()), [pages]);
+  // OmniTerm: the simple view lists the everyday pages; a search still looks through all of them.
+  const simple = useSimpleView((v) => v.simple) && hasSimpleView();
+  const narrowed = simple && !query.trim();
+  const tree = useMemo(
+    () => (narrowed ? simplePageTree(fullTree, pageId ?? undefined) : fullTree),
+    [fullTree, narrowed, pageId],
+  );
   const filtered = useMemo(() => filterPageTree(tree, query, pageLabels), [tree, query]);
   const all = useMemo(() => flatten(tree), [tree]);
 
@@ -255,7 +264,7 @@ function SettingsLayout() {
 
   const onQuery = (q: string) => {
     setQuery(q);
-    const next = flatten(filterPageTree(tree, q, pageLabels));
+    const next = flatten(filterPageTree(q.trim() ? fullTree : tree, q, pageLabels));
     if (q && current && !next.some((n) => n.key === current.key && n.matched)) {
       const first = firstPage(next);
       if (first) selectPage(first);
@@ -294,6 +303,14 @@ function SettingsLayout() {
             }
           }}
         />
+        {hasSimpleView() && (
+          <Checkbox
+            className={styles.simple}
+            checked={!simple}
+            onChange={(showAll) => setSimpleView(!showAll)}
+            label="Show advanced settings"
+          />
+        )}
         <div className={styles.tree}>
           <SettingsTree
             handleRef={treeRef}

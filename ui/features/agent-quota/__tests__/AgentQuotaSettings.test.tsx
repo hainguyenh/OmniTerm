@@ -296,4 +296,36 @@ describe('AgentQuotaSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'light' }))
     expect(preview).toHaveAttribute('data-art-mode', 'light')
   })
+
+  it('shared scope leaves the per-agent cards to the agent pages', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings scope="shared" />)
+    expect(screen.getByRole('checkbox', { name: 'Enable Agent Quota' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agents' })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'Quota lines' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('region', { name: 'Claude Code quota settings' })).toBeNull()
+  })
+
+  it('an agent scope edits only that agent, behind the same Apply', () => {
+    seed()
+    liveSave()
+    render(<AgentQuotaSettings scope="codex" />)
+    expect(screen.queryByRole('checkbox', { name: 'Enable Agent Quota' })).toBeNull()
+    expect(screen.queryByRole('tablist')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Claude Code quota settings' })).toBeNull()
+    const codex = within(screen.getByRole('region', { name: 'Codex quota settings' }))
+    fireEvent.change(codex.getByLabelText('Codex Weekly limit'), { target: { value: '70' } })
+    expect(getQuotaState().config.agents.codex.limits.weekly).not.toBe(70)
+    apply()
+    expect(getQuotaState().config.agents.codex.limits.weekly).toBe(70)
+  })
+
+  it('an agent scope says where to turn the feature on while it is off', () => {
+    seed()
+    act(() => updateQuota((state) => ({ ...state, config: { ...state.config, enabled: false } })))
+    render(<AgentQuotaSettings scope="claude" />)
+    expect(screen.queryByRole('region', { name: 'Claude Code quota settings' })).toBeNull()
+    expect(screen.getByText(/Agent quota is off/)).toBeInTheDocument()
+  })
 })

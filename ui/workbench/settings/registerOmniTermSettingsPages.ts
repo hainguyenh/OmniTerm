@@ -2,10 +2,24 @@ import { lazyComponent } from '../../ide/ui'
 import { registerSettingsPage } from '../../ide/workbench/contributions'
 import { diag } from '../../diag'
 
-import { OMNITERM_SETTINGS_PAGES } from './settingsPageIds'
+import { agentSettingsPage, OMNITERM_SETTINGS_PAGES } from './settingsPageIds'
 
 const pages = () => import('./OmniTermPages')
 const shortcuts = () => import('./ShortcutsPage')
+
+type Pages = Awaited<ReturnType<typeof pages>>
+
+/** The agents with settings of their own (their quota limits, protection and wake-up). */
+const AGENT_PAGES: ReadonlyArray<{
+  kind: string
+  title: string
+  keywords: readonly string[]
+  view: (m: Pages) => Pages['ClaudeAgentPage']
+}> = [
+  { kind: 'claude', title: 'Claude Code', keywords: ['claude', 'anthropic'], view: (m) => m.ClaudeAgentPage },
+  { kind: 'codex', title: 'Codex', keywords: ['codex', 'openai'], view: (m) => m.CodexAgentPage },
+  { kind: 'agy', title: 'Antigravity CLI', keywords: ['agy', 'antigravity', 'gemini'], view: (m) => m.AgyAgentPage },
+]
 
 /** True when the feature's `info` probe answers yes, i.e. it is switched on in the Plugins dialog. */
 async function featureOn(probe: () => Promise<unknown>): Promise<boolean> {
@@ -19,10 +33,10 @@ async function featureOn(probe: () => Promise<unknown>): Promise<boolean> {
 
 /**
  * OmniTerm's own settings pages, each in the group of its feature (`settingsLayout.ts` places the
- * groups): Terminal at the top level; Agents › Agent Sessions, Agent quota and Always awake (the
- * last two only while their built-in feature is switched on, following the Plugins dialog); Version Control › Git Utilities; Editor › Files &
+ * groups): Terminal at the top level; Agents › Agent Sessions, one page per agent, Quota and Always awake (the
+ * last three only while their built-in feature is switched on, following the Plugins dialog); Version Control › Git Utilities; Editor › Files &
  * Attachments; System Settings › Backup & Restore; Appearance › Artwork; Keymap; Plugins ›
- * Installed; Appearance & Behavior › Updates.
+ * Installed; Updates as the last top-level row.
  */
 export function registerOmniTermSettingsPages(): () => void {
   const ids = OMNITERM_SETTINGS_PAGES
@@ -96,9 +110,8 @@ export function registerOmniTermSettingsPages(): () => void {
     registerSettingsPage({
       id: ids.about,
       title: 'Updates',
-      group: 'Appearance & Behavior',
-      // Right after Appearance (0) and before System Settings (1).
-      order: 0.5,
+      // The version and updater: one row at the end of the tree (`settingsLayout.ts`).
+      order: 1000,
       keywords: ['version', 'update', 'release', 'release notes', 'about', 'license', 'omniterm', 'channel', 'source'],
       component: lazyComponent(() => pages().then((m) => m.AboutPage)),
     }),
@@ -130,14 +143,28 @@ export function registerOmniTermSettingsPages(): () => void {
   }
   conditional(
     () => window.omnitermAPI.agentQuota.info(),
-    () => registerSettingsPage({
-      id: ids.agentQuota,
-      title: 'Agent quota',
-      group: 'Agents',
-      order: 480,
-      keywords: ['claude', 'codex', 'usage', 'limit', 'footer', 'wake', 'guard', 'loading artwork'],
-      component: lazyComponent(() => pages().then((m) => m.AgentQuotaPage)),
-    }),
+    () => {
+      const registered = [
+        registerSettingsPage({
+          id: ids.agentQuota,
+          title: 'Quota',
+          group: 'Agents',
+          order: 480,
+          keywords: ['agent quota', 'usage', 'limit', 'footer', 'quota lines', 'guard', 'loading artwork'],
+          component: lazyComponent(() => pages().then((m) => m.AgentQuotaPage)),
+        }),
+        // One page per agent, before the pages the agents share.
+        ...AGENT_PAGES.map((agent, index) => registerSettingsPage({
+          id: agentSettingsPage(agent.kind),
+          title: agent.title,
+          group: 'Agents',
+          order: 440 + index,
+          keywords: [...agent.keywords, 'quota', 'limit', 'suspend', 'resume', 'wake'],
+          component: lazyComponent(() => pages().then(agent.view)),
+        })),
+      ]
+      return () => registered.reverse().forEach((dispose) => dispose())
+    },
   )
   conditional(
     () => window.omnitermAPI.alwaysAwake.info(),

@@ -160,6 +160,14 @@
 .zoomControls:focus-within {
   opacity: 1;
 }
+/* Breadcrumbs at the bottom form a 26px footer: the controls sit centred in it, not across its top
+   border, and the crumbs leave them room. */
+.content:has(.codeCrumbsBottom) > .zoomControls {
+  bottom: 2px;
+}
+.content:has(> .zoomControls) .codeCrumbsBottom {
+  padding-right: 96px;
+}
 /* An editor without a corner (images, other editor kinds): the same toolbar floats on its own. */
 .floatingEditorActions {
   position: absolute;

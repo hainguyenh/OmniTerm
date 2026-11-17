@@ -25,8 +25,17 @@ const byOrder = (a: PageNode, b: PageNode) => a.order - b.order || a.title.local
 /**
  * OmniTerm: places pages in the tree (their group, order, title) without changing their ids or
  * contributions; `ids` are all page ids, so a page nested under another by its id can be told apart.
+ * `null` leaves the page out of the tree (and of the search) while it stays registered.
  */
-export type PageLayout = (page: SettingsPageContribution, ids: ReadonlySet<string>) => SettingsPageContribution;
+export type PageLayout = (page: SettingsPageContribution, ids: ReadonlySet<string>) => PlacedPage | null;
+
+/** A page with where a layout put it. Neither field is part of the contribution or its id. */
+export interface PlacedPage extends SettingsPageContribution {
+  /** Id of the page this one goes under, instead of the one its dotted id extends. */
+  parent?: string;
+  /** Titles of the folders below the page's `group` that lead to it. */
+  folders?: readonly string[];
+}
 
 let pageLayout: PageLayout | null = null;
 
@@ -41,34 +50,40 @@ export function setPageLayout(layout: PageLayout): () => void {
 export function buildPageTree(pages: Iterable<SettingsPageContribution>): PageNode[] {
   const raw = [...pages];
   const allIds = new Set(raw.map((p) => p.id));
-  const list = pageLayout ? raw.map((p) => pageLayout!(p, allIds)) : raw;
+  const list: PlacedPage[] = pageLayout ? raw.flatMap((p) => pageLayout!(p, allIds) ?? []) : raw;
   const ids = new Set(list.map((p) => p.id));
   const nodes = new Map<string, PageNode>();
   for (const p of list) nodes.set(p.id, { key: p.id, title: p.title, page: p, children: [], order: p.order ?? 100 });
 
   const roots: PageNode[] = [];
-  const groups = new Map<string, PageNode>();
+  const folders = new Map<string, PageNode>();
+  // The folder `path` names (a group, then the folders below it), placed by its first page's order.
+  const folderFor = (path: readonly string[], order: number): PageNode => {
+    const key = groupKey(path.join("/"));
+    let folder = folders.get(key);
+    if (!folder) {
+      folder = { key, title: path[path.length - 1]!, children: [], order };
+      folders.set(key, folder);
+      if (path.length > 1) folderFor(path.slice(0, -1), order).children.push(folder);
+      else roots.push(folder);
+    }
+    for (let depth = path.length; depth > 0; depth--) {
+      const above = folders.get(groupKey(path.slice(0, depth).join("/")))!;
+      above.order = Math.min(above.order, order);
+    }
+    return folder;
+  };
   for (const p of list) {
     const node = nodes.get(p.id)!;
-    let parentId: string | undefined;
-    for (let i = p.id.lastIndexOf("."); i > 0; i = p.id.lastIndexOf(".", i - 1)) {
+    let parentId = p.parent !== undefined && p.parent !== p.id && ids.has(p.parent) ? p.parent : undefined;
+    for (let i = p.id.lastIndexOf("."); !parentId && i > 0; i = p.id.lastIndexOf(".", i - 1)) {
       const prefix = p.id.slice(0, i);
-      if (ids.has(prefix)) {
-        parentId = prefix;
-        break;
-      }
+      if (ids.has(prefix)) parentId = prefix;
     }
     if (parentId) {
       nodes.get(parentId)!.children.push(node);
     } else if (p.group) {
-      let g = groups.get(p.group);
-      if (!g) {
-        g = { key: groupKey(p.group), title: p.group, children: [], order: node.order };
-        groups.set(p.group, g);
-        roots.push(g);
-      }
-      g.order = Math.min(g.order, node.order);
-      g.children.push(node);
+      folderFor([p.group, ...(p.folders ?? [])], node.order).children.push(node);
     } else {
       roots.push(node);
     }

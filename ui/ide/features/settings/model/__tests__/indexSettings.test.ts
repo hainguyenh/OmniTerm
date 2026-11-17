@@ -10,7 +10,7 @@ describe("index settings", () => {
     expect(validateIndex(undefined)).toEqual(DEFAULT_INDEX);
     expect(validateSettings({}).index).toEqual(DEFAULT_INDEX);
     expect(DEFAULT_INDEX.enabled).toBe(true);
-    expect(DEFAULT_INDEX.scanDelayMs).toBe(3000);
+    expect(DEFAULT_INDEX.scanDelayMs).toBe(10_000);
   });
 
   it("keep valid values and clamp or drop the rest", () => {

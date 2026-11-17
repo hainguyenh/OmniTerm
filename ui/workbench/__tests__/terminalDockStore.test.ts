@@ -7,6 +7,7 @@ import { resetSessionBridge, useSessionBridge, type SessionBridgeApi, type Sessi
 import {
   PENDING_DOCK_MS,
   dockSession,
+  endedDocked,
   expectDockedSession,
   isDocked,
   resetTerminalDock,
@@ -47,7 +48,7 @@ describe('terminal dock', () => {
     selectDocked('b')
     selectDocked('unknown')
     expect(useTerminalDock.getState().active).toBe('b')
-    expect(saved()).toEqual({ docked: ['a', 'b'], active: 'b' })
+    expect(saved()).toEqual({ docked: ['a', 'b'], active: 'b', ended: [] })
     undockSession('b')
     expect(useTerminalDock.getState()).toMatchObject({ docked: ['a'], active: 'a' })
     undockSession('missing')
@@ -150,6 +151,24 @@ describe('dock sync', () => {
     expect(isDocked('gone')).toBe(true)
     publish('other')
     expect(isDocked('gone')).toBe(false)
+    stop()
+  })
+
+  // Regression: a docked agent resumed after a restart opened as an editor tab, since nothing
+  // remembered it had run in the dock.
+  it('remembers the sessions that were docked when they ended, but not ones moved out', () => {
+    publish('a', 'b', 'c')
+    const stop = startTerminalDockSync()
+    dockSession('a')
+    dockSession('b')
+    dockSession('c')
+    undockSession('c')
+    publish()
+    expect(useTerminalDock.getState().docked).toEqual([])
+    expect(endedDocked('a')).toBe(true)
+    expect(endedDocked('b')).toBe(true)
+    expect(endedDocked('c')).toBe(false)
+    expect((saved() as { ended: string[] }).ended).toEqual(['a', 'b'])
     stop()
   })
 })

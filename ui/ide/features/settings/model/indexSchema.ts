@@ -29,7 +29,7 @@ export const DEFAULT_INDEX: IndexValid = {
     "jsonc",
     "markdown",
   ],
-  scanDelayMs: 3000,
+  scanDelayMs: 10_000,
 };
 
 export const INDEX_LIMITS = { scanDelayMs: { min: 0, max: 60_000 } } as const;

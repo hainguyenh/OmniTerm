@@ -6,7 +6,7 @@ import { useStoredSessions, type StoredAgentSession } from '../utils/agentSessio
 import { useAllPanePresence } from '../utils/agentPresenceStore'
 import type { QuickStartProject } from '../utils/sessionQuickStart'
 import { buildSessionsTree, resumableCount, type SessionsFilter, type SessionsTreeTab } from '../utils/sessionsTree'
-import { scopedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
+import { scopedWorkspaceId, selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
 import BookmarksPanel, { type BookmarksPanelProps } from './BookmarksPanel'
 import { SessionSectionView } from './SessionsTreeView'
 import { SessionsQuickStart } from './SessionsQuickStart'
@@ -59,6 +59,7 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
   const presence = useAllPanePresence()
   const stored = useStoredSessions()
   const scopeWorkspaceId = useWorkspaceStore(scopedWorkspaceId)
+  const currentWorkspaceId = useWorkspaceStore((state) => selectedWorkspaceId(state.selection))
   const sections = useMemo(() => buildSessionsTree({
     tabs, workspaces, connById, isEditor, filter, stored, scopeWorkspaceId,
     cwdOf: (id) => sessionCwds[id],
@@ -92,7 +93,12 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
         </div>
       )}
       {quickStartOpen && (
-        <SessionsQuickStart workspaces={workspaces} onStart={onStart} onClose={() => setQuickStartOpen(false)} />
+        <SessionsQuickStart
+          workspaces={workspaces}
+          workspaceId={scopeWorkspaceId ?? currentWorkspaceId}
+          onStart={onStart}
+          onClose={() => setQuickStartOpen(false)}
+        />
       )}
       <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 flex-shrink-0">
         {filters.map(({ id, label }) => (
@@ -127,6 +133,8 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
             activeTabId={activeTabId}
             onShowTab={onShowTab}
             onResume={onResume}
+            onStart={onStart}
+            workspaceId={scopeWorkspaceId ?? currentWorkspaceId}
             isCollapsed={isCollapsed}
             toggleGroup={toggleGroup}
           />

@@ -22,7 +22,10 @@ use tauri::Manager;
 #[tokio::test]
 async fn the_updater_counts_as_configured_only_when_lib_registered_it() {
     let app = mock_app();
-    assert!(!updater_configured(app.handle()), "no marker: not registered");
+    assert!(
+        !updater_configured(app.handle()),
+        "no marker: not registered"
+    );
     app.manage(super::UpdaterRegistered(false));
     assert!(!updater_configured(app.handle()));
     let registered = mock_app();
@@ -84,10 +87,16 @@ fn installing_guard_enforces_single_flight_execution() {
     assert!(g2.is_none(), "Concurrent acquisition must fail");
 
     drop(g1);
-    assert!(!InstallingGuard::is_installing(), "Dropping guard must release lock");
+    assert!(
+        !InstallingGuard::is_installing(),
+        "Dropping guard must release lock"
+    );
 
     let g3 = InstallingGuard::acquire();
-    assert!(g3.is_some(), "Subsequent acquisition after drop must succeed");
+    assert!(
+        g3.is_some(),
+        "Subsequent acquisition after drop must succeed"
+    );
 }
 
 #[test]
@@ -125,7 +134,10 @@ fn app_cancel_update_cancels_matching_request() {
 #[test]
 fn update_endpoint_environment_variable_precedence() {
     let _lock = crate::test_support::lock();
-    std::env::set_var("OMNITERM_UPDATE_ENDPOINT", "https://custom.endpoint/update.json");
+    std::env::set_var(
+        "OMNITERM_UPDATE_ENDPOINT",
+        "https://custom.endpoint/update.json",
+    );
     assert_eq!(
         update_endpoint_env(),
         Some("https://custom.endpoint/update.json".to_string())

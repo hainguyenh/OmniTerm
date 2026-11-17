@@ -264,10 +264,14 @@
 
 /* Title bar widget */
 
+/* In a narrow title bar the configuration name gives way (ellipsis); the Run, Debug and Stop
+   buttons keep their size. Without `min-width: 0` the widget kept its full width while its title
+   bar slot shrank, and the buttons were drawn over the controls beside it. */
 .widget {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
 }
 .widgetChooser {
   display: inline-flex;
@@ -345,6 +349,7 @@
   flex: none;
 }
 .widgetButtons {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 2px;

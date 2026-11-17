@@ -25,6 +25,7 @@ import {
 } from "@/platform/ipc";
 import { buildToolRecovery } from "@/platform/buildToolRecovery";
 import { useBuildModel } from "@/platform/buildModel";
+import { languageFamiliesOf } from "@/platform/languageFamilies";
 import { useProject } from "@/platform/project";
 import { hostOs } from "@/platform/remote";
 import { editorService, notifications } from "@/workbench/contributions";
@@ -214,6 +215,8 @@ export function changedOutsideIde(paths: readonly string[], now = Date.now()): b
 
 /** Re-reads the build model (and the run configurations) of the open project. */
 export async function loadModel(): Promise<void> {
+  // OmniTerm: with the Java family switched off, no Maven or Gradle model is read at all.
+  if (!languageFamiliesOf(useProject.getState().settings).java) return;
   const root = useProject.getState().project?.root ?? null;
   const gen = ++generation;
   if (root !== useBuild.getState().root) {

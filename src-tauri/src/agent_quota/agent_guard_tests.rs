@@ -186,8 +186,8 @@ fn resume_only_thaws_processes_that_are_still_the_same() {
 #[test]
 fn terminate_thaws_held_processes_and_stops_deepest_first() {
     let ops = FakeOps::default();
-    let stopped =
-        terminate_session(&ops, &tree(), 100, 101, 2, vec![held(103, 4, &[7])], None).expect("terminate");
+    let stopped = terminate_session(&ops, &tree(), 100, 101, 2, vec![held(103, 4, &[7])], None)
+        .expect("terminate");
     assert_eq!(stopped, 2);
     assert_eq!(
         ops.calls(),
@@ -249,7 +249,10 @@ fn suspends_all_processes_sharing_the_same_profile_across_the_system() {
     assert!(frozen_pids.contains(&101));
     assert!(frozen_pids.contains(&200));
     assert!(frozen_pids.contains(&201));
-    assert!(!frozen_pids.contains(&300), "different profile must not be suspended");
+    assert!(
+        !frozen_pids.contains(&300),
+        "different profile must not be suspended"
+    );
 }
 
 #[test]

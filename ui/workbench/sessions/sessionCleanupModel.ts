@@ -2,10 +2,22 @@ import { invoke } from '@tauri-apps/api/core'
 
 import type { StoredAgentSession, StoredSessionState } from '../../utils/agentSessionStorage'
 
+/** The agents whose conversations the backend lists (`agy` is Antigravity). */
+export const SESSION_AGENTS = ['claude', 'codex', 'gemini', 'agy'] as const
+export type SessionAgentName = (typeof SESSION_AGENTS)[number]
+
+const isSessionAgent = (value: unknown): value is SessionAgentName =>
+  typeof value === 'string' && (SESSION_AGENTS as readonly string[]).includes(value)
+
+const AGENT_LABELS: Record<SessionAgentName, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini CLI', agy: 'Antigravity' }
+
+/** The name the dialog shows for an agent; an unknown one as it is. */
+export const agentLabel = (agent: string): string => (isSessionAgent(agent) ? AGENT_LABELS[agent] : agent)
+
 /** One agent conversation on disk, as `agent_session_files_list` reports it. */
 export interface AgentSessionFile {
   id: string
-  agent: 'claude' | 'codex'
+  agent: SessionAgentName
   profile: string
   sessionId: string
   cwd: string | null
@@ -57,6 +69,10 @@ export interface CleanupFilter {
 /** The rows a selection can act on: never a session still running in a pane. */
 export const isSelectable = (row: CleanupRow) => !row.open
 
+/** Every selectable row of `rows` (drawn or not) when `checked`, else none. */
+export const selectAllKeys = (rows: readonly CleanupRow[], checked: boolean): Set<string> =>
+  new Set(checked ? rows.filter(isSelectable).map((row) => row.key) : [])
+
 const DAY_MS = 24 * 60 * 60 * 1000
 const MAX_TEXT = 4096
 
@@ -68,7 +84,7 @@ const isCount = (value: unknown): value is number => typeof value === 'number' &
 export function parseSessionFile(raw: unknown): AgentSessionFile | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
-  if (!isText(r.id) || !r.id || (r.agent !== 'claude' && r.agent !== 'codex')) return null
+  if (!isText(r.id) || !r.id || !isSessionAgent(r.agent)) return null
   if (!isText(r.profile) || !isText(r.sessionId) || !isCount(r.lastActive) || !isCount(r.size)) return null
   return {
     id: r.id,
@@ -82,9 +98,35 @@ export function parseSessionFile(raw: unknown): AgentSessionFile | null {
   }
 }
 
-export async function listSessionFiles(): Promise<AgentSessionFile[]> {
-  const raw = await invoke<unknown>('agent_session_files_list')
+/** An agent profile folder on this machine; listing them reads no conversation. */
+export interface SessionProfile {
+  agent: AgentSessionFile['agent']
+  profile: string
+}
+
+export function parseSessionProfile(raw: unknown): SessionProfile | null {
+  if (!raw || typeof raw !== 'object') return null
+  const r = raw as Record<string, unknown>
+  if (!isSessionAgent(r.agent) || !isText(r.profile) || !r.profile) return null
+  return { agent: r.agent, profile: r.profile }
+}
+
+export async function listSessionProfiles(): Promise<SessionProfile[]> {
+  const raw = await invoke<unknown>('agent_session_profiles_list')
+  return Array.isArray(raw) ? raw.flatMap((item) => parseSessionProfile(item) ?? []) : []
+}
+
+/** The conversations of `profiles`, read from their folders on this machine. */
+export async function listSessionFiles(profiles: readonly string[]): Promise<AgentSessionFile[]> {
+  const raw = await invoke<unknown>('agent_session_files_list', { profiles })
   return Array.isArray(raw) ? raw.flatMap((item) => parseSessionFile(item) ?? []) : []
+}
+
+/** The profiles a scan with `filter` reads: the chosen one, else every profile of the chosen agent. */
+export function profilesToScan(profiles: readonly SessionProfile[], filter: Pick<CleanupFilter, 'agent' | 'profile'>): string[] {
+  return profiles
+    .filter((item) => (filter.agent === 'all' || item.agent === filter.agent) && (filter.profile === 'all' || item.profile === filter.profile))
+    .map((item) => item.profile)
 }
 
 export async function deleteSessionFiles(ids: readonly string[]): Promise<DeleteReport> {
@@ -95,6 +137,44 @@ export async function deleteSessionFiles(ids: readonly string[]): Promise<Delete
     ? report.failed.flatMap((item): Array<[string, string]> => (Array.isArray(item) && isText(item[0]) && isText(item[1]) ? [[item[0], item[1]]] : []))
     : []
   return { deleted, failed }
+}
+
+/** Ids per delete call: each call rescans the profiles it names, so progress shows between them. */
+export const DELETE_BATCH_SIZE = 25
+
+/** `items` cut into runs of at most `size`, in order. */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const step = Math.max(1, Math.floor(size))
+  const runs: T[][] = []
+  for (let start = 0; start < items.length; start += step) runs.push(items.slice(start, start + step))
+  return runs
+}
+
+/**
+ * Deletes `ids` a batch at a time, reporting how many were handled after each one. A batch that
+ * fails as a whole marks its ids failed and the rest still run.
+ */
+export async function deleteInBatches(
+  ids: readonly string[],
+  onProgress: (done: number) => void,
+  size = DELETE_BATCH_SIZE,
+  remove: (batch: readonly string[]) => Promise<DeleteReport> = deleteSessionFiles,
+): Promise<DeleteReport> {
+  const total: DeleteReport = { deleted: [], failed: [] }
+  let done = 0
+  for (const batch of chunk(ids, size)) {
+    try {
+      const report = await remove(batch)
+      total.deleted.push(...report.deleted)
+      total.failed.push(...report.failed)
+    } catch (cause) {
+      const reason = cause instanceof Error ? cause.message : String(cause)
+      total.failed.push(...batch.map((id): [string, string] => [id, reason]))
+    }
+    done += batch.length
+    onProgress(done)
+  }
+  return total
 }
 
 /** A transcript written this recently may belong to an agent OmniTerm does not track (another terminal). */
@@ -179,11 +259,6 @@ export function sortCleanupRows(rows: readonly CleanupRow[], sort: CleanupSort):
     if (left !== right) return (left < right ? -1 : 1) * direction
     return b.lastActive - a.lastActive
   })
-}
-
-/** Distinct values of a column, sorted, for the filter dropdowns. */
-export function distinctValues(rows: readonly CleanupRow[], pick: (row: CleanupRow) => string): string[] {
-  return [...new Set(rows.map(pick))].sort((a, b) => a.localeCompare(b))
 }
 
 export function formatBytes(bytes: number): string {

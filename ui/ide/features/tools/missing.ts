@@ -7,10 +7,8 @@
 import { executeAction } from "@/platform/actions";
 import { onIdeEvent } from "@/platform/ipc";
 import { notifications } from "@/workbench/contributions";
-import { installTool, refreshTools, SETTINGS_PAGE_ID, toolByName, useTools } from "./store";
+import { installTool, missingKey, refreshTools, SETTINGS_PAGE_ID, toolByName, useTools } from "./store";
 import { tx } from "@/platform/i18n";
-
-export const missingKey = (name: string) => `lsp-missing-${name}`;
 
 /**
  * `offered`: servers already offered for install. A fallback of one of them (pyright

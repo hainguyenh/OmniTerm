@@ -17,6 +17,7 @@ import { DangerConfirmDialog, QuotaNotices } from './QuotaOverlays'
 import { QuotaProfilesDashboard } from './QuotaProfilesDashboard'
 import { QuotaQuickPopover } from './QuotaQuickPopover'
 import { FrozenProcessesDialog } from './FrozenProcessesDialog'
+import { whenIdle } from '../../utils/whenIdle'
 
 export interface AgentQuotaRootProps {
   api: AgentQuotaAPI
@@ -131,8 +132,10 @@ export function AgentQuotaRoot({ api, appSettings, setAppSettings, sessionIds, b
         window.dispatchEvent(new CustomEvent(SETTINGS_TAB_EVENT, { detail: { tab: 'quota' } }))
       },
     })
-    engine.start()
+    // Its first tick detects agent processes and reads each profile's usage: after launch has settled.
+    const cancelStart = whenIdle(() => engine.start())
     return () => {
+      cancelStart()
       document.removeEventListener('visibilitychange', onVisibility)
       stopLaunchWatch()
       engine.stop()

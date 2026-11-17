@@ -352,3 +352,21 @@ fn a_transcript_with_a_non_unicode_name_is_not_listed() {
     assert!(list_sessions(&roots).is_empty());
     assert!(odd.exists());
 }
+
+#[test]
+fn deletes_a_codex_rollout_whose_file_name_does_not_hold_its_id() {
+    let home = tempfile::tempdir().expect("temp home");
+    let rollout = home
+        .path()
+        .join(".codex/sessions/2026/01/02/rollout-plain.jsonl");
+    write(
+        &rollout,
+        &lines(&[json!({ "type": "session_meta", "payload": { "id": ID_C } })]),
+    );
+    let report = delete_sessions(
+        &session_roots(home.path()),
+        &[format!("codex:codex:{ID_C}")],
+    );
+    assert_eq!(report.deleted, vec![format!("codex:codex:{ID_C}")]);
+    assert!(!rollout.exists());
+}

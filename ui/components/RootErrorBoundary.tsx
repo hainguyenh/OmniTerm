@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react'
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 import { diag } from '../diag'
 
@@ -10,6 +10,8 @@ interface RootErrorBoundaryProps {
 
 interface RootErrorBoundaryState {
   error: Error | null
+  /** Which components were rendering when it failed: the one clue a hook-order error carries. */
+  componentStack: string | null
 }
 
 /**
@@ -18,14 +20,16 @@ interface RootErrorBoundaryState {
  * running in the session daemon, so reloading the window reattaches them.
  */
 export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBoundaryState> {
-  state: RootErrorBoundaryState = { error: null }
+  state: RootErrorBoundaryState = { error: null, componentStack: null }
 
-  static getDerivedStateFromError(error: Error): RootErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<RootErrorBoundaryState> {
     return { error }
   }
 
-  componentDidCatch(error: Error) {
-    diag.error('[app] the window crashed while rendering', error)
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    const componentStack = info.componentStack?.trim() || null
+    this.setState({ componentStack })
+    diag.error('[app] the window crashed while rendering', error, componentStack)
   }
 
   private reload = () => {
@@ -42,6 +46,12 @@ export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErr
           Your terminal sessions are still running. Reload the window to reconnect to them.
         </p>
         <pre className="max-w-xl overflow-auto whitespace-pre-wrap text-xs opacity-60">{this.state.error.message}</pre>
+        {this.state.componentStack && (
+          <details className="max-w-xl text-left text-xs opacity-60">
+            <summary className="cursor-pointer">Where it happened</summary>
+            <pre data-testid="root-error-stack" className="max-h-60 overflow-auto whitespace-pre-wrap">{this.state.componentStack}</pre>
+          </details>
+        )}
         <button type="button" className="rounded border px-3 py-1 text-sm" onClick={this.reload}>
           Reload window
         </button>

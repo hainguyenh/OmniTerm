@@ -10,6 +10,7 @@ import { useCustomArt } from '../hooks/useCustomArt'
 import { singleViewGroup } from '../viewGroups'
 import { decodeWorkspaceSelection, isSelectionLive, resolveNewSessionWorkspace } from '../utils/workspaceSelection'
 import { readStoredSelection, storeSelection } from '../platform/workspaceStore'
+import { reportSessionStartFailure, workspaceHolding } from './sessionStart'
 import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, themes = [currentTheme], zoomFactor,
@@ -27,9 +28,17 @@ export function useMainLayoutBase({
       // An explicit cwd comes from a live pane and is already the exact launch target. Do not
       // reinterpret it through workspace/default history or mutate the user's last workspace.
       if (requestedCwd || requestedCommand) {
+          // The workspace it was asked for, else the selected one when the folder is in it. Left
+          // untagged, a folder shared by two workspaces went to the first one listed and the
+          // session never got a tab in the workspace it was started from.
+          const owner = decodeWorkspaceSelection(requestedWorkspaceId ?? null)?.workspaceId
+              ?? workspaceHolding(workspaceCatalog.workspaces, selectedWorkspaceId, requestedCwd)
           void openNewSession(shell, (conn) => {
-              handleConnectRef.current(conn as Connection)
-          }, null, null, requestedCwd ?? null, requestedCommand ?? null).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
+              handleConnectRef.current(owner ? { ...(conn as Connection), workspaceId: owner } : conn as Connection)
+          }, owner ?? null, null, requestedCwd ?? null, requestedCommand ?? null).catch((err: unknown) => {
+              diag.error('[MainLayout] could not open a new session', err)
+              reportSessionStartFailure(err)
+          });
           return
       }
       const lastUsed = readStoredSelection();
@@ -47,8 +56,11 @@ export function useMainLayoutBase({
       void openNewSession(shell, (conn) => {
           storeSelection(targetWorkspaceId ? workspaceId ?? targetWorkspaceId : null)
           handleConnectRef.current({ ...(conn as Connection), workspaceId: targetWorkspaceId ?? undefined })
-      }, targetWorkspaceId, folderId).catch((err: unknown) => diag.error('[MainLayout] could not open a new session', err));
-  }, [workspaceCatalog.workspaces])
+      }, targetWorkspaceId, folderId).catch((err: unknown) => {
+          diag.error('[MainLayout] could not open a new session', err)
+          reportSessionStartFailure(err)
+      });
+  }, [workspaceCatalog.workspaces, selectedWorkspaceId])
   const [activeTabs, setActiveTabs] = useState<{
       id: string;
       connId: string;

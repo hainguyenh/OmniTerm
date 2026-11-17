@@ -24,7 +24,7 @@ interface LayoutPresetPickerProps {
 }
 
 /**
- * The pane layout control at the bottom of the right stripe: one button that shows the current
+ * The pane layout control at the top of the right stripe: one button that shows the current
  * layout and opens the presets (1, 2 columns, 1 + 2, 2 × 2, 3 × 2, 4 × 2, 2 rows) as a grid of
  * glyphs beside it. Choosing fewer panes merges the extra panes' tabs, nothing is closed.
  */
@@ -53,7 +53,7 @@ export function LayoutPresetPicker({ current, onSelect }: LayoutPresetPickerProp
         open={open}
         onClose={() => setOpen(false)}
         anchor={anchor}
-        placement="left-end"
+        placement="left-start"
         offset={8}
         role="menu"
         aria-label="Pane layout"

@@ -23,6 +23,13 @@ const GROUP_ICONS: Record<string, IconName> = {
   "Languages & Frameworks": "file-code",
   Agents: "toolwindow-agents",
   Tools: "terminal",
+  // OmniTerm: the short names its layout gives the groups (`ui/workbench/settings/settingsLayout.ts`).
+  General: "settings",
+  Terminal: "terminal",
+  VCS: "branch",
+  Code: "file-code",
+  Run: "run",
+  Updates: "download",
 };
 
 export interface SettingsTreeHandle {

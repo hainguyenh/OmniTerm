@@ -386,6 +386,29 @@ function startStripeDrag(e: PointerEvent<HTMLButtonElement>, id: string) {
   window.addEventListener("keydown", onKey, true);
 }
 
+/**
+ * A key per hook a contribution brings (`useBadge`, a `headerMenu` or `titleMenu` function): a tool
+ * window registered again under the same id (an adapter replacing a feature's window, a feature
+ * loaded after the first paint) brings different hooks, and those must run in a freshly mounted
+ * component. Calling them in the old one changes its hook count, which React cannot recover from.
+ */
+const hookKeys = new WeakMap<object, number>();
+let nextHookKey = 0;
+function hookKey(hook: object | undefined): number {
+  if (!hook) return 0;
+  let key = hookKeys.get(hook);
+  if (key === undefined) {
+    key = ++nextHookKey;
+    hookKeys.set(hook, key);
+  }
+  return key;
+}
+
+/** The key of a tool window's header: it changes when the window's menu hooks do. */
+function headerKey(tw: ToolWindowContribution): string {
+  return `${hookKey(tw.headerMenu)}:${hookKey(tw.titleMenu)}`;
+}
+
 function StripeBadge({ useBadge }: { useBadge: () => number | string | null }) {
   // Settings › Appearance › Tool Windows › "Show tool window badges".
   const showBadges = useProject((s) => s.settings?.appearance?.showToolWindowBadges) !== false;
@@ -437,7 +460,7 @@ function StripeButton({
     >
       <span className={styles.stripeIcon}>
         <Icon name={tw.icon} size={16} />
-        {tw.useBadge && <StripeBadge useBadge={tw.useBadge} />}
+        {tw.useBadge && <StripeBadge key={hookKey(tw.useBadge)} useBadge={tw.useBadge} />}
       </span>
       {showName && (
         <span className={clsx(styles.stripeLabel, !/\s/.test(tw.title) && styles.stripeLabelWord)} aria-hidden="true">
@@ -579,7 +602,7 @@ export function ToolWindowHeader({
   const tw = useContext(ToolWindowFrame)?.tw;
   if (!tw) return null;
   return (
-    <HeaderRow tw={tw} title={title} actions={actions}>
+    <HeaderRow key={headerKey(tw)} tw={tw} title={title} actions={actions}>
       <TabStripRegistry.Provider value={closeTarget ? contentTabRegistry(tw.id) : null}>
         {children}
       </TabStripRegistry.Provider>
@@ -594,7 +617,7 @@ export function ToolWindowHeader({
 export function ToolWindowCornerActions({ className }: { className?: string }) {
   const tw = useContext(ToolWindowFrame)?.tw;
   if (!tw) return null;
-  return <ToolWindowActionsBar tw={tw} className={className} />;
+  return <ToolWindowActionsBar key={headerKey(tw)} tw={tw} className={className} />;
 }
 
 function ToolWindowActionsBar({ tw, className }: { tw: ToolWindowContribution; className?: string }) {
@@ -787,7 +810,7 @@ function ToolWindowView({ tw, hidden }: { tw: ToolWindowContribution; hidden: bo
       tabIndex={-1}
     >
       {!ownHeader && (
-        <HeaderRow tw={tw} title actions>
+        <HeaderRow key={headerKey(tw)} tw={tw} title actions>
           {Tabs && (
             <TabStripRegistry.Provider value={contentTabRegistry(tw.id)}>
               <Tabs id={tw.id} />

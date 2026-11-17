@@ -1,14 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import type { StoredAgentSession } from '../../../utils/agentSessionStorage'
 import {
-  distinctValues,
+  agentLabel,
+  chunk,
+  deleteInBatches,
   filterCleanupRows,
   formatAge,
   formatBytes,
   mergeCleanupRows,
   parseSessionFile,
+  parseSessionProfile,
+  profilesToScan,
   projectName,
+  selectAllKeys,
   sortCleanupRows,
   type AgentSessionFile,
 } from '../sessionCleanupModel'
@@ -41,7 +46,9 @@ const stored = (patch: Partial<StoredAgentSession>): StoredAgentSession => ({
 describe('session cleanup model', () => {
   it('validates listing entries from the backend', () => {
     expect(parseSessionFile({ ...file({}) })).toEqual(file({}))
-    expect(parseSessionFile({ ...file({}), agent: 'gemini' })).toBeNull()
+    expect(parseSessionFile({ ...file({}), agent: 'gemini' })).toMatchObject({ agent: 'gemini' })
+    expect(parseSessionFile({ ...file({}), agent: 'agy' })).toMatchObject({ agent: 'agy' })
+    expect(parseSessionFile({ ...file({}), agent: 'cursor' })).toBeNull()
     expect(parseSessionFile({ ...file({}), size: -1 })).toBeNull()
     expect(parseSessionFile({ ...file({}), cwd: 42, title: '' })).toMatchObject({ cwd: null, title: null })
     expect(parseSessionFile(null)).toBeNull()
@@ -92,12 +99,54 @@ describe('session cleanup model', () => {
     expect(keys('project', false)).toEqual(['c', 'b', 'a'])
   })
 
-  it('formats sizes, ages, project names and distinct values', () => {
+  it('formats sizes, ages and project names', () => {
     expect([formatBytes(512), formatBytes(2048), formatBytes(50 * 1024 * 1024)]).toEqual(['512 B', '2.0 KB', '50 MB'])
     const ages = [NOW, NOW - 5 * 60_000, NOW - 3 * 3_600_000, NOW - DAY, NOW - 9 * DAY].map((at) => formatAge(at, NOW))
     expect(ages).toEqual(['just now', '5 min ago', '3 h ago', '1 day ago', '9 days ago'])
     expect([projectName('D:\\work\\app\\'), projectName(undefined)]).toEqual(['app', ''])
-    const rows = mergeCleanupRows([file({}), file({ id: 'x', sessionId: 'x', profile: 'a' })], [], NOW)
-    expect(distinctValues(rows, (row) => row.profile)).toEqual(['a', 'claude'])
+  })
+  it('scans the chosen profile, else every profile of the chosen agent', () => {
+    const profiles = [
+      { agent: 'claude' as const, profile: 'claude' },
+      { agent: 'claude' as const, profile: 'claude-work' },
+      { agent: 'codex' as const, profile: 'codex' },
+    ]
+    expect(profilesToScan(profiles, { agent: 'all', profile: 'all' })).toEqual(['claude', 'claude-work', 'codex'])
+    expect(profilesToScan(profiles, { agent: 'claude', profile: 'all' })).toEqual(['claude', 'claude-work'])
+    expect(profilesToScan(profiles, { agent: 'claude', profile: 'claude-work' })).toEqual(['claude-work'])
+    expect([
+      parseSessionProfile({ agent: 'claude', profile: 'claude' }),
+      parseSessionProfile({ agent: 'agy', profile: 'antigravity-cli' }),
+      parseSessionProfile({ agent: 'cursor', profile: 'x' }),
+    ]).toEqual([{ agent: 'claude', profile: 'claude' }, { agent: 'agy', profile: 'antigravity-cli' }, null])
+  })
+
+  it('names every agent the backend lists', () => {
+    expect(['claude', 'codex', 'gemini', 'agy', 'other'].map(agentLabel)).toEqual(['Claude', 'Codex', 'Gemini CLI', 'Antigravity', 'other'])
+  })
+
+  it('selects every selectable row, drawn or not, and clears', () => {
+    const rows = mergeCleanupRows([file({}), file({ id: 'b', sessionId: 'b', lastActive: NOW })], [], NOW)
+    expect([...selectAllKeys(rows, true)]).toEqual(['claude:claude:s1'])
+    expect(selectAllKeys(rows, false).size).toBe(0)
+  })
+
+  it('cuts ids into batches in order', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
+    expect(chunk([], 3)).toEqual([])
+    expect(chunk([1, 2], 0)).toEqual([[1], [2]])
+  })
+
+  it('deletes in batches, reports progress after each, and keeps going past a failed batch', async () => {
+    const ids = ['a', 'b', 'c', 'd', 'e']
+    const remove = vi.fn(async (batch: readonly string[]) => {
+      if (batch.includes('c')) throw new Error('locked')
+      return { deleted: [...batch], failed: [] }
+    })
+    const progress: number[] = []
+    const report = await deleteInBatches(ids, (done) => progress.push(done), 2, remove)
+    expect(remove.mock.calls.map(([batch]) => batch)).toEqual([['a', 'b'], ['c', 'd'], ['e']])
+    expect(progress).toEqual([2, 4, 5])
+    expect(report).toEqual({ deleted: ['a', 'b', 'e'], failed: [['c', 'locked'], ['d', 'locked']] })
   })
 })

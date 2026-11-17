@@ -1,26 +1,33 @@
 import { Checkbox, Icon } from '../../ide/ui'
 
 import {
+  agentLabel,
   formatAge,
   formatBytes,
   isSelectable,
   projectName,
+  selectAllKeys,
   type CleanupRow,
   type CleanupSort,
   type CleanupSortColumn,
 } from './sessionCleanupModel'
 
 interface SessionCleanupTableProps {
+  /** The rows drawn (a page of `allRows`). */
   rows: readonly CleanupRow[]
+  /** Every row the filter keeps: what "Select all" selects, drawn or not. */
+  allRows: readonly CleanupRow[]
   selected: ReadonlySet<string>
   onSelectedChange: (selected: Set<string>) => void
   sort: CleanupSort
   onSortChange: (sort: CleanupSort) => void
   now: number
+  /** While a delete runs nothing can be picked. */
+  disabled?: boolean
 }
 
 const COLUMNS: ReadonlyArray<{ column: CleanupSortColumn | null; label: string; className: string }> = [
-  { column: 'agent', label: 'Agent', className: 'w-[64px]' },
+  { column: 'agent', label: 'Agent', className: 'w-[88px]' },
   { column: 'profile', label: 'Profile', className: 'w-[110px]' },
   { column: null, label: 'Session', className: '' },
   { column: 'project', label: 'Project', className: 'w-[120px]' },
@@ -37,10 +44,10 @@ function storedLabel(row: CleanupRow): string {
 }
 
 /** The cleanup table: sortable headers, a select-all box, one row per conversation. */
-export function SessionCleanupTable({ rows, selected, onSelectedChange, sort, onSortChange, now }: SessionCleanupTableProps) {
-  const selectable = rows.filter(isSelectable)
+export function SessionCleanupTable({ rows, allRows, selected, onSelectedChange, sort, onSortChange, now, disabled = false }: SessionCleanupTableProps) {
+  const selectable = allRows.filter(isSelectable)
   const chosen = selectable.filter((row) => selected.has(row.key)).length
-  const toggleAll = (checked: boolean) => onSelectedChange(checked ? new Set(selectable.map((row) => row.key)) : new Set())
+  const toggleAll = (checked: boolean) => onSelectedChange(selectAllKeys(allRows, checked))
   const toggle = (key: string, checked: boolean) => {
     const next = new Set(selected)
     if (checked) next.add(key)
@@ -60,14 +67,14 @@ export function SessionCleanupTable({ rows, selected, onSelectedChange, sort, on
                 aria-label="Select all"
                 checked={chosen > 0 && chosen === selectable.length}
                 indeterminate={chosen > 0 && chosen < selectable.length}
-                disabled={!selectable.length}
+                disabled={disabled || !selectable.length}
                 onChange={toggleAll}
               />
             </th>
             {COLUMNS.map(({ column, label, className }) => (
               <th key={label} className={`px-2 py-1 font-normal ${className}`} aria-sort={column && sort.column === column ? (sort.descending ? 'descending' : 'ascending') : undefined}>
                 {column ? (
-                  <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--fg)]" onClick={() => sortBy(column)}>
+                  <button type="button" className="inline-flex items-center gap-1 hover:text-[var(--fg)]" disabled={disabled} onClick={() => sortBy(column)}>
                     {label}
                     {sort.column === column && <Icon name={sort.descending ? 'chevron-down' : 'chevron-up'} size={12} />}
                   </button>
@@ -87,11 +94,11 @@ export function SessionCleanupTable({ rows, selected, onSelectedChange, sort, on
                 <Checkbox
                   aria-label={`Select ${row.title ?? row.sessionId}`}
                   checked={selected.has(row.key)}
-                  disabled={!isSelectable(row)}
+                  disabled={disabled || !isSelectable(row)}
                   onChange={(checked) => toggle(row.key, checked)}
                 />
               </td>
-              <td className="truncate px-2 py-1">{row.agent}</td>
+              <td className="truncate px-2 py-1">{agentLabel(row.agent)}</td>
               <td className="truncate px-2 py-1" title={row.profile}>{row.profile}</td>
               <td className="px-2 py-1" title={[row.title, row.sessionId].filter(Boolean).join('\n')}>
                 <div className="truncate text-[var(--fg)]">{row.title ?? 'Untitled session'}</div>

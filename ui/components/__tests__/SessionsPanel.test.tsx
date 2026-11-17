@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearStoredSessions, loadStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
 import { resetPanePresenceForTests } from '../../utils/agentPresenceStore'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
+import { dockSession, resetTerminalDock } from '../../workbench/terminalDock/terminalDockStore'
 import SessionsPanel, { type SessionsPanelChrome } from '../SessionsPanel'
 
 vi.mock('../BookmarksPanel', () => ({ default: () => <div data-testid="bookmarks-panel" /> }))
@@ -72,6 +73,16 @@ describe('SessionsPanel', () => {
     expect(sections[0]?.textContent).toContain('Work')
     fireEvent.click(screen.getByRole('button', { name: /Work/ }))
     expect(screen.queryByText('pwsh')).toBeNull()
+  })
+
+  // Regression: a session running in the bottom Terminal tool window looked like any editor tab
+  // session, so the list gave no hint of where it was.
+  it('marks the sessions docked in the Terminal tool window', () => {
+    setup()
+    expect(screen.queryByTestId('session-docked-mark')).toBeNull()
+    act(() => dockSession('t1'))
+    expect(screen.getByTestId('session-docked-mark').closest('button')?.textContent).toContain('pwsh')
+    act(() => resetTerminalDock())
   })
 
   it('lists terminals under their project and leaves editor tabs out', () => {

@@ -89,8 +89,13 @@ export function toolByName(name: string): ToolInfo | undefined {
   return useTools.getState().tools.find((t) => t.name === name);
 }
 
+/** Key of the "<server> is not installed" notice, shared by code insight and the install offer. */
+export const missingKey = (name: string) => `lsp-missing-${name}`;
+
 /**
- * Installs `name` (or reinstalls it). Resolves with the new info, or null on
+ * Installs `name` (or reinstalls it). Its notice (the "not installed" one unless `notificationKey`
+ * names another) turns into "Installing…" without the Install button, then into the result; the
+ * other notices about the missing tool are dropped, so none offers to install it again. Resolves with the new info, or null on
  * failure / cancellation (already reported). Restarts language servers of that
  * name afterwards so open files get code insight right away.
  */
@@ -100,12 +105,22 @@ export function installTool(name: string, opts: { notificationKey?: string } = {
   const display = toolByName(name)?.displayName ?? name;
   const request = nextRequestId();
   const taskId = `tools:${name}`;
-  const key = opts.notificationKey ?? `tools-install-${name}`;
+  const key = opts.notificationKey ?? missingKey(name);
+  for (const stale of [missingKey(name), `tools-install-${name}`]) if (stale !== key) notifications().remove?.(stale);
   useTools.setState((s) => ({ jobs: { ...s.jobs, [name]: { request, lines: [], fraction: null, message: null } } }));
   const title = tx`Installing ${display}`;
   const cancel = () => toolsBackend().cancel(request);
   const task = (message: string | null, fraction: number | null) =>
     upsertTask({ id: taskId, title, message, fraction, done: false, cancel });
+  notifications().notify({
+    group: "tools",
+    level: "info",
+    title: tx`Installing ${display}…`,
+    body: tx`This notice is updated when the install finishes.`,
+    key,
+    sticky: true,
+    actions: [{ label: "Cancel", run: cancel }],
+  });
 
   const p = (async () => {
     try {

@@ -1,11 +1,21 @@
 import { diag } from '../../diag'
 import { editorController, useTabs } from '../../ide/editor/core/controller'
-import { editorService } from '../../ide/workbench/contributions'
+import { editorService, toolWindowService } from '../../ide/workbench/contributions'
+import { TERMINAL_WINDOW } from '../terminalDock/terminalDockActions'
+import { isDocked, selectDocked } from '../terminalDock/terminalDockStore'
 
 import { sessionInput } from './sessionInput'
 
-/** Shows a session: activates its tab (any pane), or opens one when it has none. */
+/**
+ * Shows a session where it lives: a session docked in the Terminal tool window is selected there,
+ * any other activates its tab (any pane), or opens one when it has none.
+ */
 export function showSessionTab(sessionId: string): void {
+  if (isDocked(sessionId)) {
+    selectDocked(sessionId)
+    toolWindowService().show(TERMINAL_WINDOW)
+    return
+  }
   const input = sessionInput(sessionId)
   for (const pane of Object.values(useTabs.getState().panes)) {
     const tab = pane.tabs.find((item) => item.input.key === input.key)

@@ -2,43 +2,25 @@ import { diag } from '../diag'
 import { activate as editor } from '../ide/editor/core'
 import { activate as lsp } from '../ide/editor/lsp'
 import { activate as agents } from '../ide/features/agents'
-import { activate as build } from '../ide/features/build'
-import { activate as codeInsight } from '../ide/features/code-insight'
-import { activate as colorPreview } from '../ide/features/color-preview'
-import { activate as debuggerFeature } from '../ide/features/debugger'
-import { activate as dependencies } from '../ide/features/dependencies'
-import { activate as dotnet } from '../ide/features/dotnet'
-import { activate as mcp } from '../ide/features/mcp'
 import { activate as plugins } from '../ide/features/plugins'
 import { activate as projectTree } from '../ide/features/project-tree'
 import { activate as projectTrust } from '../ide/features/project-trust'
-import { activate as remoteDev } from '../ide/features/remote-dev'
-import { activate as run } from '../ide/features/run'
-import { activate as runAnything } from '../ide/features/run-anything'
-import { activate as search } from '../ide/features/search'
 import { activate as settings } from '../ide/features/settings'
-import { activate as templates } from '../ide/features/templates'
-import { activate as tools } from '../ide/features/tools'
 import { activate as vcs } from '../ide/features/vcs'
 import { activate as viewers } from '../ide/features/viewers'
-import { activate as web } from '../ide/features/web'
 import { installKeyboardDispatcher } from '../ide/platform/keymap'
 import { activateWorkbench } from '../ide/workbench/activate'
 
 import { activateAppFeature } from './appFeature'
 import { activateOmniTermSettings } from './settings/activateOmniTermSettings'
-import { registerDebuggerWorkbench } from './debugger/registerDebuggerWorkbench'
-import { registerLspWorkbench } from './lsp/lspWorkbenchActions'
 import { registerProjectTreeActions } from './projectTreeActions'
 import { registerPreviewKinds } from './registerPreviewKinds'
-import { registerRunWorkbench } from './run/registerRunWorkbench'
 import { registerSessionKind } from './sessions/registerSessionKind'
 import { registerShellToolWindows } from './registerShellToolWindows'
-import { registerQuotaWorkbench } from './quota/registerQuotaWorkbench'
 import { registerStatusBarWidgets } from './registerStatusBarWidgets'
+import { registerAgentReferenceSink } from './sessions/sendToAgentSession'
 import { registerTerminalToolWindow } from './terminalDock/registerTerminalToolWindow'
 import { registerTitleControls } from './titleControls'
-import { registerUpdaterWorkbench } from './updater/registerUpdaterWorkbench'
 
 type Activate = () => void | (() => void)
 
@@ -66,37 +48,20 @@ export const WORKBENCH_STEPS: ReadonlyArray<readonly [string, Activate]> = [
   ['editor', editor],
   // After the editor core, whose contribution registry the language features extend.
   ['lsp', lsp],
-  ['lsp-workbench', registerLspWorkbench],
-  ['mcp', mcp],
   ['app', activateAppFeature],
   ['project-tree', projectTree],
   ['project-tree-actions', registerProjectTreeActions],
   ['shell-tool-windows', registerShellToolWindows],
   ['terminal-tool-window', registerTerminalToolWindow],
-  ['search', search],
-  ['code-insight', codeInsight],
-  ['dependencies', dependencies],
   ['vcs', vcs],
-  ['run', run],
-  ['run-workbench', registerRunWorkbench],
-  ['dotnet', dotnet],
-  ['run-anything', runAnything],
-  ['debugger', debuggerFeature],
-  ['debugger-workbench', registerDebuggerWorkbench],
-  ['color-preview', colorPreview],
-  ['build', build],
-  ['templates', templates],
   ['settings', settings],
   ['omniterm-settings', activateOmniTermSettings],
   ['plugins', plugins],
-  ['tools', tools],
   ['viewers', viewers],
-  ['web', web],
   ['agents', agents],
-  ['remote-dev', remoteDev],
-  ['updater', registerUpdaterWorkbench],
   ['status-bar-widgets', registerStatusBarWidgets],
-  ['agent-quota', registerQuotaWorkbench],
+  // "Send to Agent" types into the agent's terminal session instead of the chat composer.
+  ['agent-references', registerAgentReferenceSink],
   // Last: features install capture-phase key handlers that must run before the global dispatcher.
   ['keyboard', () => installKeyboardDispatcher()],
 ]
@@ -108,9 +73,34 @@ type LoadActivate = () => Promise<Activate>
  * graphs stay out of the startup bundle. Only features whose contributions may arrive late belong
  * here: no restorable editor kinds (a session saved before they register would drop those tabs)
  * and no capture-phase key handlers (they must be installed before the keyboard dispatcher).
- * Editor contributions may come late: open editors resync when the registry changes.
+ * Editor contributions may come late: open editors resync when the registry changes, and tool
+ * windows registered late are reconciled with the saved layout.
+ *
+ * At launch the user waits for the project folder, the terminals and the agent sessions; language
+ * servers, search, run and debug, builds, templates and the updater all follow once the window is
+ * idle. An OmniTerm adapter that replaces a feature's tool window (`run-workbench`,
+ * `debugger-workbench`) comes right after that feature: the last registration of an id wins.
  */
 export const DEFERRED_WORKBENCH_STEPS: ReadonlyArray<readonly [string, LoadActivate]> = [
+  ['lsp-workbench', () => import('./lsp/lspWorkbenchActions').then((m) => m.registerLspWorkbench)],
+  ['code-insight', () => import('../ide/features/code-insight').then((m) => m.activate)],
+  ['search', () => import('../ide/features/search').then((m) => m.activate)],
+  ['mcp', () => import('../ide/features/mcp').then((m) => m.activate)],
+  ['run', () => import('../ide/features/run').then((m) => m.activate)],
+  ['run-workbench', () => import('./run/registerRunWorkbench').then((m) => m.registerRunWorkbench)],
+  ['debugger', () => import('../ide/features/debugger').then((m) => m.activate)],
+  ['debugger-workbench', () => import('./debugger/registerDebuggerWorkbench').then((m) => m.registerDebuggerWorkbench)],
+  ['run-anything', () => import('../ide/features/run-anything').then((m) => m.activate)],
+  ['dependencies', () => import('../ide/features/dependencies').then((m) => m.activate)],
+  ['dotnet', () => import('../ide/features/dotnet').then((m) => m.activate)],
+  ['color-preview', () => import('../ide/features/color-preview').then((m) => m.activate)],
+  ['build', () => import('../ide/features/build').then((m) => m.activate)],
+  ['templates', () => import('../ide/features/templates').then((m) => m.activate)],
+  ['tools', () => import('../ide/features/tools').then((m) => m.activate)],
+  ['web', () => import('../ide/features/web').then((m) => m.activate)],
+  ['remote-dev', () => import('../ide/features/remote-dev').then((m) => m.activate)],
+  ['updater', () => import('./updater/registerUpdaterWorkbench').then((m) => m.registerUpdaterWorkbench)],
+  ['agent-quota', () => import('./quota/registerQuotaWorkbench').then((m) => m.registerQuotaWorkbench)],
   ['todo', () => import('../ide/features/todo').then((m) => m.activate)],
   ['scratch', () => import('../ide/features/scratch').then((m) => m.activate)],
   ['libraries', () => import('../ide/features/libraries').then((m) => m.activate)],

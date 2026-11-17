@@ -477,11 +477,38 @@
   opacity: 0.55;
 }
 
+/*
+ * A split pane (two or more side by side) scales the strip down so it takes less of the terminal:
+ * every size setting gets the thin track. `.aq-strip` qualifies the selectors so they beat the
+ * `.aq-size-*` heights.
+ */
+@container (max-width: 760px) {
+  .aq-strip .aq-track {
+    height: 14px;
+  }
+
+  .aq-strip .aq-track-value {
+    font-size: 10px;
+  }
+
+  .aq-label {
+    font-size: 10px;
+  }
+}
+
 /* Medium panes: short labels and shorter tracks; the reset countdown stays. */
 @container (max-width: 440px) {
   .aq-lines {
     grid-template-columns: 2.4rem minmax(32px, 1fr) auto auto;
     column-gap: 4px;
+  }
+
+  .aq-strip .aq-track {
+    height: 12px;
+  }
+
+  .aq-strip .aq-track-value {
+    font-size: 9px;
   }
 
   .aq-meta-name {
@@ -504,10 +531,6 @@
 
   .aq-meta {
     display: none;
-  }
-
-  .aq-track-value {
-    font-size: 10px;
   }
 }
 

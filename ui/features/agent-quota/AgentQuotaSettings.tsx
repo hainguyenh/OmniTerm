@@ -20,8 +20,12 @@ const GROUPS: ReadonlyArray<{ id: SettingsGroup; label: string }> = [
   { id: 'artwork', label: 'Loading artwork' },
 ]
 
+/** What a page shows: everything, only what the agents share, or one agent's own settings. */
+export type QuotaSettingsScope = 'all' | 'shared' | AgentKind
+
 interface AgentQuotaSettingsProps {
   refreshCustomArt?: () => void
+  scope?: QuotaSettingsScope
 }
 
 function promptsValid(config: QuotaConfig): boolean {
@@ -32,7 +36,8 @@ function promptsValid(config: QuotaConfig): boolean {
 }
 
 /**
- * The Settings → Agent quota page: a summary form (master switch, placement, animations, providers,
+ * The Settings → Agents quota pages. With `scope` "shared" it leaves out the per-agent cards (each
+ * agent has its own page, `scope` being that agent, which shows only its card). In full: a summary form (master switch, placement, animations, providers,
  * at-limit guard), then three groups — Agents (limits,
  * protection and wake-up per agent), Quota lines (how the pane strips look) and Loading artwork (the
  * busy-header art) — one at a time, each with a live preview of what it controls.
@@ -41,12 +46,14 @@ function promptsValid(config: QuotaConfig): boolean {
  * so switching agents on/off, dragging a limit slider, or typing a wake prompt can't fire a save on
  * every keystroke, and a half-typed prompt can never be persisted.
  */
-export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: AgentQuotaSettingsProps) {
+export default function AgentQuotaSettings({ refreshCustomArt = () => {}, scope = 'all' }: AgentQuotaSettingsProps) {
   const committed = useQuota((state) => state.config)
   const overrideCount = useQuota((state) => Object.keys(state.overrides).length)
   const now = useCoarseNow()
   const [draft, setDraft] = useState<QuotaConfig>(committed)
-  const [group, setGroup] = useState<SettingsGroup>('agents')
+  const groups = scope === 'shared' ? GROUPS.filter(({ id }) => id !== 'agents') : GROUPS
+  const [group, setGroup] = useState<SettingsGroup>(scope === 'shared' ? 'lines' : 'agents')
+  const oneAgent = scope === 'all' || scope === 'shared' ? null : scope
   const [resetOverridesToo, setResetOverridesToo] = useState(false)
   const [applied, setApplied] = useState(false)
   const appliedTimerRef = useRef<number | null>(null)
@@ -76,7 +83,7 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: Agen
 
   return (
     <div className="p-5 flex flex-col gap-3 text-theme-fg">
-      <QuotaSummaryForm draft={draft} onChange={setDraft} />
+      {!oneAgent && <QuotaSummaryForm draft={draft} onChange={setDraft} />}
 
       <div className="flex flex-wrap items-center gap-2 p-2 rounded-xl border border-theme-border text-xs sticky top-0 bg-theme-bg z-10">
         {applied
@@ -101,10 +108,14 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {} }: Agen
         </button>
       </div>
 
-      {draft.enabled && (
+      {oneAgent && (draft.enabled
+        ? <AgentSettingsCard agent={oneAgent} config={draft.agents[oneAgent]} defaultExpanded onChange={(next) => saveAgent(oneAgent, next)} />
+        : <p className="px-1 text-xs text-theme-dim">Agent quota is off. Turn it on under Agents › Quota to monitor this agent.</p>)}
+
+      {!oneAgent && draft.enabled && (
         <>
           <div role="tablist" aria-label="Agent Quota settings groups" className="flex gap-1 p-0.5 rounded-xl border border-theme-border text-xs">
-            {GROUPS.map(({ id, label }) => (
+            {groups.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"

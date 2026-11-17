@@ -41,6 +41,18 @@ describe('agent quota styles', () => {
     expect(lines.slice(lines.indexOf('@container (max-width: 240px)'))).toContain('.aq-reset')
   })
 
+  // Regression: a pane split two or more ways kept the full-height strip, since only panes under
+  // 440px shrank anything, and then only the columns.
+  it('scales the strip down in split panes, whatever the size setting', () => {
+    const lines = css('agentQuota.css')
+    const split = lines.slice(lines.indexOf('@container (max-width: 760px)'), lines.indexOf('@container (max-width: 440px)'))
+    expect(lines.indexOf('@container (max-width: 760px)')).toBeGreaterThan(lines.indexOf('.aq-size-thick .aq-track {'))
+    expect(rule(split, '.aq-strip .aq-track')).toContain('height: 14px')
+    expect(rule(split, '.aq-strip .aq-track-value')).toContain('font-size: 10px')
+    const medium = lines.slice(lines.indexOf('@container (max-width: 440px)'))
+    expect(rule(medium, '.aq-strip .aq-track')).toContain('height: 12px')
+  })
+
   it('paints the profiles dialog with a theme colour that exists', () => {
     expect(rule(css('profilesDashboard.css'), '.aq-pd-dialog')).toContain('background: var(--theme-popup-bg')
   })

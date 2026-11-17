@@ -1,6 +1,7 @@
 import { provideProjectPopup, registerTitleItem } from '../ide/workbench/contributions'
 
 import { ProjectFilterItem } from './titlebar/ProjectFilterItem'
+import { ThemeModeButton } from './titlebar/ThemeModeButton'
 import { WorkspacePopup } from './titlebar/WorkspacePopup'
 import { UpdateTitleIndicator } from './updater/updateIndicator'
 
@@ -9,6 +10,7 @@ import { UpdateTitleIndicator } from './updater/updateIndicator'
  * - the project widget's popup lists workspaces (OmniTerm's "project") instead of recent projects;
  * - the "All projects" filter sits right after the project widget, before the branch widget;
  * - the update indicator, after Search Everywhere, while an update is available;
+ * - the light/dark switch, right before the Settings gear;
  *
  * The title bar carries no font size or zoom control (the mock has none): the terminal zoom shortcuts,
  * each pane's own control and Settings cover them.
@@ -22,6 +24,14 @@ export function registerTitleControls(): () => void {
       align: 'left',
       priority: 5,
       component: ProjectFilterItem,
+    }),
+    registerTitleItem({
+      id: 'omniterm.themeMode',
+      title: 'Light / Dark Mode',
+      align: 'right',
+      priority: 1,
+      trailing: true,
+      component: ThemeModeButton,
     }),
     registerTitleItem({
       id: 'omniterm.update',

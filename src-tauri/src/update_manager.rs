@@ -48,7 +48,8 @@ pub fn update_endpoint_env() -> Option<String> {
 pub struct UpdaterRegistered(pub bool);
 
 pub fn updater_configured<R: Runtime>(app: &AppHandle<R>) -> bool {
-    app.try_state::<UpdaterRegistered>().is_some_and(|registered| registered.0)
+    app.try_state::<UpdaterRegistered>()
+        .is_some_and(|registered| registered.0)
 }
 
 fn config_endpoints<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
@@ -58,7 +59,11 @@ fn config_endpoints<R: Runtime>(app: &AppHandle<R>) -> Vec<String> {
         .get("updater")
         .and_then(|u| u.get("endpoints"))
         .and_then(|e| e.as_array())
-        .map(|e| e.iter().filter_map(|u| u.as_str().map(String::from)).collect())
+        .map(|e| {
+            e.iter()
+                .filter_map(|u| u.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -72,7 +77,10 @@ fn resolve_updater<R: Runtime>(
     let endpoints = source_endpoints(config_endpoints(app), source, update_endpoint_env());
     let endpoints = endpoints
         .iter()
-        .map(|u| u.parse().map_err(|e| IdeError::invalid(format!("endpoint {u}: {e}"))))
+        .map(|u| {
+            u.parse()
+                .map_err(|e| IdeError::invalid(format!("endpoint {u}: {e}")))
+        })
         .collect::<IdeResult<Vec<_>>>()?;
     app.updater_builder()
         .endpoints(endpoints)
@@ -164,10 +172,7 @@ pub async fn app_install_update<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn app_cancel_update(
-    requests: State<'_, Requests>,
-    token: Option<String>,
-) -> IdeResult<Value> {
+pub fn app_cancel_update(requests: State<'_, Requests>, token: Option<String>) -> IdeResult<Value> {
     if let Some(ref t) = token {
         if let Ok(id) = t.parse::<u32>() {
             requests.cancel(RequestId(id));

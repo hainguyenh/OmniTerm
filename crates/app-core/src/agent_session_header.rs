@@ -114,6 +114,39 @@ fn codex_line(value: &Value, header: &mut SessionHeader) {
     }
 }
 
+/// The text of a Gemini CLI message `content`: a string, or the first part with text.
+fn gemini_text(content: &Value) -> Option<&str> {
+    match content {
+        Value::String(text) => Some(text),
+        Value::Array(parts) => parts
+            .iter()
+            .find_map(|part| part.get("text").and_then(Value::as_str)),
+        _ => None,
+    }
+}
+
+/// A Gemini CLI chat record: the first prompt the user typed is the title. The working directory
+/// is not in the chat; its project folder names it.
+fn gemini_line(value: &Value, header: &mut SessionHeader) {
+    if header.title.is_none() && value.get("type").and_then(Value::as_str) == Some("user") {
+        header.title = value
+            .get("content")
+            .and_then(gemini_text)
+            .and_then(typed_prompt);
+    }
+}
+
+/// Whether the head has told everything it can for `agent`.
+fn is_complete(header: &SessionHeader, agent: SessionAgent) -> bool {
+    match agent {
+        SessionAgent::Claude => header.cwd.is_some() && header.title.is_some(),
+        SessionAgent::Codex => {
+            header.cwd.is_some() && header.title.is_some() && header.session_id.is_some()
+        }
+        SessionAgent::Gemini | SessionAgent::Agy => header.title.is_some(),
+    }
+}
+
 fn parse_lines(reader: impl BufRead, agent: SessionAgent) -> SessionHeader {
     let mut header = SessionHeader::default();
     for line in reader.lines().take(HEAD_LINES) {
@@ -124,11 +157,11 @@ fn parse_lines(reader: impl BufRead, agent: SessionAgent) -> SessionHeader {
         match agent {
             SessionAgent::Claude => claude_line(&value, &mut header),
             SessionAgent::Codex => codex_line(&value, &mut header),
+            SessionAgent::Gemini => gemini_line(&value, &mut header),
+            // Antigravity's conversations are databases; they are never read as text.
+            SessionAgent::Agy => break,
         }
-        if header.cwd.is_some()
-            && header.title.is_some()
-            && (agent == SessionAgent::Claude || header.session_id.is_some())
-        {
+        if is_complete(&header, agent) {
             break;
         }
     }

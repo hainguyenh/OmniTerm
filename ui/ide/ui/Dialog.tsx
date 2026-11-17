@@ -10,6 +10,7 @@ import { selectableText } from "./selectableText";
 import appIcon from "../../../src-tauri/icons/128x128.png";
 import styles from "./Dialog.module.css";
 import { isImeKey } from "@/platform/ime";
+import { clampDialogOffset } from "./dialogBounds";
 import { lockDragCursor } from "./dragCursor";
 
 /**
@@ -125,6 +126,11 @@ export interface DialogProps {
   /** The size a resize ended at. */
   onResized?: (size: { w: number; h: number }) => void;
   /**
+   * Keep the whole dialog inside the app window: dragging stops at the edges and
+   * a window resize pulls it back in. Otherwise only the title bar stays reachable.
+   */
+  keepInside?: boolean;
+  /**
    * `top` places a lightweight modal popup (choosers, Search Everywhere) near
    * the top. Popups (also any dialog without a title) get no window title bar
    * and drag only by a `[data-dialog-drag]` element, such as their title.
@@ -221,6 +227,7 @@ function DialogInner({
   maxHeight,
   initialSize,
   onResized,
+  keepInside,
   position = "center",
   className,
   dismissOnBackdrop,
@@ -264,6 +271,28 @@ function DialogInner({
       window.removeEventListener("blur", onBlur);
     };
   }, []);
+
+  // A window resize re-centres the dialog; pull a dragged one back inside.
+  useEffect(() => {
+    if (!keepInside) return;
+    const onResize = () => {
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const minTop = overlayTitleBar && el.parentElement ? parseFloat(getComputedStyle(el.parentElement).paddingTop) : 0;
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      setOffset((current) =>
+        clampDialogOffset(
+          current,
+          { left: rect.left - current.x, top: rect.top - current.y, width: rect.width, height: rect.height },
+          viewport,
+          minTop,
+        ),
+      );
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [keepInside, overlayTitleBar]);
 
   const cancelOnDeactivate = closeOnDeactivate ?? popup;
   useEffect(() => {
@@ -346,6 +375,12 @@ function DialogInner({
     const minTop = overlayTitleBar && el.parentElement ? parseFloat(getComputedStyle(el.parentElement).paddingTop) : 0;
     const move = (ev: globalThis.PointerEvent) => {
       if (!(ev.buttons & 1)) return up();
+      if (keepInside) {
+        const box = { ...base, width: rect.width, height: rect.height };
+        const viewport = { width: window.innerWidth, height: window.innerHeight };
+        setOffset(clampDialogOffset({ x: ev.clientX - start.x, y: ev.clientY - start.y }, box, viewport, minTop));
+        return;
+      }
       // Keep the title bar reachable.
       const x = Math.min(
         Math.max(ev.clientX - start.x, -base.left - rect.width + 80),

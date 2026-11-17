@@ -1,5 +1,5 @@
 /** Language server status: `lsp_servers` snapshot + `languageServer` / `languageServerRemoved` events. */
-import { getAction } from "@/platform/actions";
+import { executeAction } from "@/platform/actions";
 import { create } from "zustand";
 import type { ServerId, ServerInfo, ServerStatus } from "@/bindings";
 import { call, commands, isTauri, onIdeEvent } from "@/platform/ipc";
@@ -32,14 +32,19 @@ const removedAt = new Map<ServerId, number>();
 function notifyMissing(e: ServerEntry) {
   if (notifiedMissing.has(e.name)) return;
   notifiedMissing.add(e.name);
-  // features/tools shows the same notification with an Install button.
-  if (getAction("tools.install")) return;
+  // features/tools replaces this notice (same key) with its own once it knows the server. It may
+  // load after this feature, so the offer to install is made here too: the action is looked up
+  // when the button is pressed.
   notifications().notify({
     group: "lsp",
     level: "warning",
     title: `Language server '${e.name}' is not installed`,
     body: e.message ?? "Code insight features are unavailable for these files until it is installed.",
     key: `lsp-missing-${e.name}`,
+    actions: [
+      { label: "Install", run: () => void executeAction("tools.install", e.name) },
+      { label: "Language Servers…", run: () => void executeAction("tools.languageServers") },
+    ],
   });
 }
 

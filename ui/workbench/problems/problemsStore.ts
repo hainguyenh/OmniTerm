@@ -1,7 +1,9 @@
 import { create } from 'zustand'
 
 import type { Diagnostic, Severity } from '../../ide/bindings'
+import { applyProfile, inspectionProfile, subscribeInspectionProfile } from '../../ide/platform/inspections'
 import { isTauri, onIdeEvent } from '../../ide/platform/ipc'
+import { onLocalDiagnostics } from '../../ide/platform/localDiagnostics'
 
 export interface ProblemItem {
   id: string
@@ -61,10 +63,13 @@ function computeDerived(
   let totalErrors = 0
   let totalWarnings = 0
   let totalInfo = 0
+  // The editor shows diagnostics under the inspection profile (disabled ones dropped, severities
+  // remapped, e.g. to Weak Warning); the list must match it, so it applies the same profile.
+  const profile = inspectionProfile()
 
   for (const [path, sources] of diagnosticsByPath.entries()) {
     for (const [source, items] of sources.entries()) {
-      for (const item of items) {
+      for (const item of applyProfile(profile, source, items)) {
         const severity = item.severity
         if (severity === 'error') totalErrors++
         else if (severity === 'warning') totalWarnings++
@@ -279,6 +284,16 @@ export function initProblemsEvents(): () => void {
     useProblemsStore.getState().setDiagnostics(e.path, e.source, e.items)
   })
 
+  // Typo, file-reference and SQL inspections run in the editor itself and never reach the backend
+  // event; without them the editor listed a (weak) warning that Problems did not.
+  const unlistenLocal = onLocalDiagnostics((path, producer, items) => {
+    useProblemsStore.getState().setDiagnostics(path, producer, [...items])
+  })
+
+  const unlistenProfile = subscribeInspectionProfile(() => {
+    useProblemsStore.setState((s) => computeDerived(s.diagnosticsByPath, s.filterSeverity, s.searchQuery))
+  })
+
   const unlistenFs = onIdeEvent('fsChanged', (e) => {
     if (e.removed && e.removed.length > 0) {
       for (const removedPath of e.removed) {
@@ -289,6 +304,8 @@ export function initProblemsEvents(): () => void {
 
   eventDisposer = () => {
     unlistenDiagnostics()
+    unlistenLocal()
+    unlistenProfile()
     unlistenFs()
     eventDisposer = null
   }

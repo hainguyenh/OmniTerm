@@ -69,6 +69,10 @@
   gap: 4px;
   min-width: 0;
 }
+/* A lone icon button cannot shrink: squeezed, it drew over the next control. The pills give way. */
+.item:has(> button:only-child) {
+  flex: none;
+}
 /* Main toolbar dropdown widgets ("pills"): 30px tall, 6px corners. */
 .widget {
   height: 30px;

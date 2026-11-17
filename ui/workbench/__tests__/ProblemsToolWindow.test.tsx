@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Diagnostic } from '../../ide/bindings'
 import { emitLocalIdeEvent } from '../../ide/platform/ipc'
+import { publishLocalDiagnostics } from '../../ide/platform/localDiagnostics'
 
 const openFileMock = vi.fn().mockResolvedValue(undefined)
 
@@ -239,6 +240,28 @@ describe('ProblemsToolWindow & problemsStore', () => {
 
     expect(useProblemsStore.getState().totalErrors).toBe(0)
     expect(useProblemsStore.getState().groupedProblems.length).toBe(0)
+
+    cleanup()
+  })
+
+  // Regression: a weak warning from an inspection the editor runs itself (typo, file reference, SQL)
+  // showed in the editor's inspection widget but never in Problems.
+  it('lists diagnostics the editor computes locally', () => {
+    const cleanup = initProblemsEvents()
+    const weak: Diagnostic = {
+      range: { start: { line: 1, col: 0 }, end: { line: 1, col: 4 } },
+      severity: 'info',
+      message: 'Cannot resolve file',
+      source: null,
+      code: null,
+    }
+
+    act(() => publishLocalDiagnostics('/ws/a.md', 'fileReferences', [weak]))
+    expect(useProblemsStore.getState().totalInfo).toBe(1)
+    expect(useProblemsStore.getState().groupedProblems[0]?.filename).toBe('a.md')
+
+    act(() => publishLocalDiagnostics('/ws/a.md', 'fileReferences', []))
+    expect(useProblemsStore.getState().totalInfo).toBe(0)
 
     cleanup()
   })

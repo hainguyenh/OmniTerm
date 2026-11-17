@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 
+import { stepFontZoomAt } from '../ide/editor/core/view/EditorZoom'
 import { toggleThemeMode } from '../platform/theme/unifiedTheme'
 import { openSettingsWindow } from '../workbench/settings/openSettingsWindow'
 import { matchShortcut } from '../utils/keyboard'
@@ -29,8 +30,9 @@ export interface UseAppShortcutsInput {
  *
  * Zoom is scoped by where the input landed: over a terminal, Ctrl+=/-/wheel change that terminal's
  * font size (xterm already owns that in TerminalView.tsx); everywhere else they zoom the app chrome.
- * A terminal's own wheel handler stops propagation, so this hook only ever sees chrome-scoped wheel
- * events — but the keyboard path has no such gate, hence the explicit `inTerminal` branch below.
+ * The wheel goes by the pointer: inside an editor pane or the terminal dock it steps that region's
+ * font instead (stepFontZoomAt), and a wheel a surface already claimed (preventDefault) is left
+ * alone. The keyboard path has no such gate, hence the explicit `inTerminal` branch below.
  */
 export function useAppShortcuts({
   appSettings, setAppSettings, changeFontSize, resetFontSize, persistZoom,
@@ -177,8 +179,10 @@ export function useAppShortcuts({
     }
 
     const handleWheel = (e: WheelEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return
+      if (!(e.ctrlKey || e.metaKey) || e.defaultPrevented) return
       e.preventDefault()
+      const delta = Math.sign(-e.deltaY)
+      if (delta !== 0 && e.target instanceof Element && stepFontZoomAt(e.target, delta)) return
       if (e.deltaY < 0) setZoom(getZoom() + ZOOM_STEP)
       else if (e.deltaY > 0) setZoom(getZoom() - ZOOM_STEP)
     }

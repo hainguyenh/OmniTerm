@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { executeAction, registerActions } from "@/platform/actions";
 import { call, commands, isTauri, onIdeEvent } from "@/platform/ipc";
+import { languageFamiliesOf } from "@/platform/languageFamilies";
 import { useProject } from "@/platform/project";
 import { tx } from "@/platform/i18n";
 import { notifications, registerStatusItem } from "@/workbench/contributions";
@@ -31,8 +32,15 @@ function popupShown(): boolean {
   const configured = project.settings?.languages?.python?.interpreter ?? "";
   const status = usePopup.getState().status;
   if (!root || !status || status.root !== root || status.configured !== configured) return false;
-  return status.visible || !!configured;
+  // OmniTerm: a globally saved interpreter does not make every project a Python project.
+  return status.visible;
 }
+
+/** Folders whose Python files belong to a dependency or a build, not to the project. */
+const FOREIGN_DIRS = /(^|\/)(node_modules|vendor|target|dist|build|out|\.git|\.cargo|\.gradle)\//;
+
+/** OmniTerm: whether Python tooling is switched on (Settings › Code › Languages). */
+const pythonOn = () => languageFamiliesOf(useProject.getState().settings).python !== false;
 const markers = [
   "pyproject.toml",
   "setup.py",
@@ -60,10 +68,14 @@ export function interpreterChoices(sdks: Sdk[], current: string | null): { path:
 }
 
 async function hasPythonFiles(): Promise<boolean> {
+  if (!pythonOn()) return false;
   const matches = await Promise.all(
     [".py", "requirements", ...markers].map((query) => call(commands.findFiles(query, 10000))),
   );
-  return matches.some((files) => files.some((file) => isPythonPath(file.path)));
+  // node-gyp and other packages ship `.py` files: those do not make a Node project a Python one.
+  return matches.some((files) =>
+    files.some((file) => isPythonPath(file.path) && !FOREIGN_DIRS.test(file.path.replaceAll("\\", "/"))),
+  );
 }
 
 function PythonStatus() {
@@ -86,7 +98,7 @@ function PythonStatus() {
         const visible = await hasPythonFiles();
         if (!live || sequence !== request) return;
         const [python, sdks] =
-          visible || configured
+          visible
             ? await Promise.all([effectivePython(), (detected ??= call(commands.sdkDetect("python")))])
             : [null, [] as Sdk[]];
         if (live && sequence === request) usePopup.setState({ status: { root, configured, visible, python, sdks } });

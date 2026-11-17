@@ -20,8 +20,8 @@ use ide_app::application_focus::ApplicationFocus;
 use ide_app::state::AppState;
 use ide_app::windows::WindowsState;
 use ide_app::{commands, plugin_web};
-use tauri::{Manager, Window, WindowEvent, Wry};
 use tauri::ipc::Invoke;
+use tauri::{Manager, Window, WindowEvent, Wry};
 
 use crate::invoke_handlers::{local_command_names, local_invoke_handler};
 
@@ -42,7 +42,10 @@ pub(crate) fn attach(builder: tauri::Builder<Wry>) -> tauri::Builder<Wry> {
             }
             let webview = request.message.webview_ref();
             if let Some(state) = webview.try_state::<AppState>() {
-                if let Err(error) = state.host.authorize_command(webview.label(), request.message.command()) {
+                if let Err(error) = state
+                    .host
+                    .authorize_command(webview.label(), request.message.command())
+                {
                     request.resolver.reject(error);
                     return true;
                 }

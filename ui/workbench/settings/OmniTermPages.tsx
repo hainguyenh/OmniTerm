@@ -1,7 +1,7 @@
 import { AlertTriangle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import AgentQuotaSettings from '../../features/agent-quota/AgentQuotaSettings'
+import AgentQuotaSettings, { type QuotaSettingsScope } from '../../features/agent-quota/AgentQuotaSettings'
 import { parseQuotaConfig } from '../../features/agent-quota/quotaConfig'
 import { registerQuotaCommands, updateQuota } from '../../features/agent-quota/quotaStore'
 import AlwaysAwakeModal from '../../features/always-awake/AlwaysAwakeModal'
@@ -165,8 +165,11 @@ export function BuiltinPluginsPage({
   )
 }
 
-/** Settings › Agents › Agent Quota. The engine runs in the main window; this edits its stored config. */
-export function AgentQuotaPage() {
+/**
+ * Settings › Agents › Quota (what the agents share) and Settings › Agents › <agent> (`scope` is that
+ * agent). The engine runs in the main window; this edits its stored config.
+ */
+export function AgentQuotaPage({ scope = 'shared' }: { scope?: QuotaSettingsScope }) {
   const { appSettings } = useAppSettings()
   const raw = appSettings?.agentQuota
   useEffect(() => {
@@ -182,7 +185,19 @@ export function AgentQuotaPage() {
     if (appSettings) updateQuota((state) => ({ ...state, config: parseQuotaConfig(raw) }))
   }, [appSettings, raw])
   if (!appSettings) return null
-  return <AgentQuotaSettings refreshCustomArt={notifyCustomArtChanged} />
+  return <AgentQuotaSettings refreshCustomArt={notifyCustomArtChanged} scope={scope} />
+}
+
+export function ClaudeAgentPage() {
+  return <AgentQuotaPage scope="claude" />
+}
+
+export function CodexAgentPage() {
+  return <AgentQuotaPage scope="codex" />
+}
+
+export function AgyAgentPage() {
+  return <AgentQuotaPage scope="agy" />
 }
 
 /** Settings › Agents › Always Awake. */

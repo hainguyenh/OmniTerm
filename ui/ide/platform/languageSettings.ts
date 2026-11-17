@@ -3,6 +3,7 @@
  * shape, defaults and normalisation (mirrors `ide-core::settings`).
  */
 import { useMemo } from "react";
+import { resolveLanguageFamilies } from "./languageFamilies";
 import { useProject } from "./project";
 
 export interface GoBuildTags {
@@ -154,6 +155,8 @@ export interface ArtifactConfigValid {
 }
 
 export interface LanguagesValid {
+  /** OmniTerm: each language family on or off (`languageFamilies.ts`), defaults filled in. */
+  families: Record<string, boolean>;
   /** Minutes a language server may go without open files before it stops; 0 keeps it running. */
   serverIdleMinutes: number;
   pluginFormatters: Record<string, string>;
@@ -260,6 +263,7 @@ export type FolderListKey =
 export const SERVER_IDLE_MINUTES = { min: 0, max: 1440 } as const;
 
 export const DEFAULT_LANGUAGES: LanguagesValid = {
+  families: resolveLanguageFamilies(undefined),
   serverIdleMinutes: 10,
   pluginFormatters: {},
   python: { interpreter: "", activateVirtualenv: true },
@@ -385,6 +389,7 @@ export function validateLanguages(raw: unknown): LanguagesValid {
   const markdown = obj(l.markdown);
   const idle = l.serverIdleMinutes;
   return {
+    families: resolveLanguageFamilies(l.families),
     serverIdleMinutes:
       typeof idle === "number" && Number.isFinite(idle)
         ? Math.round(Math.min(SERVER_IDLE_MINUTES.max, Math.max(SERVER_IDLE_MINUTES.min, idle)))

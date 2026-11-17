@@ -1120,8 +1120,13 @@ pub fn configure_server(cfg: &mut LanguageServerConfig, root: &Path, server_root
 
 /// The servers `language` uses after Settings › Language Servers: the
 /// definition's ones that aren't disabled (some are off by default), then the
-/// ones defined in settings for it.
+/// ones defined in settings for it. None at all while the language's family is
+/// switched off (Settings › Code › Languages): this is the one place every server
+/// start goes through, so nothing of that language runs.
 pub fn language_servers(language: &str, defined: &[LanguageServerConfig], s: &Settings) -> Vec<LanguageServerConfig> {
+    if !s.languages.language_enabled(language) {
+        return Vec::new();
+    }
     let mut out: Vec<LanguageServerConfig> =
         defined.iter().filter(|c| s.language_server_enabled(&c.name)).cloned().collect();
     for (name, ls) in &s.language_servers {
@@ -2028,5 +2033,46 @@ mod java_compliance_tests {
         assert_eq!(c("4"), None);
         assert_eq!(c(""), None);
         assert_eq!(c("latest"), None);
+    }
+}
+
+#[cfg(test)]
+mod language_family_tests {
+    use super::*;
+
+    /// The servers the built-in definition of `language` lists.
+    fn defined(language: &str) -> Vec<LanguageServerConfig> {
+        let registry = ide_language::LanguageRegistry::load(None).expect("the built-in languages load");
+        let config = registry.get(&ide_core::LanguageId::new(language)).expect("a built-in language");
+        config.language_servers.clone()
+    }
+
+    #[test]
+    fn a_family_switched_off_starts_no_server_of_its_languages() {
+        let mut s = Settings::default();
+        let defined = defined("rust");
+        let on = language_servers("rust", &defined, &s).len();
+        assert!(on >= 1, "rust has a server by default");
+
+        s.languages.families.insert("rust".into(), false);
+        assert!(language_servers("rust", &defined, &s).is_empty());
+        // Not even one the user defined for that language.
+        let custom = s.language_servers.entry("my-rust-ls".into()).or_default();
+        custom.enabled = true;
+        custom.languages = vec!["rust".into()];
+        assert!(language_servers("rust", &defined, &s).is_empty());
+
+        s.languages.families.insert("rust".into(), true);
+        assert_eq!(language_servers("rust", &defined, &s).len(), on + 1);
+    }
+
+    #[test]
+    fn java_needs_both_its_family_and_its_server_switched_on() {
+        let mut s = Settings::default();
+        let defined = defined("java");
+        s.language_servers.entry("jdtls".into()).or_default().enabled = true;
+        assert!(language_servers("java", &defined, &s).is_empty(), "the family is off by default");
+        s.languages.families.insert("java".into(), true);
+        assert!(language_servers("java", &defined, &s).iter().any(|c| c.name == "jdtls"));
     }
 }

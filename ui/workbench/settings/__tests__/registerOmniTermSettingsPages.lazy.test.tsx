@@ -15,6 +15,9 @@ vi.mock('../OmniTermPages', () => {
     BuiltinPluginsPage: stub('BuiltinPluginsPage'),
     AboutPage: stub('AboutPage'),
     AgentQuotaPage: stub('AgentQuotaPage'),
+    ClaudeAgentPage: stub('ClaudeAgentPage'),
+    CodexAgentPage: stub('CodexAgentPage'),
+    AgyAgentPage: stub('AgyAgentPage'),
     AlwaysAwakePage: stub('AlwaysAwakePage'),
   }
 })
@@ -22,7 +25,7 @@ vi.mock('../ShortcutsPage', () => ({ ShortcutsPage: () => <div data-testid="page
 
 import { useSettingsPages } from '../../../ide/workbench/contributions'
 import { registerOmniTermSettingsPages } from '../registerOmniTermSettingsPages'
-import { OMNITERM_SETTINGS_PAGES as IDS } from '../settingsPageIds'
+import { agentSettingsPage, OMNITERM_SETTINGS_PAGES as IDS } from '../settingsPageIds'
 
 const EXPECTED: Array<[string, string]> = [
   [IDS.terminal, 'TerminalPage'],
@@ -36,6 +39,9 @@ const EXPECTED: Array<[string, string]> = [
   [IDS.nodePlugins, 'BuiltinPluginsPage'],
   [IDS.about, 'AboutPage'],
   [IDS.agentQuota, 'AgentQuotaPage'],
+  [agentSettingsPage('claude'), 'ClaudeAgentPage'],
+  [agentSettingsPage('codex'), 'CodexAgentPage'],
+  [agentSettingsPage('agy'), 'AgyAgentPage'],
   [IDS.alwaysAwake, 'AlwaysAwakePage'],
 ]
 

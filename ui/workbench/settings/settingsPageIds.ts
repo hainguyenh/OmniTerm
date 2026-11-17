@@ -13,3 +13,6 @@ export const OMNITERM_SETTINGS_PAGES = {
   nodePlugins: 'plugins.installed',
   about: 'updates',
 } as const
+
+/** Page id of one agent's own settings (Settings › Agents › <agent>); `kind` is its quota agent kind. */
+export const agentSettingsPage = (kind: string): string => `agents.agent.${kind}`

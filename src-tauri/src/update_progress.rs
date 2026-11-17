@@ -7,7 +7,8 @@ use ide_core::updates::UpdateSource;
 use serde::Serialize;
 
 /// Secondary endpoint used for users whose region reaches GitHub slowly; always the fallback of the other source.
-const CNB_ENDPOINT: &str = "https://cnb.cool/hainguyenh/OmniTerm/-/releases/latest/download/latest.json";
+const CNB_ENDPOINT: &str =
+    "https://cnb.cool/hainguyenh/OmniTerm/-/releases/latest/download/latest.json";
 
 /// Unknown-length downloads report once per this many bytes.
 const UNKNOWN_TOTAL_STEP: u64 = 256 * 1024;
@@ -16,14 +17,24 @@ const UNKNOWN_TOTAL_STEP: u64 = 256 * 1024;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum UpdateProgress {
-    Downloading { downloaded: Option<u64>, total: Option<u64> },
+    Downloading {
+        downloaded: Option<u64>,
+        total: Option<u64>,
+    },
     Installing,
 }
 
 /// Orders the update endpoints: the selected source first, the other one as fallback. A valid HTTPS
 /// `custom` endpoint replaces the configured official ones; anything else is ignored.
-pub fn source_endpoints(official: Vec<String>, source: UpdateSource, custom: Option<String>) -> Vec<String> {
-    let base = match custom.map(|url| url.trim().to_owned()).filter(|url| url.starts_with("https://")) {
+pub fn source_endpoints(
+    official: Vec<String>,
+    source: UpdateSource,
+    custom: Option<String>,
+) -> Vec<String> {
+    let base = match custom
+        .map(|url| url.trim().to_owned())
+        .filter(|url| url.starts_with("https://"))
+    {
         Some(url) => vec![url],
         None => official,
     };
@@ -53,7 +64,10 @@ impl ProgressThrottle {
             return None;
         }
         self.last_step = Some(step);
-        Some(UpdateProgress::Downloading { downloaded: Some(self.downloaded), total })
+        Some(UpdateProgress::Downloading {
+            downloaded: Some(self.downloaded),
+            total,
+        })
     }
 
     /// Bytes counted so far; the progress events carry the same number to the renderer.

@@ -327,6 +327,29 @@ describe('useAppShortcuts', () => {
     cleanup()
   })
 
+  // Regression: Ctrl+wheel over the editor or the terminal dock zoomed the whole app.
+  it('Ctrl+wheel inside an editor pane zooms that pane, not the app', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    const pane = document.createElement('section')
+    pane.setAttribute('data-pane-id', 'p1')
+    const inner = document.createElement('div')
+    pane.appendChild(inner)
+    document.body.appendChild(pane)
+    inner.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true, bubbles: true }))
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    expect(persistZoom).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('leaves a Ctrl+wheel a surface already handled alone', () => {
+    const { cleanup } = setup('chrome')
+    const event = new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true })
+    event.preventDefault()
+    window.dispatchEvent(event)
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    cleanup()
+  })
+
   it('wheel without Ctrl is ignored', () => {
     const { persistZoom, cleanup } = setup('chrome')
     window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, cancelable: true }))

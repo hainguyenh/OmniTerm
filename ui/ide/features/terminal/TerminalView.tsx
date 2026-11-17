@@ -293,6 +293,7 @@ export function TerminalView() {
     <div
       ref={rootRef}
       className={styles.root}
+      data-font-zoom-region=""
       onFocusCapture={(e) => publishFocus(!!(e.target as Element).closest?.("[data-terminal-session]"))}
       onBlurCapture={() => publishFocus(false)}
     >

@@ -458,6 +458,17 @@ impl IndexSettings {
         }
         Some(self.symbol_languages.iter().cloned().collect())
     }
+
+    /// [`Self::symbol_language_filter`] without the languages `languages` has switched off.
+    /// "Every language" stays unfiltered: the index has no deny-list, and a switched-off
+    /// family is one the allow-list does not name by default.
+    pub fn symbol_languages_enabled(
+        &self,
+        languages: &LanguagesSettings,
+    ) -> Option<std::collections::BTreeSet<String>> {
+        self.symbol_language_filter()
+            .map(|allowed| allowed.into_iter().filter(|language| languages.language_enabled(language)).collect())
+    }
 }
 
 impl Default for IndexSettings {
@@ -474,7 +485,7 @@ impl Default for IndexSettings {
             "jsonc",
             "markdown",
         ];
-        Self { enabled: true, symbol_languages: languages.map(String::from).to_vec(), scan_delay_ms: 3000 }
+        Self { enabled: true, symbol_languages: languages.map(String::from).to_vec(), scan_delay_ms: 10_000 }
     }
 }
 
@@ -920,6 +931,46 @@ pub struct LanguagesSettings {
     /// A language server with no open document for this many minutes is stopped
     /// (it starts again with the next file of its language); `0` keeps it running.
     pub server_idle_minutes: u32,
+    /// Language families switched on or off, by [`LANGUAGE_FAMILIES`] name; a family
+    /// without an entry has its default there. A family that is off starts no language
+    /// server and gets no symbol index: its files stay plain, highlighted text.
+    pub families: BTreeMap<String, bool>,
+}
+
+/// The language families Settings › Code › Languages switches: name, the language ids it
+/// covers, and whether it is on without a `languages.families` entry. The JVM, Go, PHP and
+/// Ruby are off until asked for, like their language servers. A language in no family is
+/// always on. `ui/ide/platform/languageFamilies.ts` matches this list.
+pub const LANGUAGE_FAMILIES: &[(&str, &[&str], bool)] = &[
+    ("typescript", &["typescript", "typescriptreact", "javascript", "javascriptreact"], true),
+    ("python", &["python"], true),
+    ("rust", &["rust"], true),
+    ("dotnet", &["csharp", "fsharp"], true),
+    ("cpp", &["c", "cpp", "objective-c", "objective-cpp", "cmake", "arduino"], true),
+    ("java", &["java", "kotlin", "groovy", "scala", "jsp", "properties"], false),
+    ("go", &["go", "gomod", "gowork"], false),
+    ("php", &["php"], false),
+    ("ruby", &["ruby", "erb"], false),
+];
+
+impl LanguagesSettings {
+    /// Whether the family `name` is on: its `families` entry, else its default (an
+    /// unknown family is on).
+    pub fn family_enabled(&self, name: &str) -> bool {
+        self.families
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| LANGUAGE_FAMILIES.iter().find(|(family, ..)| *family == name).is_none_or(|f| f.2))
+    }
+
+    /// Whether `language` may use its tooling (servers, symbol index): its family is on,
+    /// or it belongs to none.
+    pub fn language_enabled(&self, language: &str) -> bool {
+        LANGUAGE_FAMILIES
+            .iter()
+            .find(|(_, languages, _)| languages.contains(&language))
+            .is_none_or(|(family, ..)| self.family_enabled(family))
+    }
 }
 
 impl Default for LanguagesSettings {
@@ -943,6 +994,7 @@ impl Default for LanguagesSettings {
             markdown: MarkdownSettings::default(),
             arduino: ArduinoSettings::default(),
             server_idle_minutes: 10,
+            families: BTreeMap::new(),
         }
     }
 }
@@ -1469,7 +1521,7 @@ mod tests {
     fn index_and_server_idle_settings_default_and_parse() {
         let settings: Settings = serde_json::from_str("{}").unwrap();
         assert!(settings.index.enabled);
-        assert_eq!(settings.index.scan_delay_ms, 3000);
+        assert_eq!(settings.index.scan_delay_ms, 10_000);
         assert_eq!(settings.languages.server_idle_minutes, 10);
         let languages = settings.index.symbol_language_filter().unwrap();
         for id in ["typescript", "typescriptreact", "rust", "csharp", "python", "json", "markdown"] {
@@ -1481,7 +1533,7 @@ mod tests {
         let settings: Settings = serde_json::from_str(json).unwrap();
         assert!(!settings.index.enabled);
         assert_eq!(settings.index.symbol_language_filter(), None, "\"*\" extracts every language");
-        assert_eq!(settings.index.scan_delay_ms, 3000, "missing fields keep their defaults");
+        assert_eq!(settings.index.scan_delay_ms, 10_000, "missing fields keep their defaults");
         assert_eq!(settings.languages.server_idle_minutes, 0);
     }
 
@@ -1922,5 +1974,40 @@ mod go_module_tests {
                 .unwrap();
         assert!(!configured.modules.auto_vendor);
         assert_eq!(configured.modules.env["GOPRIVATE"], "example.com/private");
+    }
+}
+
+#[cfg(test)]
+mod language_family_tests {
+    use super::*;
+
+    #[test]
+    fn families_are_on_or_off_by_default_and_follow_their_entry() {
+        let mut languages = LanguagesSettings::default();
+        assert!(languages.language_enabled("rust") && languages.language_enabled("typescriptreact"));
+        // The JVM, Go, PHP and Ruby wait to be asked for.
+        for language in ["java", "kotlin", "groovy", "go", "gomod", "php", "ruby"] {
+            assert!(!languages.language_enabled(language), "{language} is off by default");
+        }
+        // A language in no family has nothing to switch.
+        assert!(languages.language_enabled("toml") && languages.family_enabled("unknown"));
+
+        languages.families.insert("java".into(), true);
+        languages.families.insert("python".into(), false);
+        assert!(languages.language_enabled("kotlin") && !languages.language_enabled("python"));
+    }
+
+    #[test]
+    fn the_switch_is_read_from_settings_and_no_language_is_in_two_families() {
+        let settings: Settings =
+            serde_json::from_str(r#"{"languages":{"families":{"go":true,"rust":false}}}"#).expect("the families parse");
+        assert!(settings.languages.language_enabled("go") && !settings.languages.language_enabled("rust"));
+
+        let mut seen = std::collections::BTreeSet::new();
+        for (family, languages, _) in LANGUAGE_FAMILIES {
+            for language in *languages {
+                assert!(seen.insert(*language), "{language} is listed twice (in {family})");
+            }
+        }
     }
 }

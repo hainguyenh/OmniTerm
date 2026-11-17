@@ -25,6 +25,8 @@ export interface SessionGroup {
   key: string
   /** Project or folder the sessions belong to; duplicates are numbered ("OmniTerm (2)"). */
   label: string
+  /** The local folder the group stands for, when it is one: new sessions can start there. */
+  cwd?: string
   sessions: SessionNode[]
 }
 
@@ -59,6 +61,7 @@ export interface SessionsTreeInput {
 interface Project {
   key: string
   label: string
+  cwd?: string
 }
 
 interface Placement {
@@ -74,6 +77,7 @@ const normalized = (path: string): string => path.replace(/\\/g, '/').replace(/\
 const folderProject = (folder: WorkspaceFolder): Project => ({
   key: `dir:${normalized(folder.path)}`,
   label: folder.name?.trim() || lastSegment(folder.path),
+  cwd: folder.path,
 })
 
 /** The workspace project folder `cwd` lies in (the innermost one across every workspace). */
@@ -101,7 +105,7 @@ function placeTab(tab: SessionsTreeTab, input: SessionsTreeInput): Placement {
   const inFolder = folderOf(cwd, input.workspaces)
   if (inFolder) return inFolder
   const workspace = workspaceForConnection([...input.workspaces], conn) ?? null
-  if (cwd) return { workspace, project: { key: `dir:${normalized(cwd)}`, label: lastSegment(cwd) } }
+  if (cwd) return { workspace, project: { key: `dir:${normalized(cwd)}`, label: lastSegment(cwd), ...(conn?.type === 'LOCAL' ? { cwd } : {}) } }
   return { workspace, project: { key: `conn:${tab.connId}`, label: conn?.name || tab.name } }
 }
 
@@ -109,7 +113,7 @@ function placeTab(tab: SessionsTreeTab, input: SessionsTreeInput): Placement {
 function placeStored(session: StoredAgentSession, input: SessionsTreeInput): Placement {
   const inFolder = folderOf(session.cwd, input.workspaces)
   if (inFolder) return inFolder
-  if (session.cwd) return { workspace: null, project: { key: `dir:${normalized(session.cwd)}`, label: lastSegment(session.cwd) } }
+  if (session.cwd) return { workspace: null, project: { key: `dir:${normalized(session.cwd)}`, label: lastSegment(session.cwd), cwd: session.cwd } }
   return { workspace: null, project: { key: `stored:${session.id}`, label: session.folderName ?? 'Workspace' } }
 }
 

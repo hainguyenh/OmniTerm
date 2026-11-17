@@ -1,13 +1,15 @@
-import { AlertTriangle, Bookmark, BookmarkX, ChevronDown, ChevronRight, Folder, Layers, Play, SquareTerminal, X } from 'lucide-react'
+import { AlertTriangle, Bookmark, BookmarkX, ChevronDown, ChevronRight, Folder, Layers, Play, Plus, X } from 'lucide-react'
+import type { MouseEvent } from 'react'
 
 import { removeStoredSession, setSessionBookmarked, type StoredAgentSession } from '../utils/agentSessionStorage'
 import type { SessionGroup, SessionNode, SessionSection } from '../utils/sessionsTree'
 import { resumeCommandFor } from '../utils/storedSessionResume'
 import { sessionDisplayName } from '../utils/sessionDisplayName'
-import { startPointerDrag } from '../ide/ui/pointerDrag'
-import { SESSION_DRAG } from '../workbench/sessions/sessionDrag'
-import { SessionColorMark } from '../workbench/sessions/SessionColorMark'
-import { AgentBadge } from './AgentBadge'
+import { showContextMenu } from '../ide/ui/Menu'
+import type { QuickStartProject } from '../utils/sessionQuickStart'
+import { projectStartMenuItems } from '../workbench/sessions/sessionRowMenu'
+import { useTerminalDock } from '../workbench/terminalDock/terminalDockStore'
+import { SessionLiveRow } from './SessionLiveRow'
 import { Tooltip } from './Tooltip'
 
 type ResumeHandler = (session: StoredAgentSession, command: string) => void
@@ -19,6 +21,10 @@ interface RowsProps {
   onResume: ResumeHandler
   isCollapsed: (key: string) => boolean
   toggleGroup: (key: string) => void
+  /** Starts a terminal (null command) or an agent in a project folder. */
+  onStart?: (project: QuickStartProject, command: string | null) => void
+  /** The workspace the shown groups belong to, for sessions started from them. */
+  workspaceId?: string | null
 }
 
 const iconButton = 'w-5 h-5 inline-flex items-center justify-center rounded text-theme-dim hover:text-theme-fg hover:bg-[var(--theme-hover-bg)]'
@@ -65,17 +71,43 @@ function StoredRow({ node, session, onResume, indent }: { node: SessionNode; ses
 
 /** One project group: its header and, unless folded, its open and remembered sessions. */
 function SessionGroupView({ group, nested, ...rows }: RowsProps & { group: SessionGroup; nested: boolean }) {
-  const { stored, activeTabId, onShowTab, onResume, isCollapsed, toggleGroup } = rows
+  const { stored, activeTabId, onShowTab, onResume, isCollapsed, toggleGroup, onStart, workspaceId } = rows
   const collapsed = isCollapsed(group.key)
+  // Sessions in the bottom Terminal tool window rather than an editor tab are marked as such.
+  const docked = useTerminalDock((state) => state.docked)
   const indent = nested ? 'pl-10' : 'pl-6'
+  // A local project folder can start sessions: right-click its row, or its "+".
+  const project = group.cwd && onStart ? { key: group.key, label: group.label, cwd: group.cwd, workspaceId: workspaceId ?? '' } : null
+  const openStartMenu = (event: MouseEvent) => {
+    if (project && onStart) showContextMenu(event, projectStartMenuItems(project, onStart))
+  }
   return (
     <section className="mb-1" data-testid="session-group">
-      <button type="button" aria-expanded={!collapsed} onClick={() => toggleGroup(group.key)} className={`${headerButton} ${nested ? 'pl-5 pr-1' : 'px-1'}`}>
-        <Chevron collapsed={collapsed} />
-        <Folder className="w-3.5 h-3.5 flex-shrink-0 text-theme-dim" />
-        <span className="truncate flex-1" title={group.label}>{group.label}</span>
-        <span className="text-[10px] text-theme-dim">{group.sessions.length}</span>
-      </button>
+      <div className="group/project relative">
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          onClick={() => toggleGroup(group.key)}
+          onContextMenu={project ? (event) => { event.preventDefault(); openStartMenu(event) } : undefined}
+          className={`${headerButton} ${nested ? 'pl-5 pr-1' : 'px-1'}`}
+        >
+          <Chevron collapsed={collapsed} />
+          <Folder className="w-3.5 h-3.5 flex-shrink-0 text-theme-dim" />
+          <span className="truncate flex-1" title={group.cwd ?? group.label}>{group.label}</span>
+          <span className={`text-[10px] text-theme-dim${project ? ' group-hover/project:invisible' : ''}`}>{group.sessions.length}</span>
+        </button>
+        {project && (
+          <button
+            type="button"
+            aria-label={`New session in ${group.label}`}
+            title="New terminal or agent in this folder"
+            onClick={(event) => openStartMenu(event)}
+            className={`${iconButton} absolute right-1 top-0.5 invisible group-hover/project:visible focus:visible`}
+          >
+            <Plus className="w-3 h-3" />
+          </button>
+        )}
+      </div>
       {!collapsed && (
         <ul>
           {group.sessions.map(session => {
@@ -84,23 +116,15 @@ function SessionGroupView({ group, nested, ...rows }: RowsProps & { group: Sessi
               return entry ? <StoredRow key={session.id} node={session} session={entry} onResume={onResume} indent={indent} /> : null
             }
             return (
-              <li key={session.id}>
-                <button
-                  type="button"
-                  aria-current={session.id === activeTabId ? 'true' : undefined}
-                  onClick={() => onShowTab(session.id)}
-                  onPointerDown={(event) => startPointerDrag(event, event.currentTarget, { type: SESSION_DRAG, payload: session.id })}
-                  className={`w-full flex items-center gap-2 ${indent} pr-2 py-1 rounded text-left text-xs hover:bg-[var(--theme-hover-bg)] ${
-                    session.id === activeTabId ? 'bg-[var(--theme-hover-bg)] text-theme-accent' : 'text-theme-fg'
-                  }`}
-                >
-                  {session.agent
-                    ? <AgentBadge agent={session.agent} className="w-3.5 h-3.5" />
-                    : <SquareTerminal className="w-3.5 h-3.5 flex-shrink-0 text-theme-dim" />}
-                  <span className="truncate flex-1" title={session.name}>{sessionDisplayName(session.name)}</span>
-                  <SessionColorMark sessionId={session.id} className="flex-shrink-0" />
-                </button>
-              </li>
+              <SessionLiveRow
+                key={session.id}
+                session={session}
+                stored={stored}
+                active={session.id === activeTabId}
+                docked={docked.includes(session.id)}
+                indent={indent}
+                onShow={onShowTab}
+              />
             )
           })}
         </ul>
@@ -115,7 +139,7 @@ function SessionGroupView({ group, nested, ...rows }: RowsProps & { group: Sessi
  */
 export function SessionSectionView({ section, titled, ...rows }: RowsProps & { section: SessionSection; titled: boolean }) {
   if (!titled) {
-    return <>{section.groups.map(group => <SessionGroupView key={group.key} group={group} nested={false} {...rows} />)}</>
+    return <>{section.groups.map(group => <SessionGroupView key={group.key} group={group} nested={false} {...rows} workspaceId={section.workspaceId ?? rows.workspaceId} />)}</>
   }
   const collapsed = rows.isCollapsed(section.key)
   const count = section.groups.reduce((total, group) => total + group.sessions.length, 0)
@@ -127,7 +151,7 @@ export function SessionSectionView({ section, titled, ...rows }: RowsProps & { s
         <span className="truncate flex-1" title={section.label}>{section.label}</span>
         <span className="text-[10px] font-normal text-theme-dim">{count}</span>
       </button>
-      {!collapsed && section.groups.map(group => <SessionGroupView key={group.key} group={group} nested {...rows} />)}
+      {!collapsed && section.groups.map(group => <SessionGroupView key={group.key} group={group} nested {...rows} workspaceId={section.workspaceId ?? rows.workspaceId} />)}
     </section>
   )
 }

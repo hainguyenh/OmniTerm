@@ -662,6 +662,8 @@ export interface NotificationService {
   }): void;
   /** Hides the balloon of the notification with `key` (it stays in the log), e.g. once its cause is gone. */
   expire?(key: string): void;
+  /** Removes the notification with `key` from the balloons and the log: what it reported is resolved. */
+  remove?(key: string): void;
 }
 
 /** A terminal widget (xterm) embedded in another view, e.g. a Run console emulating a terminal. */
@@ -1802,6 +1804,17 @@ export function stepFocusedSurfaceFontZoom(delta: number): boolean {
   const focused = document.activeElement;
   for (const [host, step] of fontZoomSurfaces) {
     if (focused && host.contains(focused)) {
+      step(delta);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Steps the registered surface `target` sits in (the one under a Ctrl+wheel); false when in none. */
+export function stepSurfaceFontZoomAt(target: Element, delta: number): boolean {
+  for (const [host, step] of fontZoomSurfaces) {
+    if (host.contains(target)) {
       step(delta);
       return true;
     }

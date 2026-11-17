@@ -353,7 +353,10 @@ mod tests {
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        assert!(prepared, "could not turn the app-data path into a plain file");
+        assert!(
+            prepared,
+            "could not turn the app-data path into a plain file"
+        );
 
         let error = tauri::async_runtime::block_on(list_themes(app.handle().clone())).unwrap_err();
         assert!(error.contains("Failed to create themes directory"));

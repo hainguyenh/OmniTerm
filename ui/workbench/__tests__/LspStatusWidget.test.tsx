@@ -8,8 +8,12 @@ const { executeActionMock } = vi.hoisted(() => ({
   executeActionMock: vi.fn().mockResolvedValue(undefined),
 }))
 
+const installable = { on: false }
+
 vi.mock('../../ide/platform/actions', () => ({
   executeAction: executeActionMock,
+  // `tools.install` is registered by the tools feature; without it a missing server can only restart.
+  getAction: (id: string) => (installable.on && id === 'tools.install' ? { id } : undefined),
   registerAction: vi.fn(() => () => {}),
 }))
 
@@ -118,6 +122,30 @@ describe('LspStatusWidget & lspServersStore', () => {
     const restartAllBtn = screen.getByTestId('lsp-restart-all-button')
     fireEvent.click(restartAllBtn)
     expect(executeActionMock).toHaveBeenCalledWith('lsp.restart')
+  })
+
+  it('offers Install instead of Restart for a server that is not on this machine', () => {
+    installable.on = true
+    try {
+      act(() => {
+        useLspServersStore.getState().setServer({
+          id: 7,
+          name: 'vtsls',
+          languages: ['typescript'],
+          status: 'Missing',
+          rawStatus: 'missing',
+          message: 'Binary not found',
+          installHint: null,
+        })
+      })
+      render(<LspStatusWidget />)
+      fireEvent.click(screen.getByTestId('lsp-status-badge'))
+      expect(screen.queryByTestId('lsp-restart-button')).toBeNull()
+      fireEvent.click(screen.getByTestId('lsp-install-button'))
+      expect(executeActionMock).toHaveBeenCalledWith('tools.install', 'vtsls')
+    } finally {
+      installable.on = false
+    }
   })
 
   it('closes popover when clicking outside', () => {

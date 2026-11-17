@@ -4,6 +4,7 @@ import DetachedTerminalWindow from './components/DetachedTerminalWindow'
 import { ThemeRemixModal } from './components/ThemeRemixModal'
 import { AppTheme, DEFAULT_THEME_ID, TOKYO_NIGHT, LayoutMode } from './themes'
 import { useAppShortcuts } from './hooks/useAppShortcuts'
+import { whenIdle } from './utils/whenIdle'
 import { installUnifiedTheme, refreshUnifiedTheme, selectOmniTheme, setOmniThemes, useUnifiedTheme } from './platform/theme/unifiedTheme'
 import { WORKBENCH_THEME_ID, legacyChoice } from './platform/theme/choice'
 import { useThemeSync } from './platform/theme/useThemeSync'
@@ -96,8 +97,11 @@ function App() {
   useEffect(() => {
     if (!appSettings.checkUpdatesOnStartup || startupUpdateChecked.current) return
     startupUpdateChecked.current = true
-    void window.omnitermAPI.updates.check()
-      .catch((error: unknown) => diag.warn('[updates] startup check failed', error))
+    // A network round trip nobody is waiting for: after the window has settled.
+    return whenIdle(() => {
+      void window.omnitermAPI.updates.check()
+        .catch((error: unknown) => diag.warn('[updates] startup check failed', error))
+    }, 30_000)
   }, [appSettings.checkUpdatesOnStartup])
 
   // Settings can be saved from any window (a popped-out terminal writes the connection's

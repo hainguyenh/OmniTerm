@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -32,12 +32,17 @@ vi.mock('../../ide/ui/Menu', async (importOriginal) => ({
 }))
 vi.mock('../sessions/sessionTabActions', () => ({ showSessionTab: mocks.showSessionTab }))
 
+import { useTabs } from '../../ide/editor/core/controller'
 import { useProject } from '../../ide/platform/project'
+import { EDITOR_TAB_MIME } from '../../ide/workbench/contributions'
 import { resetSessionBridge, useSessionBridge, type SessionBridgeApi, type SessionInfo } from '../sessions/sessionBridge'
+import { SESSION_DRAG } from '../sessions/sessionDrag'
+import { sessionInput } from '../sessions/sessionInput'
 import { resetSurfaces, surfaceHost } from '../sessions/surfaceRegistry'
 import { registerTerminalToolWindow } from '../terminalDock/registerTerminalToolWindow'
-import { moveSessionToTerminalWindow, requestDockedTerminal, shellMenuItems, TERMINAL_WINDOW } from '../terminalDock/terminalDockActions'
-import { dockSession, isDocked, resetTerminalDock, useTerminalDock } from '../terminalDock/terminalDockStore'
+import { moveSessionToTerminalWindow, projectMenuItems, requestDockedTerminal, resumeWhereItRan, shellMenuItems, TERMINAL_WINDOW } from '../terminalDock/terminalDockActions'
+import { dockSession, isDocked, resetTerminalDock, startTerminalDockSync, useTerminalDock } from '../terminalDock/terminalDockStore'
+import { draggedSession } from '../terminalDock/draggedSession'
 import { TerminalDockTabs, TerminalToolWindow } from '../terminalDock/TerminalToolWindow'
 
 const api: SessionBridgeApi = {
@@ -76,6 +81,21 @@ afterEach(() => {
 })
 
 describe('Terminal tool window', () => {
+  // Regression: a terminal started from elsewhere into the closed bottom window left no trace of
+  // where it went; the stripe icon now counts the sessions docked there.
+  it('badges its stripe icon with the number of docked sessions', () => {
+    const dispose = registerTerminalToolWindow()
+    const window_ = mocks.registered.find((item) => (item as { id?: string }).id === TERMINAL_WINDOW) as { useBadge?: () => unknown }
+    const { result } = renderHook(() => window_.useBadge?.())
+    expect(result.current).toBeNull()
+    act(() => {
+      dockSession('a')
+      dockSession('b')
+    })
+    expect(result.current).toBe(2)
+    dispose()
+  })
+
   it('offers a new terminal when nothing is docked', () => {
     const started = vi.fn()
     window.addEventListener('omniterm:new-session', started)
@@ -116,6 +136,25 @@ describe('Terminal tool window', () => {
     window.removeEventListener('omniterm:new-session', started)
   })
 
+  // Regression: "New Terminal ⌄" only listed shells, so a workspace's other projects could not be
+  // chosen; every terminal started in the default project.
+  it('offers each project of a workspace, its shells starting in that project', () => {
+    const started = vi.fn()
+    window.addEventListener('omniterm:new-session', started)
+    const options = [{ id: 'pwsh', label: 'PowerShell' }]
+    useProject.setState({ project: { root: 'D:/work/repo' } } as never)
+    expect(projectMenuItems(options)).toEqual([])
+
+    useProject.setState({ project: { root: 'D:/data/ws', workspace: { projects: ['D:/work/api', 'D:/work/web/'] } } } as never)
+    const items = projectMenuItems(options) as { label?: string; checked?: boolean; submenu?: { run: () => void }[] }[]
+    const rows = items.filter((item) => item.submenu)
+    expect(rows.map((row) => row.label)).toEqual(['api', 'web'])
+    expect(rows.map((row) => row.checked)).toEqual([true, false])
+    rows[1]!.submenu![0]!.run()
+    expect((started.mock.calls[0]![0] as CustomEvent).detail).toEqual({ cwd: 'D:/work/web/', shell: 'pwsh' })
+    window.removeEventListener('omniterm:new-session', started)
+  })
+
   it('lends the shown docked session its terminal surface', () => {
     publish(info('a'), info('b'))
     act(() => {
@@ -132,6 +171,36 @@ describe('Terminal tool window', () => {
     moveSessionToTerminalWindow('a')
     expect(isDocked('a')).toBe(true)
     expect(mocks.show).toHaveBeenCalledWith(TERMINAL_WINDOW)
+  })
+})
+
+describe('docking by drag and resume', () => {
+  it('resumes a session that ran in the dock back into the dock', () => {
+    publish(info('old'))
+    act(() => dockSession('old'))
+    const stop = startTerminalDockSync()
+    publish()
+    resumeWhereItRan('old')
+    expect(useTerminalDock.getState().pending).toBe(1)
+    expect(mocks.show).toHaveBeenCalledWith(TERMINAL_WINDOW)
+    mocks.show.mockClear()
+    resumeWhereItRan('never-docked')
+    resumeWhereItRan(undefined)
+    expect(useTerminalDock.getState().pending).toBe(1)
+    expect(mocks.show).not.toHaveBeenCalled()
+    stop()
+  })
+
+  // The other way into the dock: drag a terminal's editor tab (or its Sessions row) onto the window.
+  it('reads the session a dragged editor tab or Sessions row carries', () => {
+    publish(info('a'))
+    act(() => useTabs.setState({ panes: { p1: { id: 'p1', tabs: [{ id: 'tab1', input: sessionInput('a') }, { id: 'tab2', input: { kind: 'file', key: 'f' } }] } } } as never))
+    expect(draggedSession(EDITOR_TAB_MIME, JSON.stringify({ paneId: 'p1', tabId: 'tab1' }))).toBe('a')
+    expect(draggedSession(EDITOR_TAB_MIME, JSON.stringify({ paneId: 'p1', tabId: 'tab2' }))).toBeNull()
+    expect(draggedSession(EDITOR_TAB_MIME, 'not json')).toBeNull()
+    expect(draggedSession(SESSION_DRAG, 'a')).toBe('a')
+    expect(draggedSession(SESSION_DRAG, 'gone')).toBeNull()
+    expect(draggedSession('text/plain', 'a')).toBeNull()
   })
 })
 

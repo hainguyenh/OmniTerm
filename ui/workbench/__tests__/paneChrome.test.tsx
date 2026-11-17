@@ -16,13 +16,14 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
 }))
 
 import { omnitermActionId } from '../../platform/omnitermActions'
+import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 import { glyphGrid } from '../layout/layoutGlyphs'
 import { LayoutPresetPicker } from '../layout/LayoutPresetPicker'
 import { registerPaneTitleActions, TOGGLE_MAXIMIZE_PANE } from '../layout/paneTitleActions'
 import { resetQuotaStore, updateQuota } from '../../features/agent-quota/quotaStore'
-import { SessionAgentBadge } from '../sessions/SessionAgentBadge'
-import { SessionAgentHeader } from '../sessions/SessionAgentHeader'
+import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
+import { SessionAgentFooter, SessionAgentHeader } from '../sessions/SessionAgentHeader'
 import { useSessionBridge } from '../sessions/sessionBridge'
 import { paintOnGroup } from '../sessions/sessionIcons'
 
@@ -82,15 +83,6 @@ describe('layout preset picker', () => {
   })
 })
 
-describe('session agent badge', () => {
-  it('shows while an AI agent runs in the session only', () => {
-    const { container } = render(<SessionAgentBadge sessionId="t1" />)
-    expect(container.textContent).toBe('')
-    act(() => setPanePresence({ t1: { agent: 'claude', profileName: 'claude', pid: 1, startTime: 0 } }))
-    expect(container.textContent).toBe('agent')
-  })
-})
-
 describe('session agent header', () => {
   const presence = { agent: 'claude' as const, profileName: 'claude', pid: 1, startTime: 0 }
 
@@ -99,16 +91,56 @@ describe('session agent header', () => {
     expect(container.firstChild).toBeNull()
   })
 
-  it('names the agent, its folder and its quota, and offers Attach file', () => {
+  // Regression: the header showed the terminal's name (the shell's window title) instead of
+  // what the agent works on.
+  it('shows the project the agent works in, not the terminal name or the profile', () => {
+    act(() => {
+      setPanePresence({ t1: { ...presence, profileName: 'claude-work' } })
+      useSessionBridge.setState({ sessions: [{ id: 't1', connId: 't1', name: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe', connType: 'LOCAL', workspaceId: null, status: 'connected', busy: false, cwd: 'D:/work/omniterm', hasCommand: false }] })
+    })
+    const { container } = render(<SessionAgentHeader sessionId="t1" />)
+    expect(container.textContent).toBe('omniterm')
+    expect(container.querySelector('[data-session-agent-header="claude"]')).not.toBeNull()
+  })
+
+  it('names the project after the session workspace when it has one', () => {
     act(() => {
       setPanePresence({ t1: presence })
-      useSessionBridge.setState({ sessions: [{ id: 't1', connId: 't1', name: 'claude', connType: 'LOCAL', workspaceId: null, status: 'connected', busy: false, cwd: 'D:/work', hasCommand: false }] })
+      useWorkspaceStore.setState({ workspaces: [{ id: 'w1', name: 'Billing', folders: [], order: 0, pins: [] }] })
+      useSessionBridge.setState({ sessions: [{ id: 't1', connId: 't1', name: 'pwsh', connType: 'LOCAL', workspaceId: 'w1', status: 'connected', busy: false, cwd: 'D:/work/omniterm', hasCommand: false }] })
     })
-    render(<SessionAgentHeader sessionId="t1" />)
-    expect(screen.getByText('claude')).toBeTruthy()
-    expect(screen.getByText('D:/work')).toBeTruthy()
-    expect(screen.queryByTestId('agent-header-quota')).toBeNull()
-    expect(screen.getByRole('button', { name: /Attach file/ })).toBeTruthy()
+    const { container } = render(<SessionAgentHeader sessionId="t1" />)
+    expect(container.textContent).toBe('Billing')
+    act(() => useWorkspaceStore.setState({ workspaces: [] }))
+  })
+
+  it('prefers the title of the agent conversation over the project', () => {
+    act(() => {
+      setPanePresence({ t1: presence })
+      useSessionBridge.setState({ sessions: [{ id: 't1', connId: 't1', name: 'pwsh', connType: 'LOCAL', workspaceId: null, status: 'connected', busy: false, cwd: 'D:/work', hasCommand: false }] })
+    })
+    const { container } = render(<SessionAgentHeader sessionId="t1" />)
+    expect(container.textContent).toBe('work')
+    act(() => upsertSession({ id: 'claude:11111111-1111-4111-8111-111111111111', agent: 'claude', profileName: 'claude', sessionId: '11111111-1111-4111-8111-111111111111', tabId: 't1', title: 'Fix the login bug', state: 'active', updatedAt: Date.now() }))
+    expect(container.textContent).toBe('Fix the login bug')
+    act(() => clearStoredSessions())
+  })
+})
+
+describe('session agent footer', () => {
+  const presence = { agent: 'claude' as const, profileName: 'claude', pid: 1, startTime: 0 }
+
+  it('shows nothing for a plain terminal', () => {
+    const { container } = render(<SessionAgentFooter sessionId="t2" />)
+    expect(container.firstChild).toBeNull()
+  })
+
+  // Attach file and the quota moved from the header to the pane footer, beside the font size controls.
+  it('offers Attach file and shows the quota once read', () => {
+    act(() => setPanePresence({ t1: presence }))
+    render(<SessionAgentFooter sessionId="t1" />)
+    expect(screen.queryByTestId('agent-footer-quota')).toBeNull()
+    expect(screen.getByRole('button', { name: /^Attach files/ }).closest('[role=toolbar]')?.getAttribute('aria-label')).toBe('Agent actions')
     act(() => {
       updateQuota((state) => ({
         ...state,
@@ -123,7 +155,7 @@ describe('session agent header', () => {
         },
       }))
     })
-    expect(screen.getByTestId('agent-header-quota').textContent).toBe('quota 64%')
+    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 64%')
   })
 })
 

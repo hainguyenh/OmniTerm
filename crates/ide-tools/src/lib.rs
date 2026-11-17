@@ -538,8 +538,17 @@ impl Tools {
 
     fn command(&self, program: impl AsRef<std::ffi::OsStr>) -> Command {
         let mut cmd = Command::new(program);
-        ide_core::process::prepare(&mut cmd).envs(&self.runtime_env).env("PATH", &self.child_path);
+        ide_core::process::prepare(&mut cmd).envs(&self.runtime_env).env("PATH", self.existing_child_path());
         cmd
+    }
+
+    /// [`Tools::child_path`] without the folders that don't exist. It names every managed tool's
+    /// folder, installed or not; on Windows that pushed it past cmd.exe's 8191-character limit, and
+    /// npm's `.cmd` shim then failed with "'node' is not recognized". Read at every call, so a tool
+    /// installed since is on it.
+    fn existing_child_path(&self) -> OsString {
+        let dirs = std::env::split_paths(&self.child_path).filter(|d| d.is_dir());
+        std::env::join_paths(dirs).unwrap_or_else(|_| self.child_path.clone())
     }
 
     /// `python` started in an empty private directory: Python puts the working directory

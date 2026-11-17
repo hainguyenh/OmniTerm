@@ -172,6 +172,11 @@ export function expireNotification(key: string) {
   }));
 }
 
+/** Drops the notification with `key` everywhere: a later one made it obsolete. */
+export function removeNotificationByKey(key: string) {
+  useNotifications.setState((s) => ({ items: s.items.filter((x) => x.key !== key) }));
+}
+
 export function removeNotification(id: number) {
   useNotifications.setState((s) => ({ items: s.items.filter((x) => x.id !== id) }));
 }
@@ -195,6 +200,7 @@ export function markAllNotificationsRead() {
 export const notificationServiceImpl: NotificationService = {
   notify: (n) => void notify(n),
   expire: expireNotification,
+  remove: removeNotificationByKey,
 };
 
 export function installNotifyEvents(): () => void {

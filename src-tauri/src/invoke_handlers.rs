@@ -143,6 +143,7 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         agent_session::export_claude_transcript,
         agent_session::agent_sessions_load,
         agent_session::agent_sessions_save,
+        agent_session_cleanup::agent_session_profiles_list,
         agent_session_cleanup::agent_session_files_list,
         agent_session_cleanup::agent_session_files_delete,
         attachments::save_temp_image,

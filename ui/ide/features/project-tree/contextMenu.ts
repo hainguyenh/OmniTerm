@@ -161,11 +161,10 @@ export function contextMenuItems(nodes: ProjectNode[]): MenuItem[] {
     project.workspace.projects.includes(single.path)
   ) {
     push(
-      {
-        kind: "action",
-        action: project.workspace.projects[0] === project.root ? "project.detach" : "workspace.removeProject",
-        arg: single.path,
-      },
+      // OmniTerm: the workspace catalog owns the folder list (`ide_set_project` rebuilds the
+      // container from it), so removing it there is what lasts.
+      { kind: "action", action: "omniterm.workspace.setDefaultProject", arg: single.path },
+      { kind: "action", action: "omniterm.workspace.removeFolder", arg: single.path },
       { kind: "separator" },
     );
   }

@@ -5,7 +5,7 @@ import { applyEditorPreset, restoreMaximized } from './layoutPresetStore'
 import { LayoutPresetPicker } from './LayoutPresetPicker'
 import { useCurrentPreset, useMaximized, type ZoomModel } from './useLayoutPreset'
 
-/** What sits at the bottom of the right stripe: the terminal zoom (grids only) above the layout picker. */
+/** What sits at the top of the right stripe, above Notifications: the terminal zoom (grids only) and the layout picker. */
 export function SessionLayoutControls({ zoom }: { zoom: ZoomModel }) {
   const preset = useCurrentPreset()
   return (

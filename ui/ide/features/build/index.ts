@@ -5,7 +5,10 @@
  */
 import { getContext } from "@/platform/context";
 import { registerActions } from "@/platform/actions";
+import { languageFamiliesOf } from "@/platform/languageFamilies";
 import { useProject } from "@/platform/project";
+import { currentDetectedRoots, projectRelative } from "@/platform/projectRoots";
+import { ecosystemOf, type Ecosystem } from "../settings/languages/projectEcosystems";
 import {
   maybeEditorService,
   registerMenuGroup,
@@ -23,6 +26,29 @@ function moduleTarget(arg: unknown): string | null {
   if (typeof arg === "string" && arg) return arg;
   if (typeof arg === "object" && arg !== null && "target" in arg && typeof arg.target === "string") return arg.target;
   return maybeEditorService()?.activePath() ?? null;
+}
+
+/** Ecosystems whose modules the backend builds (`ide-build`: Maven, Gradle, Cargo, Go, TypeScript). */
+const BUILDABLE: readonly Ecosystem[] = ["jvm", "rust", "go", "node"];
+
+/**
+ * OmniTerm: whether `path` lies in a module the Build Module action can build: a folder with a
+ * build file of a buildable ecosystem at or above it, whose language family is switched on. A
+ * plain folder, or one of a language that is off, gets no such menu entry.
+ */
+export function hasBuildableModule(path: string): boolean {
+  const relative = projectRelative(path);
+  if (relative === null) return false;
+  const families = languageFamiliesOf(useProject.getState().settings);
+  return currentDetectedRoots().some((root) => {
+    const buildFile = root.detectedFrom;
+    const ecosystem = buildFile ? ecosystemOf(buildFile) : null;
+    if (!buildFile || !ecosystem || !BUILDABLE.includes(ecosystem)) return false;
+    if ((ecosystem === "jvm" && !families.java) || (ecosystem === "node" && !families.typescript)) return false;
+    if ((ecosystem === "rust" && !families.rust) || (ecosystem === "go" && !families.go)) return false;
+    const dir = buildFile.includes("/") ? buildFile.slice(0, buildFile.lastIndexOf("/")) : "";
+    return dir === "" || relative === dir || relative.startsWith(`${dir}/`);
+  });
 }
 
 function useErrorBadge(): number | null {
@@ -141,7 +167,7 @@ export function activate(): () => void {
       menus: ["projectView"],
       order: 40,
       items: (_menu, ctx) =>
-        ctx.paths.length === 1 && useProject.getState().project
+        ctx.paths.length === 1 && useProject.getState().project && hasBuildableModule(ctx.paths[0]!)
           ? [{ kind: "action", action: "build.buildModule", arg: ctx.paths[0] }]
           : [],
     }),

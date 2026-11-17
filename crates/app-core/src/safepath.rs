@@ -55,8 +55,7 @@ pub const VIEW_DENY_EXTS: &[&str] = &[
     "lib", "pdb", "wasm", "class", "pyc", "pyo", "node", "elf",
     // Archives and packages
     "zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "7z", "rar", "iso", "jar", "cab", "deb", "rpm",
-    "dmg", "pkg", "whl", "nupkg", "pack",
-    // Images, audio, video, fonts
+    "dmg", "pkg", "whl", "nupkg", "pack", // Images, audio, video, fonts
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "avif", "mp3", "wav", "flac",
     "ogg", "mp4", "m4a", "avi", "mkv", "mov", "webm", "ttf", "otf", "woff", "woff2", "eot",
     // Binary document and database containers
@@ -79,7 +78,6 @@ pub const DEFAULT_MAX_VIEW_BYTES: u64 = 1024 * 1024;
 /// of wedging the renderer; a settings file claiming 4 GiB gets clamped here rather than at the
 /// allocation.
 pub const MAX_VIEW_BYTES_CEILING: u64 = 25 * 1024 * 1024;
-
 
 /// Coerce a configured byte cap into the supported range.
 ///
@@ -198,9 +196,12 @@ pub fn safe_subdir(root: &str, sub_path: &str, create: bool) -> Result<PathBuf, 
     // looking like traversal.
     let candidate = Path::new(sub_path);
     if candidate.is_absolute()
-        || candidate
-            .components()
-            .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_) | Component::RootDir))
+        || candidate.components().any(|c| {
+            matches!(
+                c,
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
+            )
+        })
     {
         return Err("directory is outside its workspace".to_string());
     }
@@ -292,8 +293,7 @@ pub(crate) fn sniff_text(bytes: Vec<u8>) -> Result<String, String> {
     if bytes[..bytes.len().min(SNIFF_BYTES)].contains(&0) {
         return Err("this looks like a binary file, not text".to_string());
     }
-    String::from_utf8(bytes)
-        .map_err(|_| "this file is not valid UTF-8 text".to_string())
+    String::from_utf8(bytes).map_err(|_| "this file is not valid UTF-8 text".to_string())
 }
 
 /// Read an in-workspace file as text for the viewer, bounded by `max_bytes`.
@@ -341,4 +341,3 @@ pub fn write_editable(
     let real = safe_editable_path(root, script_path)?;
     fs::write(&real, content).map_err(|e| e.to_string())
 }
-

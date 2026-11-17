@@ -43,7 +43,10 @@ struct EditorWorkspaceFolder {
 
 pub fn decode_workspaces(content: &str) -> Result<DecodedWorkspaces, String> {
     if content.trim().is_empty() {
-        return Ok(DecodedWorkspaces { workspaces: Vec::new(), migrated: false });
+        return Ok(DecodedWorkspaces {
+            workspaces: Vec::new(),
+            migrated: false,
+        });
     }
     let raw: Vec<serde_json::Value> = serde_json::from_str(content)
         .map_err(|error| format!("workspaces.json is corrupt ({error})."))?;
@@ -54,7 +57,10 @@ pub fn decode_workspaces(content: &str) -> Result<DecodedWorkspaces, String> {
         let workspaces: Vec<Workspace> = serde_json::from_value(serde_json::Value::Array(raw))
             .map_err(|error| format!("workspaces.json is corrupt ({error})."))?;
         validate_workspace_list(&workspaces)?;
-        return Ok(DecodedWorkspaces { workspaces, migrated: false });
+        return Ok(DecodedWorkspaces {
+            workspaces,
+            migrated: false,
+        });
     }
     let legacy: Vec<LegacyWorkspace> = serde_json::from_value(serde_json::Value::Array(raw))
         .map_err(|error| format!("workspaces.json is corrupt ({error})."))?;
@@ -81,7 +87,10 @@ pub fn decode_workspaces(content: &str) -> Result<DecodedWorkspaces, String> {
         })
         .collect::<Vec<_>>();
     validate_workspace_list(&workspaces)?;
-    Ok(DecodedWorkspaces { workspaces, migrated: true })
+    Ok(DecodedWorkspaces {
+        workspaces,
+        migrated: true,
+    })
 }
 
 pub fn validate_workspace_list(workspaces: &[Workspace]) -> Result<(), String> {
@@ -93,22 +102,37 @@ pub fn validate_workspace_list(workspaces: &[Workspace]) -> Result<(), String> {
         let mut folder_ids = HashSet::new();
         for folder in &workspace.folders {
             if folder.id.trim().is_empty() || folder.path.trim().is_empty() {
-                return Err(format!("Workspace \"{}\" has an invalid folder.", workspace.name));
+                return Err(format!(
+                    "Workspace \"{}\" has an invalid folder.",
+                    workspace.name
+                ));
             }
-            if folder.id.contains('/') || folder.id.contains('\\') || !folder_ids.insert(folder.id.as_str()) {
-                return Err(format!("Workspace \"{}\" has duplicate or invalid folder ids.", workspace.name));
+            if folder.id.contains('/')
+                || folder.id.contains('\\')
+                || !folder_ids.insert(folder.id.as_str())
+            {
+                return Err(format!(
+                    "Workspace \"{}\" has duplicate or invalid folder ids.",
+                    workspace.name
+                ));
             }
         }
         for pin in &workspace.pins {
             if !folder_ids.contains(pin.folder_id.as_str()) {
-                return Err(format!("Workspace \"{}\" contains a pin for an unknown folder.", workspace.name));
+                return Err(format!(
+                    "Workspace \"{}\" contains a pin for an unknown folder.",
+                    workspace.name
+                ));
             }
         }
     }
     for workspace in workspaces {
         if let Some(parent_id) = workspace.parent_id.as_deref() {
             if parent_id == workspace.id || !ids.contains(parent_id) {
-                return Err(format!("Workspace \"{}\" has an invalid parent.", workspace.name));
+                return Err(format!(
+                    "Workspace \"{}\" has an invalid parent.",
+                    workspace.name
+                ));
             }
         }
         ensure_no_cycle(workspaces, &workspace.id, workspace.parent_id.as_deref())?;
@@ -131,7 +155,11 @@ pub fn parse_workspace_import(file_path: &Path, content: &str) -> Result<Workspa
     let mut seen = HashSet::new();
     let mut folders = Vec::new();
     for item in parsed.folders {
-        let Some(raw_path) = item.path.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) else {
+        let Some(raw_path) = item
+            .path
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+        else {
             continue;
         };
         let candidate = resolve_import_path(base, &raw_path);
@@ -194,7 +222,6 @@ pub fn move_workspace(
     Ok(())
 }
 
-
 pub fn normalize_workspace_orders(workspaces: &mut [Workspace]) {
     let parents = workspaces
         .iter()
@@ -207,11 +234,7 @@ pub fn normalize_workspace_orders(workspaces: &mut [Workspace]) {
 
 /// Set a workspace folder's display alias. The path, id and every pin keep
 /// resolving to the same directory — only the rendered name changes.
-pub fn rename_folder(
-    workspace: &mut Workspace,
-    folder_id: &str,
-    name: &str,
-) -> Result<(), String> {
+pub fn rename_folder(workspace: &mut Workspace, folder_id: &str, name: &str) -> Result<(), String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Folder name cannot be empty.".to_string());
@@ -231,11 +254,17 @@ pub fn set_entry_pinned(
     path: &str,
     pinned: bool,
 ) -> Result<(), String> {
-    if !workspace.folders.iter().any(|folder| folder.id == folder_id) {
+    if !workspace
+        .folders
+        .iter()
+        .any(|folder| folder.id == folder_id)
+    {
         return Err(format!("Unknown workspace folder \"{folder_id}\"."));
     }
     let normalized = path.trim_matches('/');
-    workspace.pins.retain(|pin| !(pin.folder_id == folder_id && pin.path == normalized));
+    workspace
+        .pins
+        .retain(|pin| !(pin.folder_id == folder_id && pin.path == normalized));
     if pinned {
         workspace.pins.push(WorkspacePin {
             folder_id: folder_id.to_string(),
@@ -284,7 +313,10 @@ pub fn remove_entry_pin(workspace: &mut Workspace, folder_id: &str, path: &str) 
     workspace.pins.len() != before
 }
 
-pub fn logical_target<'a>(workspace: &'a Workspace, logical_path: &str) -> Result<LogicalTarget<'a>, String> {
+pub fn logical_target<'a>(
+    workspace: &'a Workspace,
+    logical_path: &str,
+) -> Result<LogicalTarget<'a>, String> {
     let trimmed = logical_path.trim_matches('/');
     let (folder_id, relative_path) = trimmed.split_once('/').unwrap_or((trimmed, ""));
     if folder_id.is_empty() {
@@ -295,7 +327,10 @@ pub fn logical_target<'a>(workspace: &'a Workspace, logical_path: &str) -> Resul
         .iter()
         .find(|folder| folder.id == folder_id)
         .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\"."))?;
-    Ok(LogicalTarget { folder, relative_path: relative_path.to_string() })
+    Ok(LogicalTarget {
+        folder,
+        relative_path: relative_path.to_string(),
+    })
 }
 
 pub fn namespace_path(folder_id: &str, relative_path: &str) -> String {
@@ -309,7 +344,11 @@ pub fn namespace_path(folder_id: &str, relative_path: &str) -> String {
 
 fn resolve_import_path(base: &Path, raw: &str) -> PathBuf {
     let path = Path::new(raw);
-    if path.is_absolute() { path.to_path_buf() } else { base.join(path) }
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        base.join(path)
+    }
 }
 
 fn display_name_for_path(path: &Path, fallback: &str) -> String {
@@ -319,7 +358,11 @@ fn display_name_for_path(path: &Path, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
-fn ensure_no_cycle(workspaces: &[Workspace], workspace_id: &str, parent_id: Option<&str>) -> Result<(), String> {
+fn ensure_no_cycle(
+    workspaces: &[Workspace],
+    workspace_id: &str,
+    parent_id: Option<&str>,
+) -> Result<(), String> {
     let mut cursor = parent_id;
     let mut visited = HashSet::new();
     while let Some(parent) = cursor {
@@ -337,12 +380,18 @@ fn ensure_no_cycle(workspaces: &[Workspace], workspace_id: &str, parent_id: Opti
     Ok(())
 }
 
-fn normalize_siblings(workspaces: &mut [Workspace], parent_id: Option<&str>, insertion: Option<(&str, usize)>) {
+fn normalize_siblings(
+    workspaces: &mut [Workspace],
+    parent_id: Option<&str>,
+    insertion: Option<(&str, usize)>,
+) {
     let moving = insertion.map(|(id, _)| id);
     let mut indices = workspaces
         .iter()
         .enumerate()
-        .filter(|(_, item)| item.parent_id.as_deref() == parent_id && Some(item.id.as_str()) != moving)
+        .filter(|(_, item)| {
+            item.parent_id.as_deref() == parent_id && Some(item.id.as_str()) != moving
+        })
         .map(|(idx, _)| idx)
         .collect::<Vec<_>>();
     indices.sort_by_key(|idx| workspaces[*idx].order);

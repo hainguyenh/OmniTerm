@@ -124,7 +124,9 @@ impl Host {
             })?;
         }
         let project_key = project_key(&root);
-        let index_settings = settings.effective().index;
+        let effective = settings.effective();
+        let index_settings = effective.index;
+        let language_settings = effective.languages;
         let index = if index_settings.enabled {
             ProjectIndex::open_with(
                 &root,
@@ -135,7 +137,7 @@ impl Host {
                 self.syntax(),
                 sink.clone(),
                 // A project in Restricted Mode isn't read or parsed until the user trusts it.
-                index_options(&index_settings, !trusted.load(Ordering::Acquire)),
+                index_options(&index_settings, &language_settings, !trusted.load(Ordering::Acquire)),
             )?
         } else {
             ProjectIndex::unindexed(&root, languages.clone(), self.syntax(), sink.clone())?
@@ -1197,9 +1199,14 @@ fn index_roots(root: &Path, folders: Vec<PathBuf>) -> ide_index::IndexRoots {
 /// How the index of a project opened with `index` settings scans: the symbol
 /// languages, the delay before its first scan, and half the cores to parse with.
 /// `held` (an untrusted project) waits for the trust decision before reading anything.
-fn index_options(index: &ide_core::settings::IndexSettings, held: bool) -> ide_index::IndexOptions {
+/// A language family switched off in `languages` gets no symbols.
+fn index_options(
+    index: &ide_core::settings::IndexSettings,
+    languages: &ide_core::settings::LanguagesSettings,
+    held: bool,
+) -> ide_index::IndexOptions {
     ide_index::IndexOptions {
-        symbol_languages: index.symbol_language_filter(),
+        symbol_languages: index.symbol_languages_enabled(languages),
         scan_delay: Duration::from_millis(u64::from(index.scan_delay_ms)),
         threads: ide_index::IndexOptions::half_the_cores(),
         held,
@@ -1954,7 +1961,8 @@ mod performance_settings_tests {
     #[test]
     fn index_options_follow_the_index_settings() {
         let mut index = ide_core::settings::IndexSettings::default();
-        let options = super::index_options(&index, false);
+        let mut families = ide_core::settings::LanguagesSettings::default();
+        let options = super::index_options(&index, &families, false);
         assert!(!options.held);
         let languages = options.symbol_languages.expect("the default extracts a fixed list");
         assert!(languages.contains("rust") && languages.contains("python") && !languages.contains("java"));
@@ -1963,10 +1971,19 @@ mod performance_settings_tests {
 
         index.symbol_languages = vec!["*".into()];
         index.scan_delay_ms = 0;
-        let options = super::index_options(&index, true);
+        let options = super::index_options(&index, &families, true);
         assert!(options.held, "an untrusted project's index waits for the trust");
         assert_eq!(options.symbol_languages, None);
         assert_eq!(options.scan_delay, Duration::ZERO);
+
+        // A family switched off loses its symbols even when the index lists its languages.
+        index.symbol_languages = vec!["rust".into(), "python".into(), "java".into()];
+        families.families.insert("python".into(), false);
+        let languages = super::index_options(&index, &families, false).symbol_languages.expect("a fixed list");
+        assert!(languages.contains("rust") && !languages.contains("python") && !languages.contains("java"));
+        families.families.insert("java".into(), true);
+        let languages = super::index_options(&index, &families, false).symbol_languages.expect("a fixed list");
+        assert!(languages.contains("java"));
     }
 
     #[test]

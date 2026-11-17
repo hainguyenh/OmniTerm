@@ -5790,6 +5790,12 @@ export type LanguagesSettings = {
 	 *  (it starts again with the next file of its language); `0` keeps it running.
 	 */
 	serverIdleMinutes?: number,
+	/**
+	 *  Language families switched on or off, by [`LANGUAGE_FAMILIES`] name; a family
+	 *  without an entry has its default there. A family that is off starts no language
+	 *  server and gets no symbol index: its files stay plain, highlighted text.
+	 */
+	families?: { [key in string]: boolean },
 };
 
 /**  What a freshly opened window should do once its frontend is up. */

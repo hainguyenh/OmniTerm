@@ -22,10 +22,26 @@ const listing = [
   { id: 'codex:codex:x', agent: 'codex', profile: 'codex', sessionId: 'x', cwd: null, title: 'Codex run', lastActive: Date.now() - DAY, size: 10 },
 ]
 
+const profiles = [
+  { agent: 'claude', profile: 'claude' },
+  { agent: 'claude', profile: 'claude-work' },
+  { agent: 'codex', profile: 'codex' },
+]
+
 function setup() {
   act(() => useSessionCleanup.getState().setOpen(true))
   return render(<SessionCleanupOverlay />)
 }
+
+/** Opens the dialog and scans every profile, as a user pressing Scan with the defaults does. */
+async function scanAll() {
+  setup()
+  const scan = await screen.findByTestId('session-cleanup-scan')
+  await waitFor(() => expect((scan as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(scan)
+}
+
+const listCalls = () => invokeMock.mock.calls.filter(([command]) => command === 'agent_session_files_list')
 
 describe('SessionCleanupDialog', () => {
   beforeEach(() => {
@@ -33,6 +49,7 @@ describe('SessionCleanupDialog', () => {
     clearStoredSessions()
     invokeMock.mockReset()
     invokeMock.mockImplementation(async (command: string, args?: { ids: string[] }) => {
+      if (command === 'agent_session_profiles_list') return profiles
       if (command === 'agent_session_files_list') return listing
       if (command === 'agent_session_files_delete') return { deleted: args?.ids ?? [], failed: [] }
       throw new Error(command)
@@ -50,8 +67,19 @@ describe('SessionCleanupDialog', () => {
     })
   })
 
-  it('lists files and remembered sessions most recently active first; open sessions cannot be picked', async () => {
+  it('reads nothing until Scan is pressed, then the profiles found on this machine', async () => {
     setup()
+    expect(await screen.findByText(/press Scan to read 3 profiles/)).toBeTruthy()
+    expect(listCalls()).toEqual([])
+    expect(screen.queryAllByTestId('session-cleanup-row')).toEqual([])
+
+    fireEvent.click(screen.getByTestId('session-cleanup-scan'))
+    await waitFor(() => expect(listCalls()).toEqual([['agent_session_files_list', { profiles: ['claude', 'claude-work', 'codex'] }]]))
+    expect(await screen.findAllByTestId('session-cleanup-row')).toHaveLength(4)
+  })
+
+  it('lists files and remembered sessions most recently active first; open sessions cannot be picked', async () => {
+    await scanAll()
     const rows = await screen.findAllByTestId('session-cleanup-row')
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringContaining('Running now'),
@@ -63,10 +91,11 @@ describe('SessionCleanupDialog', () => {
   })
 
   it('deletes the selected sessions after a confirmation and forgets their OmniTerm entry', async () => {
-    setup()
+    await scanAll()
     await screen.findAllByTestId('session-cleanup-row')
     fireEvent.click(screen.getByLabelText('Select all'))
-    fireEvent.click(screen.getByRole('button', { name: 'Delete…' }))
+    expect(screen.getByTestId('session-cleanup-summary').textContent).toBe('3 selected · 4.0 KB')
+    fireEvent.click(screen.getByRole('button', { name: /Delete…/ }))
     expect(screen.getByTestId('session-cleanup-status').textContent).toContain('Delete 3 sessions')
     expect(invokeMock).not.toHaveBeenCalledWith('agent_session_files_delete', expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }))
@@ -76,18 +105,85 @@ describe('SessionCleanupDialog', () => {
   })
 
   it('removes a session from the OmniTerm list without touching agent files', async () => {
-    setup()
+    await scanAll()
     await screen.findAllByTestId('session-cleanup-row')
     fireEvent.click(screen.getByLabelText('Select Remembered'))
-    fireEvent.click(screen.getByRole('button', { name: 'Remove from List…' }))
+    fireEvent.click(screen.getByRole('button', { name: /Remove from List…/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(loadStoredSessions().map((entry) => entry.sessionId)).toEqual([OPEN]))
     expect(invokeMock).not.toHaveBeenCalledWith('agent_session_files_delete', expect.anything())
   })
 
+  it('lists Gemini CLI and Antigravity sessions under their names', async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'agent_session_profiles_list') return [{ agent: 'gemini', profile: 'gemini' }, { agent: 'agy', profile: 'antigravity-cli' }]
+      if (command === 'agent_session_files_list') {
+        return [
+          { id: 'gemini:gemini:session-1', agent: 'gemini', profile: 'gemini', sessionId: 'session-1', cwd: 'D:/work/app', title: 'Explain', lastActive: Date.now() - DAY, size: 10 },
+          { id: `agy:antigravity-cli:${OLD}`, agent: 'agy', profile: 'antigravity-cli', sessionId: OLD, cwd: null, title: null, lastActive: Date.now() - 2 * DAY, size: 20 },
+        ]
+      }
+      throw new Error(command)
+    })
+    clearStoredSessions()
+    await scanAll()
+    const rows = await screen.findAllByTestId('session-cleanup-row')
+    expect(rows.map((row) => row.querySelector('td:nth-child(2)')?.textContent)).toEqual(['Gemini CLI', 'Antigravity'])
+  })
+
+  it('deletes every selected session in batches with progress, then scans again', async () => {
+    const many = Array.from({ length: 60 }, (_, index) => ({
+      id: `claude:claude:s${index}`,
+      agent: 'claude',
+      profile: 'claude',
+      sessionId: `s${index}`,
+      cwd: null,
+      title: `Session ${index}`,
+      lastActive: Date.now() - DAY - index,
+      size: 1024,
+    }))
+    const batches: Array<{ ids: string[]; resolve: () => void }> = []
+    invokeMock.mockImplementation((command: string, args?: { ids: string[] }) => {
+      if (command === 'agent_session_profiles_list') return Promise.resolve(profiles)
+      if (command === 'agent_session_files_list') return Promise.resolve(many)
+      if (command === 'agent_session_files_delete') {
+        const ids = args?.ids ?? []
+        return new Promise((resolve) => batches.push({ ids, resolve: () => resolve({ deleted: ids, failed: [] }) }))
+      }
+      return Promise.reject(new Error(command))
+    })
+    clearStoredSessions()
+    await scanAll()
+    expect(await screen.findAllByTestId('session-cleanup-row')).toHaveLength(60)
+    fireEvent.click(screen.getByLabelText('Select all'))
+    expect(screen.getByTestId('session-cleanup-summary').textContent).toBe('60 selected · 60 KB')
+    fireEvent.click(screen.getByRole('button', { name: /Delete…/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }))
+
+    await waitFor(() => expect(batches).toHaveLength(1))
+    expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting 0 of 60…')
+    expect((screen.getByTestId('session-cleanup-scan') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Delete Permanently' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Select all') as HTMLInputElement).disabled).toBe(true)
+    await act(async () => batches[0]?.resolve())
+    await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting 25 of 60…'))
+
+    for (let index = 1; index < 3; index += 1) {
+      await waitFor(() => expect(batches).toHaveLength(index + 1))
+      await act(async () => batches[index]?.resolve())
+    }
+    expect(batches.map((batch) => batch.ids.length)).toEqual([25, 25, 10])
+    expect(new Set(batches.flatMap((batch) => batch.ids)).size).toBe(60)
+    await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toContain('Deleted 60 sessions'))
+    expect(listCalls()).toHaveLength(2)
+  })
+
   it('reports a listing failure and still shows the remembered sessions', async () => {
-    invokeMock.mockRejectedValue(new Error('denied'))
-    setup()
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'agent_session_profiles_list') return profiles
+      throw new Error('denied')
+    })
+    await scanAll()
     expect(await screen.findByText(/Could not read the agent sessions/)).toBeTruthy()
     expect(screen.getAllByTestId('session-cleanup-row')).toHaveLength(2)
   })

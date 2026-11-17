@@ -91,7 +91,9 @@ impl UpdatesCoordinator {
             .map(|d| d.as_millis() as f64)
             .ok();
         if let Ok(mut state) = self.state.lock() {
-            state.policy.finish(if check_success { now_ms } else { None });
+            state
+                .policy
+                .finish(if check_success { now_ms } else { None });
         }
         self.emit_status(app);
         if let Ok(check) = res {

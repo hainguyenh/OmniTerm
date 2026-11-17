@@ -4,6 +4,7 @@ import type { Workspace } from '../domain'
 
 import { Icon } from '../ide/ui'
 import { QUICK_START_AGENTS, quickStartProjects, type QuickStartProject } from '../utils/sessionQuickStart'
+import { defaultProjectAmong } from '../workbench/projectFilterStore'
 import { SESSIONS_ICON } from '../workbench/shellIcons'
 
 interface SessionsQuickStartProps {
@@ -58,11 +59,15 @@ export const SessionsQuickStart: React.FC<SessionsQuickStartProps> = ({
   workspaces, onStart, onClose, workspaceId, project: fixedProject, onAddProject, at,
 }) => {
   const projects = useMemo(() => {
-    const all = quickStartProjects(workspaces)
-    const own = all.filter(item => item.workspaceId === workspaceId)
-    return own.length ? own : all
+    // Listed per workspace first: a folder two workspaces share belongs to both, and the full
+    // list keeps it only under the first one.
+    const own = quickStartProjects(workspaces.filter(workspace => workspace.id === workspaceId))
+    return own.length ? own : quickStartProjects(workspaces)
   }, [workspaces, workspaceId])
-  const [projectKey, setProjectKey] = useState(projects[0]?.key ?? '')
+  const [projectKey, setProjectKey] = useState(() => {
+    const preferred = defaultProjectAmong(workspaceId ?? null, projects.map(item => item.cwd))
+    return (projects.find(item => item.cwd === preferred) ?? projects[0])?.key ?? ''
+  })
   const ref = useRef<HTMLDivElement>(null)
   // Measured once: a new anchor remounts the popup (see QuickStartOverlay).
   const [position] = useState(() => popupPosition(at))

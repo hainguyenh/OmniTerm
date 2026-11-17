@@ -20,7 +20,11 @@ use tauri::{Manager, Runtime, WebviewWindow};
 pub(crate) enum ProjectPlan {
     Close,
     Folder(PathBuf),
-    Container { root: PathBuf, name: String, projects: Vec<PathBuf> },
+    Container {
+        root: PathBuf,
+        name: String,
+        projects: Vec<PathBuf>,
+    },
 }
 
 /// The container directory of workspace `id`: one per workspace, named after its id with every
@@ -28,9 +32,19 @@ pub(crate) enum ProjectPlan {
 pub(crate) fn container_dir(containers: &Path, id: &str) -> PathBuf {
     let safe: String = id
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
-    containers.join(if safe.is_empty() { "_".to_owned() } else { safe })
+    containers.join(if safe.is_empty() {
+        "_".to_owned()
+    } else {
+        safe
+    })
 }
 
 pub(crate) fn plan(containers: &Path, id: &str, name: &str, folders: Vec<PathBuf>) -> ProjectPlan {
@@ -41,7 +55,11 @@ pub(crate) fn plan(containers: &Path, id: &str, name: &str, folders: Vec<PathBuf
             let trimmed = name.trim();
             ProjectPlan::Container {
                 root: container_dir(containers, id),
-                name: if trimmed.is_empty() { "Workspace".to_owned() } else { trimmed.replace(['\r', '\n'], " ") },
+                name: if trimmed.is_empty() {
+                    "Workspace".to_owned()
+                } else {
+                    trimmed.replace(['\r', '\n'], " ")
+                },
                 projects: folders,
             }
         }
@@ -59,7 +77,10 @@ pub(crate) fn write_container(root: &Path, name: &str, projects: Vec<PathBuf>) -
 /// Whether every folder of a workspace is trusted. A folder whose trust cannot be read counts as
 /// untrusted, so a container never ends up trusted by mistake.
 pub(crate) fn all_trusted(folders: &[PathBuf], trusted: impl Fn(&Path) -> IdeResult<bool>) -> bool {
-    !folders.is_empty() && folders.iter().all(|folder| trusted(folder).unwrap_or(false))
+    !folders.is_empty()
+        && folders
+            .iter()
+            .all(|folder| trusted(folder).unwrap_or(false))
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
@@ -86,12 +107,17 @@ pub async fn ide_set_project<R: Runtime>(
     let step = match workspace_id {
         None => ProjectPlan::Close,
         Some(id) => {
-            let workspaces = crate::workspace_persistence::read_workspaces(&app).map_err(IdeError::internal)?;
+            let workspaces =
+                crate::workspace_persistence::read_workspaces(&app).map_err(IdeError::internal)?;
             let workspace = workspaces
                 .into_iter()
                 .find(|workspace| workspace.id == id)
                 .ok_or_else(|| IdeError::not_found(format!("no workspace {id}")))?;
-            let folders = workspace.folders.iter().map(|folder| PathBuf::from(&folder.path)).collect();
+            let folders = workspace
+                .folders
+                .iter()
+                .map(|folder| PathBuf::from(&folder.path))
+                .collect();
             plan(&containers, &id, &workspace.name, folders)
         }
     };
@@ -105,7 +131,11 @@ pub async fn ide_set_project<R: Runtime>(
                 return Ok(None);
             }
             ProjectPlan::Folder(root) => root,
-            ProjectPlan::Container { root, name, projects } => {
+            ProjectPlan::Container {
+                root,
+                name,
+                projects,
+            } => {
                 let members_trusted = all_trusted(&projects, |path| state.host.trust.trusted(path));
                 write_container(&root, &name, projects)?;
                 // The container is OmniTerm's own metadata folder; it is as trustworthy as the

@@ -2,7 +2,7 @@ import { registerAction } from '../../ide/platform/actions'
 import { registerToolWindow } from '../../ide/workbench/contributions'
 
 import { requestDockedTerminal, TERMINAL_WINDOW } from './terminalDockActions'
-import { startTerminalDockSync } from './terminalDockStore'
+import { startTerminalDockSync, useTerminalDock } from './terminalDockStore'
 import { TerminalDockTabs, TerminalToolWindow } from './TerminalToolWindow'
 
 /**
@@ -21,6 +21,8 @@ export function registerTerminalToolWindow(): () => void {
       requiresProject: false,
       component: TerminalToolWindow,
       headerContent: TerminalDockTabs,
+      // How many sessions run down here, so one started from elsewhere is not lost behind a closed window.
+      useBadge: () => useTerminalDock((state) => state.docked.length || null),
     }),
     registerAction({
       id: 'omniterm.terminal.new',

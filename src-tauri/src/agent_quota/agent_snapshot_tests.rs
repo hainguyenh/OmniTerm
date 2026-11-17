@@ -59,7 +59,9 @@ fn reads_names_first_and_details_only_on_request() {
     // Linux exposes the environment captured when the process started, so a runtime `set_var`
     // mutation would make this test depend on the host OS rather than the snapshot behavior.
     assert!(mine.env.iter().all(|(key, _)| {
-        PROFILE_ENV.iter().any(|wanted| wanted.eq_ignore_ascii_case(key))
+        PROFILE_ENV
+            .iter()
+            .any(|wanted| wanted.eq_ignore_ascii_case(key))
     }));
 }
 
