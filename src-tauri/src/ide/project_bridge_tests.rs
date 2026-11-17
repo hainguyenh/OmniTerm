@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ide_core::IdeError;
 use ide_workspace::workspace::Workspace;
 
-use super::{all_trusted, container_dir, plan, write_container, ProjectPlan};
+use super::{all_trusted, container_dir, plan, same_path, write_container, ProjectPlan};
 
 #[test]
 fn a_workspace_without_folders_closes_the_project() {
@@ -75,4 +75,22 @@ fn a_container_is_trusted_only_when_every_folder_is() {
     // Unreadable trust state never trusts.
     assert!(!all_trusted(&folders, |_| Err(IdeError::internal("unreadable"))));
     assert!(!all_trusted(&[], |_| Ok(true)));
+}
+
+#[test]
+fn the_same_folder_is_recognised_through_a_different_spelling() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let spelled_differently = dir.path().join("sub").join("..");
+    std::fs::create_dir_all(dir.path().join("sub")).expect("sub folder");
+    assert!(same_path(dir.path(), &spelled_differently));
+    assert!(!same_path(dir.path(), &dir.path().join("sub")));
+    // Paths that do not exist are compared as written.
+    assert!(same_path(
+        &PathBuf::from("/no/such/a"),
+        &PathBuf::from("/no/such/a")
+    ));
+    assert!(!same_path(
+        &PathBuf::from("/no/such/a"),
+        &PathBuf::from("/no/such/b")
+    ));
 }

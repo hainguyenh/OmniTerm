@@ -193,3 +193,7 @@ pub fn fetch_claude_usage(
 #[cfg(test)]
 #[path = "providers_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "provider_config_tests.rs"]
+mod config_tests;

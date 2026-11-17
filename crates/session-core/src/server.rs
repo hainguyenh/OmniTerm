@@ -259,3 +259,7 @@ async fn run_platform_server(
 #[cfg(test)]
 #[path = "server_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "server_lease_tests.rs"]
+mod lease_tests;

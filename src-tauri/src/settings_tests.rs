@@ -272,3 +272,20 @@ fn a_renderer_save_never_overwrites_the_built_in_feature_state() {
     assert_eq!(stored["disabledBuiltinFeatures"], json!(["omniterm.always-awake"]));
     let _ = std::fs::remove_file(path);
 }
+
+#[test]
+fn writing_over_a_settings_path_that_is_a_directory_reports_the_failure() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+
+    let result = write_settings_raw(app.handle(), defaults());
+    std::fs::remove_dir(&path).unwrap();
+
+    assert!(result
+        .expect_err("a directory cannot be overwritten")
+        .starts_with("Failed to write settings file"));
+}

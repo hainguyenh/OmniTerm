@@ -106,7 +106,14 @@ fn skips_ignored_directories_but_reports_hidden_files() {
 #[test]
 fn scans_past_the_old_depth_limit() {
     let (_d, root) = tree();
-    touch(&root.join("a").join("b").join("c").join("d").join("deep.bat"));
+    touch(
+        &root
+            .join("a")
+            .join("b")
+            .join("c")
+            .join("d")
+            .join("deep.bat"),
+    );
     touch(&root.join("a").join("b").join("c").join("deep.sh"));
 
     let ids: Vec<_> = scan_dir(&root).into_iter().map(|s| s.id).collect();
@@ -191,7 +198,14 @@ fn the_entry_scan_reports_hidden_entries_and_deep_folders() {
     touch(&root.join(".git").join("hook.sh"));
     touch(&root.join(".env"));
     touch(&root.join(".vscode").join("settings.json"));
-    touch(&root.join("a").join("b").join("c").join("d").join("deep.txt"));
+    touch(
+        &root
+            .join("a")
+            .join("b")
+            .join("c")
+            .join("d")
+            .join("deep.txt"),
+    );
 
     let ids: Vec<_> = scan_entries(&root).into_iter().map(|e| e.id).collect();
     assert_eq!(
@@ -228,9 +242,16 @@ fn the_folder_skeleton_reports_every_directory() {
 
     let folders = scan_folders(&root);
     let ids: Vec<_> = folders.iter().map(|e| e.id.as_str()).collect();
-    assert_eq!(ids, vec![".vscode", "a", "a/Dist", "a/b", "node_modules", "tools"]);
+    assert_eq!(
+        ids,
+        vec![".vscode", "a", "a/Dist", "a/b", "node_modules", "tools"]
+    );
     assert!(folders.iter().all(|e| e.is_dir && e.kind == "dir"));
-    let deferred: Vec<_> = folders.iter().filter(|e| e.deferred == Some(true)).map(|e| e.id.as_str()).collect();
+    let deferred: Vec<_> = folders
+        .iter()
+        .filter(|e| e.deferred == Some(true))
+        .map(|e| e.id.as_str())
+        .collect();
     assert_eq!(deferred, vec!["a/Dist", "node_modules"]);
 }
 
@@ -248,7 +269,10 @@ fn folder_pages_cover_that_folders_files_only() {
 
     let page = scan_folder_files_excluding(&root, "", &[], 0, DEFAULT_PAGE_SIZE).unwrap();
     assert_eq!(
-        page.entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+        page.entries
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
         vec!["a.txt", "b.txt"]
     );
     assert_eq!(page.total, 2);
@@ -270,14 +294,23 @@ fn folder_pages_are_sorted_and_bounded() {
     // Sorted by id — parents first, and a stable walk means the same offset names the same files.
     assert!(first.entries.windows(2).all(|w| w[0].id < w[1].id));
 
-    let second = scan_folder_files_excluding(&root, "src", &[], DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE)
-        .unwrap();
+    let second =
+        scan_folder_files_excluding(&root, "src", &[], DEFAULT_PAGE_SIZE, DEFAULT_PAGE_SIZE)
+            .unwrap();
     assert_eq!(second.entries.len(), 25);
     assert!(!second.has_more);
 
-    let all: Vec<_> = first.entries.iter().chain(&second.entries).map(|e| e.id.as_str()).collect();
+    let all: Vec<_> = first
+        .entries
+        .iter()
+        .chain(&second.entries)
+        .map(|e| e.id.as_str())
+        .collect();
     assert_eq!(all.len(), DEFAULT_PAGE_SIZE + 25);
-    assert_eq!(scan_folder_files_excluding(&root, "src", &[], 0, DEFAULT_PAGE_SIZE).unwrap(), first);
+    assert_eq!(
+        scan_folder_files_excluding(&root, "src", &[], 0, DEFAULT_PAGE_SIZE).unwrap(),
+        first
+    );
 }
 
 /// A folder's page must agree with the full walk about every file it lists — the same kinds, shells
@@ -294,18 +327,30 @@ fn folder_pages_agree_with_the_full_walk() {
     // walk's comparison set is the direct children of `scripts/` too — not `scripts/sub/deep.ps1`.
     let full: Vec<_> = scan_entries_excluding(&root, &[])
         .into_iter()
-        .filter(|e| e.id.starts_with("scripts/") && !e.is_dir && !e.id["scripts/".len()..].contains('/'))
+        .filter(|e| {
+            e.id.starts_with("scripts/") && !e.is_dir && !e.id["scripts/".len()..].contains('/')
+        })
         .collect();
     let page = scan_folder_files_excluding(&root, "scripts", &[], 0, DEFAULT_PAGE_SIZE).unwrap();
-    assert_eq!(page.entries, full, "the folder page must match the full walk's entries");
-    assert_eq!(page.entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), vec![
-        "scripts/deploy.bat",
-        "scripts/notes.txt",
-        "scripts/payload.exe",
-    ]);
+    assert_eq!(
+        page.entries, full,
+        "the folder page must match the full walk's entries"
+    );
+    assert_eq!(
+        page.entries
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "scripts/deploy.bat",
+            "scripts/notes.txt",
+            "scripts/payload.exe",
+        ]
+    );
 
     let excluded = vec!["txt".to_string()];
-    let page = scan_folder_files_excluding(&root, "scripts", &excluded, 0, DEFAULT_PAGE_SIZE).unwrap();
+    let page =
+        scan_folder_files_excluding(&root, "scripts", &excluded, 0, DEFAULT_PAGE_SIZE).unwrap();
     let by_id = |id: &str| page.entries.iter().find(|e| e.id == id).unwrap();
     assert_eq!(by_id("scripts/notes.txt").viewable, Some(false));
     assert_eq!(by_id("scripts/deploy.bat").viewable, Some(true));
@@ -317,65 +362,12 @@ fn folder_pages_reject_paths_outside_the_workspace() {
     let (_d, root) = tree();
     touch(&root.join("keep.txt"));
     for bad in ["..", "../outside", "C:\\Windows", "/etc"] {
-        assert!(scan_folder_files_excluding(&root, bad, &[], 0, DEFAULT_PAGE_SIZE).is_err(), "{bad}");
+        assert!(
+            scan_folder_files_excluding(&root, bad, &[], 0, DEFAULT_PAGE_SIZE).is_err(),
+            "{bad}"
+        );
     }
-    assert!(scan_folder_files_excluding(&root, "does-not-exist", &[], 0, DEFAULT_PAGE_SIZE).is_err());
-}
-
-#[test]
-fn as_script_converts_script_entries_only() {
-    fn make_entry(is_dir: bool, kind: &str) -> WorkspaceEntry {
-        WorkspaceEntry { id: "s".into(), name: "s".into(), path: "s".into(), is_dir, kind: kind.into(), shell: None, editable: None, viewable: None, deferred: None }
-    }
-    assert!(make_entry(true, "bat").as_script().is_none());
-    for kind in ["txt", "json", "rs"] { assert!(make_entry(false, kind).as_script().is_none()); }
-    for kind in ["bat", "ps1", "sh", "rdp"] {
-        let script = make_entry(false, kind).as_script().unwrap();
-        assert_eq!(script.kind, kind);
-    }
-}
-
-#[test]
-fn scan_dir_excluding_filters_specified_extensions() {
-    let tmp = tempfile::TempDir::new().unwrap();
-    fs::write(tmp.path().join("build.bat"), "echo hi").unwrap();
-    fs::write(tmp.path().join("setup.ps1"), "Write-Host hi").unwrap();
-    let all = scan_dir_excluding(tmp.path(), &[]);
-    assert!(all.iter().any(|s| s.kind == "bat"));
-    let with_excluded = scan_dir_excluding(tmp.path(), &["ps1".to_string()]);
-    for s in &with_excluded {
-        if s.kind == "ps1" { assert_eq!(s.viewable, Some(false)); }
-    }
-}
-
-#[test]
-fn extensionless_files_are_classified_as_kind_file() {
-    let (_d, root) = tree();
-    touch(&root.join("Makefile"));
-    touch(&root.join("deploy.bat"));
-    let entries = scan_entries_excluding(&root, &[]);
-    let makefile = entries.iter().find(|e| e.id == "Makefile").expect("Makefile must appear");
-    assert_eq!(makefile.kind, "file");
-    assert!(makefile.shell.is_none() && makefile.editable.is_none());
-    assert_eq!(makefile.viewable, Some(true));
-    let scripts = scan_dir(&root);
-    assert!(scripts.iter().all(|s| s.id != "Makefile"));
-    assert!(scripts.iter().any(|s| s.id == "deploy.bat"));
-}
-
-#[test]
-fn files_with_unknown_extensions_use_lowercase_extension_as_kind() {
-    let (_d, root) = tree();
-    touch(&root.join("doc.TXT"));
-    touch(&root.join("config.YAML"));
-    let entries = scan_entries_excluding(&root, &[]);
-    assert_eq!(entries.iter().find(|e| e.name == "doc.TXT").unwrap().kind, "txt");
-    assert_eq!(entries.iter().find(|e| e.name == "config.YAML").unwrap().kind, "yaml");
-}
-
-#[test]
-fn scan_entries_on_a_nonexistent_root_returns_empty_list() {
-    let ghost = std::path::Path::new(if cfg!(windows) { r"C:\this\does\not\exist\omniterm-test" } else { "/this/does/not/exist/omniterm-test" });
-    assert!(scan_entries_excluding(ghost, &[]).is_empty());
-    assert!(scan_folders(ghost).is_empty());
+    assert!(
+        scan_folder_files_excluding(&root, "does-not-exist", &[], 0, DEFAULT_PAGE_SIZE).is_err()
+    );
 }

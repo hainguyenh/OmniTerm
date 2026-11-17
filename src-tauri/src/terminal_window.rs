@@ -19,6 +19,9 @@ use tauri::ipc::{Channel, Response};
 use tauri::{AppHandle, Emitter, Manager, Runtime, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 #[cfg(test)]
+#[path = "terminal_window_context_tests.rs"]
+mod context_tests;
+#[cfg(test)]
 #[path = "terminal_window_session_tests.rs"]
 mod session_tests;
 #[cfg(test)]

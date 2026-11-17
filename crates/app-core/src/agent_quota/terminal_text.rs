@@ -74,3 +74,7 @@ fn strip_escapes(text: &[char]) -> Vec<char> {
 pub(crate) fn strip_terminal(raw: &str) -> Vec<char> {
     strip_escapes(&strip_csi(&strip_osc(&chars(raw))))
 }
+
+#[cfg(test)]
+#[path = "terminal_text_tests.rs"]
+mod tests;

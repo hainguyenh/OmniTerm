@@ -177,3 +177,40 @@ fn parses_iso_strictly() {
         assert_eq!(parse_iso(bad), None, "{bad}");
     }
 }
+
+#[test]
+fn rejects_impossible_days_and_ignores_empty_brackets() {
+    assert_eq!(parse_month_day("Sep 0"), None);
+    assert_eq!(parse_month_day("Sep 40"), None);
+    assert_eq!(parse_month_day("Foo 12"), None);
+    assert_eq!(
+        parse_month_day("on 3rd Oct"),
+        Some((9, 3, "on  ".to_string()))
+    );
+    // `()` names no zone, so the time is local.
+    assert_eq!(
+        parse_reset_text("today 3pm ()", now()),
+        Some(local(0, 15, 0))
+    );
+}
+
+#[test]
+fn reads_relative_units_in_any_case() {
+    assert_eq!(
+        parse_reset_text("in 1D 2H 3M", now()),
+        Some(now() + ((24 + 2) * 60 + 3) * 60_000)
+    );
+    assert_eq!(
+        parse_reset_text("in 2 hrs", now()),
+        Some(now() + 2 * 3_600_000)
+    );
+    assert_eq!(parse_reset_text("in 0m", now()), None);
+}
+
+#[test]
+fn reads_a_date_with_a_space_instead_of_t_as_free_text() {
+    assert_eq!(
+        parse_reset_text("2026-09-25 today 23:59", now()),
+        Some(local(0, 23, 59))
+    );
+}

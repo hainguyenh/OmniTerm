@@ -271,3 +271,34 @@ fn test_tauri_commands() {
     ));
     assert!(res.is_err());
 }
+
+#[test]
+fn folders_named_after_a_slot_are_never_mistaken_for_its_art() {
+    let temp = TempDir::new().expect("temp dir");
+    let dir = temp.path().join("art");
+    fs::create_dir_all(dir.join("idle-light")).expect("a folder named like a slot");
+    assert_eq!(get_custom_art_impl(&dir, "idle-light"), Ok(None));
+    remove_custom_art_impl(&dir, "idle-light").expect("nothing to remove");
+    assert!(dir.join("idle-light").is_dir(), "a folder is left alone");
+}
+
+#[test]
+fn an_art_folder_that_is_a_file_or_a_blocked_destination_is_an_error() {
+    let temp = TempDir::new().expect("temp dir");
+    let not_a_dir = temp.path().join("art-file");
+    fs::write(&not_a_dir, b"x").expect("a file where the folder should be");
+    assert!(get_custom_art_impl(&not_a_dir, "idle-dark")
+        .expect_err("cannot list a file")
+        .starts_with("Failed to read directory"));
+    assert!(remove_custom_art_impl(&not_a_dir, "idle-dark")
+        .expect_err("cannot list a file")
+        .starts_with("Failed to read directory"));
+
+    let dir = temp.path().join("art");
+    fs::create_dir_all(dir.join("idle-dark.png")).expect("a folder in the destination's place");
+    let source = temp.path().join("pic.png");
+    fs::write(&source, b"png").expect("source image");
+    assert!(upload_custom_art_impl(&dir, "idle-dark", &source)
+        .expect_err("the copy cannot replace a folder")
+        .starts_with("Failed to copy file"));
+}

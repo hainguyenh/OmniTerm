@@ -102,3 +102,34 @@ fn test_temp_notes_edge_cases_and_filtering() {
     assert!(write_temp_note(&non_existent, "note-is-dir", "content").is_err());
     assert!(delete_temp_note(&non_existent, "note-is-dir").is_err());
 }
+
+#[test]
+fn write_reports_a_temp_dir_that_cannot_be_created() {
+    let dir = tempdir().expect("temp dir");
+    let blocker = dir.path().join("blocker");
+    std::fs::write(&blocker, b"file").expect("write blocker");
+    let nested = blocker.join("temp");
+
+    let error = write_temp_note(&nested, "note", "content").expect_err("parent is a file");
+    assert!(!error.is_empty());
+    assert!(!nested.exists());
+}
+
+#[test]
+fn read_reports_a_note_path_that_is_a_directory() {
+    let dir = tempdir().expect("temp dir");
+    std::fs::create_dir(dir.path().join("folder-note.txt")).expect("create note dir");
+
+    let error = read_temp_note(dir.path(), "folder-note").expect_err("directory note");
+    assert!(!error.contains("not found"), "{error}");
+}
+
+#[test]
+fn titles_are_cut_after_forty_characters() {
+    let long = "x".repeat(41);
+    assert_eq!(
+        extract_title(&format!("\n  {long}\nbody")),
+        format!("{}…", "x".repeat(40))
+    );
+    assert_eq!(extract_title(&"y".repeat(40)), "y".repeat(40));
+}

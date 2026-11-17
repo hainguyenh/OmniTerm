@@ -201,3 +201,12 @@ fn key_material_is_recognised_case_insensitively_and_stays_in_the_viewer_deny_li
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_new_filesystem_root_has_no_file_name() {
+    let fx = fixture();
+    let error = resolve_in_roots(std::slice::from_ref(&fx.root), Path::new("/"), Access::New)
+        .expect_err("the filesystem root cannot be created");
+    assert!(error.contains("has no file name"), "{error}");
+}

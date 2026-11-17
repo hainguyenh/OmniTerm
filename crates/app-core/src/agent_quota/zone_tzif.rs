@@ -354,3 +354,7 @@ pub(crate) fn load_local() -> Tzif {
         .and_then(|data| Tzif::parse(&data))
         .unwrap_or_else(Tzif::utc)
 }
+
+#[cfg(test)]
+#[path = "zone_tzif_tests.rs"]
+mod tests;

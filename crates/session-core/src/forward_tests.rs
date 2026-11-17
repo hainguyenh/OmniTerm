@@ -3,6 +3,7 @@ use tokio::io::duplex;
 use tokio::sync::broadcast;
 
 use super::*;
+use crate::io_failure_tests::FailingStream;
 use crate::transport::read_server_message;
 
 fn data(bytes: &[u8]) -> ServerMessage {
@@ -100,4 +101,45 @@ async fn forwarding_sends_joined_output_as_binary_or_json_frames() {
     assert_eq!(forwarded(true).await, expected);
     // A client that did not ask for binary frames (an older app) gets the same messages as JSON.
     assert_eq!(forwarded(false).await, expected);
+}
+
+#[tokio::test]
+async fn a_client_that_fell_behind_is_told_to_reattach() {
+    let (tx, rx) = broadcast::channel(2);
+    for byte in [b"1", b"2", b"3"] {
+        tx.send(data(byte)).unwrap();
+    }
+    let (mut client, mut server) = duplex(64 * 1024);
+    forward(&mut server, rx, true).await;
+    drop(server);
+    assert_eq!(
+        read_server_message(&mut client).await.unwrap(),
+        ServerMessage::Error {
+            message: LAGGED_MESSAGE.to_string()
+        }
+    );
+    assert!(read_server_message(&mut client).await.is_err());
+}
+
+#[tokio::test]
+async fn forwarding_stops_when_the_client_cannot_take_the_output() {
+    let (tx, rx) = broadcast::channel(16);
+    tx.send(data(b"lost")).unwrap();
+    let mut stream = FailingStream::new(0, false);
+    // The sender stays open: only the write failure can end the forward loop.
+    forward(&mut stream, rx, true).await;
+    assert!(stream.written.is_empty());
+    drop(tx);
+}
+
+#[tokio::test]
+async fn forwarding_stops_when_the_status_after_output_cannot_be_sent() {
+    let (tx, rx) = broadcast::channel(16);
+    tx.send(data(b"out")).unwrap();
+    tx.send(status()).unwrap();
+    // Room for exactly the binary output frame (4-byte header + 3 bytes), none for the status.
+    let mut stream = FailingStream::new(7, false);
+    forward(&mut stream, rx, true).await;
+    assert_eq!(&stream.written[4..], b"out");
+    drop(tx);
 }

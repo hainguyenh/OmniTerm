@@ -260,3 +260,39 @@ fn native_ops_report_a_missing_process() {
     assert!(NativeOps.terminate(missing).is_err());
     let _ = NativeOps.resume(missing, &[]);
 }
+
+#[test]
+fn profile_targets_need_the_current_main_agent() {
+    let rows = tree();
+    assert!(suspend_targets_for_profile(&rows, 100, 999, 2, None).is_empty());
+    assert!(
+        suspend_targets_for_profile(&rows, 100, 100, 1, None).is_empty(),
+        "a shell is no agent"
+    );
+}
+
+#[test]
+fn a_profile_with_the_same_name_elsewhere_counts_but_its_tools_do_not() {
+    let rows = vec![
+        row(100, 1, 1, "pwsh.exe"),
+        with_env(
+            row(101, 100, 2, "claude.exe"),
+            "CLAUDE_CONFIG_DIR",
+            r"C:\a\work",
+        ),
+        // Another copy of the same profile folder name, synced to a different drive.
+        with_env(
+            row(200, 1, 10, "claude.exe"),
+            "CLAUDE_CONFIG_DIR",
+            r"D:\b\Work\",
+        ),
+        row(201, 200, 11, "python.exe"),
+        row(202, 200, 12, "claude.exe"),
+    ];
+    let targets = suspend_targets_for_profile(&rows, 100, 101, 2, None);
+    let pids: Vec<u32> = targets.iter().map(|target| target.pid).collect();
+    assert_eq!(pids, [101, 200, 202]);
+    assert!(targets
+        .iter()
+        .all(|target| target.profile_name.as_deref() == Some("work")));
+}

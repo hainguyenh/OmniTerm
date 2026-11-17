@@ -227,3 +227,64 @@ fn selects_the_active_model_family_when_one_pool_is_exhausted() {
         100.0
     );
 }
+
+#[test]
+fn reads_hyphenated_labels_and_an_explicit_used_direction() {
+    let windows = parsed(
+        "Gemini Models  Five-Hour Limit  45% used  2026-09-28T07:11:00Z\n\
+         Gemini Models  7-days Limit  25% left",
+        None,
+    );
+    let session = find(&windows, WindowKind::Session);
+    assert_eq!(
+        (session.used_pct, session.resets_at),
+        (45.0, iso("2026-09-28T07:11:00Z"))
+    );
+    assert_eq!(find(&windows, WindowKind::Weekly).used_pct, 75.0);
+}
+
+#[test]
+fn takes_the_fullest_reading_of_the_preferred_family() {
+    let raw = "Active model: Gemini 2.5 Pro\r\n\
+               Gemini Pro    Weekly Limit  30% used\n\
+               Gemini Flash  Weekly Limit  70% used\n\
+               Gemini Lite   Weekly Limit  50% used\n\
+               Claude        Weekly Limit  90% used";
+    let windows = parsed(raw, None);
+    assert_eq!(
+        windows,
+        vec![
+            QuotaWindow {
+                kind: WindowKind::Session,
+                used_pct: 0.0,
+                resets_at: None,
+                label: "Session (5h)".to_string(),
+                breakdown: None,
+            },
+            QuotaWindow {
+                kind: WindowKind::Weekly,
+                used_pct: 70.0,
+                resets_at: None,
+                label: "Weekly".to_string(),
+                breakdown: entries(&[
+                    ("Gemini Pro", 30.0),
+                    ("Gemini Flash", 70.0),
+                    ("Gemini Lite", 50.0),
+                    ("Claude", 90.0),
+                ]),
+            },
+        ]
+    );
+    // The model line names the Claude pool, so its reading drives the window.
+    let claude = parsed(&raw.replace("Gemini 2.5 Pro", "Claude Sonnet"), None);
+    assert_eq!(find(&claude, WindowKind::Weekly).used_pct, 90.0);
+}
+
+#[test]
+fn builds_fixed_width_digit_classes() {
+    let Tok::Class(test, min, max) = digits(4) else {
+        panic!("digits() builds a character class");
+    };
+    assert_eq!((min, max), (4, 4));
+    assert!(test('7') && !test('x'));
+}

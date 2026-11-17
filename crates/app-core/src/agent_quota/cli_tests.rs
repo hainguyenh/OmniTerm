@@ -179,3 +179,62 @@ fn sets_a_custom_profile_and_unsets_the_default_one_whatever_the_casing() {
     assert_eq!(default.keys().collect::<Vec<_>>(), ["PATH"]);
     assert!(profile_env("CODEX_HOME", None, Path::new("/home/.codex"), &Env::new()).is_empty());
 }
+
+#[test]
+fn treats_only_cmd_and_bat_files_as_shims() {
+    for shim in ["x.cmd", "x.CMD", "dir/x.bat", "x.Bat"] {
+        assert!(is_shim(Path::new(shim)), "{shim}");
+    }
+    for plain in ["x.exe", "x", "x.cmd.txt", ".cmd"] {
+        assert!(!is_shim(Path::new(plain)), "{plain}");
+    }
+}
+
+/// Yields `chunks` full buffers of `a`, then fails like a broken pipe.
+struct Failing {
+    chunks: usize,
+}
+
+impl Read for Failing {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.chunks == 0 {
+            return Err(std::io::Error::other("broken pipe"));
+        }
+        self.chunks -= 1;
+        buffer.fill(b'a');
+        Ok(buffer.len())
+    }
+}
+
+#[test]
+fn drains_output_up_to_the_cap_and_keeps_what_arrived_before_an_error() {
+    let large = drain(std::io::Cursor::new(vec![b'x'; OUTPUT_CAP + 50_000]))
+        .recv_timeout(Duration::from_secs(10))
+        .expect("drained output");
+    assert_eq!(large.len(), OUTPUT_CAP);
+    assert!(large.bytes().all(|b| b == b'x'));
+    let partial = drain(Failing { chunks: 2 })
+        .recv_timeout(Duration::from_secs(10))
+        .expect("drained output");
+    assert_eq!(partial, "a".repeat(2 * 8192));
+}
+
+#[test]
+fn falls_back_to_the_default_windows_extensions_without_pathext() {
+    let dir = Path::new("tools");
+    let mut env = Env::new();
+    env.insert("PATH".into(), "tools;;".into());
+    let shim = dir.join("agy.bat");
+    let ps1 = dir.join("agy.ps1");
+    let exists = |file: &Path| file == shim || file == ps1;
+    assert_eq!(
+        resolve_executable("agy", &[], &env, Platform::Windows, &exists),
+        Some(dir.join("agy.bat"))
+    );
+    // A PATHEXT naming only extensions that are never run is honoured, so nothing is found.
+    env.insert("PATHEXT".into(), ".PS1;.COM".into());
+    assert_eq!(
+        resolve_executable("agy", &[], &env, Platform::Windows, &exists),
+        None
+    );
+}

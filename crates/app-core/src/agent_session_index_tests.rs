@@ -227,3 +227,128 @@ fn header_reads_the_first_codex_rollout_format() {
     assert_eq!(header.session_id.as_deref(), Some(ID_C));
     assert_eq!(header.cwd.as_deref(), Some("/home/me/app"));
 }
+
+#[test]
+fn ignores_invalid_profile_suffixes_and_profile_files() {
+    let home = tempfile::tempdir().expect("temp home");
+    let root = home.path();
+    for dir in [
+        ".claude-".to_string(),
+        format!(".claude-{}", "a".repeat(PROFILE_SUFFIX_MAX + 1)),
+        ".claude-has space".to_string(),
+        ".codex-v1.2_beta".to_string(),
+        "claude-profiles/claude-".to_string(),
+    ] {
+        fs::create_dir_all(root.join(dir)).expect("profile dir");
+    }
+    write(&root.join(".codex-file"), "not a dir");
+    write(&root.join("claude-profiles/solo"), "not a dir");
+
+    let roots = session_roots(root);
+    let profiles: Vec<_> = roots
+        .iter()
+        .map(|root| (root.agent, root.profile.as_str()))
+        .collect();
+    assert_eq!(profiles, vec![(SessionAgent::Codex, "codex-v1.2_beta")]);
+}
+
+#[test]
+fn codex_rollout_without_an_id_is_named_after_its_file() {
+    let home = tempfile::tempdir().expect("temp home");
+    write(
+        &home
+            .path()
+            .join(".codex/sessions/2026/01/02/rollout-plain.jsonl"),
+        &lines(&[json!({ "type": "session_meta", "payload": { "cwd": "/srv" } })]),
+    );
+    let sessions = list_sessions(&session_roots(home.path()));
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].session_id, "rollout-plain");
+    assert_eq!(sessions[0].id, "codex:codex:rollout-plain");
+    assert_eq!(sessions[0].cwd.as_deref(), Some("/srv"));
+}
+
+#[test]
+fn sessions_with_the_same_age_are_ordered_by_id() {
+    let home = tempfile::tempdir().expect("temp home");
+    let project = home.path().join(".claude/projects/p");
+    let stamp = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+    for id in [ID_B, ID_A] {
+        let path = project.join(format!("{id}.jsonl"));
+        write(&path, &claude_transcript("/w", "hi"));
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .expect("open transcript")
+            .set_modified(stamp)
+            .expect("set mtime");
+    }
+    let sessions = list_sessions(&session_roots(home.path()));
+    let ids: Vec<_> = sessions.iter().map(|s| s.session_id.as_str()).collect();
+    assert_eq!(ids, vec![ID_A, ID_B]);
+    assert_eq!(sessions[0].last_active, 1_700_000_000_000);
+}
+
+#[test]
+fn deleting_a_non_uuid_claude_session_leaves_same_named_entries() {
+    let home = tempfile::tempdir().expect("temp home");
+    let root = home.path().join(".claude");
+    let project = root.join("projects/p");
+    write(&project.join("draft.jsonl"), &claude_transcript("/w", "hi"));
+    write(&project.join("draft").join("keep.txt"), "x");
+    write(&root.join("file-history/draft/v1"), "x");
+
+    let report = delete_sessions(
+        &session_roots(home.path()),
+        &["claude:claude:draft".to_string()],
+    );
+
+    assert_eq!(report.deleted, vec!["claude:claude:draft".to_string()]);
+    assert!(report.failed.is_empty());
+    assert!(!project.join("draft.jsonl").exists());
+    assert!(project.join("draft/keep.txt").exists());
+    assert!(root.join("file-history/draft/v1").exists());
+}
+
+#[test]
+fn remove_owned_removes_files_and_dirs_and_ignores_missing_entries() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let file = dir.path().join("a.txt");
+    let folder = dir.path().join("nested");
+    write(&file, "x");
+    write(&folder.join("b.txt"), "y");
+
+    remove_owned(&file).expect("remove file");
+    remove_owned(&folder).expect("remove dir");
+    remove_owned(&dir.path().join("missing")).expect("missing is fine");
+    assert!(!file.exists());
+    assert!(!folder.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_owned_leaves_symlinks_and_their_targets() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let target = dir.path().join("target.txt");
+    let link = dir.path().join("link.txt");
+    write(&target, "x");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+    remove_owned(&link).expect("symlink is skipped");
+    assert!(fs::symlink_metadata(&link).is_ok());
+    assert!(target.exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_transcript_with_a_non_unicode_name_is_not_listed() {
+    use std::os::unix::ffi::OsStrExt;
+    let home = tempfile::tempdir().expect("temp home");
+    let project = home.path().join(".claude/projects/p");
+    let odd = project.join(std::ffi::OsStr::from_bytes(b"\xff.jsonl"));
+    write(&odd, &claude_transcript("/w", "hi"));
+
+    let roots = session_roots(home.path());
+    assert!(list_sessions(&roots).is_empty());
+    assert!(odd.exists());
+}

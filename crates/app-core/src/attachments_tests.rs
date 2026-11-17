@@ -224,3 +224,102 @@ fn list_attachments_collects_from_subdirectories() {
     assert_eq!(listed[0].name, "file-100.txt");
 }
 
+#[test]
+fn split_extension_keeps_only_short_alphanumeric_extensions() {
+    assert_eq!(split_extension("Photo.PNG"), ("Photo", "png".to_string()));
+    assert_eq!(split_extension(".hidden"), (".hidden", String::new()));
+    assert_eq!(split_extension("trailing."), ("trailing.", String::new()));
+    assert_eq!(
+        split_extension("archive.extensiontoolong"),
+        ("archive.extensiontoolong", String::new())
+    );
+    assert_eq!(
+        split_extension("backup.tar-gz"),
+        ("backup.tar-gz", String::new())
+    );
+    assert_eq!(split_extension("plain"), ("plain", String::new()));
+}
+
+#[test]
+fn save_reports_a_folder_that_cannot_be_created() {
+    let temp = dir();
+    let blocker = temp.path().join("blocker");
+    fs::write(&blocker, b"file").expect("write blocker");
+    assert!(save_attachment(&blocker.join("attachments"), "a.txt", b"x", 1).is_err());
+}
+
+#[test]
+fn import_reports_a_missing_source() {
+    let temp = dir();
+    let error = import_attachment(temp.path(), &temp.path().join("gone.txt"), 1)
+        .expect_err("missing source");
+    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+}
+
+#[test]
+fn attachments_of_the_same_age_are_listed_by_name() {
+    let temp = dir();
+    let stamp = UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+    for name in ["b.txt", "a.txt"] {
+        let saved = save_attachment(temp.path(), name, b"x", 5).expect("save");
+        fs::File::options()
+            .write(true)
+            .open(&saved.path)
+            .expect("open attachment")
+            .set_modified(stamp)
+            .expect("set mtime");
+    }
+    let names: Vec<_> = list_attachments(temp.path())
+        .into_iter()
+        .map(|info| info.name)
+        .collect();
+    assert_eq!(names, vec!["a-5.txt", "b-5.txt"]);
+}
+
+#[test]
+fn legacy_pastes_are_regular_png_files_with_the_old_prefix() {
+    let temp = dir();
+    fs::write(temp.path().join("omniterm-paste-1.png"), b"png").expect("write paste");
+    fs::write(temp.path().join("omniterm-paste-2.txt"), b"txt").expect("write txt");
+    fs::write(temp.path().join("other.png"), b"png").expect("write other");
+    fs::create_dir(temp.path().join("omniterm-paste-3.png")).expect("create dir");
+
+    let names: Vec<_> = legacy_pastes(temp.path())
+        .into_iter()
+        .map(|info| info.name)
+        .collect();
+    assert_eq!(names, vec!["omniterm-paste-1.png"]);
+    assert!(legacy_pastes(&temp.path().join("missing")).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn listing_skips_symlinks() {
+    let temp = dir();
+    fs::write(temp.path().join("real.txt"), b"x").expect("write file");
+    std::os::unix::fs::symlink(temp.path().join("real.txt"), temp.path().join("link.txt"))
+        .expect("symlink");
+    let names: Vec<_> = list_attachments(temp.path())
+        .into_iter()
+        .map(|info| info.name)
+        .collect();
+    assert_eq!(names, vec!["real.txt"]);
+}
+
+#[cfg(unix)]
+#[test]
+fn listing_skips_names_that_are_not_unicode() {
+    use std::os::unix::ffi::OsStrExt;
+    let temp = dir();
+    fs::write(temp.path().join("ok.txt"), b"x").expect("write file");
+    fs::write(
+        temp.path().join(std::ffi::OsStr::from_bytes(b"\xff.txt")),
+        b"x",
+    )
+    .expect("write odd file");
+    let names: Vec<_> = list_attachments(temp.path())
+        .into_iter()
+        .map(|info| info.name)
+        .collect();
+    assert_eq!(names, vec!["ok.txt"]);
+}

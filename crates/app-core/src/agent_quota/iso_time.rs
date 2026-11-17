@@ -87,3 +87,7 @@ pub(crate) fn parse_iso(text: &str) -> Option<i64> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "iso_time_tests.rs"]
+mod tests;

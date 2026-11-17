@@ -14,6 +14,8 @@ mod client;
 mod exit_watcher;
 mod forward;
 mod freeze;
+#[cfg(test)]
+mod io_failure_tests;
 mod manager;
 mod manifest;
 mod output;

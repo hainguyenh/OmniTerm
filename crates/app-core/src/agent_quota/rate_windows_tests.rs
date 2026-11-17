@@ -97,3 +97,16 @@ fn keeps_the_fullest_window_of_each_kind_in_order() {
         ["b", "c"]
     );
 }
+
+#[test]
+fn keeps_the_earlier_window_when_a_later_one_is_no_fuller() {
+    let kept = worst_per_kind(vec![
+        window(WindowKind::Session, "first", 40.0),
+        window(WindowKind::Session, "lower", 10.0),
+        window(WindowKind::Session, "equal", 40.0),
+    ]);
+    assert_eq!(
+        kept.iter().map(|w| w.label.as_str()).collect::<Vec<_>>(),
+        ["first"]
+    );
+}

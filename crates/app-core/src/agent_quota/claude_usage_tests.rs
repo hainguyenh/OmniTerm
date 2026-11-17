@@ -203,3 +203,40 @@ fn normalizes_escapes_glyphs_list_markers_and_separators() {
         vec!["Current session \u{b7} 3% used".to_string()]
     );
 }
+
+#[test]
+fn reads_a_label_followed_by_its_value_without_a_colon() {
+    assert_eq!(
+        windows("Current session 12% used"),
+        vec![window(WindowKind::Session, "Current session", 12.0, None)]
+    );
+}
+
+#[test]
+fn keeps_the_first_reset_found_below_a_label() {
+    assert_eq!(
+        windows("Current session: 10% used | Resets 3pm (UTC)\nResets 4pm (UTC)"),
+        vec![window(
+            WindowKind::Session,
+            "Current session",
+            10.0,
+            Some(utc_ms(2026, 9, 25, 15, 0))
+        )]
+    );
+}
+
+#[test]
+fn refuses_a_percentage_above_one_hundred() {
+    assert_eq!(
+        parse_claude_usage("Current session: 150% used", now()).map_err(|failure| failure.error),
+        Err(QuotaError::ParseFailed)
+    );
+}
+
+#[test]
+fn blanks_braille_and_block_bar_glyphs() {
+    assert_eq!(
+        normalize_usage_text("Weekly\u{2800}\u{25a0}\u{28ff}limit: 5% used"),
+        vec!["Weekly limit: 5% used".to_string()]
+    );
+}

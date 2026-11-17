@@ -169,3 +169,42 @@ fn fills_a_launchers_missing_directory_from_its_profile_folder() {
         )]
     );
 }
+
+#[test]
+fn keeps_the_first_profile_folder_and_skips_missing_or_misnamed_ones() {
+    let home_dir = home();
+    let profiles_dir = home().join("claude-profiles");
+    let bin_dir = bin();
+    let listed_home = home_dir.clone();
+    let listed_profiles = profiles_dir.clone();
+    let deps = FakeDeps::new(&[])
+        .listing(move |dir| {
+            let names: &[&str] = if dir == listed_home {
+                &[".claude-work", ".claude-gone", ".claude-bad name", "notes"]
+            } else if dir == listed_profiles {
+                &["claude-work", "bad name", "missing"]
+            } else if dir == bin_dir {
+                &[".cmd", "claude-x.txt"]
+            } else {
+                &[]
+            };
+            Ok(names.iter().map(|name| (*name).to_string()).collect())
+        })
+        .with_mtime(move |dir| {
+            let present = [
+                home_dir.join(".claude-work"),
+                profiles_dir.join("claude-work"),
+            ];
+            Ok(present.iter().any(|known| known == dir).then_some(1))
+        });
+    // `~/.claude-work` is found first, so the `claude-profiles` folder of the same name does not
+    // replace it; folders that do not exist or whose names are not profile names are skipped.
+    assert_eq!(
+        list_profiles(&deps, Platform::Windows),
+        vec![profile(
+            "claude-work",
+            Some(home().join(".claude-work")),
+            None
+        )]
+    );
+}

@@ -48,3 +48,33 @@ fn honours_anchors_boundaries_and_repetition() {
     assert!(!test(UNITS, "1d2"));
     assert_eq!(string(&chars("xy")), "xy");
 }
+
+#[test]
+fn replaces_empty_matches_between_characters_like_a_global_regex() {
+    const DIGIT_RUN: &[Tok] = &[Tok::Class(is_digit, 0, MANY)];
+    // `"a1b".replace(/\d*/g, "-")` in JavaScript.
+    assert_eq!(
+        replace_all(DIGIT_RUN, "a1b", &|_, _| "-".to_string()),
+        "-a--b-"
+    );
+    assert_eq!(replace_all(DIGIT_RUN, "", &|_, _| "-".to_string()), "-");
+    const DIGITS_ONLY: &[Tok] = &[Tok::Class(is_digit, 1, MANY)];
+    assert_eq!(
+        replace_all(DIGITS_ONLY, "a12b3", &|subject, found| {
+            format!("<{}>", string(&subject[found.start..found.end]))
+        }),
+        "a<12>b<3>"
+    );
+}
+
+#[test]
+fn stops_repeating_a_group_that_matched_nothing() {
+    const ALL_DIGITS: &[Tok] = &[
+        Tok::Start,
+        Tok::Plus(&[Tok::Class(is_digit, 0, MANY)]),
+        Tok::End,
+    ];
+    assert!(test(ALL_DIGITS, ""));
+    assert!(test(ALL_DIGITS, "123"));
+    assert!(!test(ALL_DIGITS, "12a"));
+}

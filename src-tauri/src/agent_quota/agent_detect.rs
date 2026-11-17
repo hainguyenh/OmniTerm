@@ -374,3 +374,7 @@ pub fn suspend_targets(rows: &[ProcRow], pid: u32, start_time: u64) -> Vec<ProcT
 #[cfg(test)]
 #[path = "agent_detect_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "agent_detect_agy_tests.rs"]
+mod agy_tests;

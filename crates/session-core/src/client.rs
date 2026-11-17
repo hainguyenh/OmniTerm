@@ -244,6 +244,10 @@ fn spawn_daemon(executable: &Path, state_dir: &Path) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "client_fake_daemon_tests.rs"]
+mod fake_daemon_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use tokio::io::AsyncWriteExt;

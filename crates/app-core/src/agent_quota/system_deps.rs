@@ -228,4 +228,93 @@ mod tests {
         assert!(!candidates(AgentKind::Agy, deps.home(), deps.env()).is_empty());
         assert!(!launcher_candidates("claude-x", deps.home()).is_empty());
     }
+
+    #[test]
+    fn routes_log_lines_to_the_callback_and_runs_through_the_cli_runner() {
+        let lines = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = std::sync::Arc::clone(&lines);
+        let deps = SystemDeps::new(
+            std::env::temp_dir(),
+            Box::new(move |line| sink.lock().expect("log lock").push(line.to_string())),
+        );
+        deps.log("probe ran");
+        assert_eq!(*lines.lock().expect("log lock"), ["probe ran"]);
+        let dir = tempfile::tempdir().expect("temp dir");
+        let missing = dir.path().join("missing-agent");
+        let options = CliOptions {
+            env: Env::new(),
+            timeout: std::time::Duration::from_secs(5),
+            cwd: None,
+        };
+        let result = deps.run(&missing, &[], &options);
+        assert_eq!((result.code, result.timed_out), (None, false));
+        assert!(result.stderr.contains("missing-agent"), "{result:?}");
+    }
+
+    #[test]
+    fn resolves_agents_and_launchers_from_their_install_locations() {
+        let home = tempfile::tempdir().expect("temp home");
+        let home = home.path();
+        let expected = if cfg!(windows) {
+            let local = home.join("AppData").join("Local");
+            [
+                local.join("Programs").join("Claude").join("claude.exe"),
+                home.join("AppData")
+                    .join("Roaming")
+                    .join("npm")
+                    .join("codex.cmd"),
+                local.join("agy").join("bin").join("agy.exe"),
+            ]
+        } else {
+            [
+                home.join(".claude").join("local").join("claude"),
+                home.join(".local").join("bin").join("codex"),
+                home.join(".gemini")
+                    .join("antigravity-cli")
+                    .join("bin")
+                    .join("agy"),
+            ]
+        };
+        let launcher = launcher_candidates("claude-work", home)[0].clone();
+        for file in expected.iter().chain([&launcher]) {
+            let parent = file.parent().expect("a parent folder");
+            std::fs::create_dir_all(parent).expect("create the install folder");
+            std::fs::write(file, "").expect("write the fake executable");
+        }
+        let mut deps = SystemDeps::new(home.to_path_buf(), Box::new(|_| {}));
+        // Only the install locations count: no PATH, and the Windows folders derive from home.
+        deps.env = Env::new();
+        let resolved: Vec<Option<PathBuf>> = AgentKind::ALL
+            .into_iter()
+            .map(|agent| deps.resolve(agent))
+            .collect();
+        assert_eq!(resolved, expected.map(Some));
+        assert_eq!(deps.resolve_launcher("claude-work"), Some(launcher));
+        assert_eq!(deps.resolve_launcher("claude-other"), None);
+    }
+
+    #[test]
+    fn takes_windows_app_data_folders_from_the_environment() {
+        let home = Path::new("home");
+        let mut env = Env::new();
+        env.insert("APPDATA".into(), "roaming".into());
+        env.insert("LOCALAPPDATA".into(), "local".into());
+        let codex = candidates(AgentKind::Codex, home, &env);
+        if cfg!(windows) {
+            assert_eq!(
+                codex,
+                [
+                    Path::new("local")
+                        .join("Programs")
+                        .join("OpenAI")
+                        .join("Codex")
+                        .join("bin")
+                        .join("codex.exe"),
+                    Path::new("roaming").join("npm").join("codex.cmd"),
+                ]
+            );
+        } else {
+            assert_eq!(codex, [home.join(".local").join("bin").join("codex")]);
+        }
+    }
 }

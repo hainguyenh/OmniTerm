@@ -108,10 +108,119 @@ async fn remove_deletes_a_flushed_scrollback_file() {
             shell_launch("echo bye"),
         )
         .unwrap();
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    // Wait for the shell's first output rather than a fixed delay, which is too short when
+    // many test shells start at once.
+    for _ in 0..100 {
+        let replay = manager
+            .sessions
+            .get("session")
+            .and_then(|session| session.output.lock().ok().map(|output| output.replay()))
+            .unwrap_or_default();
+        if !replay.is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     flush(&manager).unwrap();
     assert!(!load(dir.path(), "session").is_empty());
     remove(dir.path(), "session");
     assert!(load(dir.path(), "session").is_empty());
+    manager.disconnect("session").unwrap();
+}
+
+fn recoverable(dir: &std::path::Path) -> SessionManager {
+    let manager = SessionManager::new(dir.to_path_buf()).unwrap();
+    manager
+        .create(
+            "gui",
+            "r1",
+            "session",
+            1,
+            PersistencePolicy::RecoverAfterReboot,
+            shell_launch("echo kept"),
+        )
+        .unwrap();
+    manager
+        .sessions
+        .get("session")
+        .expect("session must exist")
+        .output
+        .lock()
+        .expect("output lock must be healthy")
+        .push(b"durable-bytes");
+    manager
+}
+
+#[tokio::test]
+async fn flush_skips_a_session_whose_output_did_not_change() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = recoverable(dir.path());
+    // Let the shell finish printing so only this test changes the output.
+    let revision = || {
+        manager
+            .sessions
+            .get("session")
+            .and_then(|session| session.output.lock().ok()?.take_flush_snapshot())
+            .map(|(revision, _)| revision)
+    };
+    let mut last = revision();
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let now = revision();
+        if now == last {
+            break;
+        }
+        last = now;
+    }
+    flush(&manager).unwrap();
+    let file = path(dir.path(), "session");
+    std::fs::write(&file, b"sentinel").unwrap();
+    flush(&manager).unwrap();
+    assert_eq!(std::fs::read(&file).unwrap(), b"sentinel");
+    manager.disconnect("session").unwrap();
+}
+
+#[tokio::test]
+async fn flush_reports_an_uncreatable_scrollback_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = recoverable(dir.path());
+    std::fs::write(dir.path().join("scrollback"), b"not a directory").unwrap();
+    let error = flush(&manager).unwrap_err();
+    assert!(
+        error.starts_with("Could not create durable scrollback directory"),
+        "{error}"
+    );
+    manager.disconnect("session").unwrap();
+}
+
+#[tokio::test]
+async fn flush_reports_a_failed_durable_write() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = recoverable(dir.path());
+    // A directory where the scrollback file belongs makes the atomic commit fail.
+    std::fs::create_dir_all(path(dir.path(), "session").join("blocker")).unwrap();
+    let error = flush(&manager).unwrap_err();
+    assert!(error.contains("durable terminal scrollback"), "{error}");
+    manager.disconnect("session").unwrap();
+}
+
+#[tokio::test]
+async fn flush_reports_a_poisoned_output_lock() {
+    let dir = tempfile::tempdir().unwrap();
+    let manager = recoverable(dir.path());
+    let session = std::sync::Arc::clone(&manager.sessions.get("session").unwrap());
+    std::thread::scope(|scope| {
+        let joined = scope
+            .spawn(|| {
+                let _guard = session.output.lock().unwrap();
+                panic!("poisoning the output lock on purpose");
+            })
+            .join();
+        assert!(joined.is_err());
+    });
+    assert_eq!(
+        flush(&manager).unwrap_err(),
+        "Session output lock is poisoned"
+    );
     manager.disconnect("session").unwrap();
 }

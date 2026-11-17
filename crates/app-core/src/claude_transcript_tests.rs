@@ -115,3 +115,83 @@ fn a_missing_session_file_is_an_error() {
     let error = export_transcript(dir.path(), ID).expect_err("missing file");
     assert_eq!(error.kind(), io::ErrorKind::NotFound);
 }
+
+#[test]
+fn an_oversized_session_file_is_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let project = dir.path().join("projects").join("p");
+    fs::create_dir_all(&project).expect("project dir");
+    let file = fs::File::create(project.join(format!("{ID}.jsonl"))).expect("create transcript");
+    file.set_len(MAX_TRANSCRIPT_BYTES + 1)
+        .expect("grow transcript");
+    drop(file);
+
+    let error = export_transcript(dir.path(), ID).expect_err("oversized file");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn a_profile_without_projects_has_no_transcript() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    assert_eq!(find_transcript(dir.path(), ID), None);
+}
+
+#[test]
+fn renders_user_text_blocks_and_skips_noise_blocks() {
+    let jsonl = lines(&[
+        json!({ "type": "user", "timestamp": "", "message": { "content": [
+            { "type": "text", "text": "Block prompt" },
+            { "type": "text", "text": "   " },
+            { "type": "image", "source": {} },
+        ] } }),
+        json!({ "type": "user", "message": { "content": 42 } }),
+        json!({ "type": "user", "message": { "content": "<system-reminder>hidden</system-reminder>" } }),
+        json!({ "type": "user", "message": { "content": "<command-message>only a message</command-message>" } }),
+        json!({ "type": "assistant", "message": { "content": [
+            { "type": "text", "text": "  \n " },
+            { "type": "redacted_thinking" },
+        ] } }),
+    ]);
+
+    let text = render_transcript(&jsonl, ID);
+
+    assert_eq!(
+        text,
+        format!("# Claude Code conversation {ID}\n\n## User\n\nBlock prompt\n")
+    );
+}
+
+#[test]
+fn an_unclosed_command_name_is_kept_as_typed() {
+    assert_eq!(
+        user_text("<command-name>/usage"),
+        Some("<command-name>/usage".to_string())
+    );
+    assert_eq!(user_text(""), None);
+}
+
+#[test]
+fn tool_markers_fall_back_to_json_input_and_bare_tags() {
+    assert_eq!(tool_input_summary(&json!({ "limit": 3 })), r#"{"limit":3}"#);
+    assert_eq!(result_text(&json!({ "nested": true })), "");
+    assert_eq!(marker("tool result", "  \n "), "[tool result]");
+
+    let jsonl = lines(&[
+        json!({ "type": "assistant", "message": { "content": [{ "type": "tool_use", "input": { "limit": 3 } }] } }),
+        json!({ "type": "user", "message": { "content": [{ "type": "tool_result" }] } }),
+    ]);
+    let text = render_transcript(&jsonl, ID);
+    assert!(
+        text.contains("[tool: tool] {\"limit\":3}\n\n[tool result]\n"),
+        "{text}"
+    );
+}
+
+#[test]
+fn timestamps_without_a_clock_or_utc_marker_are_kept() {
+    assert_eq!(format_timestamp("yesterday"), "yesterday");
+    assert_eq!(
+        format_timestamp("2026-09-30T08:15:02+02:00"),
+        "2026-09-30 08:15:02"
+    );
+}

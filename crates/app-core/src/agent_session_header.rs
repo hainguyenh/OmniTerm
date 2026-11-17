@@ -147,3 +147,7 @@ pub fn read_header(path: &Path, agent: SessionAgent) -> SessionHeader {
 pub(crate) fn parse_text(text: &str, agent: SessionAgent) -> SessionHeader {
     parse_lines(text.as_bytes(), agent)
 }
+
+#[cfg(test)]
+#[path = "agent_session_header_tests.rs"]
+mod tests;

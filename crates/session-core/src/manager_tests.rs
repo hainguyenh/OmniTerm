@@ -1,5 +1,15 @@
 use super::*;
 
+// Declared here rather than in manager.rs to keep that file within the size limit; as descendants
+// of `manager` they keep access to its private items, and `use super::*` reaches them through
+// this module's glob import.
+#[path = "manager_interrupted_tests.rs"]
+mod interrupted;
+#[path = "manager_lock_tests.rs"]
+mod lock;
+#[path = "manager_ops_tests.rs"]
+mod ops;
+
 fn shell_launch(command: &str) -> LaunchSpec {
     #[cfg(windows)]
     let (exe, args) = ("cmd.exe".to_string(), vec!["/k".into(), command.into()]);

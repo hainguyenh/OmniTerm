@@ -120,3 +120,10 @@ fn reads_transition_tables_and_their_footer_rule() {
     assert!(Tzif::parse(b"nope").is_none());
     assert!(Tzif::parse(&tzif_v2(&[(1, 5)], &[0], "UTC0")).is_none());
 }
+
+#[test]
+fn refuses_zone_names_too_long_to_be_real() {
+    let long = format!("Asia/{}", "a".repeat(60));
+    assert!(!is_known(&long));
+    assert!(is_known("Europe/Berlin"));
+}

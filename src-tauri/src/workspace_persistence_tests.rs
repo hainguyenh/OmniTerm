@@ -77,3 +77,21 @@ fn write_workspaces_rejects_an_invalid_list() {
     let err = write_workspaces(app.handle(), &dup).unwrap_err();
     assert!(err.contains("unique"), "got: {err}");
 }
+
+/// A catalog path that is occupied by a directory is reported on both read and write, not
+/// mistaken for an empty catalog or silently skipped.
+#[test]
+fn an_unreadable_catalog_path_is_an_error_for_read_and_write() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = workspaces_file(app.handle()).expect("path");
+    let _ = std::fs::remove_file(&path);
+    std::fs::create_dir_all(&path).expect("occupy the catalog path with a directory");
+
+    let read = read_workspaces(app.handle());
+    let write = write_workspaces(app.handle(), &[]);
+    std::fs::remove_dir_all(&path).expect("clean up the directory");
+
+    assert!(read.is_err(), "reading a directory must fail");
+    assert!(write.is_err(), "writing over a directory must fail");
+}

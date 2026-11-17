@@ -237,3 +237,7 @@ impl<D: ProviderDeps> QuotaService<D> {
 #[cfg(test)]
 #[path = "service_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "service_edge_tests.rs"]
+mod edge_tests;

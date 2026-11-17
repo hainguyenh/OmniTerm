@@ -11,6 +11,10 @@ use std::time::Instant;
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::Notify;
 
+#[cfg(test)]
+#[path = "update_coordinator_tests.rs"]
+mod tests;
+
 #[derive(Default)]
 pub struct UpdatesCoordinator {
     started: AtomicBool,

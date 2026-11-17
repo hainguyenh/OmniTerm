@@ -217,3 +217,167 @@ fn classifies_rate_limits_by_length_and_carries_credits() {
     assert_eq!(parse_rate_limits(&json!({})), None);
     assert_eq!(parse_rate_limits(&json!("nope")), None);
 }
+
+fn sessions() -> PathBuf {
+    codex().join("sessions")
+}
+
+fn primary_used(reading: Option<RolloutReading>) -> Option<f64> {
+    reading.map(|reading| reading.windows[0].used_pct)
+}
+
+#[test]
+fn picks_the_most_recently_modified_rollout_of_the_newest_day_that_has_one() {
+    let a = event(now() - 3000, &rate_limits(10.0, 1.0));
+    let b = event(now() - 2000, &rate_limits(20.0, 1.0));
+    let c = event(now() - 1000, &rate_limits(30.0, 1.0));
+    let deps = FakeDeps::new(&[
+        (rollout_file("25", "rollout-a.jsonl"), a.as_str()),
+        (rollout_file("25", "rollout-b.jsonl"), b.as_str()),
+        (rollout_file("25", "rollout-c.jsonl"), c.as_str()),
+        (rollout_file("25", "rollout-d.txt"), c.as_str()),
+        (rollout_file("25", "notes.jsonl"), c.as_str()),
+        (rollout_file("26", "readme.md"), ""),
+        (
+            sessions().join("latest").join("rollout-z.jsonl"),
+            c.as_str(),
+        ),
+    ])
+    .with_mtime(|file| {
+        let name = file
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned());
+        Ok(Some(match name.as_deref() {
+            Some("rollout-a.jsonl") => 100,
+            Some("rollout-b.jsonl") => 200,
+            _ => 50,
+        }))
+    });
+    // Day 26 holds no rollout and `latest` is not a year, so day 25's newest file is read.
+    assert_eq!(
+        primary_used(read_latest_rollout(&codex(), &deps).expect("readable")),
+        Some(20.0)
+    );
+}
+
+#[test]
+fn reports_a_failure_at_any_depth_of_the_session_tree() {
+    let day = sessions().join("2026").join("09").join("25");
+    let failing = [
+        sessions().join("2026"),
+        sessions().join("2026").join("09"),
+        day.clone(),
+    ];
+    for broken in failing {
+        let listed_day = day.clone();
+        let deps = FakeDeps::new(&[]).listing(move |dir| {
+            if dir == broken {
+                return Err(io::Error::other("unreadable"));
+            }
+            let parent = listed_day.parent().map(Path::to_path_buf);
+            let next = [
+                (sessions(), "2026"),
+                (sessions().join("2026"), "09"),
+                (parent.unwrap_or_default(), "25"),
+                (listed_day.clone(), "rollout-a.jsonl"),
+            ]
+            .into_iter()
+            .find(|(known, _)| known == dir)
+            .map(|(_, name)| vec![name.to_string()]);
+            Ok(next.unwrap_or_default())
+        });
+        assert_eq!(
+            read_latest_rollout(&codex(), &deps)
+                .expect_err("unreadable")
+                .to_string(),
+            "unreadable"
+        );
+    }
+    let text = event(now(), &rate_limits(1.0, 1.0));
+    let deps = FakeDeps::new(&[(rollout_file("25", "rollout-a.jsonl"), text.as_str())])
+        .with_mtime(|_| Err(io::Error::other("no stat")));
+    assert_eq!(
+        read_latest_rollout(&codex(), &deps)
+            .expect_err("unreadable")
+            .to_string(),
+        "no stat"
+    );
+}
+
+#[test]
+fn returns_none_when_the_newest_rollout_cannot_be_read() {
+    let day = sessions().join("2026").join("09").join("25");
+    let deps = FakeDeps::new(&[]).listing(move |dir| {
+        let name = if dir == sessions() {
+            "2026"
+        } else if dir == sessions().join("2026") {
+            "09"
+        } else if dir == sessions().join("2026").join("09") {
+            "25"
+        } else if dir == day {
+            "rollout-a.jsonl"
+        } else {
+            return Ok(Vec::new());
+        };
+        Ok(vec![name.to_string()])
+    });
+    assert_eq!(
+        read_latest_rollout(&codex(), &deps).expect("readable"),
+        None
+    );
+}
+
+#[test]
+fn skips_events_without_a_usable_rate_limits_payload() {
+    let good = event(now() - 5000, &rate_limits(12.0, 1.0));
+    let lines = [
+        good,
+        json!({ "timestamp": "2026-09-25T02:00:00Z", "rate_limits": {} }).to_string(),
+        json!({ "timestamp": "2026-09-25T02:00:00Z", "payload": { "x": 1 }, "y": "rate_limits" })
+            .to_string(),
+        event(now() - 1000, &json!("rate_limits")),
+        event(now() - 1000, &json!({ "primary": null })),
+    ]
+    .join("\n");
+    let deps = FakeDeps::new(&[(rollout_file("25", "rollout-a.jsonl"), lines.as_str())]);
+    assert_eq!(
+        primary_used(read_latest_rollout(&codex(), &deps).expect("readable")),
+        Some(12.0)
+    );
+}
+
+#[test]
+fn carries_credits_only_when_the_account_has_them() {
+    let credits_of = |credits: Option<Value>| {
+        let mut limits = json!({ "primary": { "used_percent": 5 } });
+        if let Some(credits) = credits {
+            limits["credits"] = credits;
+        }
+        parse_rate_limits(&limits).expect("a window").1
+    };
+    assert_eq!(credits_of(None), None);
+    assert_eq!(credits_of(Some(json!(5))), None);
+    assert_eq!(credits_of(Some(json!({ "has_credits": false }))), None);
+    assert_eq!(
+        credits_of(Some(json!({ "has_credits": true, "balance": 3 }))),
+        Some(QuotaCredits {
+            balance: Some(3.0),
+            unlimited: false
+        })
+    );
+}
+
+#[test]
+fn ignores_session_entries_that_are_not_dated_folders() {
+    let deps = FakeDeps::new(&[]).listing(|dir| {
+        Ok(if dir == sessions() {
+            vec![String::new(), "abc".to_string(), "20x6".to_string()]
+        } else {
+            vec!["rollout-a.jsonl".to_string()]
+        })
+    });
+    assert_eq!(
+        read_latest_rollout(&codex(), &deps).expect("readable"),
+        None
+    );
+}

@@ -122,6 +122,50 @@ mod tests {
     }
 
     #[test]
+    fn beginning_a_running_id_again_cancels_the_older_request() {
+        let requests = Requests::default();
+        let first = requests.begin(RequestId(4));
+        let second = requests.begin(RequestId(4));
+        assert!(first.is_cancelled());
+        assert!(!second.is_cancelled());
+    }
+
+    #[test]
+    fn expired_early_cancels_are_forgotten() {
+        let requests = Requests::default();
+        let long_ago = Instant::now()
+            .checked_sub(EARLY_CANCEL_TTL + Duration::from_secs(1))
+            .expect("the clock has run longer than the cancel TTL");
+        requests.lock().early.push_back((RequestId(5), long_ago));
+        assert!(!requests.begin(RequestId(5)).is_cancelled());
+        assert!(requests.lock().early.is_empty());
+    }
+
+    #[test]
+    fn a_poisoned_lock_keeps_serving_requests() {
+        let requests = Requests::default();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = requests.inner.lock().expect("not yet poisoned");
+            panic!("poison the request table for the test");
+        }));
+        assert!(requests.inner.is_poisoned());
+        let token = requests.begin(RequestId(6));
+        requests.cancel(RequestId(6));
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
+    fn the_cancel_command_reaches_the_managed_request_table() {
+        use tauri::Manager;
+
+        let app = crate::test_support::mock_app();
+        app.manage(Requests::default());
+        let token = app.state::<Requests>().begin(RequestId(9));
+        cancel_request(app.state::<Requests>(), RequestId(9));
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
     fn a_finished_request_is_not_cancelled_again() {
         let requests = Requests::default();
         let token = requests.begin(RequestId(3));

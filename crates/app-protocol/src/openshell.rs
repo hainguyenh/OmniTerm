@@ -339,4 +339,21 @@ mod tests {
         assert_eq!(req.cwd, None);
         assert_eq!(req.name, expected.default_name());
     }
+
+    /// The renderer's quick-shell overrides get the same caps as the launcher argv.
+    #[test]
+    fn renderer_overrides_are_capped_like_launcher_flags() {
+        assert_eq!(cap_cwd(None), None);
+        assert_eq!(cap_cwd(Some("")), None);
+        assert_eq!(cap_cwd(Some("/srv/app")), Some("/srv/app".to_string()));
+        assert_eq!(
+            cap_cwd(Some(&"d".repeat(MAX_CWD + 5))).map(|cwd| cwd.len()),
+            Some(MAX_CWD)
+        );
+        assert_eq!(cap_command(Some("ls -la")), Some("ls -la".to_string()));
+        assert_eq!(
+            cap_command(Some(&"c".repeat(MAX_COMMAND + 1))).map(|command| command.len()),
+            Some(MAX_COMMAND)
+        );
+    }
 }

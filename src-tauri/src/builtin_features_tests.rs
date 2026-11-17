@@ -52,3 +52,18 @@ fn leaves_node_plugin_ids_to_the_plugin_host() {
         None
     );
 }
+
+#[test]
+fn switching_always_awake_without_its_native_state_still_persists_the_choice() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    write_settings_raw(app.handle(), defaults()).expect("reset the settings");
+    assert!(app.try_state::<AlwaysAwakeState>().is_none());
+
+    let row = set_enabled(app.handle(), features::ALWAYS_AWAKE, false)
+        .expect("saved")
+        .expect("a built-in feature row");
+    assert_eq!(row["enabled"], json!(false));
+    assert!(!is_enabled(app.handle(), features::ALWAYS_AWAKE));
+    set_enabled(app.handle(), features::ALWAYS_AWAKE, true).expect("restored");
+}

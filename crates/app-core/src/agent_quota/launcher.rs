@@ -80,3 +80,7 @@ pub fn agent_command(
         env: profile_env(variable, profile_dir, &default_dir, deps.env()),
     })
 }
+
+#[cfg(test)]
+#[path = "launcher_tests.rs"]
+mod tests;

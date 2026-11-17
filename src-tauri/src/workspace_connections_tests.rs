@@ -162,3 +162,23 @@ fn read_at_reads_saved_connections_and_find_by_id_locates_them() {
     }
     fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn an_omniterm_folder_without_a_connections_file_reads_as_empty() {
+    let dir = temp_workspace();
+    fs::create_dir_all(dir.join(".omniterm")).expect("create .omniterm");
+    assert!(read_at(dir.to_str().expect("utf-8 temp path"))
+        .expect("an absent file is not an error")
+        .is_empty());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_corrupt_workspace_catalog_resolves_no_connection() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = crate::workspace_persistence::workspaces_file(app.handle()).expect("store path");
+    fs::write(&path, "{ not json").expect("write a corrupt catalog");
+    assert!(find_by_id(app.handle(), "anything").is_none());
+    fs::remove_file(path).ok();
+}
