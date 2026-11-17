@@ -1,6 +1,6 @@
 id = "omniterm.blame-annotations"
 name = "Blame Annotations (API Example)"
-version = "0.1.0"
+version = "0.0.1"
 description = "Small plugin API 1.4 example; see the package README."
 authors = ["OmniTerm contributors"]
 license = "Apache-2.0"

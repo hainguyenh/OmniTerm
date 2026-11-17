@@ -104,6 +104,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm assets:generate
+      - run: pnpm stage:plugins
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
@@ -144,6 +145,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm assets:generate
+      - run: pnpm stage:plugins
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update

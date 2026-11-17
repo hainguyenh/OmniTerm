@@ -1,10 +1,10 @@
 id = "omniterm.string-tools"
 name = "String Tools"
-version = "0.1.0"
+version = "0.0.1"
 description = "Case conversion (camelCase, snake_case, kebab-case…), encoding (Base64, URL, HTML, JSON), line sorting and more, on every selection at once."
 authors = ["OmniTerm contributors"]
 license = "Apache-2.0"
-change-notes = "0.1.0 — first release: 26 commands in four groups."
+change-notes = "0.0.1 — first release: 26 commands in four groups."
 categories = ["tools"]
 engines.omniterm = "^1.0"
 wasm = "dist/plugin.wasm"

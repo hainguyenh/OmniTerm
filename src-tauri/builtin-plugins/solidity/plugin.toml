@@ -1,10 +1,10 @@
 id = "omniterm.solidity"
 name = "Solidity"
-version = "0.1.0"
+version = "0.0.1"
 description = "Solidity support: file detection, highlighting, structure view and folding, plus the Solidity language server when it is installed."
 authors = ["OmniTerm contributors"]
 license = "Apache-2.0"
-change-notes = "0.1.0 — first release: .sol detection, highlighting, structure view, folding; language server via @nomicfoundation/solidity-language-server or solc."
+change-notes = "0.0.1 — first release: .sol detection, highlighting, structure view, folding; language server via @nomicfoundation/solidity-language-server or solc."
 categories = ["languages"]
 engines.omniterm = "^1.0"
 # Highlighting, structure and folding come from this component; it is loaded

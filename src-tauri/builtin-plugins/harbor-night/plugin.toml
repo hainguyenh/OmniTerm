@@ -2,11 +2,11 @@
 # `omniterm-plugin new --template theme` starts a new theme from this one.
 id = "omniterm.harbor-night"
 name = "Harbor Night"
-version = "0.1.0"
+version = "0.0.1"
 description = "A dark theme: slate surfaces, a teal accent and a warm syntax palette."
 authors = ["OmniTerm contributors"]
 license = "Apache-2.0"
-change-notes = "1.0.0 — first release."
+change-notes = "0.0.1 — first release."
 engines.omniterm = "^1.0"
 
 # One entry per theme. `editor-scheme` is optional: its tokens are merged over
