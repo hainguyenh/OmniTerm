@@ -513,7 +513,8 @@ mod tests {
         )
         .unwrap();
         let ok = std::process::Command::new(bin("javac"))
-            .args(["--release", "8", "-d"])
+            // Newer JDKs warn that release 8 is obsolete; the old target is the point here.
+            .args(["--release", "8", "-Xlint:-options", "-d"])
             .arg(&classes)
             .arg(src.join("p/Main.java"))
             .status()

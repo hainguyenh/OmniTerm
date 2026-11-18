@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentQuotaAPI } from '../agentQuotaAPI'
 
+import { diag } from '../../../diag'
 import { mockOmnitermAPI } from '../../../testUtils'
 import { AgentQuotaRoot, QUICK_SETTINGS_EVENT, SETTINGS_TAB_EVENT } from '../AgentQuotaRoot'
 import { getQuotaState, quotaCommands, resetQuotaStore } from '../quotaStore'
@@ -127,10 +128,14 @@ describe('AgentQuotaRoot', () => {
 
   it('logs a failed resume-all on shutdown', async () => {
     const api = fakeApi(true)
-    vi.mocked(api.resumeAll).mockRejectedValueOnce(new Error('ipc gone'))
+    const failure = new Error('ipc gone')
+    vi.mocked(api.resumeAll).mockRejectedValueOnce(failure)
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const { unmount } = render(<AgentQuotaRoot api={api} appSettings={settings} setAppSettings={vi.fn()} sessionIds={[]} busy={{}} openSettings={vi.fn()} />)
     await waitFor(() => expect(getQuotaState().available).toBe(true))
     unmount()
-    await waitFor(() => expect(api.resumeAll).toHaveBeenCalled())
+    await waitFor(() => expect(report).toHaveBeenCalledWith('[agentQuota] resume-all on shutdown failed', failure))
+    expect(api.resumeAll).toHaveBeenCalled()
+    report.mockRestore()
   })
 })

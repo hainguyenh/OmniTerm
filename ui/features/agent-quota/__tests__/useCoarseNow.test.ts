@@ -1,13 +1,18 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, renderHook } from '@testing-library/react'
+import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { resetQuotaStore, setQuotaNow, updateQuota, useCoarseNow } from '../quotaStore'
 
 beforeEach(() => resetQuotaStore())
-afterEach(() => resetQuotaStore())
+// Unmount before resetting: the reset notifies the store and clock listeners, and a still-mounted
+// view would re-render outside act().
+afterEach(() => {
+  cleanup()
+  resetQuotaStore()
+})
 
 describe('useCoarseNow', () => {
   it('buckets the clock to 30s without a nearby deadline', () => {

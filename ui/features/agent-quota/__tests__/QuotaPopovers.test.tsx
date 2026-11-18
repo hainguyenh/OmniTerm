@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useQuotaActivityEntry } from '../activityEntry'
@@ -14,7 +14,10 @@ import { getQuotaState, pushNotice, registerQuotaCommands, requestConfirm, reset
 import { NOW, profile, reading, seed, terminal } from './quotaFixtures'
 
 beforeEach(() => resetQuotaStore())
+// Unmount before resetting: the reset notifies the store and clock listeners, and a still-mounted
+// view would re-render outside act().
 afterEach(() => {
+  cleanup()
   resetQuotaStore()
   vi.clearAllTimers()
   vi.useRealTimers()

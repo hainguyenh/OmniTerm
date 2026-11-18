@@ -35,6 +35,18 @@ describe('Empirical Challenger M4: Adversarial Stress & Confinement Suite', () =
   const disposers: Array<() => void> = []
 
   beforeEach(() => {
+    // Activating the workbench registers OmniTerm's plugin source and probes the built-in Agent Quota
+    // and Always Awake features; no plugins are installed and both features are off here.
+    vi.stubGlobal('omnitermAPI', {
+      agentQuota: { info: () => Promise.resolve(false) },
+      alwaysAwake: { info: () => Promise.resolve(false) },
+      plugin: {
+        list: () => Promise.resolve([]),
+        builtinIds: () => Promise.resolve([]),
+        onChanged: () => () => {},
+        setEnabled: () => Promise.resolve(null),
+      },
+    })
     act(() => {
       useRun.setState({
         configs: [],
@@ -55,6 +67,7 @@ describe('Empirical Challenger M4: Adversarial Stress & Confinement Suite', () =
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     while (disposers.length > 0) {
       try {
         disposers.pop()?.()

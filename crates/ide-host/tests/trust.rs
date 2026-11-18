@@ -491,7 +491,7 @@ async fn a_restricted_project_is_indexed_only_once_it_is_trusted() {
     std::fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
     let app = tmp.path().join("app");
     std::fs::create_dir_all(app.join("config")).unwrap();
-    // No scan delay, so the test doesn't wait for the default three seconds.
+    // No scan delay, so the test doesn't wait for the default ten seconds.
     std::fs::write(app.join("config/settings.toml"), "[index]\nscanDelayMs = 0\n").unwrap();
     let host = host(&app, false);
     let project = host.open_project("main", &root).unwrap();

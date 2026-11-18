@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { renderHook, waitFor } from '@testing-library/react'
+import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useProject } from '../../../ide/platform/project'
@@ -20,6 +20,8 @@ describe('useThemeSync', () => {
     useUnifiedTheme.setState({ choice: 'light', mode: 'light' })
   })
   afterEach(() => {
+    // Unmount first: this hook runs before RTL's own cleanup, and the reset would re-render it outside act.
+    cleanup()
     useProject.setState({ settings: null })
   })
 

@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { QuotaConfig } from '../quotaConfig'
@@ -24,7 +24,12 @@ const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }
 const openGroup = (name: 'Agents' | 'Quota lines' | 'Loading artwork') => fireEvent.click(screen.getByRole('tab', { name }))
 
 beforeEach(() => resetQuotaStore())
-afterEach(() => resetQuotaStore())
+// Unmount before resetting: the reset notifies the store and clock listeners, and a still-mounted
+// view would re-render outside act().
+afterEach(() => {
+  cleanup()
+  resetQuotaStore()
+})
 
 describe('AgentQuotaSettings', () => {
   it('edits land in a draft — nothing saves until Apply', () => {

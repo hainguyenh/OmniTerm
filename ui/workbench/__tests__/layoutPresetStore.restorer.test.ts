@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { diag } from '../../diag'
 import { useTabs } from '../../ide/editor/core/controller'
 import { initialTabsState, openTab } from '../../ide/editor/core/model/tabs'
 import { useProject } from '../../ide/platform/project'
@@ -179,8 +180,10 @@ describe('startPresetRestorer', () => {
   it('logs and carries on when applying the preset fails', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ [projectKey('C:/proj-a')]: '2x2' }))
     const stop = startPresetRestorer()
+    const warn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     vi.spyOn(presets, 'applyPreset').mockImplementation(() => { throw new Error('bad layout') })
     seed(4)
+    expect(warn).toHaveBeenCalledWith('[layout] could not bring back the layout preset', expect.any(Error))
     stop()
   })
 

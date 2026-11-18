@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { diag } from '../../../diag'
 import { useSettingsPages } from '../../../ide/workbench/contributions'
 import { registerOmniTermSettingsPages } from '../registerOmniTermSettingsPages'
 import { agentSettingsPage, OMNITERM_SETTINGS_PAGES as IDS } from '../settingsPageIds'
@@ -20,13 +21,19 @@ function stubApi(quota: boolean, awake: boolean | (() => boolean)) {
 const pages = () => useSettingsPages.getState().pages
 
 beforeEach(() => useSettingsPages.setState({ pages: new Map() }))
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('registerOmniTermSettingsPages', () => {
   it('registers the always-present pages in the group of their feature', async () => {
+    const warn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     stubApi(false, false)
     const stop = registerOmniTermSettingsPages()
     await new Promise((r) => setTimeout(r, 0))
+    // Always awake's probe rejects here, which counts as switched off.
+    expect(warn).toHaveBeenCalledWith('[settings] feature probe failed', expect.objectContaining({ message: 'no command' }))
     expect(pages().get(IDS.terminal)?.title).toBe('Terminal')
     expect(pages().get(IDS.terminal)?.group).toBeUndefined()
     expect(pages().get(IDS.agentSessions)).toMatchObject({ title: 'Agent Sessions', group: 'Agents' })

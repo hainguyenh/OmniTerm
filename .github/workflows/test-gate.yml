@@ -76,9 +76,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # Clippy and the test suite share a toolchain and a target directory, so running them in one job
-  # lets `cargo test` reuse what `clippy --all-targets` already built instead of compiling the
-  # workspace from a cold cache on a second runner.
+  # Lint only. The Rust test suite runs once, inside `rust-coverage`: `cargo llvm-cov` runs the same
+  # `cargo test --workspace` test set (the workspace has no doctests), so a second plain run here only
+  # doubled the time. The job keeps its name because it is a required status check in the ruleset.
   rust-checks:
     name: Rust — Clippy & Tests
     runs-on: ubuntu-latest
@@ -105,10 +105,20 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm assets:generate
       - run: pnpm stage:plugins
+      # The Ubuntu mirror has served these ~70 MB at 65 kB/s (17 minutes), so the downloaded .deb
+      # files are kept per runner image. apt still installs from them, and fetches only what changed.
+      - name: Cache Tauri system packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-tauri-${{ runner.os }}-${{ env.ImageOS }}-${{ env.ImageVersion }}
       - name: Install Tauri system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y -o Acquire::Retries=3 -o Dir::Cache::Archives="$HOME/apt-archives"             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
+          rm -f ~/apt-archives/lock
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -118,7 +128,6 @@ jobs:
         with:
           workspaces: .
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
 
   rust-coverage:
     name: Rust — Coverage (llvm-cov)
@@ -146,24 +155,41 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm assets:generate
       - run: pnpm stage:plugins
+      # The Ubuntu mirror has served these ~70 MB at 65 kB/s (17 minutes), so the downloaded .deb
+      # files are kept per runner image. apt still installs from them, and fetches only what changed.
+      - name: Cache Tauri system packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-tauri-xvfb-${{ runner.os }}-${{ env.ImageOS }}-${{ env.ImageVersion }}
       - name: Install Tauri system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev xvfb xauth
+          mkdir -p ~/apt-archives/partial
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get install -y -o Acquire::Retries=3 -o Dir::Cache::Archives="$HOME/apt-archives"             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev xvfb xauth
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-archives
+          rm -f ~/apt-archives/lock
       # LLVM branch instrumentation is nightly-only, and a nightly build cannot share the stable
-      # cache, so this stays a separate job from `rust-checks`.
-      - uses: dtolnay/rust-toolchain@nightly
+      # cache, so this stays a separate job from `rust-checks`. The nightly is pinned: the cache key
+      # includes the compiler version, so a floating `nightly` started every day from a cold build.
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: nightly-2026-11-17
           components: llvm-tools-preview
+      # The coverage script builds into a temp directory by default, which no cache step saw, so the
+      # instrumented dependencies were rebuilt from scratch every run. Inside the workspace,
+      # rust-cache keeps them (it drops the workspace's own crates before saving).
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: .
+          workspaces: . -> target/coverage/llvm-cov-target
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate full-source Rust coverage
         # Tauri/Wry initializes GTK before the coverage-smoke setup hook can request exit.
         # A virtual X server lets the real binary boot in headless GitHub Actions.
         run: xvfb-run -a node scripts/run-rust-coverage.mjs
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target/coverage
       - uses: actions/upload-artifact@v6
         if: always()
         with:

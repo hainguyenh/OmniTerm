@@ -131,7 +131,7 @@ fn picked_venv_folders_and_executables_are_validated_without_resolving_symlinks(
 
 #[test]
 fn a_real_existing_virtualenv_resolves_from_its_folder_or_platform_executable() {
-    let Some(base) = crate::exec::which("python3").or_else(|| crate::exec::which("python")) else { return };
+    let Some(base) = runnable_python(&["python3", "python"]) else { return };
     let tmp = tempfile::tempdir().unwrap();
     let home = tmp.path().join("existing");
     let status =
@@ -1149,6 +1149,15 @@ fn pip_list_output_is_parsed() {
     assert_eq!(pkgs[0].version, "2.32.0");
 }
 
+/// The first of `names` on `PATH` that really runs. Windows puts Microsoft Store aliases named
+/// `python3.exe` on `PATH` that only print an install hint and exit 9009; tests skip those
+/// like a machine with no Python at all.
+fn runnable_python(names: &[&str]) -> Option<std::path::PathBuf> {
+    names.iter().filter_map(|name| crate::exec::which(name)).find(|path| {
+        std::process::Command::new(path).args(["-c", "import sys"]).output().is_ok_and(|out| out.status.success())
+    })
+}
+
 /// A directory whose `typing.py` breaks any interpreter that imports it from there.
 fn shadowing_dir() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
@@ -1159,7 +1168,7 @@ fn shadowing_dir() -> tempfile::TempDir {
 
 #[test]
 fn venv_creation_ignores_modules_in_the_working_directory() {
-    let Some(python) = crate::exec::which("python3") else { return };
+    let Some(python) = runnable_python(&["python3"]) else { return };
     let shadow = shadowing_dir();
     // Precondition: without isolation the shadowing module is picked up.
     let plain =

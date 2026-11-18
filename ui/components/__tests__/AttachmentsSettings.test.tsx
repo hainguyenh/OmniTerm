@@ -57,9 +57,10 @@ describe('AttachmentsSettings', () => {
     expect(screen.getByRole('button', { name: /Clear all/ })).toBeDisabled()
   })
 
-  it('shows the large-paste thresholds and saves a clamped value when a field is committed', () => {
+  it('shows the large-paste thresholds and saves a clamped value when a field is committed', async () => {
     const onLargePasteChange = vi.fn()
     render(<AttachmentsSettings largePaste={{ promptChars: 2000 }} onLargePasteChange={onLargePasteChange} />)
+    await waitFor(() => expect(screen.getByTestId('attachments-summary')).toHaveTextContent('2 files'))
     const prompt = screen.getByLabelText('Ask to attach pasted text from (characters)')
     const attach = screen.getByLabelText('Attach as a document without asking above (characters)')
     expect(prompt).toHaveValue(2000)

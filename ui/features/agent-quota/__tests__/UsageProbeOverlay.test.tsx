@@ -36,8 +36,11 @@ describe('UsageProbeOverlay', () => {
     expect(screen.queryByTestId('usage-probe-overlay')).toBeNull()
 
     let done = false
-    const probe = probeUsageInline(codex, io).then(() => { done = true })
-    await act(async () => {})
+    let probe: Promise<void> = Promise.resolve()
+    // The probe veils the pane synchronously as it starts, so it starts inside act().
+    await act(async () => {
+      probe = probeUsageInline(codex, io).then(() => { done = true })
+    })
     expect(screen.getByTestId('usage-probe-overlay')).toHaveTextContent('Reading quota with /status')
 
     while (!done) await act(async () => { wake() })

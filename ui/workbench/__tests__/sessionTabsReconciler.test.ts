@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
+// The reconciler imports the terminal dock store, which reads its saved state from localStorage when
+// it is imported; this suite runs in node, where there is none.
+vi.hoisted(() => {
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} })
+})
+
 import { initialTabsState, openTab, paneIds, splitPane, type TabsState } from '../../ide/editor/core/model/tabs'
 import type { EditorInput } from '../../ide/workbench/contributions'
 import { SESSIONS_KIND } from '../sessionsHostCore'

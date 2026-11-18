@@ -16,6 +16,9 @@ async fn opens_unity_without_generated_solutions_and_excludes_caches_from_the_in
     std::fs::write(root.join("Library/PackageCache/Cached.cs"), "class Cached {}\n").unwrap();
     std::fs::write(root.join("Temp/Temporary.cs"), "class Temporary {}\n").unwrap();
     std::fs::write(root.join("Logs/Editor.log"), "log\n").unwrap();
+    // Skip the default scan delay so the idle wait measures only the scan.
+    std::fs::create_dir(base.join("config")).unwrap();
+    std::fs::write(base.join("config/settings.toml"), "[index]\nscanDelayMs = 0\n").unwrap();
     let host = Host::new(HostConfig {
         config_dir: base.join("config"),
         data_dir: base.join("data"),

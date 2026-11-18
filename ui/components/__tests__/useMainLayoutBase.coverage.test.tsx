@@ -186,8 +186,10 @@ describe('useMainLayoutBase complete behavior', () => {
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'omniterm:focus-terminal' }))
   })
 
-  it('reattach without a target slot leaves the pane layout untouched', () => {
+  it('reattach without a target slot leaves the pane layout untouched', async () => {
     const { result } = renderHook(() => useMainLayoutBase(props()))
+    // Let the loads the layout starts on mount (shells, artwork, workspaces) settle inside act.
+    await act(async () => {})
     act(() => { result.current.setPanes(['a', 'b', null, null]) })
     act(() => result.current.reattachTerminal('b'))
     expect(result.current.panes).toEqual(['a', 'b', null, null])
@@ -241,10 +243,13 @@ describe('useMainLayoutBase complete behavior', () => {
   it('logs session-open failures and falls back to the selected shell', async () => {
     openNewSession.mockRejectedValueOnce(new Error('shell failed'))
     const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // With no notification service provided, the failure notice falls back to the console.
+    const notice = vi.spyOn(console, 'info').mockImplementation(() => {})
     renderHook(() => useMainLayoutBase(props({ appSettings: { ...settings, defaultShell: 'missing' } })))
     act(() => window.dispatchEvent(new Event('omniterm:new-session')))
     await waitFor(() => expect(openNewSession).toHaveBeenCalledWith('powershell', expect.any(Function)))
     await waitFor(() => expect(error).toHaveBeenCalled())
+    expect(notice).toHaveBeenCalledWith('[error] Could not start the session: shell failed')
   })
 
   it('resizes and persists the sidebar, switches views, keeps previews, and reveals editors', async () => {
@@ -292,9 +297,10 @@ describe('useMainLayoutBase complete behavior', () => {
   })
 
 
-  it('bounds font size', () => {
+  it('bounds font size', async () => {
     const p = props({ setAppSettings: vi.fn() })
     const { result } = renderHook(() => useMainLayoutBase(p))
+    await act(async () => {})
     act(() => result.current.updateFontSize(100))
     expect(p.setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ fontSize: 48 }))
     act(() => result.current.updateFontSize(-100))

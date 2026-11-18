@@ -62,9 +62,12 @@ describe('workspace title items', () => {
     expect(useWorkspaceStore.getState()).toMatchObject({ scope: 'workspace', selection: 'b::solo' })
   })
 
-  it('the workspace popup offers All workspaces only with several workspaces', () => {
+  it('the workspace popup offers All workspaces only with several workspaces', async () => {
     useWorkspaceStore.setState({ workspaces: [catalog[0] as Workspace] })
+    // The popup refreshes the catalog when it opens, so the backend has to agree there is only one.
+    vi.mocked(window.omnitermAPI.workspace.list).mockResolvedValue([catalog[0] as Workspace])
     render(<WorkspacePopup anchor={createRef()} onClose={() => {}} />)
+    await screen.findByText('2 projects · 2 connections')
     expect(screen.queryByText('All workspaces')).toBeNull()
   })
 
@@ -85,8 +88,8 @@ describe('workspace title items', () => {
 
   it('the filter goes back to all projects when the workspace changes and hides without folders', () => {
     render(<ProjectFilterItem />)
-    useProjectFilterStore.getState().setFilter('D:/w/docs')
-    useWorkspaceStore.getState().selectWorkspace('b')
+    act(() => useProjectFilterStore.getState().setFilter('D:/w/docs'))
+    act(() => useWorkspaceStore.getState().selectWorkspace('b'))
     expect(useProjectFilterStore.getState().filter).toBe('all')
     act(() => useWorkspaceStore.setState({ workspaces: [ws('a', [])], selection: 'a' }))
     expect(screen.queryByTestId('project-filter')).toBeNull()

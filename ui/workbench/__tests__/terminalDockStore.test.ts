@@ -3,6 +3,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// Hoisted so the store sees the same `warn` after `vi.resetModules()` re-imports it.
+const { warn } = vi.hoisted(() => ({ warn: vi.fn() }))
+vi.mock('../../diag', () => ({ diag: { warn, error: vi.fn(), log: vi.fn(), info: vi.fn(), debug: vi.fn() } }))
+
 import { resetSessionBridge, useSessionBridge, type SessionBridgeApi, type SessionInfo } from '../sessions/sessionBridge'
 import {
   PENDING_DOCK_MS,
@@ -33,7 +37,10 @@ const info = (id: string): SessionInfo => ({
 const publish = (...ids: string[]) => useSessionBridge.setState({ sessions: ids.map(info), api, restoreSettled: true })
 const saved = () => JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as unknown
 
-beforeEach(() => resetTerminalDock())
+beforeEach(() => {
+  warn.mockClear()
+  resetTerminalDock()
+})
 afterEach(() => {
   resetTerminalDock()
   resetSessionBridge()
@@ -96,6 +103,7 @@ describe('restoring the saved dock', () => {
   it('starts empty from unreadable or foreign data', async () => {
     localStorage.setItem(STORAGE_KEY, '{not json')
     expect(await load()).toMatchObject({ docked: [], active: null })
+    expect(warn).toHaveBeenCalledWith('[terminal-dock] ignoring unreadable saved state', expect.any(SyntaxError))
     localStorage.setItem(STORAGE_KEY, '"text"')
     expect(await load()).toMatchObject({ docked: [], active: null })
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ docked: 'a' }))

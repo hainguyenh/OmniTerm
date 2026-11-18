@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useDebug, type DebugSession } from '../../ide/features/debugger/state'
 import { useRun, type RunSession } from '../../ide/features/run/store'
@@ -18,6 +18,18 @@ describe('Milestone 4: Run & Debug Stress & Session Preservation Suite', () => {
   const disposers: Array<() => void> = []
 
   beforeEach(() => {
+    // Activating the workbench registers OmniTerm's plugin source and probes the built-in Agent Quota
+    // and Always Awake features; no plugins are installed and both features are off here.
+    vi.stubGlobal('omnitermAPI', {
+      agentQuota: { info: () => Promise.resolve(false) },
+      alwaysAwake: { info: () => Promise.resolve(false) },
+      plugin: {
+        list: () => Promise.resolve([]),
+        builtinIds: () => Promise.resolve([]),
+        onChanged: () => () => {},
+        setEnabled: () => Promise.resolve(null),
+      },
+    })
     act(() => {
       useRun.setState({
         configs: [],
@@ -38,6 +50,7 @@ describe('Milestone 4: Run & Debug Stress & Session Preservation Suite', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     while (disposers.length > 0) {
       try {
         disposers.pop()?.()

@@ -19,7 +19,13 @@ export function FrozenProcessesDialog() {
   const guard = useQuota((state) => (terminal ? state.guards[terminal.instanceKey] : undefined))
   const now = useQuotaNow()
 
-  const [processes, setProcesses] = useState<FrozenProcess[]>([])
+  const [processes, setProcessList] = useState<FrozenProcess[]>([])
+  // The latest list for async handlers, whose render-time `processes` may be stale.
+  const processesRef = useRef<FrozenProcess[]>([])
+  const setProcesses = (next: FrozenProcess[]) => {
+    processesRef.current = next
+    setProcessList(next)
+  }
   const [loading, setLoading] = useState(true)
   const [expandedPids, setExpandedPids] = useState<Set<number>>(new Set())
   const [actionPid, setActionPid] = useState<number | null>(null)
@@ -91,23 +97,26 @@ export function FrozenProcessesDialog() {
     handleClose()
   }
 
+  // Closing the dialog updates the quota store, so it must run from the
+  // handler, never from inside a state updater (which React calls while rendering).
+  const removeProcess = (pid: number): boolean => {
+    const next = processesRef.current.filter((p) => p.pid !== pid)
+    processesRef.current = next
+    setProcesses(next)
+    return next.length === 0
+  }
+
   const handleResumePid = async (pid: number) => {
     setActionPid(pid)
     try {
       const ok = api.resumePid ? await api.resumePid(reviewSessionId, pid) : false
-      if (ok) {
-        setProcesses((prev) => {
-          const next = prev.filter((p) => p.pid !== pid)
-          if (next.length === 0) {
-            handleClose()
-            const currentTerminal = getQuotaState().terminals[reviewSessionId]
-            if (currentTerminal) {
-              const cfg = terminalConfig(getQuotaState(), currentTerminal)
-              scheduleResumeRecovery(reviewSessionId, cfg.resumeRecovery)
-            }
-          }
-          return next
-        })
+      if (ok && removeProcess(pid)) {
+        handleClose()
+        const currentTerminal = getQuotaState().terminals[reviewSessionId]
+        if (currentTerminal) {
+          const cfg = terminalConfig(getQuotaState(), currentTerminal)
+          scheduleResumeRecovery(reviewSessionId, cfg.resumeRecovery)
+        }
       }
     } finally {
       setActionPid(null)
@@ -118,13 +127,7 @@ export function FrozenProcessesDialog() {
     setActionPid(pid)
     try {
       await api.terminate(reviewSessionId, pid, startTime)
-      setProcesses((prev) => {
-        const next = prev.filter((p) => p.pid !== pid)
-        if (next.length === 0) {
-          handleClose()
-        }
-        return next
-      })
+      if (removeProcess(pid)) handleClose()
     } finally {
       setActionPid(null)
     }

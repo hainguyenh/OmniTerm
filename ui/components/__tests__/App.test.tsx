@@ -7,6 +7,13 @@ import { mockOmnitermAPI } from "../../testUtils";
 import App from "../../App";
 import { TOKYO_NIGHT } from "../../themes";
 
+// The deferred workbench features import their modules after the first paint; this test ends
+// before they finish, so those imports would land after the environment is torn down.
+vi.mock("../../workbench/activateWorkbenchFeatures", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../workbench/activateWorkbenchFeatures")>()),
+  DEFERRED_WORKBENCH_STEPS: [],
+}));
+
 describe("App", () => {
   beforeEach(() => {
     mockOmnitermAPI({

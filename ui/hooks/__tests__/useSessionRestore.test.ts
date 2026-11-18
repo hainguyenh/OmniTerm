@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { diag } from '../../diag'
 import type { Connection } from '../../domain'
 import { useSessionRestore } from '../useSessionRestore'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
@@ -68,8 +69,13 @@ describe('useSessionRestore', () => {
   const mockOpen = vi.fn()
   const mockRelease = vi.fn()
   const localDisconnect = vi.fn()
+  let restoreLog: ReturnType<typeof vi.spyOn>
+  let restoreWarn: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    // Every restore reports how many panes it recreated; the failure test asserts its own warning.
+    restoreLog = vi.spyOn(diag, 'log').mockImplementation(() => {})
+    restoreWarn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     clearStoredSessions()
     mockOpen.mockReset()
     mockRelease.mockReset()
@@ -108,6 +114,7 @@ describe('useSessionRestore', () => {
     renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
+    expect(restoreLog).toHaveBeenCalledWith('[useSessionRestore] recreated', 1, 'terminal pane(s)')
     expect(localDisconnect).toHaveBeenCalledWith('old-tab-1')
     expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
     expect(applied(s.setActiveTabs, [])).toEqual([
@@ -223,6 +230,7 @@ describe('useSessionRestore', () => {
       retryable: true,
       action: 'retry-session',
     })
+    expect(restoreWarn).toHaveBeenCalledWith('[useSessionRestore] fresh shell registration failed', expect.objectContaining({ message: 'backend unavailable' }))
   })
 
   it('releases a registration that resolves after its pane was explicitly closed', async () => {

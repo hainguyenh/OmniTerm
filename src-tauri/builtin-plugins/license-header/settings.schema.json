@@ -4,7 +4,7 @@
       "type": "string",
       "title": "Copyright holder",
       "description": "Written after the year, e.g. \"ACME Inc.\"; empty for none.",
-      "default": ""
+      "default": "OmniTerm"
     },
     "license": {
       "type": "string",

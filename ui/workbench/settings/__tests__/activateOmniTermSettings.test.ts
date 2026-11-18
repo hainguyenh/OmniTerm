@@ -17,6 +17,7 @@ describe('activateOmniTermSettings', () => {
   it('adds OmniTerm pages to the dialog and prunes the pages it does not cover, until released', async () => {
     vi.stubGlobal('omnitermAPI', {
       agentQuota: { info: () => Promise.resolve(false) },
+      alwaysAwake: { info: () => Promise.resolve(false) },
       plugin: {
         list: () => Promise.resolve([]),
         builtinIds: () => Promise.resolve(['omniterm.todo-finder']),

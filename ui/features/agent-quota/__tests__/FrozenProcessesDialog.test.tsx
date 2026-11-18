@@ -1,7 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { FrozenProcessesDialog } from '../FrozenProcessesDialog'
@@ -11,6 +12,11 @@ import { seed, terminal } from './quotaFixtures'
 const mockGetHeld = vi.fn()
 const mockResumePid = vi.fn()
 const mockTerminate = vi.fn()
+const mockScheduleResumeRecovery = vi.fn()
+
+vi.mock('../resumeRecovery', () => ({
+  scheduleResumeRecovery: (...args: unknown[]) => mockScheduleResumeRecovery(...args),
+}))
 
 vi.mock('../agentQuotaAPI', async () => {
   const actual = await vi.importActual('../agentQuotaAPI')
@@ -23,6 +29,13 @@ vi.mock('../agentQuotaAPI', async () => {
     }),
   }
 })
+
+/** Clicks and lets the async handler's IPC call and state updates settle inside act. */
+async function clickAndSettle(element: HTMLElement) {
+  await act(async () => {
+    fireEvent.click(element)
+  })
+}
 
 describe('FrozenProcessesDialog', () => {
   beforeEach(() => {
@@ -49,6 +62,8 @@ describe('FrozenProcessesDialog', () => {
   })
 
   afterEach(() => {
+    // Unmount first: resetting the store notifies mounted dialogs outside act.
+    cleanup()
     resetQuotaStore()
   })
 
@@ -102,11 +117,10 @@ describe('FrozenProcessesDialog', () => {
 
     const resumeBtns = screen.getAllByRole('button', { name: /Resume/i })
     // First resume button in process row
-    fireEvent.click(resumeBtns[0])
+    await clickAndSettle(resumeBtns[0])
 
-    await waitFor(() => {
-      expect(mockResumePid).toHaveBeenCalledWith('s1', 101)
-    })
+    expect(mockResumePid).toHaveBeenCalledWith('s1', 101)
+    expect(screen.queryByText('PID 101')).toBeNull()
   })
 
   it('calls resumeAll when Resume All Processes is clicked', async () => {
@@ -166,11 +180,9 @@ describe('FrozenProcessesDialog', () => {
     await screen.findByText('claude.exe')
 
     const stopBtns = screen.getAllByRole('button', { name: /Stop/i })
-    fireEvent.click(stopBtns[0])
+    await clickAndSettle(stopBtns[0])
 
-    await waitFor(() => {
-      expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
-    })
+    expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
     expect(screen.queryByText('PID 101')).toBeNull()
     expect(screen.getByText('PID 202')).toBeInTheDocument()
   })
@@ -192,14 +204,10 @@ describe('FrozenProcessesDialog', () => {
     await screen.findByText('claude.exe')
 
     const stopBtn = screen.getByRole('button', { name: /Stop/i })
-    fireEvent.click(stopBtn)
+    await clickAndSettle(stopBtn)
 
-    await waitFor(() => {
-      expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
-    })
-    await waitFor(() => {
-      expect(screen.queryByText('Suspended Processes')).toBeNull()
-    })
+    expect(mockTerminate).toHaveBeenCalledWith('s1', 101, 100)
+    expect(screen.queryByText('Suspended Processes')).toBeNull()
   })
 
   it('closes dialog when all remaining processes are individually resumed', async () => {
@@ -219,14 +227,35 @@ describe('FrozenProcessesDialog', () => {
     await screen.findByText('claude.exe')
 
     const resumeBtn = screen.getByTitle('Thaw this process')
-    fireEvent.click(resumeBtn)
+    await clickAndSettle(resumeBtn)
 
-    await waitFor(() => {
-      expect(mockResumePid).toHaveBeenCalledWith('s1', 101)
+    expect(mockResumePid).toHaveBeenCalledWith('s1', 101)
+    expect(screen.queryByText('Suspended Processes')).toBeNull()
+  })
+
+  it('closes once, from the handler, when the last process is resumed', async () => {
+    mockGetHeld.mockResolvedValue([
+      { pid: 101, startTime: 100, image: 'claude.exe', profileName: 'work', threads: [] },
+    ])
+    seed({ terminals: [terminal({ sessionId: 's1' })] })
+    setReviewSession('s1')
+    let finishResume: (ok: boolean) => void = () => {}
+    mockResumePid.mockReturnValueOnce(new Promise<boolean>((resolve) => {
+      finishResume = resolve
+    }))
+    render(<StrictMode><FrozenProcessesDialog /></StrictMode>)
+    await screen.findByText('claude.exe')
+    fireEvent.click(screen.getByTitle('Thaw this process'))
+    // A still-pending update makes React run any state updater during the next
+    // render, where Strict Mode runs it twice.
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText('Expand threads'))
+      finishResume(true)
+      await new Promise((resolve) => setTimeout(resolve, 0))
     })
-    await waitFor(() => {
-      expect(screen.queryByText('Suspended Processes')).toBeNull()
-    })
+
+    expect(screen.queryByText('Suspended Processes')).toBeNull()
+    expect(mockScheduleResumeRecovery).toHaveBeenCalledTimes(1)
   })
 
   it('falls back to terminal process when held processes return empty', async () => {

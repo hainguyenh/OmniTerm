@@ -7,10 +7,16 @@ const WEEK: Duration = Duration::from_secs(7 * 86_400);
 fn set_age(path: &Path, days: u64) {
     let when = SystemTime::now() - Duration::from_secs(days * 86_400);
     let mut options = File::options();
-    options.write(true);
-    // A folder is opened with backup semantics on Windows.
+    // Windows needs write access and backup semantics to stamp a folder; Unix
+    // refuses to open a folder for writing but lets its owner stamp a
+    // read-only handle.
     #[cfg(windows)]
-    std::os::windows::fs::OpenOptionsExt::custom_flags(&mut options, 0x0200_0000);
+    {
+        options.write(true);
+        std::os::windows::fs::OpenOptionsExt::custom_flags(&mut options, 0x0200_0000);
+    }
+    #[cfg(not(windows))]
+    options.read(true);
     options
         .open(path)
         .and_then(|f| f.set_modified(when))

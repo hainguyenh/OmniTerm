@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 
 import { useProject } from '../../ide/platform/project'
 import { mockOmnitermAPI } from '../../testUtils'
@@ -92,7 +92,7 @@ describe('update source setting', () => {
     expect(localStorage.getItem(KEY)).toBeNull()
   })
 
-  it('writes the setting from the selector in About & Updates', () => {
+  it('writes the setting from the selector in About & Updates', async () => {
     mockOmnitermAPI({ settings: { save: vi.fn(async () => {}) } })
     withSource('github')
     render(
@@ -112,7 +112,9 @@ describe('update source setting', () => {
     )
     const select = screen.getByLabelText('Update source') as HTMLSelectElement
     expect(select.value).toBe('github')
-    fireEvent.change(select, { target: { value: 'cnb' } })
+    // The selector applies the choice at once, then stores the settings the write returns.
+    await act(async () => { fireEvent.change(select, { target: { value: 'cnb' } }) })
+    expect(select.value).toBe('cnb')
     expect(mockSettingsSet).toHaveBeenCalledWith('global', 'general.updateSource', '"cnb"')
     expect(localStorage.getItem(KEY)).toBeNull()
   })

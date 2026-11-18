@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { QuotaLine } from '../QuotaLine'
@@ -13,7 +13,12 @@ import { getQuotaState, resetQuotaStore, setOverride } from '../quotaStore'
 import { NOW, profile, reading, seed, terminal } from './quotaFixtures'
 
 beforeEach(() => resetQuotaStore())
-afterEach(() => resetQuotaStore())
+// Unmount before resetting: the reset notifies the store and clock listeners, and a still-mounted
+// view would re-render outside act().
+afterEach(() => {
+  cleanup()
+  resetQuotaStore()
+})
 
 describe('QuotaLine', () => {
   const window = { kind: 'session' as const, label: 'Current session', usedPct: 72, resetsAt: NOW + 65 * 60_000, breakdown: [{ label: 'Opus', usedPct: 72 }] }
@@ -88,7 +93,7 @@ describe('QuotaPaneLines', () => {
   it('renders nothing without a detected, enabled agent', () => {
     const { container, rerender } = render(<QuotaPaneLines sessionId="none" />)
     expect(container).toBeEmptyDOMElement()
-    seed({ config: { ...DEFAULT_QUOTA_CONFIG, enabled: false } })
+    act(() => seed({ config: { ...DEFAULT_QUOTA_CONFIG, enabled: false } }))
     rerender(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByTestId('aq-monitor-off')).toHaveTextContent('Quota monitor off')
   })
@@ -123,13 +128,13 @@ describe('QuotaPaneLines', () => {
     seed({ profiles: [profile(undefined)] })
     const { rerender } = render(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByText('Reading quota…')).toBeInTheDocument()
-    seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'timeout', message: 'claude /usage timed out.' })] })
+    act(() => seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'timeout', message: 'claude /usage timed out.' })] }))
     rerender(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByText('claude /usage timed out.')).toBeInTheDocument()
-    seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'timeout' }, { lastGood: reading(40) })] })
+    act(() => seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'timeout' }, { lastGood: reading(40) })] }))
     rerender(<QuotaPaneLines sessionId="s1" />)
     expect(document.querySelector('.aq-stale')).not.toBeNull()
-    seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'failed' })] })
+    act(() => seed({ profiles: [profile({ windows: [], fetchedAt: NOW, error: 'failed' })] }))
     rerender(<QuotaPaneLines sessionId="s1" />)
     expect(screen.getByText('Quota unavailable')).toBeInTheDocument()
   })

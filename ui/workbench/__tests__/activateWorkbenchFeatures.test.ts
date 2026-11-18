@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+// The session-tab steps pull in the terminal dock store, which reads its saved state from
+// localStorage when it is imported; this suite runs in node, where there is none.
+vi.hoisted(() => {
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {} })
+})
 vi.mock('../../ide/workbench/activate', () => ({ activateWorkbench: vi.fn() }))
 vi.mock('../../ide/editor/core', () => ({ activate: vi.fn() }))
 vi.mock('../../ide/editor/lsp', () => ({ activate: vi.fn() }))
@@ -10,6 +15,7 @@ vi.mock('../../ide/features/vcs', () => ({ activate: vi.fn() }))
 vi.mock('../../ide/features/debugger', () => ({ activate: vi.fn() }))
 vi.mock('../../ide/platform/keymap', () => ({ installKeyboardDispatcher: vi.fn() }))
 
+import { diag } from '../../diag'
 import {
   activateWorkbenchFeatures,
   DEFERRED_WORKBENCH_STEPS,
@@ -36,6 +42,7 @@ describe('activateWorkbenchFeatures', () => {
   const releases: Array<() => void> = []
   afterEach(() => {
     while (releases.length) releases.pop()?.()
+    vi.restoreAllMocks()
   })
 
   it('lists the shell first and the keyboard dispatcher last', () => {
@@ -117,6 +124,7 @@ describe('activateWorkbenchFeatures', () => {
   })
 
   it('keeps going when one feature throws on activation', () => {
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const later = vi.fn()
     const release = activateWorkbenchFeatures([
       ['broken', () => { throw new Error('boom') }],
@@ -124,9 +132,11 @@ describe('activateWorkbenchFeatures', () => {
     ])
     releases.push(release)
     expect(later).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith('[workbench] feature "broken" failed to activate', expect.any(Error))
   })
 
   it('keeps disposing when one disposer throws', () => {
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const first = vi.fn()
     const release = activateWorkbenchFeatures([
       ['first', () => first],
@@ -134,6 +144,7 @@ describe('activateWorkbenchFeatures', () => {
     ])
     release()
     expect(first).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith('[workbench] a feature failed to deactivate', expect.any(Error))
   })
 
   it('loads the deferred features one idle period at a time, after the eager ones', async () => {
@@ -182,6 +193,7 @@ describe('activateWorkbenchFeatures', () => {
   })
 
   it('keeps loading the next deferred feature when one fails to load', async () => {
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const later = vi.fn()
     const { queue, schedule } = manualSchedule()
     const release = activateWorkbenchFeatures(
@@ -198,5 +210,6 @@ describe('activateWorkbenchFeatures', () => {
     queue.shift()?.()
     await flush()
     expect(later).toHaveBeenCalledTimes(1)
+    expect(report).toHaveBeenCalledWith('[workbench] feature "broken" failed to load', expect.any(Error))
   })
 })

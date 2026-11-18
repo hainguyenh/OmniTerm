@@ -16,8 +16,11 @@ beforeEach(() => {
 })
 
 describe('GeneralSettings', () => {
-  it('shows only the sections of the page it is on', () => {
-    render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} sections={['git']} />)
+  it('shows only the sections of the page it is on', async () => {
+    // Flushes the excluded-type and attachment listings the page loads when it mounts.
+    await act(async () => {
+      render(<GeneralSettings appSettings={{}} setAppSettings={vi.fn()} shellOptions={shells} onCloseSettings={vi.fn()} sections={['git']} />)
+    })
     expect(screen.getByLabelText('Git Integration Preferences')).toBeTruthy()
     for (const other of ['Terminal & Shell Preferences', 'AI Agents Preferences', 'Files & Attachments Preferences', 'Backup & Restore']) {
       expect(screen.queryByLabelText(other)).toBeNull()
@@ -44,18 +47,22 @@ describe('GeneralSettings', () => {
     expect(window.omnitermAPI.settings.save).toHaveBeenLastCalledWith({ maxOpenFileMb: 1 })
   })
 
-  it('shows command completion on by default and saves it when toggled off', () => {
+  it('shows command completion on by default and saves it when toggled off', async () => {
     const setAppSettings = vi.fn()
-    render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    await act(async () => {
+      render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    })
     const toggle = screen.getByRole('switch', { name: 'Command completion' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
     expect(window.omnitermAPI.settings.save).toHaveBeenCalledWith({ commandCompletion: false })
   })
 
-  it('shows Git utilities on by default and saves it when toggled off', () => {
+  it('shows Git utilities on by default and saves it when toggled off', async () => {
     const setAppSettings = vi.fn()
-    render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    await act(async () => {
+      render(<GeneralSettings appSettings={{}} setAppSettings={setAppSettings} shellOptions={shells} onCloseSettings={vi.fn()} />)
+    })
     const toggle = screen.getByRole('switch', { name: 'Enable Git utilities' })
     expect(toggle).toHaveAttribute('aria-checked', 'true')
     fireEvent.click(toggle)
@@ -134,16 +141,18 @@ describe('GeneralSettings', () => {
     expect(setAppSettings).toHaveBeenCalledWith(expect.objectContaining({ defaultWorkspace: undefined }))
   })
 
-  it('reflects a saved default-workspace setting back into the select value', () => {
-    render(
-      <GeneralSettings
-        appSettings={{ defaultWorkspace: { mode: 'folder', workspaceId: 'ws1', folderId: 'f1' } }}
-        setAppSettings={vi.fn()}
-        shellOptions={shells}
-        workspaces={[{ id: 'ws1', name: 'Alpha', folders: [{ id: 'f1', name: 'Core' }] }] as never}
-        onCloseSettings={vi.fn()}
-      />,
-    )
+  it('reflects a saved default-workspace setting back into the select value', async () => {
+    await act(async () => {
+      render(
+        <GeneralSettings
+          appSettings={{ defaultWorkspace: { mode: 'folder', workspaceId: 'ws1', folderId: 'f1' } }}
+          setAppSettings={vi.fn()}
+          shellOptions={shells}
+          workspaces={[{ id: 'ws1', name: 'Alpha', folders: [{ id: 'f1', name: 'Core' }] }] as never}
+          onCloseSettings={vi.fn()}
+        />,
+      )
+    })
     const select = screen.getByLabelText('Default workspace for new terminals') as HTMLSelectElement
     expect(select.value).toBe('sel:ws1::f1')
   })

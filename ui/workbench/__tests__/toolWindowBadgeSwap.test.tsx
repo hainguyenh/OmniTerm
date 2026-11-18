@@ -67,7 +67,7 @@ describe('tool window stripe badges', () => {
       ).not.toThrow()
       expect(screen.getByTestId('problems-content')).toBeTruthy()
     } finally {
-      dispose()
+      act(() => dispose())
     }
   })
 })

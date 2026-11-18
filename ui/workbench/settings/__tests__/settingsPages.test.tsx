@@ -79,7 +79,9 @@ describe('ShortcutsPage', () => {
 
   it('resets to the defaults', async () => {
     render(<ShortcutsPage />)
-    fireEvent.click(await screen.findByRole('button', { name: /Reset/ }))
+    const reset = await screen.findByRole('button', { name: /Reset/ })
+    // Saving broadcasts the change, and the page reloads its settings from that broadcast.
+    await act(async () => { fireEvent.click(reset) })
     const saved = save.mock.calls[0]![0] as { shortcuts: Record<string, string> }
     expect(saved.shortcuts.newSession).toBe('Ctrl+N')
     expect(saved.shortcuts.zoomIn).toBe('Ctrl+=')

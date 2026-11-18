@@ -1,9 +1,10 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
+import { diag } from '../../diag'
 import type { Connection } from '../../domain'
 import type { LayoutMode } from '../../themes'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
@@ -68,7 +69,13 @@ describe('useSessionRecoveryState', () => {
   const release = vi.fn()
   const localDisconnect = vi.fn()
 
+  let restoreLog: ReturnType<typeof vi.spyOn>
+  let restoreWarn: ReturnType<typeof vi.spyOn>
+
   beforeEach(() => {
+    // Every restore reports how many panes it recreated; the failing-shell test asserts its warning.
+    restoreLog = vi.spyOn(diag, 'log').mockImplementation(() => {})
+    restoreWarn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     clearStoredSessions()
     vi.mocked(useSessionPersistence).mockReturnValue({ initialSnapshot: snapshot })
     open.mockReset().mockImplementation((_shell, _workspace, _folder, cwd) => Promise.resolve({
@@ -92,7 +99,10 @@ describe('useSessionRecoveryState', () => {
     })
   })
 
-  afterEach(() => clearStoredSessions())
+  afterEach(() => {
+    clearStoredSessions()
+    vi.restoreAllMocks()
+  })
 
   it('does not auto-resume a plain PowerShell pane, while an agent-titled pane remains eligible', () => {
     expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
@@ -131,13 +141,14 @@ describe('useSessionRecoveryState', () => {
     })
 
     const { result } = renderHook(() => useHarness())
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.recovery.restoreOutcomes['tab-a']?.phase).toBe('recovering')
       expect(result.current.recovery.restoreOutcomes['tab-b']?.phase).toBe('failed')
     })
+    expect(restoreWarn).toHaveBeenCalledWith('[useSessionRestore] fresh shell registration failed', expect.objectContaining({ message: 'shell unavailable' }))
 
     const latestPersistenceInput = () => vi.mocked(useSessionPersistence).mock.calls.at(-1)?.[0]
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(latestPersistenceInput()?.pendingSnapshot?.activeTabs.map(tab => tab.id)).toEqual(['tab-a', 'tab-b'])
     })
 
@@ -147,13 +158,13 @@ describe('useSessionRecoveryState', () => {
     const aCallsBefore = open.mock.calls.filter(call => call[3] === 'F:/a').length
     const bCallsBefore = open.mock.calls.filter(call => call[3] === 'F:/b').length
     act(() => result.current.recovery.retryRestore('tab-a'))
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(open.mock.calls.filter(call => call[3] === 'F:/a')).toHaveLength(aCallsBefore + 1)
     })
     expect(open.mock.calls.filter(call => call[3] === 'F:/b')).toHaveLength(bCallsBefore)
 
     act(() => result.current.recovery.markRestoreReady('tab-a'))
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(latestPersistenceInput()?.pendingSnapshot?.activeTabs.map(tab => tab.id)).toEqual(['tab-b'])
     })
 
@@ -164,13 +175,14 @@ describe('useSessionRecoveryState', () => {
   it('recreates saved panes as fresh shells in their saved directories', async () => {
     const { result } = renderHook(() => useHarness())
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.activeTabs).toEqual([
         { id: 'tab-a', connId: 'fresh-a', name: 'A' },
         { id: 'tab-b', connId: 'fresh-b', name: 'B' },
       ])
     })
 
+    expect(restoreLog).toHaveBeenCalledWith('[useSessionRestore] recreated', 2, 'terminal pane(s)')
     expect(localDisconnect).toHaveBeenCalledWith('tab-a')
     expect(localDisconnect).toHaveBeenCalledWith('tab-b')
     expect(open).toHaveBeenCalledWith('powershell', null, undefined, 'F:/a', null)
