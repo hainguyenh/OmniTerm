@@ -207,6 +207,9 @@ async fn attach_and_detach_preserve_the_primary_project_session() {
         std::fs::write(root.join("same.txt"), "needle").unwrap();
         std::fs::write(root.join("package.json"), r#"{"scripts":{"test":"echo test"}}"#).unwrap();
     }
+    // The default scan delay is as long as the idle wait below.
+    std::fs::create_dir(base.join("config")).unwrap();
+    std::fs::write(base.join("config/settings.toml"), "[index]\nscanDelayMs = 0\n").unwrap();
     let host = Host::new(HostConfig {
         config_dir: base.join("config"),
         data_dir: base.join("data"),

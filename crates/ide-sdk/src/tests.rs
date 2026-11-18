@@ -1016,6 +1016,10 @@ fn go_java_php_servers_are_off_until_enabled() {
 
     s.language_servers.insert("gopls".into(), LanguageServerSettings { enabled: true, ..Default::default() });
     s.language_servers.insert("intelephense".into(), LanguageServerSettings::default());
+    // An enabled server still needs its language family on.
+    assert!(language_servers("go", &[server("gopls")], &s).is_empty());
+    s.languages.families.insert("go".into(), true);
+    s.languages.families.insert("php".into(), true);
     assert_eq!(names(language_servers("go", &[server("gopls")], &s)), ["gopls"]);
     assert_eq!(names(language_servers("php", &php, &s)), ["intelephense"]);
     assert!(language_servers("java", &[server("jdtls")], &s).is_empty());

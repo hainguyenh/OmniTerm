@@ -33,39 +33,3 @@ export function progressText(p: UpdateProgress): ProgressSummary {
     fraction: null,
   }
 }
-
-export function isValidCustomEndpoint(url: string): boolean {
-  return typeof url === 'string' && url.startsWith('https://')
-}
-
-export function sanitizeReleaseNotes(notes?: string | null): string {
-  if (!notes) return ''
-  return notes.replace(/<script[\s\S]*?<\/script>/gi, '').trim()
-}
-
-export class ProgressThrottle {
-  private downloaded = 0
-  private lastStep: number | null = null
-  static readonly UNKNOWN_STEP = 256 * 1024
-
-  chunk(len: number, total: number | null = null): UpdateProgress | null {
-    this.downloaded += len
-    const step =
-      total && total > 0
-        ? Math.floor((Math.min(this.downloaded, total) * 100) / total)
-        : Math.floor(this.downloaded / ProgressThrottle.UNKNOWN_STEP)
-    if (this.lastStep === step) {
-      return null
-    }
-    this.lastStep = step
-    return {
-      type: 'downloading',
-      downloaded: this.downloaded,
-      total,
-    }
-  }
-
-  getDownloaded(): number {
-    return this.downloaded
-  }
-}
