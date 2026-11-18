@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use ide_core::IdeError;
 use ide_workspace::workspace::Workspace;
 
-use super::{all_trusted, container_dir, plan, same_path, write_container, ProjectPlan};
+use super::{
+    all_trusted, container_dir, plan, project_folders, same_path, write_container, ProjectPlan,
+};
 
 #[test]
 fn a_workspace_without_folders_closes_the_project() {
@@ -117,4 +119,41 @@ fn the_same_folder_is_recognised_through_a_different_spelling() {
         &PathBuf::from("/no/such/a"),
         &PathBuf::from("/no/such/b")
     ));
+}
+
+#[test]
+fn disabled_folders_are_left_out_of_the_project() {
+    let folder = |id: &str, disabled: bool| app_protocol::workspace::WorkspaceFolder {
+        id: id.to_string(),
+        name: id.to_string(),
+        path: format!("/work/{id}"),
+        color: None,
+        disabled,
+    };
+    let mut workspace = app_protocol::workspace::Workspace {
+        id: "w".to_string(),
+        name: "W".to_string(),
+        folders: vec![folder("a", false), folder("b", true), folder("c", false)],
+        parent_id: None,
+        order: 0,
+        pins: Vec::new(),
+        color: None,
+        icon: None,
+    };
+    assert_eq!(
+        project_folders(&workspace),
+        vec![PathBuf::from("/work/a"), PathBuf::from("/work/c")]
+    );
+    // One folder left is a plain folder project; none left closes the project.
+    workspace.folders[2].disabled = true;
+    let containers = PathBuf::from("/c");
+    assert_eq!(
+        plan(&containers, "w", "W", project_folders(&workspace)),
+        ProjectPlan::Folder(PathBuf::from("/work/a"))
+    );
+    workspace.folders[0].disabled = true;
+    assert_eq!(
+        plan(&containers, "w", "W", project_folders(&workspace)),
+        ProjectPlan::Close
+    );
 }

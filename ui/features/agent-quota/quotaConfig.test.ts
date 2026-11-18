@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { clampLimit, DEFAULT_QUOTA_CONFIG, effectiveConfig, parseQuotaConfig, pruneOverride, wakeConfigWithEnabled } from './quotaConfig'
+import { clampLimit, DEFAULT_QUOTA_CONFIG, DISPLAY_REVISION, effectiveConfig, parseQuotaConfig, pruneOverride, wakeConfigWithEnabled } from './quotaConfig'
 
 describe('parseQuotaConfig', () => {
   it('defaults everything for missing or malformed settings', () => {
@@ -42,6 +42,20 @@ describe('parseQuotaConfig', () => {
     expect(parsed.agents.codex.hardStopAtPct).toBeNull()
     // A key stored by an older version is ignored rather than resurrecting the agent.
     expect(Object.keys(parseQuotaConfig({ agents: { antigravity: { enabled: true } } }).agents)).toEqual(['claude', 'codex', 'agy'])
+  })
+
+  it('defaults to thin quota lines with the loading artwork on', () => {
+    expect(DEFAULT_QUOTA_CONFIG.display).toMatchObject({ size: 'thin', customArtSession: true, animations: true, revision: DISPLAY_REVISION })
+  })
+
+  it('moves display settings stored under the old defaults to the new ones once', () => {
+    const old = parseQuotaConfig({ display: { size: 'normal', customArtSession: false, animations: true } })
+    expect(old.display).toMatchObject({ size: 'thin', customArtSession: true, revision: DISPLAY_REVISION })
+    // A size that differs from the old default was a choice: it is kept.
+    expect(parseQuotaConfig({ display: { size: 'thick', customArtSession: false } }).display.size).toBe('thick')
+    // Settings written under the current revision are taken as they are.
+    const current = parseQuotaConfig({ display: { size: 'normal', customArtSession: false, revision: DISPLAY_REVISION } })
+    expect(current.display).toMatchObject({ size: 'normal', customArtSession: false })
   })
 
   it('drops the retired per-agent header icon', () => {

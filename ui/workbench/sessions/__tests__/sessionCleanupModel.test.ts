@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
+const invokeMock = vi.fn()
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
+
 import type { StoredAgentSession } from '../../../utils/agentSessionStorage'
 import {
   agentLabel,
@@ -11,8 +14,10 @@ import {
   mergeCleanupRows,
   parseSessionFile,
   parseSessionProfile,
+  listSessionFiles,
   profilesToScan,
   projectName,
+  scanCoversAge,
   selectAllKeys,
   sortCleanupRows,
   type AgentSessionFile,
@@ -30,6 +35,7 @@ const file = (patch: Partial<AgentSessionFile>): AgentSessionFile => ({
   title: 'Fix the build',
   lastActive: NOW - 40 * DAY,
   size: 2048,
+  empty: false,
   ...patch,
 })
 
@@ -83,6 +89,19 @@ describe('session cleanup model', () => {
     expect(keys({ agent: 'claude', profile: 'all', olderThanDays: 0 })).toEqual(['claude:claude:s1', 'claude:claude-work:s3'])
     expect(keys({ agent: 'all', profile: 'claude-work', olderThanDays: 0 })).toEqual(['claude:claude-work:s3'])
     expect(keys({ agent: 'all', profile: 'all', olderThanDays: 30 })).toEqual(['claude:claude:s1', 'codex:codex:s4'])
+  })
+
+  it('keeps only the conversations without a prompt when asked, and reads the flag from IPC', () => {
+    const rows = mergeCleanupRows([
+      file({}),
+      file({ id: 'claude:claude:s2', sessionId: 's2', title: null, empty: true }),
+    ], [{ id: 'claude:s9', agent: 'claude', profileName: 'claude', sessionId: 's9', state: 'saved', updatedAt: NOW - 40 * DAY } as StoredAgentSession], NOW)
+    const keys = filterCleanupRows(rows, { agent: 'all', profile: 'all', olderThanDays: 0, emptyOnly: true }, NOW).map((row) => row.key)
+    expect(keys).toEqual(['claude:claude:s2'])
+    const raw = { id: 'claude:claude:s2', agent: 'claude', profile: 'claude', sessionId: 's2', lastActive: 1, size: 187 }
+    expect(parseSessionFile({ ...raw, empty: true })?.empty).toBe(true)
+    expect(parseSessionFile({ ...raw, empty: 'yes' })?.empty).toBe(false)
+    expect(parseSessionFile(raw)?.empty).toBe(false)
   })
 
   it('sorts by last active by default and by any column both ways', () => {
@@ -148,5 +167,20 @@ describe('session cleanup model', () => {
     expect(remove.mock.calls.map(([batch]) => batch)).toEqual([['a', 'b'], ['c', 'd'], ['e']])
     expect(progress).toEqual([2, 4, 5])
     expect(report).toEqual({ deleted: ['a', 'b', 'e'], failed: [['c', 'locked'], ['d', 'locked']] })
+  })
+})
+
+describe('the idle age of a scan', () => {
+  it('sends the age to the backend so old sessions survive its listing cap', async () => {
+    invokeMock.mockResolvedValue([])
+    await listSessionFiles(['claude'], 7)
+    expect(invokeMock).toHaveBeenCalledWith('agent_session_files_list', { profiles: ['claude'], olderThanDays: 7 })
+  })
+
+  it('covers only filters at least as old as the scan', () => {
+    expect(scanCoversAge(7, 7)).toBe(true)
+    expect(scanCoversAge(7, 30)).toBe(true)
+    expect(scanCoversAge(7, 0)).toBe(false)
+    expect(scanCoversAge(0, 7)).toBe(true)
   })
 })

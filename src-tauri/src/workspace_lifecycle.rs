@@ -37,6 +37,29 @@ pub async fn import_workspace_file<R: Runtime>(
     Ok(workspace)
 }
 
+/// Writes workspace `workspace_id` as a VS Code `.code-workspace` file at `path`.
+#[tauri::command]
+pub async fn export_workspace_file<R: Runtime>(
+    app: AppHandle<R>,
+    workspace_id: String,
+    path: String,
+) -> Result<(), String> {
+    let target = Path::new(&path);
+    let extension = target
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if !extension.eq_ignore_ascii_case("code-workspace") {
+        return Err("Save the file with the .code-workspace extension.".to_string());
+    }
+    let workspace = read_workspaces(&app)?
+        .into_iter()
+        .find(|workspace| workspace.id == workspace_id)
+        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
+    let text = app_core::workspace_model::to_code_workspace(&workspace)?;
+    fs::write(target, text).map_err(|error| format!("Cannot write the workspace file: {error}"))
+}
+
 #[tauri::command]
 pub async fn remove_workspace<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
     let mut list = read_workspaces(&app)?;

@@ -62,7 +62,8 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
   const currentWorkspaceId = useWorkspaceStore((state) => selectedWorkspaceId(state.selection))
   const sections = useMemo(() => buildSessionsTree({
     tabs, workspaces, connById, isEditor, filter, stored, scopeWorkspaceId,
-    cwdOf: (id) => sessionCwds[id],
+    // An agent pane belongs to the folder it was started in, even after the shell moved elsewhere.
+    cwdOf: (id) => presence[id]?.launchCwd ?? sessionCwds[id],
     agentOf: (id) => presence[id]?.agent,
   }), [tabs, workspaces, connById, isEditor, filter, stored, scopeWorkspaceId, sessionCwds, presence])
   const resumable = resumableCount(stored)
@@ -135,6 +136,7 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
             onResume={onResume}
             onStart={onStart}
             workspaceId={scopeWorkspaceId ?? currentWorkspaceId}
+            highlightAgents={filter === 'agents'}
             isCollapsed={isCollapsed}
             toggleGroup={toggleGroup}
           />

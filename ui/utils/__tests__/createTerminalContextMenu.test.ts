@@ -15,6 +15,7 @@ function makeHandler(overrides: {
   clipboard?: { copySelection: () => void; paste: () => void }
   setLinkMenu?: (state: { x: number; y: number; kind: 'url' | 'path'; text: string }) => void
   setSuppressPaste?: () => void
+  openPath?: (link: { text: string; line?: number; col?: number }) => void
 } = {}) {
   let suppressCalls = 0
   const suppress = () => { suppressCalls += 1 }
@@ -60,6 +61,7 @@ function makeHandler(overrides: {
     clipboard,
     setLinkMenu,
     setSuppressPaste: overrides.setSuppressPaste ?? suppress,
+    ...(overrides.openPath ? { openPath: overrides.openPath } : {}),
   })
   return {
     onContextMenu,
@@ -159,17 +161,60 @@ describe('createTerminalContextMenu — onLinkClick', () => {
   })
 })
 
-describe('createTerminalContextMenu — onContextMenu (paste-fallback)', () => {
-  it('never opens the link overlay, even when a URL sits beneath the right-click', () => {
-    const { onContextMenu, setLinkMenu, clipboard, term } = makeHandler()
-    // Client coords land exactly where the URL lives — pre-refactor this would have shown the menu.
-    onContextMenu(click({ clientX: 60, clientY: 6 }))
+/** A pane line naming a file the way an agent reports it: the path spans cols 6..22. */
+const pathLine = {
+  buffer: {
+    active: {
+      viewportY: 0,
+      getLine: () => ({ translateToString: () => 'wrote src/app/main.ts:12:5 ok' }),
+    },
+  },
+} as unknown as Partial<Terminal>
 
+describe('createTerminalContextMenu — a file path in the output', () => {
+  it('opens a modifier-clicked path straight away, with the line and column printed after it', () => {
+    const openPath = vi.fn()
+    const { onLinkClick, setLinkMenu } = makeHandler({ term: pathLine, openPath })
+
+    onLinkClick(click({ ctrlKey: true, button: 0, clientX: 80, clientY: 6 }))
+
+    expect(openPath).toHaveBeenCalledWith(expect.objectContaining({ text: 'src/app/main.ts', line: 12, col: 5 }))
     expect(setLinkMenu).not.toHaveBeenCalled()
+  })
+
+  it('shows the menu for a path when the pane cannot open it (a remote pane)', () => {
+    const { onLinkClick, setLinkMenu } = makeHandler({ term: pathLine })
+
+    onLinkClick(click({ ctrlKey: true, button: 0, clientX: 80, clientY: 6 }))
+
+    expect(setLinkMenu).toHaveBeenCalledWith(expect.objectContaining({ kind: 'path', text: 'src/app/main.ts', line: 12 }))
+  })
+
+  it('keeps a URL on the menu even when paths open straight away', () => {
+    const openPath = vi.fn()
+    const { onLinkClick, setLinkMenu } = makeHandler({ openPath })
+
+    onLinkClick(click({ ctrlKey: true, button: 0, clientX: 60, clientY: 6 }))
+
+    expect(openPath).not.toHaveBeenCalled()
+    expect(setLinkMenu).toHaveBeenCalledWith(expect.objectContaining({ kind: 'url' }))
+  })
+})
+
+describe('createTerminalContextMenu — onContextMenu (paste-fallback)', () => {
+  // Regression: right-clicking a file an agent reported did nothing but paste.
+  it('shows the link menu, with Paste, when a URL or path sits beneath the right-click', () => {
+    const { onContextMenu, setLinkMenu, clipboard, term, suppressCalls } = makeHandler({ term: pathLine })
+
+    onContextMenu(click({ clientX: 80, clientY: 6 }))
+
+    expect(setLinkMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'path', text: 'src/app/main.ts', line: 12, col: 5, fromContextMenu: true }),
+    )
     expect(term.focus).toHaveBeenCalled()
-    // Selection absent (default fake) → paste branch is taken instead of copy.
-    expect(clipboard.paste).toHaveBeenCalled()
-    expect(clipboard.copySelection).not.toHaveBeenCalled()
+    expect(clipboard.paste).not.toHaveBeenCalled()
+    // The gesture's own native paste is held back; the menu's Paste item is the way to paste.
+    expect(suppressCalls()).toBe(1)
   })
 
   it('copies selection when the right-click has a selection (no link detection runs)', () => {

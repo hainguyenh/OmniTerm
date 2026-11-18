@@ -11,6 +11,8 @@ vi.mock('../../ide/features/project-tree/ProjectView', () => ({
 const workspaceActions = vi.hoisted(() => ({
   addFolderToWorkspace: vi.fn().mockResolvedValue(undefined),
   addWorkspaceFromFolder: vi.fn().mockResolvedValue(undefined),
+  exportWorkspaceFile: vi.fn().mockResolvedValue(undefined),
+  activeFolders: (workspace?: { folders: Array<{ disabled?: boolean }> } | null) => (workspace?.folders ?? []).filter((folder) => !folder.disabled),
 }))
 vi.mock('../titlebar/workspaceActions', () => workspaceActions)
 
@@ -96,5 +98,21 @@ describe('ProjectToolWindow', () => {
     } finally {
       dispose()
     }
+  })
+
+  it('names the workspace above its projects and counts the ones switched on', () => {
+    act(() => {
+      useProjectTree.setState({ root: '/w' } as never)
+      useWorkspaceStore.setState({
+        workspaces: [{ id: 'w1', name: 'dev', order: 0, pins: [], folders: [{ id: 'a', name: 'a', path: '/a' }, { id: 'b', name: 'b', path: '/b', disabled: true }] }],
+        selection: 'w1',
+        scope: 'workspace',
+      } as never)
+    })
+    render(<ProjectToolWindow />)
+    expect(screen.getByTestId('workspace-header').textContent).toContain('dev (Workspace)')
+    expect(screen.getByTestId('workspace-header-count').textContent).toBe('1/2 projects')
+    fireEvent.click(screen.getByRole('button', { name: 'Save as VS Code Workspace…' }))
+    expect(workspaceActions.exportWorkspaceFile).toHaveBeenCalledTimes(1)
   })
 })

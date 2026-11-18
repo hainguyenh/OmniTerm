@@ -24,6 +24,8 @@ export interface AgentSessionFile {
   title: string | null
   lastActive: number
   size: number
+  /** No prompt was ever typed: the agent's resume list shows it with nothing in it. */
+  empty: boolean
 }
 
 export interface DeleteReport {
@@ -50,6 +52,8 @@ export interface CleanupRow {
   bookmarked: boolean
   /** Runs in an open pane, or its file was written moments ago: never deleted from under an agent. */
   open: boolean
+  /** Its transcript holds no prompt (see `AgentSessionFile.empty`). */
+  empty: boolean
 }
 
 export type CleanupSortColumn = 'lastActive' | 'agent' | 'profile' | 'size' | 'project'
@@ -64,7 +68,12 @@ export interface CleanupFilter {
   profile: string | 'all'
   /** Only sessions idle at least this many days; 0 for any. */
   olderThanDays: number
+  /** Only conversations without a prompt. */
+  emptyOnly?: boolean
 }
+
+/** Whether a listing read with `scannedDays` holds every row a filter of `filterDays` shows. */
+export const scanCoversAge = (scannedDays: number, filterDays: number) => scannedDays <= filterDays
 
 /** The rows a selection can act on: never a session still running in a pane. */
 export const isSelectable = (row: CleanupRow) => !row.open
@@ -95,6 +104,7 @@ export function parseSessionFile(raw: unknown): AgentSessionFile | null {
     title: optionalText(r.title),
     lastActive: r.lastActive,
     size: r.size,
+    empty: r.empty === true,
   }
 }
 
@@ -116,9 +126,13 @@ export async function listSessionProfiles(): Promise<SessionProfile[]> {
   return Array.isArray(raw) ? raw.flatMap((item) => parseSessionProfile(item) ?? []) : []
 }
 
-/** The conversations of `profiles`, read from their folders on this machine. */
-export async function listSessionFiles(profiles: readonly string[]): Promise<AgentSessionFile[]> {
-  const raw = await invoke<unknown>('agent_session_files_list', { profiles })
+/**
+ * The conversations of `profiles`, read from their folders on this machine. With `olderThanDays`
+ * the backend drops newer ones before it caps the listing, so a "7+ days" scan reaches the old
+ * conversations even when a machine holds more than the cap.
+ */
+export async function listSessionFiles(profiles: readonly string[], olderThanDays = 0): Promise<AgentSessionFile[]> {
+  const raw = await invoke<unknown>('agent_session_files_list', { profiles, olderThanDays })
   return Array.isArray(raw) ? raw.flatMap((item) => parseSessionFile(item) ?? []) : []
 }
 
@@ -204,6 +218,7 @@ export function mergeCleanupRows(files: readonly AgentSessionFile[], stored: rea
       storedState: entry?.state,
       bookmarked: Boolean(entry?.bookmarked),
       open: entry?.state === 'active' || now - file.lastActive < IN_USE_MS,
+      empty: file.empty,
     }
   })
   for (const entry of stored) {
@@ -222,6 +237,7 @@ export function mergeCleanupRows(files: readonly AgentSessionFile[], stored: rea
       storedState: entry.state,
       bookmarked: Boolean(entry.bookmarked),
       open: entry.state === 'active',
+      empty: false,
     })
   }
   return rows
@@ -232,7 +248,8 @@ export function filterCleanupRows(rows: readonly CleanupRow[], filter: CleanupFi
   return rows.filter((row) =>
     (filter.agent === 'all' || row.agent === filter.agent)
     && (filter.profile === 'all' || row.profile === filter.profile)
-    && row.lastActive <= cutoff,
+    && row.lastActive <= cutoff
+    && (!filter.emptyOnly || row.empty),
   )
 }
 

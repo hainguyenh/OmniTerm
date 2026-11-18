@@ -197,6 +197,8 @@ fn library_project_roots(root: &Path, cancel: &CancellationToken) -> Vec<PathBuf
             || [".venv", "venv", ".pixi"].iter().any(|name| dir.join(name).is_dir())
             || dir == root
     });
+    // Test data (`fixtures/python-app`) is not part of the project's own libraries.
+    roots.retain(|dir| dir == root || !is_test_data(dir.strip_prefix(root).unwrap_or(dir)));
     let mut scanned = std::collections::HashSet::new();
     let mut index = 0;
     while index < roots.len() && !cancel.is_cancelled() {
@@ -234,6 +236,16 @@ fn library_project_roots(root: &Path, cancel: &CancellationToken) -> Vec<PathBuf
     roots.sort();
     roots.dedup();
     roots
+}
+
+/// A path inside a folder that holds sample or test data rather than project code.
+fn is_test_data(relative: &Path) -> bool {
+    relative.components().any(|c| {
+        matches!(
+            c.as_os_str().to_str().map(str::to_ascii_lowercase).as_deref(),
+            Some("fixtures" | "fixture" | "testdata" | "__fixtures__")
+        )
+    })
 }
 
 fn module_settings(root: &Path, settings: &Settings) -> Settings {
@@ -364,7 +376,23 @@ fn tool(bin: Option<PathBuf>, name: &str) -> Option<PathBuf> {
 
 // ------------------------------------------------------------------ python
 
+/// Files that make a folder a Python project. A Python the user pinned for every project (the global
+/// mise config, a parent folder's `.tool-versions`) must not add a "Python" library to a TypeScript or
+/// Rust project, so a pin alone does not count unless it sits in the folder itself.
+const PYTHON_MARKERS: [&str; 6] =
+    ["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt", "Pipfile", ".python-version"];
+
+pub(crate) fn is_python_project(dir: &Path, s: &Settings) -> bool {
+    !s.languages.python.interpreter.trim().is_empty()
+        || PYTHON_MARKERS.iter().any(|name| dir.join(name).is_file())
+        || crate::discover::project_venv_python(dir).is_some()
+        || crate::pinned::pinned_in_dir(dir, ide_core::version_managers::Tool::Python)
+}
+
 fn python_groups(root: &Path, s: &Settings, cancel: &CancellationToken) -> Vec<LibraryGroup> {
+    if !is_python_project(root, s) {
+        return Vec::new();
+    }
     let Some(python) = crate::apply::python_interpreter(root, s) else { return Vec::new() };
     let mut files = vec![python.clone()];
     files.extend(crate::venv_of(&python).map(|v| v.join("pyvenv.cfg")));
@@ -981,6 +1009,59 @@ mod go_cache_tests {
         for member in ["packages/web", "crates/api", "go"] {
             assert!(roots.contains(&root.join("nested/very/deep").join(member)), "{member}");
         }
+    }
+
+    #[test]
+    fn a_typescript_or_rust_project_is_not_a_python_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("package.json"), "{}").unwrap();
+        std::fs::write(tmp.path().join("Cargo.toml"), "").unwrap();
+        assert!(!is_python_project(tmp.path(), &Settings::default()));
+        assert!(python_groups(tmp.path(), &Settings::default(), &CancellationToken::new()).is_empty());
+    }
+
+    #[test]
+    fn python_markers_a_venv_a_local_pin_or_an_explicit_interpreter_make_a_python_project() {
+        for marker in ["pyproject.toml", "requirements.txt", "setup.py", ".python-version"] {
+            let tmp = tempfile::tempdir().unwrap();
+            std::fs::write(tmp.path().join(marker), "").unwrap();
+            assert!(is_python_project(tmp.path(), &Settings::default()), "{marker}");
+        }
+        let pinned = tempfile::tempdir().unwrap();
+        std::fs::write(
+            pinned.path().join(".tool-versions"),
+            "python 3.12.1
+nodejs 20
+",
+        )
+        .unwrap();
+        assert!(is_python_project(pinned.path(), &Settings::default()));
+        let other = tempfile::tempdir().unwrap();
+        std::fs::write(
+            other.path().join(".tool-versions"),
+            "nodejs 20
+",
+        )
+        .unwrap();
+        assert!(!is_python_project(other.path(), &Settings::default()));
+        let mut explicit = Settings::default();
+        explicit.languages.python.interpreter = "python3".into();
+        assert!(is_python_project(other.path(), &explicit));
+    }
+
+    #[test]
+    fn sample_data_folders_are_not_library_roots() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        std::fs::write(root.join("package.json"), "{}").unwrap();
+        for dir in ["fixtures/python-app", "crates/api"] {
+            std::fs::create_dir_all(root.join(dir)).unwrap();
+        }
+        std::fs::write(root.join("fixtures/python-app/pyproject.toml"), "").unwrap();
+        std::fs::write(root.join("crates/api/Cargo.toml"), "").unwrap();
+        let roots = library_project_roots(root, &CancellationToken::new());
+        assert!(roots.contains(&root.join("crates/api")));
+        assert!(!roots.iter().any(|r| r.starts_with(root.join("fixtures"))));
     }
 
     #[cfg(unix)]

@@ -44,10 +44,14 @@ export function parseLocationQuery(raw: string, root?: string | null): ParsedQue
   }
 
   if (root) {
-    const r = root.replace(/\/+$/, "");
-    if (text === r) text = "";
-    else if (text.startsWith(r + "/")) text = text.slice(r.length + 1);
+    const r = root.replace(/\\/g, "/").replace(/\/+$/, "");
+    // Windows paths compare without case: a pasted `d:/work/x` is inside the root `D:/work`.
+    const fold = /^[A-Za-z]:\//.test(r) ? (s: string) => s.toLowerCase() : (s: string) => s;
+    if (fold(text) === fold(r)) text = "";
+    else if (fold(text).startsWith(fold(r) + "/")) text = text.slice(r.length + 1);
   }
+  // `./src/x.ts` (as shells and agents print it) names the same file as `src/x.ts`.
+  text = text.replace(/^(?:\.\/)+/, "");
   return { text, line, col };
 }
 

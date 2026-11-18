@@ -13,6 +13,7 @@ import { ProgressBar } from '../ide/ui'
 import { appLogo as projectMark } from '../assets/appLogo'
 import { useSelectedWorkspace } from '../platform/workspaceStore'
 
+import { PaneQuickStartHost } from './sessions/PaneQuickStartHost'
 import { SessionCloseConfirmHost } from './sessions/SessionCloseConfirmHost'
 import { startSessionTabsReconciler } from './sessions/sessionTabsReconciler'
 import './titlebar/titleBarLayout.css'
@@ -71,6 +72,7 @@ export function WorkbenchShell() {
       {openingPath && <WorkspaceOpening path={openingPath} />}
       <OverlayHost />
       <SessionCloseConfirmHost />
+      <PaneQuickStartHost />
     </div>
   )
 }

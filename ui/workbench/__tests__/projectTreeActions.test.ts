@@ -8,6 +8,18 @@ import {
   getAction,
   registerAction,
 } from '../../ide/platform/actions'
+const indexProjectMock = vi.hoisted(() => vi.fn())
+const notify = vi.hoisted(() => vi.fn())
+vi.mock('../../ide/platform/ipc', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../ide/platform/ipc')>()),
+  call: (result: Promise<unknown>) => result,
+  commands: { indexProject: () => indexProjectMock() },
+}))
+vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../ide/workbench/contributions')>()),
+  notifications: () => ({ notify }),
+}))
+import { menuGroupItems } from '../../ide/workbench/contributions'
 import { registerProjectTreeActions } from '../projectTreeActions'
 
 describe('projectTreeActions', () => {
@@ -45,6 +57,24 @@ describe('projectTreeActions', () => {
     expect(secondEvent.detail?.cwd).toBe('/another/folder')
 
     dispatchSpy.mockRestore()
+  })
+
+  it('offers Index Project on a folder of the project tree and starts the index', async () => {
+    const items = menuGroupItems('projectView', { paths: ['/work/app'], dirs: [true] })
+    expect(items).toContainEqual(expect.objectContaining({ action: 'omniterm.project.index', label: 'Index Project' }))
+    expect(menuGroupItems('projectView', { paths: ['/work/app/a.ts'], dirs: [false] })).not.toContainEqual(
+      expect.objectContaining({ action: 'omniterm.project.index' }),
+    )
+    indexProjectMock.mockResolvedValue(null)
+    await executeAction('omniterm.project.index')
+    expect(indexProjectMock).toHaveBeenCalledTimes(1)
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ level: 'info' }))
+  })
+
+  it('reports why indexing could not start', async () => {
+    indexProjectMock.mockRejectedValue(new Error('Project is in Restricted Mode'))
+    await executeAction('omniterm.project.index')
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ level: 'error', body: 'Project is in Restricted Mode' }))
   })
 
   it('registers p5.tree.toolbar.locate and executes navigate.selectInProjectView', async () => {

@@ -21,7 +21,8 @@ import { workflowSettings } from "@/platform/workflowSettings";
 import { fitScheduler, settledResize } from "./fit";
 import { watchWindowsPty, windowsPty } from "./windowsPty";
 import { findTerminalLinks } from "./links";
-import { LINK_HANDLER, fontFor, openExternal, openFileLink } from "./session";
+import { LINK_HANDLER, fontFor, openExternal } from "./session";
+import { openFileLink } from "./openFile";
 import { MIN_CONTRAST_RATIO, readTerminalTheme, remeasureWhenFontsLoad } from "./theme";
 
 const live = new Set<Terminal>();

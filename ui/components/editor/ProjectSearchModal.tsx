@@ -4,6 +4,8 @@ import type { Workspace, WorkspaceScript } from '../../domain'
 
 import { getOrIndexWorkspace, type IndexedFile } from '../../utils/projectIndexer'
 
+import { readSearchScope, saveSearchScope, searchTargets, type ProjectSearchScope } from './projectSearchScope'
+
 export interface ProjectSearchModalProps {
   isOpen: boolean
   onClose: () => void
@@ -66,24 +68,36 @@ export const ProjectSearchModal: React.FC<ProjectSearchModalProps> = ({
     return workspaces[0] ?? null
   }, [workspaces, activeWorkspaceId])
 
-  const loadWorkspaceFiles = useCallback(async (ws: Workspace, force = false) => {
+  const [scope, setScope] = useState<ProjectSearchScope>(readSearchScope)
+  const targets = useMemo(() => searchTargets(workspaces, currentWorkspace, scope), [workspaces, currentWorkspace, scope])
+  // Reload only when the set of workspaces changes, not when the parent hands over a new array.
+  const targetsKey = targets.map((ws) => ws.id).join('|')
+  const targetsRef = useRef(targets)
+  targetsRef.current = targets
+
+  const loadFiles = useCallback(async (list: readonly Workspace[], force = false) => {
     setLoading(true)
     try {
-      const indexed = await getOrIndexWorkspace(ws, force)
-      setFiles(indexed)
+      const indexed = await Promise.all(list.map((ws) => getOrIndexWorkspace(ws, force).catch((): IndexedFile[] => [])))
+      setFiles(indexed.flat())
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    if (isOpen && currentWorkspace) {
+    if (isOpen && targetsRef.current.length > 0) {
       setQuery('')
       setSelectedIndex(0)
-      void loadWorkspaceFiles(currentWorkspace)
+      void loadFiles(targetsRef.current)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
-  }, [isOpen, currentWorkspace, loadWorkspaceFiles])
+  }, [isOpen, targetsKey, loadFiles])
+
+  const chooseScope = (next: ProjectSearchScope) => {
+    saveSearchScope(next)
+    setScope(next)
+  }
 
   useEffect(() => {
     setSelectedIndex(0)
@@ -174,7 +188,21 @@ export const ProjectSearchModal: React.FC<ProjectSearchModalProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          {currentWorkspace && (
+          {workspaces.length > 1 ? (
+            <div className="flex flex-shrink-0 overflow-hidden rounded-full border border-[var(--theme-border)] text-[11px]" role="group" aria-label="Search scope">
+              {([['current', currentWorkspace?.name ?? 'This workspace'], ['all', 'All workspaces']] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={scope === id}
+                  onClick={() => chooseScope(id)}
+                  className={`px-2 py-0.5 font-medium ${scope === id ? 'bg-[var(--theme-selection)] text-[var(--theme-fg)]' : 'text-[var(--theme-dim)] hover:text-[var(--theme-fg)]'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : currentWorkspace && (
             <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-[var(--theme-border)] text-[var(--theme-dim)] flex-shrink-0">
               {currentWorkspace.name}
             </span>
@@ -222,6 +250,9 @@ export const ProjectSearchModal: React.FC<ProjectSearchModalProps> = ({
                   {fileIcon(file.kind)}
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                     <span className="font-semibold truncate">{file.name}</span>
+                    {scope === 'all' && (
+                      <span className="text-[10px] px-1.5 rounded bg-[var(--theme-border)] text-[var(--theme-dim)] flex-shrink-0">{file.workspaceName}</span>
+                    )}
                     <span className="text-[11px] text-[var(--theme-dim)] truncate max-w-[50%]">
                       {file.path}
                     </span>

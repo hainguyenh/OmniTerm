@@ -58,6 +58,7 @@ import {
   type VirtualInputData,
 } from "../controller";
 import { useDocMeta } from "../model/document";
+import { activatePane, usePaneActivation } from "./paneActivation";
 import { FloatingEditorActions } from "./EditorActions";
 import { FloatingZoomControls } from "./EditorZoom";
 import { inputDirty } from "../model/customDocuments";
@@ -181,6 +182,8 @@ function PaneView({ paneId }: { paneId: string }) {
   const tints = useFileDecorations(useShallow(() => paths.map((p) => (p ? (getFileDecoration(p)?.tint ?? "") : ""))));
 
   const hints = useTitleHints();
+  const [section, setSection] = useState<HTMLElement | null>(null);
+  usePaneActivation(section, paneId);
   const [dropZone, setDropZone] = useState<DropZone | null>(null);
   const tabPrefs = useEditorPrefs().tabs;
   const distractionFree = useDistractionFree((s) => s.active);
@@ -375,6 +378,7 @@ function PaneView({ paneId }: { paneId: string }) {
         vertical && styles.tabsVertical,
         tabPrefs.placement === "right" && styles.tabsRight,
       )}
+      ref={setSection}
       data-pane-id={paneId}
       aria-label={tx("Editor")}
       onFocus={onFocus}
@@ -401,7 +405,7 @@ function PaneView({ paneId }: { paneId: string }) {
         ))}
         {!active ? (
           multiPane ? (
-            <EmptyPane />
+            <EmptyPane paneId={paneId} />
           ) : (
             <EmptyEditor />
           )
@@ -505,8 +509,7 @@ function PaneStripActions({ paneId, tab }: { paneId: string; tab: Tab | null }) 
     <div
       className={styles.paneStrip}
       onPointerDownCapture={() => {
-        if (useTabs.getState().activePane !== paneId)
-          useTabs.setState((s) => ({ ...s, activePane: s.panes[paneId] ? paneId : s.activePane }), true);
+        activatePane(paneId);
       }}
     >
       {tab && <TabActionsMenu paneId={paneId} tab={tab} />}
@@ -516,11 +519,17 @@ function PaneStripActions({ paneId, tab }: { paneId: string; tab: Tab | null }) 
 }
 
 /** OmniTerm: a pane of a split layout without tabs; the `editor.emptyPane` slot offers what to start. */
-function EmptyPane() {
+function EmptyPane({ paneId }: { paneId: string }) {
   const actions = useActions((s) => s.actions);
   const items = useMenuSlotItems((s) => s.slots["editor.emptyPane"]) ?? [];
   return (
-    <div className={styles.emptyPane}>
+    <div
+      className={styles.emptyPane}
+      onPointerDownCapture={() => {
+        // Its buttons start something in this pane, so it must be the active one first.
+        activatePane(paneId);
+      }}
+    >
       <div>{tx("Empty pane")}</div>
       <div className={styles.emptyPaneActions}>
         {items

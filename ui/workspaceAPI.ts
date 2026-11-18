@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { open } from '@tauri-apps/plugin-dialog'
+import { open, save } from '@tauri-apps/plugin-dialog'
 import type { Connection, Workspace, WorkspaceScript } from './domain'
 
 type WorkspaceWire = Omit<Workspace, 'pins'> & { pins?: Workspace['pins'] }
@@ -64,11 +64,22 @@ export function createWorkspaceAPI() {
         ? invoke<WorkspaceWire>('import_workspace_file', { path }).then(normalizeWorkspace)
         : null
     },
+    exportFile: async (workspaceId: string, defaultName: string) => {
+      const path = await save({
+        defaultPath: `${defaultName}.code-workspace`,
+        filters: [{ name: 'VS Code workspace', extensions: ['code-workspace'] }],
+      })
+      if (typeof path !== 'string') return null
+      await invoke<void>('export_workspace_file', { workspaceId, path })
+      return path
+    },
     remove: (id: string) => invoke<void>('remove_workspace', { id }),
     rename: (workspaceId: string, name: string) =>
       invoke<WorkspaceWire>('rename_workspace', { workspaceId, name }).then(normalizeWorkspace),
     setAppearance: (workspaceId: string, color?: Workspace['color'], icon?: Workspace['icon']) =>
       invoke<WorkspaceWire>('set_workspace_appearance', { workspaceId, color: color ?? null, icon: icon ?? null }).then(normalizeWorkspace),
+    setFolderDisabled: (workspaceId: string, folderId: string, disabled: boolean) =>
+      invoke<WorkspaceWire>('set_workspace_folder_disabled', { workspaceId, folderId, disabled }).then(normalizeWorkspace),
     setFolderColor: (workspaceId: string, folderId: string, color?: Workspace['folders'][number]['color']) =>
       invoke<WorkspaceWire>('set_workspace_folder_color', { workspaceId, folderId, color: color ?? null }).then(normalizeWorkspace),
     move: (workspaceId: string, parentId: string | null, index: number) =>

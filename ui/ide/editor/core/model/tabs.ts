@@ -463,11 +463,16 @@ function mapLayout(n: LayoutNode, f: (n: LayoutNode) => LayoutNode | null): Layo
   return { ...n, children: flat };
 }
 
-/** Splits `paneId` and opens a copy of its active tab in the new pane. */
-export function splitPane(s: TabsState, paneId: string, dir: "row" | "column"): { state: TabsState; paneId: string } {
+/** Splits `paneId` and opens a copy of its active tab in the new pane (an empty pane when `copy` is false). */
+export function splitPane(
+  s: TabsState,
+  paneId: string,
+  dir: "row" | "column",
+  copy = true,
+): { state: TabsState; paneId: string } {
   const src = paneOf(s, paneId);
   const id = nextId("pane");
-  const active = src.tabs.find((t) => t.id === src.active);
+  const active = copy ? src.tabs.find((t) => t.id === src.active) : undefined;
   const tab: Tab | null = active ? { ...active, id: nextId("tab"), preview: false, pinned: false } : null;
   const pane: Pane = { id, tabs: tab ? [tab] : [], active: tab?.id ?? null, mru: tab ? [tab.id] : [] };
   const layout = mapLayout(s.layout, (n) => {

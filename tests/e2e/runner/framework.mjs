@@ -1,3 +1,6 @@
+// Copyright (c) 2026
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * Minimalist, robust E2E test runner framework for OmniTerm.
  * Provides describe, test/it, lifecycle hooks, tier filtering, and runner execution.

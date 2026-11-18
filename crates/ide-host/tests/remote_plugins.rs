@@ -3,7 +3,6 @@
 //! code plugins over the remote protocol; License Header then checks the file
 //! on the server's disk when it is saved, and secrets come from the desktop.
 #![recursion_limit = "256"]
-
 #![cfg(unix)]
 
 use ide_core::IdeEvent;

@@ -56,12 +56,14 @@ describe('shell tool windows', () => {
     registerShellToolWindows()
     expect(registered.items.map((i) => i.id)).toEqual([
       'project',
+      'omniterm.scm',
       'omniterm.sessions',
       'problems',
     ])
     const leftWindows = registered.items.filter((i) => i.anchor === 'left')
-    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'omniterm.sessions'])
-    expect(leftWindows.every((i) => i.requiresProject === false)).toBe(true)
+    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'omniterm.scm', 'omniterm.sessions'])
+    // Source Control needs an open project (a repository); the others work without one.
+    expect(leftWindows.filter((i) => i.id !== 'omniterm.scm').every((i) => i.requiresProject === false)).toBe(true)
     expect(leftWindows[0]?.order).toBe(0)
 
     const problemsWindow = registered.items.find((i) => i.id === 'problems')

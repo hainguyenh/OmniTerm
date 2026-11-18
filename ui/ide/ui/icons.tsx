@@ -296,6 +296,8 @@ const ICONS = {
   paste: "general/paste",
   cut: "general/cut",
   trash: "general/delete",
+  broom: "omniterm/general/broom",
+  palette: "omniterm/general/palette",
   edit: "general/edit",
   "arrow-left": "general/left",
   "arrow-right": "general/right",

@@ -41,6 +41,30 @@ fn entries_of_one_kind_share_a_key() {
 }
 
 #[test]
+fn loose_files_group_by_extension_and_folders_by_name() {
+    let dir = tempdir().expect("tempdir");
+    let root = temp_root(&dir);
+    fs::write(root.join("a.LOG"), b"x").unwrap();
+    fs::write(root.join("b.log"), b"x").unwrap();
+    fs::write(root.join("README"), b"x").unwrap();
+    fs::create_dir_all(root.join("bizreq-ab12cd34")).unwrap();
+    assert_eq!(entry_key(&root.join("a.LOG")), "*.log files");
+    assert_eq!(entry_key(&root.join("b.log")), "*.log files");
+    assert_eq!(entry_key(&root.join("README")), "(files without extension)");
+    assert_eq!(entry_key(&root.join("bizreq-ab12cd34")), "bizreq-*");
+    let keys = ["*.log files".to_string()];
+    let report = clean(
+        &root,
+        Some(&keys),
+        Duration::ZERO,
+        SystemTime::now() + Duration::from_secs(5),
+    )
+    .unwrap();
+    assert_eq!(report.removed, 2);
+    assert!(root.join("README").exists() && root.join("bizreq-ab12cd34").exists());
+}
+
+#[test]
 fn a_scan_groups_sizes_and_orders_the_children() {
     let dir = tempdir().expect("tempdir");
     let root = temp_root(&dir);
@@ -60,7 +84,7 @@ fn a_scan_groups_sizes_and_orders_the_children() {
         (groups[0].entries, groups[0].files, groups[0].bytes),
         (2, 2, 1500)
     );
-    assert_eq!(groups[1].key, "note.txt");
+    assert_eq!(groups[1].key, "*.txt files");
     assert!(groups[0].oldest <= groups[0].newest);
 }
 

@@ -32,6 +32,8 @@ export function registerSessionKind(): () => void {
     restorable: true,
     keepAlive: true,
     exemptFromTabLimit: true,
+    // A copy of a live session would start a second shell; the empty pane offers the session picker.
+    splitOpensEmpty: true,
     confirmClose: confirmSessionClose,
     onClose: onSessionTabClosed,
   })

@@ -13,6 +13,7 @@ import { registerEditorKind } from '../../ide/workbench/contributions'
 import { omnitermActionId } from '../../platform/omnitermActions'
 import { applyPreset } from '../layout/layoutPresets'
 import { registerPaneTitleActions } from '../layout/paneTitleActions'
+import { usePaneQuickStart } from '../sessions/paneQuickStartStore'
 
 const holder = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('../../ide/editor/core/controller', async (original) => ({
@@ -45,6 +46,7 @@ afterEach(() => {
   disposers.splice(0).forEach((dispose) => dispose())
   controller.stop()
   useTabs.setState(initialTabsState(), true)
+  usePaneQuickStart.setState({ target: null })
 })
 
 describe('pane actions', () => {
@@ -80,18 +82,23 @@ describe('pane actions', () => {
     expect(screen.queryByRole('button', { name: 'Tab Actions' })).toBeNull()
   })
 
-  it('make their own pane the active one when pressed, and an empty pane offers a new session', async () => {
+  it('make their own pane the active one when pressed, and an empty pane offers the session picker', async () => {
     await act(() => controller.openInput({ kind: 'test-doc', key: 'test-doc:1' }))
     const first = useTabs.getState().activePane
     act(() => useTabs.setState(applyPreset(useTabs.getState(), '2'), true))
     render(<EditorAreaView />)
     expect(screen.getByText('Empty pane')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'New session' })).toBeTruthy()
     const empty = screen.getByText('Empty pane').closest('[data-pane-id]') as HTMLElement
     expect(empty.dataset.paneId).not.toBe(first)
     act(() => useTabs.setState((state) => ({ ...state, activePane: first }), true))
     const plus = empty.querySelector('button[aria-label="New terminal or agent session in this pane"], button[title="New terminal or agent session in this pane"]') as HTMLElement
     fireEvent.pointerDown(plus)
     expect(useTabs.getState().activePane).toBe(empty.dataset.paneId)
+    // Its button opens the picker (project, then terminal or agent) for this pane: nothing starts yet.
+    act(() => useTabs.setState((state) => ({ ...state, activePane: first }), true))
+    const picker = screen.getByRole('button', { name: 'New session…' })
+    fireEvent.pointerDown(picker)
+    fireEvent.click(picker)
+    expect(usePaneQuickStart.getState().target?.paneId).toBe(empty.dataset.paneId)
   })
 })

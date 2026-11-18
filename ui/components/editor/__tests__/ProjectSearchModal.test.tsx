@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Workspace } from '../../../domain'
 
+import { invalidateProjectIndex } from '../../../utils/projectIndexer'
 import { ProjectSearchModal } from '../ProjectSearchModal'
 import { mockOmnitermAPI } from '../../../testUtils'
 
@@ -20,6 +21,9 @@ describe('ProjectSearchModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // The index is cached per workspace for a minute; every test starts from a fresh scan.
+    for (const id of ['ws-1', 'ws-2']) invalidateProjectIndex(id)
+    localStorage.clear()
     mockOmnitermAPI({
       workspace: {
         scanScripts: vi.fn().mockResolvedValue([
@@ -38,6 +42,30 @@ describe('ProjectSearchModal', () => {
         }),
       },
     })
+  })
+
+  it('searches every workspace on request and names the workspace of each result', async () => {
+    localStorage.clear()
+    const other: Workspace = { id: 'ws-2', name: 'Other', folders: [{ id: 'folder-9', name: 'lib', path: '/other/lib' }], order: 1, pins: [] }
+    const scanScripts = vi.fn(async (id: string) => (id === 'ws-2' ? [{ id: 'script-2', name: 'deploy.sh', path: 'scripts/deploy.sh', kind: 'sh' }] : []))
+    mockOmnitermAPI({
+      workspace: {
+        scanScripts,
+        scanFolders: vi.fn().mockResolvedValue([]),
+        scanFolderEntries: vi.fn().mockResolvedValue({ entries: [], total: 0, hasMore: false }),
+      },
+    })
+    render(
+      <ProjectSearchModal isOpen={true} onClose={onClose} workspaces={[dummyWorkspace, other]} activeWorkspaceId="ws-1" onOpenScript={onOpenScript} />,
+    )
+    await waitFor(() => expect(scanScripts).toHaveBeenCalledWith('ws-1'))
+    expect(scanScripts).not.toHaveBeenCalledWith('ws-2')
+    fireEvent.click(screen.getByRole('button', { name: 'All workspaces' }))
+    expect(await screen.findByText('deploy.sh')).toBeInTheDocument()
+    expect(screen.getByText('Other')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('deploy.sh'))
+    expect(onOpenScript).toHaveBeenCalledWith('ws-2', expect.objectContaining({ name: 'deploy.sh' }))
+    expect(localStorage.getItem('omniterm.projectSearch.scope')).toBe('all')
   })
 
   it('does not render when isOpen is false', () => {

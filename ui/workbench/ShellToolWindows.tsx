@@ -55,7 +55,7 @@ export function SessionsHeaderActions() {
         data-testid="sessions-cleanup-button"
       />
       <IconButton
-        icon="scratches"
+        icon="broom"
         title="Clean Temp Files…"
         size="small"
         onClick={() => useTempCleanup.getState().setOpen(true)}

@@ -10,7 +10,7 @@ import {
 
 /**
  * Registers workbench action `lsp.restart` and hooks into server status events
- * to surface installation guidance notifications when a server binary is missing or failed.
+ * to offer a restart when a server fails.
  */
 export function registerLspWorkbenchActions(): () => void {
   const disposers: Array<() => void> = []
@@ -30,34 +30,27 @@ export function registerLspWorkbenchActions(): () => void {
     }),
   )
 
-  // Hook into language server status changes for guidance notifications
+  // A server that failed gets a notice to restart it. A missing one does not: code insight
+  // (features/code-insight/servers.ts) already offers to install it, and restarting a server that
+  // is not installed cannot help, so a second notice would only repeat the first.
   const unlistenServer = onIdeEvent('languageServer', (e) => {
-    if (e.status === 'missing' || e.status === 'crashed' || e.status === 'misconfigured') {
-      const isMissing = e.status === 'missing'
-      const title = `${e.name} Server ${isMissing ? 'Not Found' : 'Failed'}`
-      const body =
-        e.message ||
-        (isMissing
-          ? `Language server "${e.name}" is not installed or not found on PATH.`
-          : `Language server "${e.name}" encountered a critical error.`)
-
-      notifications().notify({
-        group: 'lsp',
-        level: 'warning',
-        sticky: true,
-        key: `lsp.status.${e.name}`,
-        title,
-        body,
-        actions: [
-          {
-            label: 'Restart Server',
-            run: () => {
-              void executeAction('lsp.restart', e.server)
-            },
+    if (e.status !== 'crashed' && e.status !== 'misconfigured') return
+    notifications().notify({
+      group: 'lsp',
+      level: 'warning',
+      sticky: true,
+      key: `lsp.status.${e.name}`,
+      title: `${e.name} Server Failed`,
+      body: e.message || `Language server "${e.name}" encountered a critical error.`,
+      actions: [
+        {
+          label: 'Restart Server',
+          run: () => {
+            void executeAction('lsp.restart', e.server)
           },
-        ],
-      })
-    }
+        },
+      ],
+    })
   })
   disposers.push(unlistenServer)
 

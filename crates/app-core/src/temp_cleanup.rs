@@ -85,6 +85,24 @@ pub fn group_key(name: &str) -> String {
     }
 }
 
+/// The group of one child of the temp folder: folders by their masked name (`bizreq-*`), loose
+/// files by extension (`*.log`) so the many single files an agent or tool leaves are one kind.
+pub fn entry_key(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir()) {
+        return group_key(&name);
+    }
+    match Path::new(&name).extension().and_then(|e| e.to_str()) {
+        Some(ext) if !ext.is_empty() && ext.len() <= 12 => {
+            format!("*.{} files", ext.to_ascii_lowercase())
+        }
+        _ => "(files without extension)".to_string(),
+    }
+}
+
 fn secs(time: SystemTime) -> u64 {
     time.duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -140,7 +158,7 @@ pub fn scan(root: &Path) -> Result<Vec<TempGroup>, String> {
         let path = child.path();
         let (files, bytes) = measure(&path);
         let changed = modified(&path).map_or(0, secs);
-        let key = group_key(&child.file_name().to_string_lossy());
+        let key = entry_key(&path);
         let group = groups.entry(key.clone()).or_insert(TempGroup {
             key,
             entries: 0,
@@ -225,7 +243,7 @@ pub fn clean(
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default();
-        if keys.is_some_and(|keys| !keys.contains(&group_key(&name))) {
+        if keys.is_some_and(|keys| !keys.contains(&entry_key(&path))) {
             continue;
         }
         if modified(&path).is_some_and(|changed| changed > cutoff) {

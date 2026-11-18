@@ -32,7 +32,7 @@ function createPreviewWrapper(
     // The view-mode switch sits in the tab strip; the wrapper floats it only while tabs are hidden.
     component: ({ path, tabId, children, actionsInTabs }) =>
       createElement(PreviewWrapper, { kind, path, tabId, actionsInTabs }, children),
-    tabActions: ({ tabId }) => createElement(PreviewTabActions, { tabId }),
+    tabActions: ({ tabId, path }) => createElement(PreviewTabActions, { tabId, path }),
   }
 }
 

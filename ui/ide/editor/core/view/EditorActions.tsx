@@ -8,10 +8,11 @@ import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ContributedToolbar } from "@/workbench/ContributedToolbar";
 import { IconButton } from "@/ui";
-import { editorController, useTabs } from "../controller";
+import { editorController } from "../controller";
 import type { Tab } from "../model/tabs";
 import { textEditorWrapperFor, useTextEditorWrappers } from "@/workbench/contributions";
 import styles from "./EditorArea.module.css";
+import { activatePane } from "./paneActivation";
 
 /** Class of the corner the inspection widget lives in (`editorCorner()`). */
 const CORNER = ".cm-omniterm-corner";
@@ -89,11 +90,6 @@ function Actions({ paneId, tab }: { paneId: string; tab: Tab }) {
   );
 }
 
-/** Pressing an action makes its pane the active one first, so the action runs for this pane. */
-function activatePane(paneId: string) {
-  if (useTabs.getState().activePane !== paneId)
-    useTabs.setState((s) => ({ ...s, activePane: s.panes[paneId] ? paneId : s.activePane }), true);
-}
 
 export function FloatingEditorActions({
   paneId,
@@ -106,7 +102,11 @@ export function FloatingEditorActions({
 }) {
   const slot = useCornerSlot(contentRef, tab.id);
   const body: ReactNode = (
-    <div className={styles.editorActions} onPointerDownCapture={() => activatePane(paneId)}>
+    <div
+      className={styles.editorActions}
+      // Pressing an action makes its pane the active one first, so the action runs for this pane.
+      onPointerDownCapture={() => activatePane(paneId)}
+    >
       <Actions paneId={paneId} tab={tab} />
     </div>
   );

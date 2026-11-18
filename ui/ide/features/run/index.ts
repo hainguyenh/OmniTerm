@@ -42,7 +42,7 @@ import { registerComposerInstall } from "./composerInstall";
 import { registerGoActions } from "./goActions";
 import { invalidateGoModules } from "./goModules";
 import { invalidatePythonPackages } from "./pythonPackages";
-import { RunWidget } from "./RunWidget";
+import { RunWidgetGate } from "./RunWidgetGate";
 import { runConfigsRunAnything } from "./runAnything";
 import { cleanupRemovedProject, recordRun, registerRunServiceActions, runServiceProvider } from "./services";
 import { liveServiceSession, serviceSessions } from "./serviceSessions";
@@ -381,7 +381,7 @@ export function activate(): () => void {
       headerContent: lazyComponent(() => import("./RunView").then((m) => m.RunTabs)),
       useBadge: useRunningCount,
     }),
-    registerTitleItem({ id: "run.widget", title: "Run Widget", align: "right", priority: 0, component: RunWidget }),
+    registerTitleItem({ id: "run.widget", title: "Run Widget", align: "right", priority: 0, component: RunWidgetGate }),
     registerRunAnythingProvider(runConfigsRunAnything),
     registerBuiltinTypes(),
     registerRunConfigType(junitType),

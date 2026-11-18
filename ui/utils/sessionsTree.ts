@@ -154,6 +154,8 @@ export function buildSessionsTree(input: SessionsTreeInput): SessionSection[] {
   if (scoped && input.filter === 'all') {
     const groups = sections.get(sectionKey(scoped))
     for (const folder of scoped.folders ?? []) {
+      // A project switched off for now is not listed empty; its running sessions still show.
+      if (folder.disabled) continue
       const project = folderProject(folder)
       seeded.add(project.key)
       groups?.set(project.key, { ...project, sessions: [] })
@@ -161,8 +163,11 @@ export function buildSessionsTree(input: SessionsTreeInput): SessionSection[] {
   }
 
   const add = (placement: Placement, node: SessionNode) => {
-    // A session outside the scoped workspace has no section and is not listed.
+    // A session outside the scoped workspace has no section and is not listed. A running AI agent
+    // that belongs to no workspace at all (its project was removed, or it runs outside every project)
+    // still shows under the scoped workspace instead of vanishing while it runs.
     const groups = sections.get(sectionKey(placement.workspace))
+      ?? (placement.workspace === null && node.kind === 'agent' && scoped ? sections.get(sectionKey(scoped)) : undefined)
     if (!groups) return
     const group = groups.get(placement.project.key) ?? { ...placement.project, sessions: [] }
     groups.set(placement.project.key, group)

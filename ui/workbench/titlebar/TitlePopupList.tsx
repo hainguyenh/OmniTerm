@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type R
 
 import clsx from 'clsx'
 
-import { Icon, Popup } from '../../ide/ui'
+import { Icon, Popup, showContextMenu, type MenuItem } from '../../ide/ui'
 import styles from '../../ide/features/welcome/ProjectPopup.module.css'
 
 export interface PopupEntry {
@@ -17,6 +17,8 @@ export interface PopupEntry {
   /** Starts a new section (separator, and a grey header when `header` is set). */
   header?: string
   run: () => void
+  /** Right-click actions of this row. */
+  menu?: MenuItem[]
 }
 
 interface TitlePopupListProps {
@@ -83,6 +85,7 @@ export function TitlePopupList({ anchor, onClose, label, entries, caption }: Tit
               className={clsx(styles.row, index === current && styles.active)}
               onMouseMove={() => index !== current && setActive(index)}
               onClick={() => activate(entry)}
+              onContextMenu={entry.menu?.length ? (event) => { event.preventDefault(); showContextMenu(event, entry.menu ?? []) } : undefined}
             >
               {entry.lead ?? (entry.icon && <Icon name={entry.icon} size={16} className={styles.actionIcon} />)}
               <span className={styles.label}>{entry.label}</span>

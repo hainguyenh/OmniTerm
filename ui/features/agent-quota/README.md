@@ -30,12 +30,54 @@ engine, its UI and every native quota command (the state is kept in the app sett
 
 | Agent | Source |
 | --- | --- |
-| Claude Code | `claude -p /usage`, run the way the user runs the profile: through its launcher (`claude-th -p /usage`) when the terminal used one, else `claude` with the profile's `CLAUDE_CONFIG_DIR` |
+| Claude Code | The status line bridge's record (below) while it is under 10 minutes old; otherwise `claude -p /usage`, run the way the user runs the profile: through its launcher (`claude-th -p /usage`) when the terminal used one, else `claude` with the profile's `CLAUDE_CONFIG_DIR` |
 | Codex | The newest `rate_limits` event in `<CODEX_HOME>/sessions/**/rollout-*.jsonl`, which Codex writes after every reply |
+| Antigravity | The Antigravity status line bridge's record (below) while it is under 10 minutes old; otherwise `agy -p /usage`, run the same way as Claude's |
 
-No token is read and no request is made; `agent_quota/no_network_tests.rs` fails the build if that
+When an agent starts in a terminal, the engine asks Rust (`agent_quota_ensure_passive`) whether its
+profile reports its quota by itself: a Claude or Antigravity profile with its bridge installed (the
+call installs it when missing), or a Codex profile with a session log. Such a pane is never frozen,
+trusted or typed into; the bridge and the background read keep its quota. Only the others — a
+launcher with no known folder, an unreadable `settings.json`, a removed bridge, a Codex profile
+before its first reply — fall back to the inline probe (`inlineUsageProbe.ts`).
+
+No token is read and no request is made (the bridge record is what Claude Code itself shows its
+status line); `agent_quota/no_network_tests.rs` fails the build if that
 changes. A reading the parser cannot understand is an error, never zero usage, and an error or
 stale reading never suspends anything.
+
+## Claude status line bridge
+
+Agent Quota installs it into every Claude profile it sees (Settings › Agent Quota › Agents › Status
+line bridges lists them; Remove there keeps it out, through `<profile>/omniterm/bridge-declined`).
+Per Claude profile it adds:
+
+- `statusLine` → `omniterm --omniterm-claude-statusline --profile <dir>`. Claude Code hands it
+  `rate_limits` (5-hour and 7-day used percentage and reset) after every reply; it keeps them in
+  `<profile>/omniterm/claude-usage.json` and prints the profile's earlier status line (kept in
+  `<profile>/omniterm/bridge.json` and run with the same input) or a short `5h 42% · 7d 13%` line.
+- A `PreToolUse` hook on `Agent|Task` → `omniterm --omniterm-claude-guard --profile <dir>`. It denies
+  a new sub-agent (hook JSON `permissionDecision: "deny"`) while the 5-hour or weekly window is at
+  the Claude limit set here, as long as Claude is monitored and "suspend at limit" is on. Sub-agents
+  already running are not stopped by it — the process guard below still covers them.
+
+On Windows both commands are wrapped as `powershell -NoProfile -Command "& '…' | Write-Output"`, the
+one form that runs the same in Git Bash and PowerShell (Claude Code uses either). The first install
+keeps the untouched file as `<profile>/omniterm/settings.backup.json`; Remove restores the earlier
+status line and drops only OmniTerm's entries. A record that is stale, malformed, or written before a
+window's reset is ignored, and the guard allows the tool on any doubt. The installed commands name
+this OmniTerm executable: the row says "update" when a profile points at another copy.
+
+## Antigravity status line bridge
+
+The Antigravity CLI runs `statusLine.command` from `<AGY_HOME>/antigravity-cli/settings.json`
+whenever the agent's state changes and hands it a `quota` map (per bucket such as `gemini-weekly`:
+`remaining_fraction`, `reset_time`). The bridge sets that command to
+`omniterm --omniterm-agy-statusline --profile <AGY_HOME>`, keeps the buckets in
+`antigravity-cli/omniterm/agy-usage.json`, and prints the earlier status line (run with `cmd /c` on
+Windows, `sh -c` elsewhere, as the CLI does) or a short `Quota 5h 18% · wk 6%` line under the
+built-in one (`stack_with_default`). Install, backup, Remove and the 10-minute freshness rule work
+as for Claude. There is no sub-agent guard: the CLI's hooks have no stable home to install into.
 
 ## Profiles and launchers
 

@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom'
 import type { Workspace } from '../domain'
 
 import { Icon } from '../ide/ui'
+import { folderKey, recordAgentLaunch, useRecentLaunches } from '../utils/recentAgentLaunches'
 import { QUICK_START_AGENTS, quickStartProjects, type QuickStartProject } from '../utils/sessionQuickStart'
+import { useClaudeProfiles } from '../utils/useClaudeProfiles'
 import { defaultProjectAmong } from '../workbench/projectFilterStore'
 import { SESSIONS_ICON } from '../workbench/shellIcons'
 
@@ -69,9 +71,22 @@ export const SessionsQuickStart: React.FC<SessionsQuickStartProps> = ({
     return (projects.find(item => item.cwd === preferred) ?? projects[0])?.key ?? ''
   })
   const ref = useRef<HTMLDivElement>(null)
+  const claudeProfiles = useClaudeProfiles()
+  const [profileMenu, setProfileMenu] = useState(false)
   // Measured once: a new anchor remounts the popup (see QuickStartOverlay).
   const [position] = useState(() => popupPosition(at))
   const project = fixedProject ?? projects.find(item => item.key === projectKey) ?? projects[0] ?? null
+  const launches = useRecentLaunches()
+  // Only folders still among the projects are offered: a removed one is not started blindly.
+  const recent = fixedProject ? [] : launches.flatMap(launch => {
+    const target = projects.find(item => item.key === folderKey(launch.cwd))
+    return target ? [{ command: launch.command, project: target }] : []
+  })
+  const start = (target: QuickStartProject | null, command: string | null) => {
+    if (command && target) recordAgentLaunch(command, target.cwd)
+    onStart(target, command)
+    onClose()
+  }
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
@@ -99,6 +114,27 @@ export const SessionsQuickStart: React.FC<SessionsQuickStartProps> = ({
       style={{ left: position.left, top: position.top, width: POPUP_WIDTH }}
       data-feature="p2.sessions.quickStart"
     >
+      {recent.length > 0 && (
+        <>
+          <div className="px-2 pb-0.5 pt-1.5 text-[11.5px] text-[var(--fg-muted)]">Recent</div>
+          {recent.map(item => (
+            <button
+              key={`${item.command}:${item.project.key}`}
+              type="button"
+              aria-label={`Start ${item.command} in ${item.project.label}`}
+              onClick={() => start(item.project, item.command)}
+              className={row}
+            >
+              <Icon name={SESSIONS_ICON} size={16} className="flex-none text-[var(--fg-muted)]" />
+              <span className="flex-none">{item.command}</span>
+              <span className="flex-none text-[var(--fg-muted)]">·</span>
+              <span className="flex-none">{item.project.label}</span>
+              <span className="min-w-0 truncate text-[var(--fg-muted)]">{item.project.cwd}</span>
+            </button>
+          ))}
+          <div className="mx-1.5 my-1 h-px bg-[var(--border-strong)]" />
+        </>
+      )}
       {!fixedProject && (
         <>
           <div className="px-2 pb-0.5 pt-1.5 text-[11.5px] text-[var(--fg-muted)]">Project</div>
@@ -131,18 +167,53 @@ export const SessionsQuickStart: React.FC<SessionsQuickStartProps> = ({
         {project ? `Start in ${project.label}` : 'Start'}
       </div>
       <div className="flex flex-wrap gap-1.5 px-2 pb-2">
-        {QUICK_START_AGENTS.map(agent => (
-          <button
-            key={agent.id}
-            type="button"
-            aria-label={agent.label}
-            onClick={() => { onStart(project, agent.command); onClose() }}
-            className="inline-flex h-[26px] items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 hover:border-[var(--accent)] hover:bg-[var(--bg-hover)]"
-          >
-            <Icon name={agent.command ? SESSIONS_ICON : 'terminal'} size={14} className="flex-none" />
-            {agent.label}
-          </button>
-        ))}
+        {QUICK_START_AGENTS.map(agent => {
+          const button = (
+            <button
+              key={agent.id}
+              type="button"
+              aria-label={agent.label}
+              onClick={() => start(project, agent.command)}
+              className="inline-flex h-[26px] items-center gap-1.5 rounded-md border border-[var(--border-strong)] px-3 hover:border-[var(--accent)] hover:bg-[var(--bg-hover)]"
+            >
+              <Icon name={agent.command ? SESSIONS_ICON : 'terminal'} size={14} className="flex-none" />
+              {agent.label}
+            </button>
+          )
+          // Hovering Claude offers the profiles found on this machine; clicking it starts the default.
+          if (agent.id !== 'claude' || claudeProfiles.length < 2) return button
+          return (
+            <div
+              key={agent.id}
+              className="relative"
+              onMouseEnter={() => setProfileMenu(true)}
+              onMouseLeave={() => setProfileMenu(false)}
+              onFocus={() => setProfileMenu(true)}
+              onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setProfileMenu(false) }}
+            >
+              {button}
+              {profileMenu && (
+                <div
+                  role="menu"
+                  aria-label="Claude profiles"
+                  className="absolute left-0 top-full z-10 flex min-w-[180px] flex-col rounded-md border border-[var(--border-popup)] bg-[var(--bg-popup)] p-1 shadow-[0_8px_24px_#0006]"
+                >
+                  {claudeProfiles.map(choice => (
+                    <button
+                      key={choice.command}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => start(project, choice.command)}
+                      className={row}
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

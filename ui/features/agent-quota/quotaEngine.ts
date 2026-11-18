@@ -1,18 +1,20 @@
 import type { AgentKind, QuotaSnapshot } from './usage/types'
 import type { SessionAgent } from './agentQuotaAPI'
 import type { EngineDeps, EngineInputs } from './quotaEngineDeps'
+import type { AgentConfig } from './quotaConfig'
 import type { ProfileQuota, TerminalAgent } from './quotaStore'
 
+import { scheduleWakes, wakeProfile, type WakeContext } from './engineWakes'
 import { releaseUnguarded, resumeByHand, runGuards, suspendByHand } from './guardRunner'
 import { cancelUsageRead, pollUsageReads, readUsageNow, type ManualReadDeps } from './manualUsageRead'
+import { PassiveSources } from './passiveSources'
 import { intervalForProfile } from './profileInterval'
 import { instanceKeyOf, profileKeyOf } from './profileKey'
-import { AGENT_LABELS, type AgentConfig } from './quotaConfig'
 import { isHeld } from './quotaGuard'
 import { isOlderReading, windowOf } from './quotaPolicy'
-import { getQuotaState, patchProfile, pushNotice, setQuotaNow, terminalConfig, updateQuota } from './quotaStore'
+import { getQuotaState, patchProfile, setQuotaNow, terminalConfig, updateQuota } from './quotaStore'
 import { pushSample } from './smartInterval'
-import { dueWake, rememberReset, weekSpent } from './wakePolicy'
+import { rememberReset } from './wakePolicy'
 
 /**
  * The Agent Quota loop. Once a second it advances the countdown clock (while the window is
@@ -30,7 +32,6 @@ const TICK_MS = 1000
  */
 const OFF_TICK_MS = 15_000
 const DETECT_MS = 5000
-const AFTER_WAKE_REFRESH_MS = 5000
 /** While an agent is being started in a frozen pane, its process is looked for this often. */
 const LAUNCH_DETECT_MS = 1000
 /** A launch hold whose agent never shows up is released after this long… */
@@ -52,7 +53,20 @@ export class QuotaEngine {
   /** Panes held since an agent was started in them, until detection finds it: session → when. */
   private readonly launching = new Map<string, number>()
 
-  constructor(private readonly deps: EngineDeps) {}
+  private readonly passive: PassiveSources
+  private readonly wakes: WakeContext
+
+  constructor(private readonly deps: EngineDeps) {
+    this.passive = new PassiveSources(deps.api)
+    this.wakes = {
+      api: deps.api,
+      now: () => deps.now(),
+      configsForProfile: (key) => this.configsForProfile(key),
+      configForProfile: (key) => this.configForProfile(key),
+      isBusy: (key) => this.terminalsOf(key).some((terminal) => this.inputs.busy[terminal.sessionId]),
+      track: (work) => this.track(work),
+    }
+  }
 
   setInputs(inputs: EngineInputs): void {
     this.inputs = inputs
@@ -105,6 +119,8 @@ export class QuotaEngine {
     const { config } = getQuotaState()
     if (!this.deps.launchHold || !this.deps.inlineProbe || this.launching.has(sessionId)) return
     if (!config.enabled || !config.agents[agent]?.enabled || this.inputs.busy[sessionId]) return
+    // A profile that reports its quota by itself is neither frozen nor typed into.
+    if (this.passive.agentIsPassive(agent)) return
     this.deps.launchHold.hold(sessionId)
     this.launching.set(sessionId, this.deps.now())
     this.detectAt = 0
@@ -137,14 +153,17 @@ export class QuotaEngine {
     const now = this.deps.now()
     await this.track(releaseUnguarded(this.deps.api))
     this.expireLaunches(now)
-    if (!getQuotaState().config.enabled) return
+    const { config } = getQuotaState()
+    if (!config.enabled) return
+    const monitored = (Object.keys(config.agents) as AgentKind[]).filter((agent) => config.agents[agent].enabled)
+    void this.track(this.passive.prime(monitored))
     if (this.deps.visible?.() ?? true) setQuotaNow(now)
     if (now >= this.detectAt && !this.detecting) await this.detect(now)
     for (const profile of Object.values(getQuotaState().profiles)) {
       const monitoring = this.configsForProfile(profile.key).some((config) => config.enabled)
       if (monitoring && !profile.fetching && now >= profile.nextFetchAt) void this.track(this.fetchProfile(profile.key))
     }
-    this.scheduleWakes(now)
+    scheduleWakes(this.wakes, now)
     pollUsageReads(this.manualRead)
   }
 
@@ -257,8 +276,22 @@ export class QuotaEngine {
       // A new profile has no reading yet: its background read waits for the probe.
       const previousNextFetchAt = current.profiles[terminal.profileKey]?.nextFetchAt
       patchProfile(terminal.profileKey, () => ({ nextFetchAt: now + INLINE_PROBE_HOLD_MS }))
-      void this.track(this.probeInline(terminal.profileKey, terminal, previousNextFetchAt))
+      void this.track(this.startAgent(terminal, now, previousNextFetchAt))
     }
+  }
+
+  /**
+   * A profile that reports its quota by itself (a status line bridge, Codex's session log) is let
+   * go at once and read in the background; only the others are asked inline, as a fallback.
+   */
+  private async startAgent(terminal: TerminalAgent, now: number, previousNextFetchAt?: number): Promise<void> {
+    const { agent, profileDir, launcher } = terminal
+    if (await this.passive.check({ agent, profileDir, launcher })) {
+      this.deps.launchHold?.release(terminal.sessionId)
+      patchProfile(terminal.profileKey, () => ({ nextFetchAt: previousNextFetchAt ?? now }))
+      return
+    }
+    await this.probeInline(terminal.profileKey, terminal, previousNextFetchAt)
   }
 
   private async probeInline(key: string, terminal: TerminalAgent, previousNextFetchAt?: number): Promise<void> {
@@ -326,42 +359,6 @@ export class QuotaEngine {
     patchProfile(key, (current) => ({ fetching: false, nextFetchAt: now + intervalForProfile(current, this.inputs.busy, this.deps.random, now) }))
   }
 
-  private scheduleWakes(now: number): void {
-    for (const profile of Object.values(getQuotaState().profiles)) {
-      if (profile.waking) continue
-      const isBusy = this.terminalsOf(profile.key).some((terminal) => this.inputs.busy[terminal.sessionId])
-      const scheduled = this.configsForProfile(profile.key)
-        .filter((config) => config.enabled)
-        .map((config) => ({ config, key: dueWake(config, profile.wake, profile.lastGood, now) }))
-        .find((entry): entry is { config: AgentConfig; key: string } => entry.key !== null)
-      if (scheduled) {
-        if (isBusy) {
-          patchProfile(profile.key, (current) => ({
-            wake: { ...current.wake, lastKey: scheduled.key },
-          }))
-          continue
-        }
-        void this.track(this.wakeProfile(profile.key, scheduled.key, scheduled.config))
-      }
-    }
-  }
-
-  private async wakeProfile(key: string, scheduleKey?: string, requestedConfig?: AgentConfig): Promise<void> {
-    const profile = getQuotaState().profiles[key]
-    if (!profile || profile.waking) return
-    const config = requestedConfig ?? this.configForProfile(key) ?? getQuotaState().config.agents[profile.agent]
-    const name = `${AGENT_LABELS[profile.agent]} (${profile.profileName})`
-    if (weekSpent(profile.lastGood, config)) {
-      pushNotice('warning', `Wake-up skipped for ${name}: its weekly limit is reached.`)
-      return
-    }
-    patchProfile(key, (current) => ({ waking: true, wake: scheduleKey ? { ...current.wake, lastKey: scheduleKey } : current.wake }))
-    const result = await this.deps.api.wake({ agent: profile.agent, profileDir: profile.profileDir, launcher: profile.launcher, prompt: config.wake.prompt })
-    const now = this.deps.now()
-    patchProfile(key, () => ({ waking: false, nextFetchAt: now + AFTER_WAKE_REFRESH_MS }))
-    pushNotice(result.ok ? 'info' : 'danger', result.ok ? `Woke ${name}: a new session window has started.` : `Wake-up failed for ${name}: ${result.message ?? 'unknown error'}`)
-  }
-
   /** Manual wake for one terminal's profile, or every active profile. */
   wake(target: { sessionId: string } | 'all'): void {
     const state = getQuotaState()
@@ -374,7 +371,7 @@ export class QuotaEngine {
         const config = terminal ? terminalConfig(state, terminal) : undefined
         return terminal && config?.enabled ? [{ key: terminal.profileKey, config }] : []
       })()
-    for (const { key, config } of targets) void this.track(this.wakeProfile(key, undefined, config))
+    for (const { key, config } of targets) void this.track(wakeProfile(this.wakes, key, undefined, config))
   }
 
   refresh(profileKey?: string): void {

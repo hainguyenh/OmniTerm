@@ -90,6 +90,14 @@ fn same_path(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// The folders that make up the project: a disabled folder stays in the workspace but is left out,
+/// so the project tree, search, index and scans do not see it.
+pub(crate) fn project_folders(workspace: &app_protocol::workspace::Workspace) -> Vec<PathBuf> {
+    app_core::workspace_model::active_folders(workspace)
+        .map(|folder| PathBuf::from(&folder.path))
+        .collect()
+}
+
 /// Marks the workspace the workbench works on (or clears it) and returns its project. Not part of
 /// the `ide_app` command set: the OmniTerm webview calls it whenever its active workspace changes.
 #[tauri::command]
@@ -113,11 +121,7 @@ pub async fn ide_set_project<R: Runtime>(
                 .into_iter()
                 .find(|workspace| workspace.id == id)
                 .ok_or_else(|| IdeError::not_found(format!("no workspace {id}")))?;
-            let folders = workspace
-                .folders
-                .iter()
-                .map(|folder| PathBuf::from(&folder.path))
-                .collect();
+            let folders = project_folders(&workspace);
             plan(&containers, &id, &workspace.name, folders)
         }
     };

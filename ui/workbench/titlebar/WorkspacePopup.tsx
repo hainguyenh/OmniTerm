@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from 'react'
 import type { Workspace } from '../../domain'
 
 import { ProjectBadge } from '../../ide/features/welcome/RecentList'
+import { Icon } from '../../ide/ui'
 import { promptInput } from '../../ide/workbench/inputDialogs'
 import type { ProjectPopupProps } from '../../ide/workbench/contributions'
 import { selectedWorkspaceId, useWorkspaceStore } from '../../platform/workspaceStore'
 
 import { TitlePopupList, type PopupEntry } from './TitlePopupList'
+import { workspaceIconName, workspaceMenuItems } from './workspaceMenu'
 import { addFolderToWorkspace, addWorkspaceFromFolder, createWorkspace, importWorkspaceFile } from './workspaceActions'
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? '' : 's'}`
@@ -51,7 +53,10 @@ export function WorkspacePopup({ anchor, onClose }: ProjectPopupProps) {
       detail: [plural(workspace.folders?.length ?? 0, 'project'), counts[workspace.id] === undefined ? null : plural(counts[workspace.id], 'connection')]
         .filter(Boolean)
         .join(' · '),
-      lead: <ProjectBadge name={workspace.name} />,
+      lead: workspaceIconName(workspace.icon)
+        ? <Icon name={workspaceIconName(workspace.icon) ?? 'folder'} size={16} />
+        : <ProjectBadge name={workspace.name} />,
+      menu: workspaceMenuItems(workspace),
       checked: !allScope && workspace.id === currentId,
       header: index === 0 ? 'Workspaces' : undefined,
       run: () => selectWorkspace(workspace.id),

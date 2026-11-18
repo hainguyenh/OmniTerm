@@ -129,6 +129,7 @@ fn quick_shell_workspace_folder_requires_exactly_one_real_root() {
         name: "One".to_string(),
         path: "/one".to_string(),
         color: None,
+        disabled: false,
     };
     let make = |folders| Workspace {
         id: "ws#one".to_string(),

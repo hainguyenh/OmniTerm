@@ -22,6 +22,7 @@ pub mod maven_profiles;
 mod npm;
 pub mod php;
 pub mod pinned;
+pub mod powershell;
 pub mod python;
 pub mod ruby;
 mod vue;

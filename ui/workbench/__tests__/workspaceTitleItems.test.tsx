@@ -86,6 +86,20 @@ describe('workspace title items', () => {
     expect(screen.getByTestId('project-filter').textContent).toContain('docs')
   })
 
+  it('the filter lists only enabled projects, and a project can be disabled or enabled from it', async () => {
+    const setFolderDisabled = vi.fn().mockResolvedValue({})
+    window.omnitermAPI = { ...window.omnitermAPI, workspace: { ...window.omnitermAPI.workspace, setFolderDisabled } as never }
+    const withOff = ws('a', [['OmniTerm', 'D:/w/OmniTerm'], ['docs', 'D:/w/docs']])
+    withOff.folders[1] = { ...withOff.folders[1]!, disabled: true }
+    act(() => useWorkspaceStore.setState({ workspaces: [withOff], selection: 'a' }))
+    render(<ProjectFilterItem />)
+    expect(screen.getByTestId('project-filter').textContent).toContain('1/2')
+    fireEvent.click(screen.getByTestId('project-filter'))
+    expect(screen.queryByText('docs')).toBeNull()
+    fireEvent.click(screen.getByText('Enable docs'))
+    await waitFor(() => expect(setFolderDisabled).toHaveBeenCalledWith('a', 'docs', false))
+  })
+
   it('the filter goes back to all projects when the workspace changes and hides without folders', () => {
     render(<ProjectFilterItem />)
     act(() => useProjectFilterStore.getState().setFilter('D:/w/docs'))

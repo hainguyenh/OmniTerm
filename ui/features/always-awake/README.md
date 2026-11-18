@@ -28,8 +28,10 @@ The sleep request cannot outlive the app. It is scoped to the OmniTerm process t
 `RunEvent::ExitRequested`/`Exit` calls `AlwaysAwakeState::begin_shutdown`, which the poller notices
 within ~50 ms and releases on; the loop also stops if the app's managed state disappears; and Windows
 drops a dead process's execution state regardless. A saved schedule *is* restored on the next launch —
-that is deliberate, so a custom deadline (08:00 tomorrow by default) survives a restart — and the panel
-shows ON when it is.
+that is deliberate, so a deadline survives a restart — and the panel shows ON when it is. The panel
+offers three schedules, all saved as one `expiresAtMs`: a number of hours from the moment of saving
+(10 by default, at most 168), the rest of today, or a custom date and time (08:00 tomorrow by
+default). A stored deadline reopens as Today when it is exactly the end of today, else as Custom.
 
 Nothing here runs while the feature is off. The Activity Bar icon appears only once
 `always_awake_info` says it is on, and the native poller is spawned by the first `get_state` call

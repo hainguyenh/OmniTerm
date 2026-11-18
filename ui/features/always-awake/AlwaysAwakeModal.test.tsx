@@ -4,7 +4,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AlwaysAwakeModal from './AlwaysAwakeModal'
-import { defaultCustomExpiry, endOfToday, fromLocalInput, scheduleFromStatus, toLocalInput } from './awakeSchedule'
+import { DEFAULT_HOURS, defaultCustomExpiry, endOfToday, expiryFor as scheduleExpiry, fromLocalInput, scheduleFromStatus, toLocalInput } from './awakeSchedule'
 import { mockOmnitermAPI } from '../../testUtils'
 
 const status: AlwaysAwakeStatus = {
@@ -64,6 +64,34 @@ describe('AlwaysAwakeModal', () => {
     later.setHours(18, 30, 0, 0)
     fireEvent.change(screen.getByLabelText('Keep awake until'), { target: { value: toLocalInput(later.getTime()) } })
     expect(await expiryFor('Custom')).toBe(later.getTime())
+  })
+
+  it('keeps awake for a number of hours from the moment of saving', async () => {
+    const setState = vi.fn(async (_payload: { enabled: boolean; mode: AlwaysAwakeMode; expiresAtMs: number }) => status)
+    mockOmnitermAPI({ alwaysAwake: { setState } })
+    render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Hours' }))
+    expect(screen.getByLabelText('Keep awake for hours')).toHaveValue(DEFAULT_HOURS)
+    fireEvent.change(screen.getByLabelText('Keep awake for hours'), { target: { value: '2.5' } })
+    const before = Date.now()
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(setState).toHaveBeenCalled())
+    const saved = setState.mock.calls[0][0].expiresAtMs
+    expect(saved).toBeGreaterThanOrEqual(before + 2.5 * 3_600_000 - 1_000)
+    expect(saved).toBeLessThanOrEqual(Date.now() + 2.5 * 3_600_000)
+  })
+
+  it('refuses no hours, negative hours or more than a week', () => {
+    render(<AlwaysAwakeModal status={status} onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Hours' }))
+    for (const value of ['', '0', '-1', '169']) {
+      fireEvent.change(screen.getByLabelText('Keep awake for hours'), { target: { value } })
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+      expect(screen.getByText(/at most 168 hours/)).toBeTruthy()
+    }
+    const now = Date.now()
+    expect(scheduleExpiry({ duration: 'hours', hours: 10, customAt: 0 }, now)).toBe(now + 36_000_000)
+    expect(scheduleExpiry({ duration: 'hours', hours: Number.NaN, customAt: 0 }, now)).toBeNull()
   })
 
   it('refuses a custom time that is not in the future', () => {
@@ -179,11 +207,11 @@ describe('AlwaysAwakeModal', () => {
     const tomorrowAt8 = defaultCustomExpiry()
     const custom = now + 2 * 86_400_000
 
-    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: endOfToday() }, now)).toEqual({ duration: 'today', customAt: tomorrowAt8 })
-    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: custom }, now)).toEqual({ duration: 'custom', customAt: custom })
+    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: endOfToday() }, now)).toEqual({ duration: 'today', hours: DEFAULT_HOURS, customAt: tomorrowAt8 })
+    expect(scheduleFromStatus({ ...status, enabled: true, expiresAtMs: custom }, now)).toEqual({ duration: 'custom', hours: DEFAULT_HOURS, customAt: custom })
     // Nothing running (off, lapsed, or never set): Custom at its 08:00-tomorrow default.
     for (const stored of [{ enabled: false, expiresAtMs: custom }, { enabled: true, expiresAtMs: now - 1 }, { enabled: true, expiresAtMs: 0 }]) {
-      expect(scheduleFromStatus({ ...status, ...stored }, now)).toEqual({ duration: 'custom', customAt: tomorrowAt8 })
+      expect(scheduleFromStatus({ ...status, ...stored }, now)).toEqual({ duration: 'custom', hours: DEFAULT_HOURS, customAt: tomorrowAt8 })
     }
   })
 

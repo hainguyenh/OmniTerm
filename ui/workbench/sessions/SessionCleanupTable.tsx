@@ -101,7 +101,9 @@ export function SessionCleanupTable({ rows, allRows, selected, onSelectedChange,
               <td className="truncate px-2 py-1">{agentLabel(row.agent)}</td>
               <td className="truncate px-2 py-1" title={row.profile}>{row.profile}</td>
               <td className="px-2 py-1" title={[row.title, row.sessionId].filter(Boolean).join('\n')}>
-                <div className="truncate text-[var(--fg)]">{row.title ?? 'Untitled session'}</div>
+                <div className={`truncate ${row.empty && !row.title ? 'italic text-[var(--fg-muted)]' : 'text-[var(--fg)]'}`}>
+                  {row.title ?? (row.empty ? 'No conversation' : 'Untitled session')}
+                </div>
                 <div className="truncate text-[11px] text-[var(--fg-muted)]">{row.sessionId}</div>
               </td>
               <td className="truncate px-2 py-1" title={row.cwd}>{projectName(row.cwd)}</td>

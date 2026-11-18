@@ -16,6 +16,13 @@ pub fn index_status(window: Window, state: State<'_, AppState>) -> IdeResult<Ind
     ide_host::ops::nav::index_status(&state.host, window.label())
 }
 
+/// Indexes the whole project (right-click a project › Index Project).
+#[tauri::command]
+#[specta::specta]
+pub fn index_project(window: Window, state: State<'_, AppState>) -> IdeResult<()> {
+    ide_host::ops::nav::index_project(&state.host, window.label())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn index_file_extensions(window: Window, state: State<'_, AppState>) -> IdeResult<Vec<ExtensionCount>> {

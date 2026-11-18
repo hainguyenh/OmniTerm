@@ -12,6 +12,7 @@ fn folder(id: &str, path: &str) -> WorkspaceFolder {
         name: id.to_string(),
         path: path.to_string(),
         color: None,
+        disabled: false,
     }
 }
 

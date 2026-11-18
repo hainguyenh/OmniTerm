@@ -186,7 +186,7 @@ describe('M3 LSP Status & Store Adversarial Stress Suite', () => {
   })
 
   describe('3. Guidance Notifications & Flood Protection', () => {
-    it('generates rich guidance notifications for missing or crashed servers with install hints', () => {
+    it('notifies a crashed server and leaves a missing one to the install notice', () => {
       const dispose = registerLspWorkbenchActions()
       disposers.push(dispose)
 
@@ -200,11 +200,7 @@ describe('M3 LSP Status & Store Adversarial Stress Suite', () => {
       })
 
       let items = useNotifications.getState().items.filter((x) => x.group === 'lsp')
-      expect(items.length).toBe(1)
-      expect(items[0]?.title).toContain('rust-analyzer')
-      expect(items[0]?.title).toContain('Not Found')
-      expect(items[0]?.level).toBe('warning')
-      expect(items[0]?.sticky).toBe(true)
+      expect(items.length).toBe(0)
 
       // Crashed server
       emitLocalIdeEvent({
@@ -216,11 +212,13 @@ describe('M3 LSP Status & Store Adversarial Stress Suite', () => {
       })
 
       items = useNotifications.getState().items.filter((x) => x.group === 'lsp')
-      expect(items.length).toBe(2)
+      expect(items.length).toBe(1)
       const vtslsNotif = items.find((x) => x.key === 'lsp.status.vtsls')
       expect(vtslsNotif).toBeDefined()
       expect(vtslsNotif?.title).toContain('Failed')
       expect(vtslsNotif?.body).toContain('exit code 137')
+      expect(vtslsNotif?.level).toBe('warning')
+      expect(vtslsNotif?.sticky).toBe(true)
     })
 
     it('enforces flood protection: deduplicates rapid duplicate events with key clustering', () => {
@@ -260,13 +258,9 @@ describe('M3 LSP Status & Store Adversarial Stress Suite', () => {
       }
 
       const lspItems = useNotifications.getState().items.filter((x) => x.group === 'lsp')
-      // Exactly 3 notifications retained despite 150 incoming events!
-      expect(lspItems.length).toBe(3)
-      expect(lspItems.map((n) => n.key).sort()).toEqual([
-        'lsp.status.pyright',
-        'lsp.status.rust-analyzer',
-        'lsp.warning.gopls',
-      ])
+      // Two notifications despite 150 incoming events; the missing server raises none here.
+      expect(lspItems.length).toBe(2)
+      expect(lspItems.map((n) => n.key).sort()).toEqual(['lsp.status.pyright', 'lsp.warning.gopls'])
     })
   })
 

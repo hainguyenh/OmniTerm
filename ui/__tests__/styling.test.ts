@@ -33,6 +33,19 @@ describe("styling regression check", () => {
   // 0 and xterm maps that back onto the buffer, so a background pane receiving output was dragged
   // to the top of its scrollback. It also zeroed clientWidth/Height, forcing a re-fit on every tab
   // switch. Hiding a pane must therefore keep its layout box.
+  // Regression: IDE dialogs and popups are portaled to <body>, outside [data-workbench]. The legacy
+  // `input { background-color: var(--theme-bg) !important }` rule then took the terminal theme's
+  // background and covered the field's inset-shadow frame, so search boxes lost their border and
+  // showed the wrong colour in light/dark mode.
+  it("keeps the legacy input colours off the IDE's portaled dialogs and popups", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "index.css"), "utf8");
+    const rule = content.match(/(:is\(input, select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
+    expect(rule?.[1]).toContain("[data-workbench] *");
+    expect(rule?.[1]).toContain("[data-ide-surface] *");
+    const font = content.match(/(:is\(html, body[^{]*)\{\s*font-family: var\(--theme-font-family/);
+    expect(font?.[1]).toContain("[data-ide-surface] *");
+  });
+
   it("hides off-screen panes without collapsing their layout box", () => {
     const cssPath = path.join(ROOT, "ui", "index.css");
     const content = fs.readFileSync(cssPath, "utf8");

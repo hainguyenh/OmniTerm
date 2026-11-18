@@ -284,6 +284,24 @@ fn persistence_skips_unchanged_files_on_reopen() {
 }
 
 #[test]
+fn reindex_finds_files_created_behind_the_watchers() {
+    let fx = sample();
+    let idx = fx.open();
+    let before = idx.status().files;
+    // Written without `update`: no watcher event reaches the index.
+    fx.write(
+        "src/missed/Quiet.kt",
+        "class QuietThing {}
+",
+    );
+    assert!(symbols(&idx, "QuietThing", SymbolFilter::Types).is_empty());
+    idx.reindex();
+    assert!(idx.wait_idle(WAIT));
+    assert_eq!(symbols(&idx, "QuietThing", SymbolFilter::Types), vec!["QuietThing"]);
+    assert_eq!(idx.status().files, before + 1);
+}
+
+#[test]
 fn incremental_updates() {
     let fx = sample();
     let idx = fx.open();

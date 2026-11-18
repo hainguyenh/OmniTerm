@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::agy_bridge::{agy_home, agy_usage_file, parse_agy_record};
 use super::agy_usage::{is_agy_model_match, parse_agy_usage};
 use super::claude_provider::redact_sample;
 use super::deps::{CliOptions, ProviderDeps};
@@ -13,6 +14,8 @@ use super::launcher::agent_command;
 use super::types::{AgentKind, ModelFamily, QuotaError, QuotaSnapshot, QuotaSource};
 
 const USAGE_TIMEOUT: Duration = Duration::from_secs(45);
+/// The status line record is a few hundred bytes; anything past this is not one.
+const BRIDGE_TAIL: u64 = 64 * 1024;
 
 /// The model family the profile's settings select, when they name one.
 pub fn detect_agy_active_family(
@@ -43,6 +46,14 @@ pub fn fetch_agy_usage(
     family: Option<ModelFamily>,
     deps: &dyn ProviderDeps,
 ) -> QuotaSnapshot {
+    let active = family.or_else(|| detect_agy_active_family(profile_dir, deps));
+    // The status line bridge's fresh record, when the profile has one: no CLI run needed.
+    let bridged = agy_home(profile_dir, launcher, deps.home())
+        .and_then(|home| deps.read_tail(&agy_usage_file(&home), BRIDGE_TAIL))
+        .and_then(|raw| parse_agy_record(&raw, deps.now(), active));
+    if let Some(reading) = bridged {
+        return reading;
+    }
     let Some(command) = agent_command(AgentKind::Agy, profile_dir, launcher, deps) else {
         return QuotaSnapshot::failure(
             deps.now(),
@@ -50,7 +61,6 @@ pub fn fetch_agy_usage(
             "Antigravity CLI not found.",
         );
     };
-    let active = family.or_else(|| detect_agy_active_family(profile_dir, deps));
     let options = CliOptions {
         env: command.env,
         timeout: USAGE_TIMEOUT,

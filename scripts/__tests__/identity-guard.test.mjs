@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 
 import {
@@ -6,7 +9,9 @@ import {
   listOutgoingCommits,
   parseGitIdent,
   parsePushUpdates,
+  runCommitMsg,
   runPrePush,
+  stripCoAuthorTrailers,
   validateCommitMessage,
   validateEffectiveIdentities,
   validateOutgoingCommit,
@@ -45,6 +50,23 @@ test('commit-message policy permits product features that genuinely discuss AI',
     'Pair on identity guard\n\nCo-authored-by: Bob Human <bob@example.test>',
   ]
   for (const message of allowed) assert.doesNotThrow(() => validateCommitMessage(message))
+})
+
+test('commit-msg hook strips every co-author trailer from the message file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'identity-guard-'))
+  try {
+    const file = join(dir, 'COMMIT_EDITMSG')
+    writeFileSync(file, 'Ship feature\n\nBody line.\n\nCo-Authored-By: Bifrost <bifrost@example.test>\nco-authored-by: Claude <noreply@anthropic.com>\n')
+    runCommitMsg(file)
+    assert.equal(readFileSync(file, 'utf8'), 'Ship feature\n\nBody line.\n')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+  assert.equal(
+    stripCoAuthorTrailers('Fix\r\n\r\nCo-authored-by: Bob <bob@example.test>\r\n'),
+    'Fix\r\n',
+  )
+  assert.equal(stripCoAuthorTrailers('Mention co-authored-by in prose'), 'Mention co-authored-by in prose')
 })
 
 test('pre-commit identity validation requires both effective identities to match exactly', () => {

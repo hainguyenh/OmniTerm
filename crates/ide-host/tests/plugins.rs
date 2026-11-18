@@ -2000,8 +2000,7 @@ fn plugin_syntax_for_languages_without_a_grammar() {
     );
     host.load_all();
     host.startup_finished();
-    let info =
-        host.install_from_dir(&repo().join("plugins/official/solidity"), &Consent::default()).unwrap();
+    let info = host.install_from_dir(&repo().join("plugins/official/solidity"), &Consent::default()).unwrap();
     assert_eq!(info.status, PluginStatus::Inactive, "{:?}", info.error);
     assert!(info.capabilities.iter().all(|c| c.optional && !c.granted), "language servers were refused");
 

@@ -4,12 +4,15 @@ import {
 } from '../ide/features/project-tree/HeaderActions'
 import { registerOverlay, registerToolWindow } from '../ide/workbench/contributions'
 import { NOTIFICATIONS_TOOL_WINDOW } from '../ide/workbench/Notifications'
+import { useVcs } from '../ide/features/vcs/store'
+import { useActiveAgentCount } from '../utils/agentPresenceStore'
 import { setDefaultStripeWindows } from '../ide/workbench/toolwindows/store'
 
 import { ProblemsToolWindow } from './problems/ProblemsToolWindow'
 import { useProblemsStore } from './problems/problemsStore'
 import { OmniTermProjectHeaderActions, ProjectToolWindow } from './ProjectToolWindow'
 import { QUOTA_TOOL_WINDOW } from './quota/quotaDockState'
+import { ScmToolWindow } from './scm/ScmToolWindow'
 import { SessionCleanupOverlay } from './sessions/SessionCleanupDialog'
 import { TempCleanupOverlay } from './tempCleanup/TempCleanupDialog'
 import { SessionsHeaderActions, SessionsToolWindow } from './ShellToolWindows'
@@ -21,9 +24,13 @@ import { TERMINAL_WINDOW } from './terminalDock/terminalDockActions'
  * Every other window (Structure, TODO, Find, Database, ...) stays available from the menus and
  * gets its button once opened.
  */
+/** Source Control with a section per project, next to the IDE's Commit window. */
+export const SCM_TOOL_WINDOW = 'omniterm.scm'
+
 export const STRIPE_WINDOWS: readonly string[] = [
   'project',
   'commit',
+  SCM_TOOL_WINDOW,
   'bookmarks',
   QUOTA_TOOL_WINDOW,
   'omniterm.sessions',
@@ -57,6 +64,16 @@ export function registerShellToolWindows(): () => void {
       titleMenu: useProjectTitleMenu,
     }),
     registerToolWindow({
+      id: SCM_TOOL_WINDOW,
+      title: 'Source Control',
+      icon: 'toolwindow-git',
+      anchor: 'left',
+      order: 12,
+      requiresProject: true,
+      component: ScmToolWindow,
+      useBadge: () => useVcs((s) => (s.status.length > 0 ? s.status.length : null)),
+    }),
+    registerToolWindow({
       id: 'omniterm.sessions',
       title: 'Sessions',
       icon: SESSIONS_ICON,
@@ -65,6 +82,8 @@ export function registerShellToolWindows(): () => void {
       requiresProject: false,
       component: SessionsToolWindow,
       headerActions: SessionsHeaderActions,
+      // Like the Commit badge: how many AI agents are running in open panes.
+      useBadge: useActiveAgentCount,
     }),
     registerOverlay({ id: 'omniterm.sessions.cleanup', component: SessionCleanupOverlay }),
     registerOverlay({ id: 'omniterm.temp.cleanup', component: TempCleanupOverlay }),

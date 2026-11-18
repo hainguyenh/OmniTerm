@@ -91,11 +91,16 @@ export function MarkdownEditor({
   const actions = <MarkdownLayoutActions path={path} tabId={tabId} />;
   return (
     <div ref={splitRef} className={clsx(styles.split, styles[`mode-${mode}`])}>
-      <div ref={ref} className={styles.editor}>
+      {/* aria-hidden in Preview Only: the editor's own corner actions are hidden with it, so the floating
+          editor actions must not attach to that corner (see `shownCorner`). */}
+      <div ref={ref} className={styles.editor} aria-hidden={mode === "preview" ? true : undefined}>
         {children}
         {!actionsInTabs && mode !== "preview" && <FloatingToolbar targetRef={ref}>{actions}</FloatingToolbar>}
       </div>
       {mode !== "editor" && <MarkdownPreview path={path} sync={mode === "split"} />}
+      {/* Preview only hides the editor, and the toolbar with it: float it over the preview so the
+          view mode can be switched back. */}
+      {!actionsInTabs && mode === "preview" && <FloatingToolbar targetRef={splitRef}>{actions}</FloatingToolbar>}
     </div>
   );
 }

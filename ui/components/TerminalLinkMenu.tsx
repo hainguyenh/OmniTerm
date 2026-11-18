@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { Copy, ExternalLink, FolderOpen } from 'lucide-react'
+import { ClipboardPaste, Copy, ExternalLink, FileCode, FolderOpen } from 'lucide-react'
 import type { TerminalLinkMenuKind } from '../utils/terminalLinks'
 
 export type { TerminalLinkMenuKind }
@@ -16,6 +16,10 @@ export interface TerminalLinkMenuProps {
   onCopyText: (text: string) => void
   onOpenUrl: (url: string) => void
   onOpenPath: (path: string) => void
+  /** Open the path in OmniTerm's editor (local panes only, like Open in OS). */
+  onOpenInEditor: (path: string) => void
+  /** Set when a right-click opened the menu: that gesture pastes elsewhere, so Paste stays here. */
+  onPaste?: () => void
   onClose: () => void
 }
 
@@ -24,7 +28,7 @@ const MENU_W = 200
 const MENU_H_PAD = 96
 
 export const TerminalLinkMenu: React.FC<TerminalLinkMenuProps> = ({
-  x, y, kind, text, isLocal, onCopyText, onOpenUrl, onOpenPath, onClose,
+  x, y, kind, text, isLocal, onCopyText, onOpenUrl, onOpenPath, onOpenInEditor, onPaste, onClose,
 }) => {
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -60,11 +64,17 @@ export const TerminalLinkMenu: React.FC<TerminalLinkMenuProps> = ({
         </>
       ) : (
         <>
+          {isLocal && (
+            <MenuItem icon={<FileCode className="w-3 h-3" />} label="Open in Editor" onClick={() => { onOpenInEditor(text); onClose() }} />
+          )}
           <MenuItem icon={<Copy className="w-3 h-3" />} label="Copy Path" onClick={() => { onCopyText(text); onClose() }} />
           {isLocal && (
             <MenuItem icon={<FolderOpen className="w-3 h-3" />} label="Open in OS" onClick={() => { onOpenPath(text); onClose() }} />
           )}
         </>
+      )}
+      {onPaste && (
+        <MenuItem icon={<ClipboardPaste className="w-3 h-3" />} label="Paste" onClick={() => { onPaste(); onClose() }} />
       )}
     </div>,
     document.body,

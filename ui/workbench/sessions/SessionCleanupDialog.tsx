@@ -10,6 +10,7 @@ import {
   agentLabel,
   deleteInBatches,
   filterCleanupRows,
+  scanCoversAge,
   formatBytes,
   isSelectable,
   mergeCleanupRows,
@@ -72,7 +73,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
  */
 export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
   const profiles = useSessionProfiles()
-  const { files, scanned, scanning, error, scan, rescan } = useSessionScan()
+  const { files, scanned, scannedDays, scanning, error, scan, rescan } = useSessionScan()
   const stored = useStoredSessions()
   const [filter, setFilter] = useState<CleanupFilter>({ agent: 'all', profile: 'all', olderThanDays: 0 })
   const [sort, setSort] = useState<CleanupSort>({ column: 'lastActive', descending: true })
@@ -86,7 +87,7 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
 
   const scope = useMemo(() => profilesToScan(profiles ?? [], filter), [profiles, filter])
   // The rows shown come from a scan that covered the chosen agent and profile.
-  const covered = files !== null && scope.every((profile) => scanned.includes(profile))
+  const covered = files !== null && scope.every((profile) => scanned.includes(profile)) && scanCoversAge(scannedDays, filter.olderThanDays)
   const all = useMemo(() => (files ? mergeCleanupRows(files, stored, now) : []), [files, stored, now])
   const rows = useMemo(() => sortCleanupRows(filterCleanupRows(all, filter, now), sort), [all, filter, now, sort])
   const chosen = useMemo(() => rows.filter((row) => selected.has(row.key) && isSelectable(row)), [rows, selected])
@@ -105,7 +106,7 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
     setStatus(null)
     setSelected(new Set())
     setShown(ROWS_PER_PAGE)
-    void scan(scope)
+    void scan(scope, filter.olderThanDays)
   }
 
   const forget = (targets: readonly CleanupRow[]) => targets.forEach((row) => row.storedId && removeStoredSession(row.storedId))
@@ -227,6 +228,12 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
               onChange={(days) => changeFilter({ olderThanDays: Number(days) })}
             />
           </Field>
+          <Checkbox
+            label="Empty only"
+            checked={filter.emptyOnly === true}
+            disabled={running}
+            onChange={(emptyOnly) => changeFilter({ emptyOnly })}
+          />
           <span className="flex-1" />
           <Button
             variant="primary"

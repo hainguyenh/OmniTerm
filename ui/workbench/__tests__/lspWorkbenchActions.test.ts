@@ -80,24 +80,21 @@ describe('lspWorkbenchActions & workbench wiring', () => {
     expect(registeredActions.has('lsp.restart')).toBe(false)
   })
 
-  it('displays guidance notification when a language server is reported missing', () => {
+  // Regression: a missing server showed "<name> Server Not Found" (Restart Server) next to code
+  // insight's "is not installed" (Install) notice. Only the offer to install should appear.
+  it('leaves a missing language server to the install notice', () => {
     const dispose = registerLspWorkbenchActions()
     disposers.push(dispose)
 
     emitLocalIdeEvent({
       type: 'languageServer',
       server: 101,
-      name: 'rust-analyzer',
+      name: 'marksman',
       status: 'missing',
-      message: 'rust-analyzer not found. Install via rustup component add rust-analyzer',
+      message: 'marksman not found',
     })
 
-    expect(notificationsSent.length).toBe(1)
-    const notif = notificationsSent[0]!
-    expect(notif.level).toBe('warning')
-    expect(notif.title).toContain('rust-analyzer')
-    expect(notif.title).toContain('Not Found')
-    expect(String(notif.body)).toContain('rustup component add rust-analyzer')
+    expect(notificationsSent).toEqual([])
   })
 
   it('displays guidance notification on server crash', () => {

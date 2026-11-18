@@ -28,6 +28,11 @@ export interface PanePresence {
   agentSessionId?: string
   /** The resolved AI agent model and effort. */
   modelInfo?: AgentModelSummary
+  /**
+   * The folder the pane was in when this agent process was first seen, kept while the same process
+   * runs. The shell may `cd` elsewhere afterwards; the agent still belongs to the project it started in.
+   */
+  launchCwd?: string
 }
 
 /** How long a restored pane is given for its resumed agent to appear before it is untracked. */
@@ -47,6 +52,7 @@ function samePresence(a: PanePresence | undefined, b: PanePresence | undefined):
   return a.agent === b.agent && a.profileName === b.profileName && a.launcher === b.launcher
     && a.pid === b.pid && a.startTime === b.startTime && a.claudeSessionId === b.claudeSessionId
     && a.agentSessionId === b.agentSessionId && a.modelInfo?.display === b.modelInfo?.display
+    && a.launchCwd === b.launchCwd
 }
 
 /** Replace every pane's presence in one step; unchanged panes keep their object identity. */
@@ -99,6 +105,12 @@ export function usePanePresence(tabId: string | null | undefined): PanePresence 
 }
 
 /** Every pane's presence at once — for lists (the tab strip) that cannot call a hook per item. */
+/** How many open panes run an AI agent right now (the badge of the Sessions stripe button); null for none. */
+export function useActiveAgentCount(): number | null {
+  const count = useSyncExternalStore(subscribePanePresence, () => Object.keys(presence).length, () => Object.keys(presence).length)
+  return count > 0 ? count : null
+}
+
 export function useAllPanePresence(): Readonly<Record<string, PanePresence>> {
   return useSyncExternalStore(subscribePanePresence, () => presence, () => presence)
 }

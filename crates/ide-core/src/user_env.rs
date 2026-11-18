@@ -18,9 +18,7 @@ use std::ffi::OsString;
 pub fn refreshed_vars() -> Vec<(OsString, OsString)> {
     #[cfg(windows)]
     {
-        windows::environment_block()
-            .map(|fresh| overlay(fresh, |key| std::env::var_os(key)))
-            .unwrap_or_default()
+        windows::environment_block().map(|fresh| overlay(fresh, |key| std::env::var_os(key))).unwrap_or_default()
     }
     #[cfg(not(windows))]
     {
@@ -85,7 +83,7 @@ fn parse_block(block: &[u16]) -> Vec<(&[u16], &[u16])> {
 
 #[cfg(windows)]
 mod windows {
-    use std::ffi::{c_void, OsString};
+    use std::ffi::{OsString, c_void};
     use std::os::windows::ffi::OsStringExt;
 
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
@@ -99,8 +97,9 @@ mod windows {
         let mut token: HANDLE = std::ptr::null_mut();
         // SAFETY: `GetCurrentProcess` returns a pseudo handle that needs no closing; `token`
         // is a valid out pointer and is closed below once the block is built.
-        let opened =
-            unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &mut token) };
+        let opened = unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE, &mut token)
+        };
         if opened == 0 {
             return None;
         }

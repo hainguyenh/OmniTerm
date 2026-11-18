@@ -33,10 +33,12 @@ export function useSessionProfiles(): SessionProfile[] | null {
 export function useSessionScan() {
   const [files, setFiles] = useState<AgentSessionFile[] | null>(null)
   const [scanned, setScanned] = useState<readonly string[]>([])
+  const [scannedDays, setScannedDays] = useState(0)
+  const lastDays = useRef(0)
   const [scanning, setScanning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const generation = useRef(0)
-  const scan = useCallback(async (profiles: readonly string[]) => {
+  const scan = useCallback(async (profiles: readonly string[], olderThanDays = 0) => {
     const current = ++generation.current
     setScanning(true)
     setError(null)
@@ -45,19 +47,23 @@ export function useSessionScan() {
       timer = setTimeout(() => reject(new Error('the scan took too long. Scan again, or narrow it to fewer profiles')), SCAN_TIMEOUT_MS)
     })
     try {
-      const listed = await Promise.race([listSessionFiles(profiles), timeout])
+      const listed = await Promise.race([listSessionFiles(profiles, olderThanDays), timeout])
       if (current !== generation.current) return
       setFiles(listed)
       setScanned(profiles)
+      setScannedDays(olderThanDays)
+      lastDays.current = olderThanDays
     } catch (cause) {
       if (current !== generation.current) return
       setFiles([])
       setScanned(profiles)
+      setScannedDays(olderThanDays)
+      lastDays.current = olderThanDays
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       clearTimeout(timer)
       if (current === generation.current) setScanning(false)
     }
   }, [])
-  return { files, scanned, scanning, error, scan, rescan: () => scan(scanned) }
+  return { files, scanned, scannedDays, scanning, error, scan, rescan: () => scan(scanned, lastDays.current) }
 }

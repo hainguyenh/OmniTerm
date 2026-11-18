@@ -3,6 +3,7 @@ import { useProject } from '../../ide/platform/project'
 import { toolWindowService } from '../../ide/workbench/contributions'
 import type { MenuItem } from '../../ide/ui'
 import type { ShellOption } from '../../shellOptions'
+import { selectedWorkspaceId, useWorkspaceStore } from '../../platform/workspaceStore'
 import { currentDefaultProject, useProjectFilterStore } from '../projectFilterStore'
 
 import { dockSession, endedDocked, expectDockedSession } from './terminalDockStore'
@@ -71,6 +72,18 @@ export function shellMenuItems(options: readonly ShellOption[], open: (shell: st
 const folderName = (path: string): string => path.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || path
 
 /**
+ * The projects a terminal can start in: the selected workspace's folders that are switched on (what
+ * the user arranged and sees), else the folders of the open IDE project.
+ */
+export function terminalProjects(): string[] {
+  const state = useWorkspaceStore.getState()
+  const id = selectedWorkspaceId(state.selection)
+  const workspace = state.workspaces.find((item) => item.id === id)
+  const fromCatalog = (workspace?.folders ?? []).filter((folder) => !folder.disabled).map((folder) => folder.path)
+  return fromCatalog.length > 0 ? fromCatalog : (useProject.getState().project?.workspace?.projects ?? [])
+}
+
+/**
  * The "New Terminal ⌄" rows that pick the project of a workspace with several: one per project, its
  * shells in a submenu. The project a plain "+" would use is checked.
  */
@@ -78,9 +91,11 @@ export function projectMenuItems(
   options: readonly ShellOption[],
   open: (shell: string, folder: string) => void = requestDockedTerminal,
 ): MenuItem[] {
-  const members = useProject.getState().project?.workspace?.projects ?? []
+  const members = terminalProjects()
   if (members.length < 2) return []
   const current = terminalStartFolder()
+  const norm = (path: string) => path.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
+  const same = (a: string, b: string | undefined) => !!b && norm(a) === norm(b)
   return [
     { kind: 'separator' },
     { kind: 'header', label: 'Open in Project' },
@@ -88,7 +103,7 @@ export function projectMenuItems(
       label: folderName(folder),
       verbatim: true,
       icon: 'folder',
-      checked: folder === current,
+      checked: same(folder, current),
       submenu: shellMenuItems(options, (shell) => open(shell, folder)),
     })),
   ]

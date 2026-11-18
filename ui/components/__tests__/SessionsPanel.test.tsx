@@ -1,16 +1,21 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { Connection, Workspace } from '../../domain'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clearStoredSessions, loadStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
-import { resetPanePresenceForTests } from '../../utils/agentPresenceStore'
+import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { dockSession, resetTerminalDock } from '../../workbench/terminalDock/terminalDockStore'
 import SessionsPanel, { type SessionsPanelChrome } from '../SessionsPanel'
 
+const profilesMock = vi.fn()
+vi.mock('../../features/agent-quota/agentQuotaAPI', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/agent-quota/agentQuotaAPI')>()),
+  listAgentProfiles: () => profilesMock(),
+}))
 vi.mock('../BookmarksPanel', () => ({ default: () => <div data-testid="bookmarks-panel" /> }))
 
 const local = { id: 'c1', name: 'Local', type: 'LOCAL', host: '', port: '', user: '', localCwd: 'D:/work/app' } as Connection
@@ -53,6 +58,8 @@ describe('SessionsPanel', () => {
     localStorage.clear()
     clearStoredSessions()
     resetPanePresenceForTests()
+    profilesMock.mockReset()
+    profilesMock.mockResolvedValue([])
     useWorkspaceStore.setState({ workspaces: [], selection: null, scope: 'workspace' })
   })
 
@@ -100,6 +107,14 @@ describe('SessionsPanel', () => {
     expect(onShowTab).toHaveBeenCalledWith('t1')
   })
 
+  it('tints agent rows lightly only in the AI agents view', () => {
+    act(() => setPanePresence({ t1: { agent: 'claude', profileName: 'claude-work', pid: 1, startTime: 1 } }))
+    const { view } = setup()
+    expect(view.container.querySelector('[data-agent-highlight]')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'AI agents' }))
+    expect(view.container.querySelector('[data-agent-highlight]')).not.toBeNull()
+  })
+
   it('filters to AI agents and shows the empty state', () => {
     setup()
     fireEvent.click(screen.getByRole('button', { name: 'AI agents' }))
@@ -119,6 +134,59 @@ describe('SessionsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New session' }))
     fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
     expect(onStart).toHaveBeenCalledWith(expect.anything(), null)
+  })
+
+  it('offers the Claude profiles found on this machine when Claude is hovered, and starts the chosen one', async () => {
+    profilesMock.mockResolvedValue([
+      { agent: 'claude', profileName: 'claude', profileDir: 'C:/u/.claude', launcher: null },
+      { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' },
+    ])
+    const { onStart } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }))
+    await waitFor(() => expect(profilesMock).toHaveBeenCalled())
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Claude' }).parentElement!)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'claude-work' }))
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/app' }), 'claude-work')
+  })
+
+  it('starts plain claude, without a profile list, when only the default profile exists', async () => {
+    const { onStart } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'New session' }))
+    await waitFor(() => expect(profilesMock).toHaveBeenCalled())
+    fireEvent.mouseEnter(screen.getByRole('button', { name: 'Claude' }).parentElement!)
+    expect(screen.queryByRole('menu', { name: 'Claude profiles' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
+    expect(onStart).toHaveBeenCalledWith(expect.anything(), 'claude')
+  })
+
+  it('opens a terminal in a project straight from its row', () => {
+    const { onStart } = setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Open terminal in app' }))
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/app' }), null)
+  })
+
+  it('says where an unfolded project without sessions is and starts one from it', () => {
+    const onStart = vi.fn()
+    const two = { id: 'w1', name: 'Work', folders: [{ path: 'D:/work/app' }, { path: 'D:/work/lib' }, { path: 'D:/work/off', disabled: true }] } as unknown as Workspace
+    useWorkspaceStore.setState({ workspaces: [two], selection: 'w1', scope: 'workspace' })
+    render(
+      <SessionsPanel
+        tabs={[{ id: 't1', connId: 'c1', name: 'pwsh' }]}
+        workspaces={[two]}
+        connById={(id) => (id === 'c1' ? local : undefined)}
+        isEditor={() => false}
+        sessionCwds={{}}
+        activeTabId={null}
+        onShowTab={vi.fn()}
+        onStart={onStart}
+        onResume={vi.fn()}
+      />,
+    )
+    const empty = screen.getAllByTestId('session-group-empty')
+    expect(empty).toHaveLength(1) // the disabled project is not listed empty
+    expect(empty[0]!.textContent).toContain('No sessions · D:/work/lib')
+    fireEvent.click(screen.getByRole('button', { name: 'Terminal' }))
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/lib' }), null)
   })
 
   it('shows an interrupted session with Resume and Discard, plus the Resume filter', () => {

@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
@@ -35,5 +38,21 @@ describe('agentPresenceStore', () => {
     markRestoredPane('tab-2')
     setPanePresence({ 'tab-2': claude })
     expect(isInRestoreGrace('tab-2')).toBe(false)
+  })
+})
+
+describe('useActiveAgentCount', () => {
+  it('counts the panes that run an agent, and is null for none', async () => {
+    const { renderHook, act } = await import('@testing-library/react')
+    const { useActiveAgentCount, setPanePresence, resetPanePresenceForTests } = await import('../agentPresenceStore')
+    resetPanePresenceForTests()
+    const { result } = renderHook(() => useActiveAgentCount())
+    expect(result.current).toBeNull()
+    const pane = { agent: 'claude' as const, profileName: 'claude', pid: 1, startTime: 1 }
+    act(() => setPanePresence({ a: pane, b: { ...pane, pid: 2 } }))
+    expect(result.current).toBe(2)
+    act(() => setPanePresence({ a: pane }))
+    expect(result.current).toBe(1)
+    resetPanePresenceForTests()
   })
 })

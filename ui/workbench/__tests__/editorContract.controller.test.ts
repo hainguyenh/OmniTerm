@@ -86,6 +86,19 @@ describe('editor contract: splitting', () => {
     expect(new Set(tabs.map((tab) => tab.input.key)).size).toBe(1)
     expect(new Set(tabs.map((tab) => tab.id)).size).toBe(2)
   })
+
+  it('Split Right of a splitOpensEmpty kind opens an empty, active pane and keeps the tab single', async () => {
+    register('contract-split-empty', { splitOpensEmpty: true })
+    const ctrl = start()
+    await ctrl.openInput({ kind: 'contract-split-empty', key: 'contract-split-empty:1' })
+    const source = useTabs.getState().activePane
+    ctrl.split(source, 'row')
+    const state = useTabs.getState()
+    expect(Object.keys(state.panes)).toHaveLength(2)
+    expect(state.activePane).not.toBe(source)
+    expect(state.panes[state.activePane]?.tabs).toEqual([])
+    expect(allTabs().map((tab) => tab.input.key)).toEqual(['contract-split-empty:1'])
+  })
 })
 
 describe('editor contract: tab limit', () => {

@@ -13,6 +13,7 @@ use super::claude_provider::fetch_claude_usage;
 use super::codex_rollout::fetch_codex_usage;
 use super::deps::{Platform, ProviderDeps};
 use super::launcher::is_launcher_name;
+use super::passive_source::{ensure_passive_source, BridgeTarget};
 use super::profiles::list_profiles;
 use super::types::{
     AgentKind, DiscoveredProfile, FetchUsageRequest, ModelFamily, QuotaError, QuotaSnapshot,
@@ -221,6 +222,16 @@ impl<D: ProviderDeps> QuotaService<D> {
         );
         self.waking
             .run(key, || wake_agent(request, &self.deps), WakeResult::failed)
+    }
+
+    /// Whether the profile reports its quota by itself, installing its status line bridge when it
+    /// can (see passive_source.rs).
+    pub fn ensure_passive_source(
+        &self,
+        request: &FetchUsageRequest,
+        target: &BridgeTarget,
+    ) -> bool {
+        ensure_passive_source(request, target, &self.deps)
     }
 
     pub fn list_profiles(&self) -> Vec<DiscoveredProfile> {

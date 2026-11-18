@@ -165,11 +165,11 @@ const MODEL_LINE: &[Tok] = &[
     Tok::Cap(0, &[Tok::Class(not_line_end, 1, MANY)]),
 ];
 
-struct Reading {
-    kind: WindowKind,
-    model: String,
-    used_pct: f64,
-    resets_at: Option<i64>,
+pub(crate) struct Reading {
+    pub(crate) kind: WindowKind,
+    pub(crate) model: String,
+    pub(crate) used_pct: f64,
+    pub(crate) resets_at: Option<i64>,
 }
 
 /// Remove terminal escapes and blank lines; trim what is left.
@@ -287,6 +287,15 @@ pub fn parse_agy_usage(raw: &str, now: i64, active: Option<ModelFamily>) -> Usag
         ));
     }
     let preferred = active.or_else(|| detect_family_from_text(raw));
+    Ok(pick_windows(&readings, preferred))
+}
+
+/// One window per kind from per-model readings: the preferred family's worst, the others as its
+/// breakdown. Shared by the `/usage` parser and the status line bridge (agy_bridge.rs).
+pub(crate) fn pick_windows(
+    readings: &[Reading],
+    preferred: Option<ModelFamily>,
+) -> Vec<QuotaWindow> {
     let mut windows = Vec::new();
     for kind in WindowKind::ORDER {
         let matching: Vec<&Reading> = readings
@@ -355,7 +364,7 @@ pub fn parse_agy_usage(raw: &str, now: i64, active: Option<ModelFamily>) -> Usag
             },
         );
     }
-    Ok(windows)
+    windows
 }
 
 #[cfg(test)]

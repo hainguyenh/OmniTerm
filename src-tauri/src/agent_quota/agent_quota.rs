@@ -18,6 +18,8 @@ mod agent_detect;
 mod agent_guard;
 #[path = "agent_snapshot.rs"]
 mod agent_snapshot;
+#[path = "bridge_commands.rs"]
+pub mod bridge_commands;
 #[path = "process_suspend.rs"]
 mod process_suspend;
 #[path = "usage_commands.rs"]

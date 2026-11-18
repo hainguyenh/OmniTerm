@@ -12,6 +12,7 @@ import { decodeWorkspaceSelection, isSelectionLive, resolveNewSessionWorkspace }
 import { readStoredSelection, storeSelection } from '../platform/workspaceStore'
 import { reportSessionStartFailure, workspaceHolding } from './sessionStart'
 import { useWorkspaceCatalog } from './useWorkspaceCatalog'
+import { OPEN_ALWAYS_AWAKE_EVENT, publishAwakeIndicator } from '../workbench/awake/awakeIndicatorStore'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, themes = [currentTheme], zoomFactor,
   onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
@@ -242,6 +243,16 @@ export function useMainLayoutBase({
           unsubscribe?.();
       };
   }, []);
+  // The workbench's stripe button shows this state and opens the dialog through a window event.
+  useEffect(() => {
+      publishAwakeIndicator({ available: alwaysAwakeAvailable, enabled: alwaysAwake.enabled, keepingAwake: alwaysAwake.keepingAwake });
+  }, [alwaysAwakeAvailable, alwaysAwake.enabled, alwaysAwake.keepingAwake]);
+  useEffect(() => {
+      if (!alwaysAwakeAvailable) return;
+      const open = () => setAlwaysAwakeOpen(true);
+      window.addEventListener(OPEN_ALWAYS_AWAKE_EVENT, open);
+      return () => window.removeEventListener(OPEN_ALWAYS_AWAKE_EVENT, open);
+  }, [alwaysAwakeAvailable]);
   const lastViewRef = useRef<ActivityView>('workspace');
   const sidebarVisible = activeView !== null;
   const [editorTabs, setEditorTabs] = useState<Record<string, {

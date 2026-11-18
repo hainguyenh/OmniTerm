@@ -289,6 +289,34 @@ fn sessions_with_the_same_age_are_ordered_by_id() {
     assert_eq!(sessions[0].last_active, 1_700_000_000_000);
 }
 
+/// Regression: a "7+ days" cleanup scan found nothing because the newest sessions were kept first.
+#[test]
+fn an_idle_listing_keeps_only_sessions_idle_long_enough() {
+    let home = tempfile::tempdir().expect("temp home");
+    let project = home.path().join(".claude/projects/p");
+    let now = std::time::SystemTime::now();
+    let day = std::time::Duration::from_secs(86_400);
+    for (id, age) in [(ID_A, day * 10), (ID_B, day * 2)] {
+        let path = project.join(format!("{id}.jsonl"));
+        write(&path, &claude_transcript("/w", "hi"));
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .expect("open transcript")
+            .set_modified(now - age)
+            .expect("set mtime");
+    }
+    let roots = session_roots(home.path());
+    assert_eq!(list_sessions(&roots).len(), 2);
+    let week = 7 * 86_400_000;
+    let old: Vec<_> = list_sessions_idle(&roots, week)
+        .into_iter()
+        .map(|s| s.session_id)
+        .collect();
+    assert_eq!(old, vec![ID_A.to_string()]);
+    assert!(list_sessions_idle(&roots, 30 * 86_400_000).is_empty());
+}
+
 #[test]
 fn deleting_a_non_uuid_claude_session_leaves_same_named_entries() {
     let home = tempfile::tempdir().expect("temp home");

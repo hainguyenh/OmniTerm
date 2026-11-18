@@ -6,6 +6,7 @@ import { RootErrorBoundary } from './components/RootErrorBoundary'
 import { GlobalButtonTooltips } from './components/Tooltip.tsx'
 import { initTauriBridge } from './omnitermAPI'
 import { silenceConsole } from './diag'
+import { guardExternalLinks } from './utils/externalLinkGuard'
 import { auxiliaryWindow } from './ide/platform/auxWindow'
 import './ide/styles/global.css'
 import './index.css'
@@ -20,6 +21,8 @@ silenceConsole()
 // This must happen before any component mounts so that window.omnitermAPI
 // is available for the first render cycle.
 initTauriBridge()
+// Links go to the system browser; nothing may navigate this window away from the app.
+guardExternalLinks()
 
 // The floating fullscreen restore bar is rendered into a separate transparent overlay
 // window (main.ts) that loads this same bundle with the '#overlay' hash. The global

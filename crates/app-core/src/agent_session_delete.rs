@@ -24,7 +24,7 @@ pub(super) fn remove_owned(path: &Path) -> std::io::Result<()> {
 
 /// What Claude keeps beside a transcript for the same session: its sub-agent folder, file
 /// checkpoints, shell snapshots and todo lists. Only entries named after the (UUID) session id.
-fn claude_companions(root: &SessionRoot, session: &AgentSessionFile) -> Vec<PathBuf> {
+pub(super) fn claude_companions(root: &SessionRoot, session: &AgentSessionFile) -> Vec<PathBuf> {
     let id = &session.session_id;
     let mut paths = Vec::new();
     if let Some(parent) = session.path.parent() {

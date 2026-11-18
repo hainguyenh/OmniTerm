@@ -6,6 +6,7 @@ import type { AgentConfig, DisplayConfig, QuotaConfig } from './quotaConfig'
 import './agentQuota.css'
 import { isSafePrompt } from './usage/prompt'
 import { AgentSettingsCard } from './AgentSettingsCard'
+import { ClaudeBridgeSettings } from './ClaudeBridgeSettings'
 import { LoadingArtSettings } from './LoadingArtSettings'
 import { QuotaLinesSettings } from './QuotaLinesSettings'
 import { AGENT_KINDS } from './quotaConfig'
@@ -109,7 +110,12 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {}, scope 
       </div>
 
       {oneAgent && (draft.enabled
-        ? <AgentSettingsCard agent={oneAgent} config={draft.agents[oneAgent]} defaultExpanded onChange={(next) => saveAgent(oneAgent, next)} />
+        ? (
+          <>
+            <AgentSettingsCard agent={oneAgent} config={draft.agents[oneAgent]} defaultExpanded onChange={(next) => saveAgent(oneAgent, next)} />
+            {oneAgent === 'claude' && <ClaudeBridgeSettings />}
+          </>
+        )
         : <p className="px-1 text-xs text-theme-dim">Agent quota is off. Turn it on under Agents › Quota to monitor this agent.</p>)}
 
       {!oneAgent && draft.enabled && (
@@ -143,6 +149,7 @@ export default function AgentQuotaSettings({ refreshCustomArt = () => {}, scope 
                 onChange={(next) => saveAgent(agent, next)}
               />
             ))}
+            {group === 'agents' && <ClaudeBridgeSettings />}
             {group === 'lines' && <QuotaLinesSettings display={draft.display} onChange={saveDisplay} now={now} />}
             {group === 'artwork' && <LoadingArtSettings display={draft.display} onChange={saveDisplay} refreshCustomArt={refreshCustomArt} />}
           </div>

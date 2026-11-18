@@ -56,6 +56,8 @@ export interface WorkspaceFolder {
   name: string
   path: string
   color?: WorkspaceColor
+  /** Switched off for now: kept in the workspace, skipped by the project tree, search and scans. */
+  disabled?: boolean
 }
 
 export type WorkspaceColor = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'gray'

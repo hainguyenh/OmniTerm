@@ -36,6 +36,19 @@ fn pinned_version_in(root: &Path, global: &[PathBuf], tool: Tool) -> Option<Stri
     })
 }
 
+/// Whether a config file in `dir` itself (not in a parent folder or the global config) pins `tool`.
+pub(crate) fn pinned_in_dir(dir: &Path, tool: Tool) -> bool {
+    CONFIG_FILES.iter().any(|f| {
+        std::fs::read_to_string(dir.join(f)).is_ok_and(|text| {
+            if f.ends_with(".tool-versions") {
+                tool_versions_entry(&text, tool).is_some()
+            } else {
+                mise_toml_entry(&text, tool).is_some()
+            }
+        })
+    })
+}
+
 fn global_configs() -> Vec<PathBuf> {
     let var = |k: &str| ide_core::process::host_var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from);
     if let Some(file) = var("MISE_GLOBAL_CONFIG_FILE") {

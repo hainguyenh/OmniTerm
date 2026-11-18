@@ -260,12 +260,6 @@
   background: var(--bg-toolbar-hover);
 }
 
-.omt-q-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .omt-q-mini {
   display: inline-block;
   width: 34px;
@@ -278,4 +272,51 @@
 .omt-q-mini > i {
   display: block;
   height: 100%;
+}
+
+/* Footer: one entry per running profile. The list wraps rather than clips, and only its first
+   line shows, so an entry that does not fit disappears whole (StatusBarQuotaChips counts them). */
+.omt-q-profiles {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  height: 22px;
+  overflow: hidden;
+}
+
+.omt-q-prof {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  white-space: nowrap;
+}
+
+.omt-q-prof + .omt-q-prof::before {
+  content: '|';
+  margin: 0 6px 0 2px;
+  color: var(--fg-subtle);
+}
+
+.omt-q-prof[data-active] .omt-q-prof-name {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* The percent sits above its bar, the pair as tall as one line of text. */
+.omt-q-meter {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 9.5px;
+  line-height: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.omt-q-meter .omt-q-mini {
+  width: 30px;
+  height: 3px;
 }

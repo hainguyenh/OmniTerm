@@ -8,6 +8,7 @@
  */
 import type { AttachmentKind } from './attachmentTypes'
 import type { SavedAttachment } from './attachmentInput'
+import { forgetPasteReview } from './pasteReview'
 import { releasePastedImage, setLastPastedImage, type SavedPastedImage } from './pastedImageStore'
 
 export interface SessionAttachment {
@@ -83,5 +84,6 @@ export const subscribeSessionAttachments = (sessionId: string | null, listener: 
 export const releaseSessionMedia = (sessionId: string | null): void => {
   if (!sessionId) return
   releasePastedImage(sessionId)
+  forgetPasteReview(sessionId)
   if (lists.delete(sessionId)) notify(sessionId)
 }

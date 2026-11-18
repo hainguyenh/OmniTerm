@@ -11,7 +11,7 @@ import "@xterm/xterm/css/xterm.css";
 import { Channel } from "@tauri-apps/api/core";
 import { call, commands, isTauri, type TerminalId } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
-import { editorService, notifications, registerFontZoomSurface } from "@/workbench/contributions";
+import { notifications, registerFontZoomSurface } from "@/workbench/contributions";
 import { fitScheduler, settledResize } from "./fit";
 import { watchWindowsPty, windowsPty } from "./windowsPty";
 import { installTerminalDrop } from "./drop";
@@ -20,7 +20,8 @@ import { installSelectionHighlights, type SelectionHighlightController } from ".
 import { installTerminalPaste, pasteTerminalClipboard } from "./paste";
 import { ImeCommitGate } from "./imeCommit";
 import { ownTerminalInput } from "./imeInput";
-import { findTerminalLinks, resolvePath, type TerminalLink } from "./links";
+import { findTerminalLinks } from "./links";
+import { openFileLink } from "./openFile";
 import { parseShellCommand } from "@/platform/commandLine";
 import { useProject } from "@/platform/project";
 import { hostOs, useRemote } from "@/platform/remote";
@@ -150,39 +151,6 @@ export const LINK_HANDLER: ILinkHandler = {
     if (/^https?:\/\//i.test(uri)) void openExternal(uri);
   },
 };
-
-export async function openFileLink(link: Extract<TerminalLink, { kind: "file" }>, cwd: string) {
-  const selection = link.line ? { line: link.line - 1, col: Math.max(0, (link.col ?? 1) - 1) } : undefined;
-  const path = resolvePath(link.path, cwd);
-  const rel = link.path.replace(/\\/g, "/");
-  const name = rel.split("/").pop() ?? rel;
-  try {
-    const slash = path.lastIndexOf("/");
-    const entries = await call(commands.fsReadDir(slash > 0 ? path.slice(0, slash) : "/"));
-    if (entries.some((e) => e.name === name && e.kind !== "dir")) {
-      await editorService().openFile(path, { selection, focus: true });
-      return;
-    }
-  } catch {
-    /* fall back to a project-wide lookup */
-  }
-  // The basename alone is ambiguous (`a/x.ts` vs `b/x.ts`): rank the link's
-  // directory part too and verify the hit actually sits on that path, settling
-  // for a basename match only when the link names no directory.
-  for (const q of rel === name ? [name] : [rel, name]) {
-    try {
-      const hits = await call(commands.findFiles(q, 5));
-      const hit = hits.find((h) => h.relPath === q || h.relPath.endsWith(`/${q}`));
-      if (hit) {
-        await editorService().openFile(hit.path, { selection, focus: true });
-        return;
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  notifications().notify({ level: "warning", title: "File not found", body: link.path });
-}
 
 /**
  * A tab restored from the last session may remember a directory that has since
@@ -442,7 +410,7 @@ export class TerminalSession {
         // Plain click opens; a click that ends a drag-selection never reaches here.
         event.preventDefault();
         if (l.kind === "url") void openExternal(l.url);
-        else void openFileLink(l, this.snapshot.cwd);
+        else void openFileLink(l, this.snapshot.cwd, [useProject.getState().project?.root ?? ""]);
       },
     }));
   }

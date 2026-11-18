@@ -34,14 +34,13 @@ describe('title controls', () => {
   it('provides the workspace popup and the OmniTerm title items', () => {
     registerTitleControls()
     expect(registered.popup).toBe(WorkspacePopup)
-    expect(registered.items.map((i) => i.id)).toEqual(['omniterm.projectFilter', 'omniterm.themeMode', 'omniterm.update'])
+    expect(registered.items.map((i) => i.id)).toEqual(['omniterm.projectFilter', 'omniterm.themePicker', 'omniterm.themeMode', 'omniterm.update'])
     const filter = registered.items[0]
     expect(filter).toMatchObject({ align: 'left', component: ProjectFilterItem })
     // Before the branch widget (priority 10), so the order is project, filter, branch.
     expect(filter.priority).toBeLessThan(10)
     // The light/dark switch and the update indicator follow Search Everywhere, before the gear.
-    expect(registered.items[1]).toMatchObject({ align: 'right', trailing: true })
-    expect(registered.items[2]).toMatchObject({ align: 'right', trailing: true })
+    for (const item of registered.items.slice(1)) expect(item).toMatchObject({ align: 'right', trailing: true })
   })
 
   it('leaves the font size and zoom controls out of the title bar', () => {

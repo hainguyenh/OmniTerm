@@ -83,7 +83,16 @@ export interface DisplayConfig {
   pace: PaceConfig
   artSpeed?: ArtSpeed
   artSize?: ArtSize
+  /** Which defaults the stored display settings were written under; see `DISPLAY_REVISION`. */
+  revision?: number
 }
+
+/**
+ * Revision 2 made thin quota lines and the loading artwork the defaults. Display settings stored
+ * under an older revision that still hold the old defaults (`normal` lines, artwork off) move to the
+ * new ones once; a size or artwork choice that differs from the old default is kept.
+ */
+export const DISPLAY_REVISION = 2
 
 export interface QuotaConfig {
   enabled: boolean
@@ -141,16 +150,17 @@ export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
   footer: false,
   dock: 'right',
   display: {
-    size: 'normal',
+    size: 'thin',
     lines: { session: true, weekly: true, monthly: true },
     icons: { agent: true, overrideBadge: true, resetCountdown: true, wakeButton: true, suspendState: true },
     animations: true,
-    customArtSession: false,
+    customArtSession: true,
     weeklyAutoHide: true,
     weeklyThresholdPct: 60,
     pace: { enabled: true, glyphs: DEFAULT_PACE_GLYPHS },
     artSpeed: 'normal',
     artSize: 'normal',
+    revision: DISPLAY_REVISION,
   },
   agents: { claude: defaultAgent(true, true), codex: defaultAgent(true, false), agy: defaultAgent(true, false) },
 }
@@ -238,13 +248,16 @@ export function parseQuotaConfig(value: unknown): QuotaConfig {
   const icons = record(display.icons)
   const agents = record(source.agents)
   const base = DEFAULT_QUOTA_CONFIG
+  const outdated = Object.keys(display).length > 0 && num(display.revision, 1, 1, DISPLAY_REVISION) < DISPLAY_REVISION
+  const size = oneOf(display.size, ['thin', 'normal', 'thick'] as const, base.display.size)
+  const customArtSession = bool(display.customArtSession, base.display.customArtSession)
   return {
     enabled: bool(source.enabled, base.enabled),
     pinned: bool(source.pinned, base.pinned),
     footer: bool(source.footer, base.footer),
     dock: parseQuotaDock(source.dock, source.footer),
     display: {
-      size: oneOf(display.size, ['thin', 'normal', 'thick'] as const, base.display.size),
+      size: outdated && size === 'normal' ? base.display.size : size,
       lines: {
         session: bool(lines.session, base.display.lines.session),
         weekly: bool(lines.weekly, base.display.lines.weekly),
@@ -258,12 +271,13 @@ export function parseQuotaConfig(value: unknown): QuotaConfig {
         suspendState: bool(icons.suspendState, base.display.icons.suspendState),
       },
       animations: bool(display.animations, base.display.animations),
-      customArtSession: bool(display.customArtSession, base.display.customArtSession),
+      customArtSession: outdated || customArtSession,
       weeklyAutoHide: bool(display.weeklyAutoHide, base.display.weeklyAutoHide),
       weeklyThresholdPct: num(display.weeklyThresholdPct, base.display.weeklyThresholdPct ?? 60, 0, 100),
       pace: parsePace(display.pace, base.display.pace),
       artSpeed: oneOf(display.artSpeed, ['slow', 'normal', 'fast'] as const, base.display.artSpeed ?? 'normal'),
       artSize: oneOf(display.artSize, ['compact', 'normal', 'large'] as const, base.display.artSize ?? 'normal'),
+      revision: DISPLAY_REVISION,
     },
     agents: {
       claude: parseAgent(agents.claude, base.agents.claude),

@@ -441,6 +441,7 @@ function DialogInner({
 
   return createPortal(
     <div
+      data-ide-surface=""
       className={clsx(styles.backdrop, position === "top" && styles.top, overlayTitleBar && styles.belowTitleBar)}
       onPointerDown={(e) => {
         if ((dismissOnBackdrop ?? popup) && e.target === e.currentTarget) onClose();

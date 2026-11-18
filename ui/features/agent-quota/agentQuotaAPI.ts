@@ -161,6 +161,11 @@ export interface AgentQuotaAPI {
   fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
   wake(request: WakeRequest): Promise<WakeResult>
   listProfiles?(): Promise<DiscoveredProfile[]>
+  /**
+   * Whether the profile reports its quota by itself, installing its status line bridge when it
+   * can (see passiveSources.ts); any failure is a "no".
+   */
+  ensurePassive?(request: FetchUsageRequest): Promise<boolean>
   /** The app's scratch folder for the hidden profile probe; null when it cannot say. */
   probeDir?(): Promise<string | null>
 }
@@ -202,6 +207,7 @@ export function createAgentQuotaAPI(): AgentQuotaAPI {
       (error: unknown) => ({ ok: false, message: String(error).slice(0, 300) }),
     ),
     listProfiles: () => listAgentProfiles(),
+    ensurePassive: (request) => invoke<unknown>('agent_quota_ensure_passive', { request }).then((value) => value === true, () => false),
     probeDir: () => invoke<unknown>('agent_quota_probe_dir').then(
       (value) => (typeof value === 'string' && value.length > 0 && value.length <= 1024 && !value.includes('\0') ? value : null),
       () => null,

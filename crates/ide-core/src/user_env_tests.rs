@@ -82,7 +82,9 @@ struct UserVariable {
 #[cfg(windows)]
 impl UserVariable {
     fn set(name: &str, value: &str) -> Self {
-        use windows_sys::Win32::System::Registry::{RegOpenKeyExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ};
+        use windows_sys::Win32::System::Registry::{
+            HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ, RegOpenKeyExW, RegSetValueExW,
+        };
         let subkey: Vec<u16> = "Environment\0".encode_utf16().collect();
         let name: Vec<u16> = name.encode_utf16().chain([0]).collect();
         let data: Vec<u16> = value.encode_utf16().chain([0]).collect();

@@ -20,6 +20,7 @@ vi.mock('../attachmentInput', () => ({
 vi.mock('../largeTextPaste', () => ({
   handleLargeTextPaste: (...args: unknown[]) => h.handleLargeTextPaste(...args),
   largePasteThresholds: () => ({ promptChars: h.promptChars }),
+  saveTextAsAttachment: async () => null,
 }))
 vi.mock('../paste', () => ({ formatPowerShellScriptForPaste: (text: string) => h.formatScript(text) }))
 vi.mock('../pastedScriptDecoration', () => ({ markPastedScript: (...args: unknown[]) => h.markPastedScript(...args) }))

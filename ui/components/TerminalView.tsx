@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { noteSubmittedInput, onAgentLaunch } from '../utils/agentLaunchSignal'
 import { interceptPaneInput } from '../utils/paneInputHold'
+import { registerPaneConsole } from '../utils/paneConsoles'
 import { registerPaneScreen } from '../utils/paneScreens'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
@@ -18,6 +19,7 @@ import { createNativePasteGate, createTerminalClipboard, writeClipboardText } fr
 import { recordPastedImage, recordSavedAttachments, releaseSessionMedia } from '../utils/sessionAttachmentStore'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
+import { openTerminalPath } from '../utils/terminalOpenPath'
 import '@xterm/xterm/css/xterm.css'
 import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
@@ -49,6 +51,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
   // host (Escape / outside click / item picked).
   const [linkMenu, setLinkMenu] = React.useState<TerminalLinkMenuState | null>(null)
+  // The shell's reported directory, which relative paths in its output are relative to.
+  const cwdRef = useRef<string | null>(null)
+  // The menu's Paste item; set by the main effect, which owns the clipboard.
+  const menuPasteRef = useRef<() => void>(() => {})
   // Set by the main effect; lets the fontSize effect refit without re-running it.
   const safeFitRef = useRef<() => void>(() => {})
   // Was the pane pinned to the live tail when it was last hidden? Re-showing scrolls back down only
@@ -138,6 +144,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     if (!terminalRef.current) return
 
     const isLocal = connection.type === 'LOCAL'
+    cwdRef.current ??= connection.localCwd ?? findSessionByTabId(id)?.cwd ?? null
 
     const term = new Terminal(createTerminalOptions({
       isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
@@ -172,8 +179,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         })
       : { dispose: () => {} }
     const paneDisposables = [
-      ...registerCwdReporting(term, (cwd) => cbs.current.onCwdChange?.(cwd)),
+      ...registerCwdReporting(term, (cwd) => {
+        cwdRef.current = cwd
+        cbs.current.onCwdChange?.(cwd)
+      }),
       registerPaneScreen(id, term),
+      registerPaneConsole(id, term),
       onScrollDisposable,
     ]
     const plainLinkDisposable = registerPlainUrlLinks(term)
@@ -257,7 +268,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       clipboard,
       setLinkMenu,
       setSuppressPaste: () => { suppressNativePasteUntil = performance.now() + 250 },
+      openPath: isLocal ? (link) => void openTerminalPath(link, cwdRef.current) : undefined,
     })
+    menuPasteRef.current = () => { term.focus(); void clipboard.paste() }
     const onNativePaste = createNativePasteGate({
       term,
       noteLocalEcho: () => noteLocalEcho(),
@@ -471,6 +484,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       <TerminalViewLinkMenuHost
         menu={linkMenu}
         isLocal={connection.type === 'LOCAL'}
+        onOpenInEditor={(link) => void openTerminalPath(link, cwdRef.current)}
+        onPaste={() => menuPasteRef.current()}
         onClose={() => setLinkMenu(null)}
       />
       <CtrlCHint trigger={ctrlCHintTick} />

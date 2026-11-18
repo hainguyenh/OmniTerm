@@ -32,6 +32,26 @@ fn main() {
     // covers `--sessiond`: a daemon started by a debug build hosts panes for every later app launch.
     strip_debugger_env(cfg!(debug_assertions), |name| std::env::remove_var(name));
     let args: Vec<String> = std::env::args().collect();
+    // Claude Code runs OmniTerm as a profile's status line and sub-agent guard, and the Antigravity
+    // CLI as its status line, once a bridge is installed (Settings › Agent Quota). These answer on stdout and exit before any app start-up.
+    if args
+        .iter()
+        .any(|arg| arg == app_core::agent_quota::STATUSLINE_FLAG)
+    {
+        std::process::exit(app_core::agent_quota::run_statusline_mode(&args));
+    }
+    if args
+        .iter()
+        .any(|arg| arg == app_core::agent_quota::AGY_STATUSLINE_FLAG)
+    {
+        std::process::exit(app_core::agent_quota::run_agy_statusline_mode(&args));
+    }
+    if args
+        .iter()
+        .any(|arg| arg == app_core::agent_quota::GUARD_FLAG)
+    {
+        std::process::exit(app_core::agent_quota::run_guard_mode(&args));
+    }
     if args.iter().any(|arg| arg == "--sessiond") {
         let result = state_dir_arg(&args).and_then(session_core::run_daemon);
         if result.is_err() {

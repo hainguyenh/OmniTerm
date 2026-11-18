@@ -180,6 +180,7 @@ function PopupInner({
         refs.setFloating(node);
       }}
       data-popup=""
+      data-ide-surface=""
       role={role}
       aria-label={aria["aria-label"]}
       tabIndex={-1}

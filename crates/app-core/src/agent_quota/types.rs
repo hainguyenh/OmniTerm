@@ -84,12 +84,14 @@ pub struct QuotaWindow {
     pub breakdown: Option<Vec<BreakdownEntry>>,
 }
 
-/// Where a reading came from. Neither source uses a token or the network.
+/// Where a reading came from. No source uses a token or the network.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum QuotaSource {
     Cli,
     Rollout,
+    /// The `rate_limits` Claude Code handed the OmniTerm status line bridge (see claude_bridge.rs).
+    Statusline,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]

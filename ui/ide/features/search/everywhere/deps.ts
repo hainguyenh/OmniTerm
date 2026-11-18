@@ -34,6 +34,13 @@ export function ipcDeps(ctx: ContextKeys): SeDeps {
     now: () => performance.now(),
     inFileSet: (set, path) => inFileSet(set, path),
     routes: () => searchEndpoints(projectRoot()),
+    entryKind: async (path) => {
+      try {
+        return await call(commands.fsEntryKind(path));
+      } catch {
+        return null;
+      }
+    },
   };
 }
 

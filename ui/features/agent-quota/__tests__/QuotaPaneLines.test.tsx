@@ -104,7 +104,8 @@ describe('QuotaPaneLines', () => {
     expect(screen.getByTestId('aq-line-session')).toBeInTheDocument()
     expect(screen.queryByTestId('aq-line-weekly')).toBeNull()
     expect(screen.queryByLabelText('Global limits')).toBeNull()
-    expect(screen.getByTestId('aq-strip')).toHaveClass('aq-size-normal')
+    // Thin lines are the default.
+    expect(screen.getByTestId('aq-strip')).toHaveClass('aq-size-thin')
   })
 
   it('shows the profile name without an agent icon', () => {

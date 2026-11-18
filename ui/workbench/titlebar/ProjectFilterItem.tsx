@@ -8,7 +8,7 @@ import { useSelectedWorkspace } from '../../platform/workspaceStore'
 import { comparablePath, useProjectFilterStore } from '../projectFilterStore'
 
 import { TitlePopupList, type PopupEntry } from './TitlePopupList'
-import { addFolderToWorkspace, removeFolderFromWorkspace } from './workspaceActions'
+import { activeFolders, addFolderToWorkspace, enableAllFolders, removeFolderFromWorkspace, setFolderDisabled } from './workspaceActions'
 
 function folderName(folder: WorkspaceFolder): string {
   if (folder.name) return folder.name
@@ -46,7 +46,10 @@ export function ProjectFilterItem() {
   const defaultPath = useProjectFilterStore((s) => (workspace ? s.defaults[workspace.id] : undefined))
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLButtonElement>(null)
-  const folders = workspace?.folders ?? []
+  const allFolders = workspace?.folders ?? []
+  // Only folders that are switched on are part of the project the panel shows.
+  const folders = activeFolders(workspace)
+  const disabledCount = allFolders.length - folders.length
   const selected = filter === 'all' ? null : folders.find((folder) => folder.path === filter)
 
   const defaultIndex = defaultPath
@@ -79,6 +82,18 @@ export function ProjectFilterItem() {
         run: () => workspace && void addFolderToWorkspace(workspace.id),
       },
       // One row per project: the list above only picks what the panel shows.
+      // Switch a project off for now instead of removing it: search, scans and the Project panel skip it.
+      ...allFolders.map((folder, index) => ({
+        id: `toggle:${folder.id || folder.path}`,
+        label: `${folder.disabled ? 'Enable' : 'Disable'} ${folderName(folder)}`,
+        detail: folder.disabled ? 'disabled for now' : undefined,
+        icon: folder.disabled ? 'check' : 'hide',
+        ...(index === 0 ? { header: 'Disable for now (kept in the workspace)' } : {}),
+        run: () => workspace && void setFolderDisabled(workspace.id, folder, !folder.disabled),
+      })),
+      ...(workspace && disabledCount > 0
+        ? [{ id: 'enable-all', label: 'Enable all projects', icon: 'check', run: () => void enableAllFolders(workspace) }]
+        : []),
       ...folders.map((folder, index) => ({
         id: `remove:${folder.id || folder.path}`,
         label: `Remove ${folderName(folder)} from workspace`,
@@ -87,10 +102,10 @@ export function ProjectFilterItem() {
         run: () => workspace && void removeFolderFromWorkspace(workspace.id, folder),
       })),
     ],
-    [folders, selected, setFilter, workspace, defaultPath],
+    [folders, allFolders, disabledCount, selected, setFilter, workspace, defaultPath],
   )
 
-  if (!workspace || folders.length === 0) return null
+  if (!workspace || allFolders.length === 0) return null
   return (
     <>
       <BarButton
@@ -107,7 +122,7 @@ export function ProjectFilterItem() {
         <span className={styles.widgetText}>{selected ? folderName(selected) : 'All projects'}</span>
         {!selected && (
           <span data-title-count style={{ color: 'var(--fg-subtle)', fontWeight: 400 }}>
-            {folders.length}
+            {disabledCount > 0 ? `${folders.length}/${allFolders.length}` : folders.length}
           </span>
         )}
         <Icon name="chevron-down" size={12} className={styles.chevron} />

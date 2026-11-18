@@ -50,6 +50,9 @@ describe('TempCleanupDialog', () => {
       return Promise.resolve({ removed: 3, freedBytes: 5_000_000, kept: 0, skipped: [{ name: 'locked.tmp', reason: 'in use' }] })
     })
     render(<TempCleanupOverlay />)
+    expect(invokeMock).not.toHaveBeenCalled()
+    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/Press Scan/)
+    fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
     expect(await screen.findAllByTestId('temp-cleanup-row')).toHaveLength(2)
     const del = screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement
     expect(del.disabled).toBe(true)
@@ -59,7 +62,7 @@ describe('TempCleanupDialog', () => {
     expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/cannot be undone/)
     fireEvent.click(screen.getByText('Delete Permanently'))
     await waitFor(() =>
-      expect(invokeMock).toHaveBeenCalledWith('temp_cleanup_run', { keys: ['claude-*'], olderThanHours: 24 }),
+      expect(invokeMock).toHaveBeenCalledWith('temp_cleanup_run', { keys: ['claude-*'], olderThanHours: 7 * 24 }),
     )
     await waitFor(() => expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/1 entry skipped.*locked\.tmp/))
     expect(invokeMock.mock.calls.filter(([c]) => c === 'temp_cleanup_scan')).toHaveLength(2)
@@ -68,6 +71,7 @@ describe('TempCleanupDialog', () => {
   it('shows a scan failure instead of an empty list', async () => {
     invokeMock.mockRejectedValue('Cannot read the temp folder')
     render(<TempCleanupOverlay />)
+    fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
     expect(await screen.findByText(/Cannot read the temp folder/)).toBeTruthy()
   })
 })

@@ -78,6 +78,7 @@ pub fn decode_workspaces(content: &str) -> Result<DecodedWorkspaces, String> {
                     name: display_name_for_path(Path::new(&item.path), &item.path),
                     path: item.path,
                     color: None,
+                    disabled: false,
                 }],
                 parent_id: None,
                 order,
@@ -141,6 +142,10 @@ pub fn validate_workspace_list(workspaces: &[Workspace]) -> Result<(), String> {
     Ok(())
 }
 
+#[path = "workspace_export.rs"]
+mod export;
+pub use export::to_code_workspace;
+
 pub fn parse_workspace_import(file_path: &Path, content: &str) -> Result<WorkspaceImport, String> {
     let extension = file_path
         .extension()
@@ -184,6 +189,7 @@ pub fn parse_workspace_import(file_path: &Path, content: &str) -> Result<Workspa
             name,
             path: normalized,
             color: None,
+            disabled: false,
         });
     }
     if folders.is_empty() {
@@ -247,6 +253,27 @@ pub fn rename_folder(workspace: &mut Workspace, folder_id: &str, name: &str) -> 
         .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\""))?;
     folder.name = name.to_string();
     Ok(())
+}
+
+/// Switch a folder off (or back on) without removing it: it stays in the workspace and keeps its
+/// id and pins, but [`active_folders`] skips it, so the project tree, search and scans do too.
+pub fn set_folder_disabled(
+    workspace: &mut Workspace,
+    folder_id: &str,
+    disabled: bool,
+) -> Result<(), String> {
+    let folder = workspace
+        .folders
+        .iter_mut()
+        .find(|folder| folder.id == folder_id)
+        .ok_or_else(|| format!("Unknown workspace folder \"{folder_id}\""))?;
+    folder.disabled = disabled;
+    Ok(())
+}
+
+/// The folders that are switched on, in workspace order.
+pub fn active_folders(workspace: &Workspace) -> impl Iterator<Item = &WorkspaceFolder> {
+    workspace.folders.iter().filter(|folder| !folder.disabled)
 }
 
 pub fn set_entry_pinned(

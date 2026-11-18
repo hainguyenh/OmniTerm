@@ -14,6 +14,7 @@ import { useSessionCleanup } from '../sessionCleanupStore'
 const OLD = '11111111-1111-4111-8111-111111111111'
 const OPEN = '22222222-2222-4222-8222-222222222222'
 const LISTED = '33333333-3333-4333-8333-333333333333'
+const EMPTY = '44444444-4444-4444-8444-444444444444'
 const DAY = 86_400_000
 
 const listing = [
@@ -74,7 +75,7 @@ describe('SessionCleanupDialog', () => {
     expect(screen.queryAllByTestId('session-cleanup-row')).toEqual([])
 
     fireEvent.click(screen.getByTestId('session-cleanup-scan'))
-    await waitFor(() => expect(listCalls()).toEqual([['agent_session_files_list', { profiles: ['claude', 'claude-work', 'codex'] }]]))
+    await waitFor(() => expect(listCalls()).toEqual([['agent_session_files_list', { profiles: ['claude', 'claude-work', 'codex'], olderThanDays: 0 }]]))
     expect(await screen.findAllByTestId('session-cleanup-row')).toHaveLength(4)
   })
 
@@ -176,6 +177,20 @@ describe('SessionCleanupDialog', () => {
     expect(new Set(batches.flatMap((batch) => batch.ids)).size).toBe(60)
     await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toContain('Deleted 60 sessions'))
     expect(listCalls()).toHaveLength(2)
+  })
+
+  it('names a session without a prompt "No conversation" and can show only those', async () => {
+    const empty = { id: `claude:claude:${EMPTY}`, agent: 'claude', profile: 'claude', sessionId: EMPTY, cwd: null, title: null, lastActive: Date.now() - 50 * DAY, size: 187, empty: true }
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'agent_session_profiles_list') return profiles
+      if (command === 'agent_session_files_list') return [...listing, empty]
+      throw new Error(command)
+    })
+    await scanAll()
+    expect(await screen.findByText('No conversation')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Empty only'))
+    await waitFor(() => expect(screen.getAllByTestId('session-cleanup-row')).toHaveLength(1))
+    expect(screen.getByText(EMPTY)).toBeTruthy()
   })
 
   it('reports a listing failure and still shows the remembered sessions', async () => {

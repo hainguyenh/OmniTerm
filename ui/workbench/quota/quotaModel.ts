@@ -106,6 +106,60 @@ export function quotaGroups(
   return groups
 }
 
+export interface QuotaFooterProfile {
+  key: string
+  agent: AgentKind
+  /** The profile name, with the agent's tag when another agent has a profile of the same name. */
+  label: string
+  /** Used percent of the row's window (the 5h one when known), or null before the first reading. */
+  pct: number | null
+  /** "Claude · 5h window · resets 14:20", for the tooltip. */
+  detail: string
+  /** The active session runs on this profile. */
+  active: boolean
+}
+
+/** How close a profile is to its 5h limit, for ordering: the session window, else no urgency. */
+function sessionUrgency(profile: QuotaState['profiles'][string]): number {
+  const window = shownWindow(profile)
+  return window?.kind === 'session' ? window.usedPct : -1
+}
+
+/**
+ * The footer's profiles: those with a running agent (every known one while none runs), the one
+ * nearest its 5h limit first. When the bar is too narrow the tail is what gets hidden, so the
+ * profiles about to run out stay in sight.
+ */
+export function footerProfiles(
+  state: Pick<QuotaState, 'terminals' | 'profiles'> & { now: number },
+  active: ActiveQuotaSession | null,
+): QuotaFooterProfile[] {
+  const running = new Set(Object.values(state.terminals).map((terminal) => terminal.profileKey))
+  const all = Object.values(state.profiles)
+  const shown = all.some((profile) => running.has(profile.key)) ? all.filter((profile) => running.has(profile.key)) : all
+  const agentsByName = new Map<string, Set<AgentKind>>()
+  for (const profile of shown) {
+    const agents = agentsByName.get(profile.profileName) ?? new Set<AgentKind>()
+    agents.add(profile.agent)
+    agentsByName.set(profile.profileName, agents)
+  }
+  return shown
+    .map((profile) => ({ profile, urgency: sessionUrgency(profile) }))
+    .sort((a, b) => b.urgency - a.urgency || a.profile.profileName.localeCompare(b.profile.profileName))
+    .map(({ profile }): QuotaFooterProfile => {
+      const usage = usageOf(profile, state.now)
+      const shared = (agentsByName.get(profile.profileName)?.size ?? 0) > 1
+      return {
+        key: profile.key,
+        agent: profile.agent,
+        label: shared ? `${profile.profileName} (${AGENT_TAGS[profile.agent]})` : profile.profileName,
+        pct: usage.pct,
+        detail: `${AGENT_NAMES[profile.agent]} · ${usage.detail}`,
+        active: active?.profileKey === profile.key,
+      }
+    })
+}
+
 /** Bar colour by usage, as in the mock: green, amber over 50%, red over 80%. */
 export function usageColor(pct: number | null): string {
   if (pct === null) return 'var(--border-strong)'

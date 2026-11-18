@@ -144,6 +144,7 @@ fn read_at_reads_saved_connections_and_find_by_id_locates_them() {
             name: "Lookup".to_string(),
             path: dir.to_str().unwrap().to_string(),
             color: None,
+            disabled: false,
         }],
         parent_id: None,
         order: 0,

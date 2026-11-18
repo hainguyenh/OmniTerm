@@ -214,10 +214,8 @@ path = "themes/__SLUG__.theme.json"
 editor-scheme = "themes/__SLUG__.scheme.json"
 "#;
 
-const THEME_UI: &str =
-    include_str!("../../../../../plugins/official/harbor-night/themes/harbor-night.theme.json");
-const THEME_SCHEME: &str =
-    include_str!("../../../../../plugins/official/harbor-night/themes/harbor-night.scheme.json");
+const THEME_UI: &str = include_str!("../../../../../plugins/official/harbor-night/themes/harbor-night.theme.json");
+const THEME_SCHEME: &str = include_str!("../../../../../plugins/official/harbor-night/themes/harbor-night.scheme.json");
 
 const ICON_MANIFEST: &str = r#"id = "__ID__"
 name = "__NAME__"

@@ -12,13 +12,15 @@ import { sessionRowMenuItems } from '../workbench/sessions/sessionRowMenu'
 import { AgentBadge } from './AgentBadge'
 
 /** A running session of the Sessions tool window: shows it on click, its actions on right-click. */
-export function SessionLiveRow({ session, stored, active, docked, indent, onShow }: {
+export function SessionLiveRow({ session, stored, active, docked, indent, onShow, highlightAgent = false }: {
   session: SessionNode
   stored: readonly StoredAgentSession[]
   active: boolean
   docked: boolean
   indent: string
   onShow: (sessionId: string) => void
+  /** Tint an agent's row lightly: the AI agents view makes agents easy to pick out. */
+  highlightAgent?: boolean
 }) {
   const presence = usePanePresence(session.id)
   const title = session.agent ? stored.find((item) => item.tabId === session.id)?.title : null
@@ -36,7 +38,8 @@ export function SessionLiveRow({ session, stored, active, docked, indent, onShow
         onPointerDown={(event) => startPointerDrag(event, event.currentTarget, { type: SESSION_DRAG, payload: session.id })}
         className={`w-full flex items-center gap-2 ${indent} pr-2 py-1 rounded text-left text-xs hover:bg-[var(--theme-hover-bg)] ${
           active ? 'bg-[var(--theme-hover-bg)] text-theme-accent' : 'text-theme-fg'
-        }`}
+        }${session.agent && highlightAgent && !active ? ' bg-[color-mix(in_srgb,var(--theme-accent)_10%,transparent)]' : ''}`}
+        data-agent-highlight={session.agent && highlightAgent ? '' : undefined}
       >
         {session.agent
           ? <AgentBadge agent={session.agent} className="w-3.5 h-3.5" />

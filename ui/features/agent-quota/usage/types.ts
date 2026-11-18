@@ -20,8 +20,11 @@ export interface QuotaWindow {
   breakdown?: Array<{ label: string; usedPct: number }>
 }
 
-/** Where a reading came from. Neither source uses a token or the network. */
-export type QuotaSource = 'cli' | 'rollout'
+/**
+ * Where a reading came from. No source uses a token or the network; `statusline` is the
+ * `rate_limits` Claude Code handed the OmniTerm status line bridge.
+ */
+export type QuotaSource = 'cli' | 'rollout' | 'statusline'
 
 export type QuotaError = 'parse_failed' | 'timeout' | 'not_signed_in' | 'unsupported' | 'failed'
 

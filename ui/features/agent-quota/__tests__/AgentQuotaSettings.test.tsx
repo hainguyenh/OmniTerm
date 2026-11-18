@@ -49,7 +49,7 @@ describe('AgentQuotaSettings', () => {
   })
 
   it('keeps agent loading art hidden until enabled and offers uploads per built-in slot only', () => {
-    seed()
+    seed({ config: { ...DEFAULT_QUOTA_CONFIG, display: { ...DEFAULT_QUOTA_CONFIG.display, customArtSession: false } } })
     const save = liveSave()
     render(<AgentQuotaSettings />)
     openGroup('Loading artwork')
@@ -207,7 +207,7 @@ describe('AgentQuotaSettings', () => {
     apply()
     const { display } = getQuotaState().config
     expect(display).toMatchObject({ size: 'thick', lines: { monthly: false }, icons: { resetCountdown: false }, animations: false })
-    expect(DEFAULT_QUOTA_CONFIG.display.size).toBe('normal')
+    expect(DEFAULT_QUOTA_CONFIG.display.size).toBe('thin')
   })
 
   it('configures weekly auto-hide visibility threshold', () => {
@@ -240,7 +240,7 @@ describe('AgentQuotaSettings', () => {
 
     render(<AgentQuotaSettings />)
     openGroup('Loading artwork')
-    fireEvent.click(screen.getByRole('switch', { name: 'Show agent loading artwork' }))
+    // The loading artwork is on by default, so its uploads show straight away.
     const uploadButton = screen.getByRole('button', { name: 'Upload Slow light mode artwork' })
     await act(async () => {
       fireEvent.click(uploadButton)
@@ -289,7 +289,6 @@ describe('AgentQuotaSettings', () => {
     liveSave()
     render(<AgentQuotaSettings />)
     openGroup('Loading artwork')
-    fireEvent.click(screen.getByRole('switch', { name: 'Show agent loading artwork' }))
     fireEvent.click(screen.getByRole('button', { name: 'large' }))
     fireEvent.click(screen.getByRole('button', { name: 'Slow (0.6x)' }))
     const preview = screen.getByLabelText('Loading artwork preview')

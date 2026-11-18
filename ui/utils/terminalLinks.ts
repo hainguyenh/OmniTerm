@@ -48,6 +48,8 @@ export const isTerminalLinkModifierClick = (event: MouseEvent): boolean =>
 const FILE_PATH_RE =
   /(?<![A-Za-z])[A-Za-z]:[\\/][\w.\\/-]+|~\/[\w.\\/-]+|\.\/[\w.\\/-]+|\.\.\/[\w.\\/-]+|(?<!\w)\/[\w.-]+(?:[\\/][\w.-]+)*|(?<!\w)[\w.-]+(?:[\\/][\w.-]+)+/g
 const TRAILING_PATH_PUNCTUATION_RE = /[),.;:!?\]}"'`]+$/
+/** A location printed right after a path: `:12`, `:12:5`, `(12)` or `(12,5)` (1-based). */
+const PATH_LOCATION_RE = /^(?::(\d+)(?::(\d+))?|\((\d+)(?:[,:](\d+))?\))/
 
 /** The link/path classification a modifier click is offering a small overlay menu for. */
 export type TerminalLinkMenuKind = 'url' | 'path'
@@ -59,6 +61,20 @@ export interface DetectedLinkOrPath {
   start: number
   /** 0-based end col (exclusive). */
   end: number
+  /** 1-based line printed after a path (`a.ts:12`); the path text itself never includes it. */
+  line?: number
+  /** 1-based column printed after the line (`a.ts:12:5`). */
+  col?: number
+}
+
+/** The `:line[:col]` that follows a path at `end`, when there is one. */
+const pathLocation = (line: string, end: number): Pick<DetectedLinkOrPath, 'line' | 'col'> => {
+  const match = PATH_LOCATION_RE.exec(line.slice(end))
+  if (!match) return {}
+  const row = Number(match[1] ?? match[3])
+  const col = Number(match[2] ?? match[4])
+  if (!(row > 0)) return {}
+  return col > 0 ? { line: row, col } : { line: row }
 }
 
 /** Map a client cursor position on a line text to whatever link or path sits at `col`, or null. */
@@ -78,7 +94,7 @@ export const findLinkOrPathAt = (line: string, col: number): DetectedLinkOrPath 
     if (!raw) continue
     const start = match.index ?? 0
     const end = start + raw.length
-    if (col >= start && col < end) return { kind: 'path', text: raw, start, end }
+    if (col >= start && col < end) return { kind: 'path', text: raw, start, end, ...pathLocation(line, end) }
   }
 
   return null

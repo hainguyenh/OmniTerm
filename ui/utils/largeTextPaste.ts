@@ -109,6 +109,8 @@ export interface HandleLargeTextPasteOptions {
   noteLocalEcho: () => void
   onFilesSaved?: (saved: SavedAttachment[]) => void
   canInsertImagePaths?: boolean
+  /** The text went into the prompt as it is (short enough, or the user chose Paste). */
+  onPastedInline?: (text: string) => void
   promptDecision?: (
     sessionId: string,
     text: string,
@@ -129,12 +131,14 @@ export const handleLargeTextPaste = async ({
   noteLocalEcho,
   onFilesSaved,
   canInsertImagePaths,
+  onPastedInline,
   promptDecision = requestLargeTextPasteDecision,
 }: HandleLargeTextPasteOptions): Promise<boolean> => {
   const { promptChars, attachChars } = largePasteThresholds()
   if (text.length < promptChars) {
     noteLocalEcho()
     term.paste(text)
+    onPastedInline?.(text)
     return true
   }
 
@@ -170,6 +174,7 @@ export const handleLargeTextPaste = async ({
     if (decision === 'paste') {
       noteLocalEcho()
       term.paste(text)
+      onPastedInline?.(text)
       return true
     }
     return false

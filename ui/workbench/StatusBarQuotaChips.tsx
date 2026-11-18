@@ -1,4 +1,4 @@
-import { Fragment, useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 import { dockShowsFooter } from '../features/agent-quota/quotaDock'
 import { Icon } from '../ide/ui'
@@ -6,7 +6,7 @@ import { Icon } from '../ide/ui'
 import { toggleQuotaPopup, useQuotaDock, useQuotaPopup } from './quota/quotaDockState'
 import { QUOTA_ICON } from './quota/quotaIcons'
 import { usageColor } from './quota/quotaModel'
-import { useQuotaGroups } from './quota/useQuotaGroups'
+import { useFooterProfiles } from './quota/useQuotaGroups'
 import './quota/quotaWorkbench.css'
 
 /** The editor panel's left edge, in window coordinates; follows tool window resizes. */
@@ -33,17 +33,42 @@ function useEditorLeft(): number | null {
 }
 
 /**
- * Agent quota in the footer (Display: footer, or right tool window + footer): a chip per agent for
- * the active session's profile, its left edge aligned with the editor panel's. Click for details.
+ * How many of the list's items wrapped below its first line. The list wraps instead of clipping, so
+ * an item that does not fit disappears whole; this counts them for the "+N" after the list.
+ */
+function useHiddenCount(list: HTMLElement | null, items: number): number {
+  const [hidden, setHidden] = useState(0)
+  useLayoutEffect(() => {
+    if (!list) return
+    const measure = () => {
+      const children = Array.from(list.children) as HTMLElement[]
+      const top = children[0]?.offsetTop ?? 0
+      setHidden(children.filter((child) => child.offsetTop > top).length)
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(list)
+    return () => observer.disconnect()
+  }, [list, items])
+  return hidden
+}
+
+/**
+ * Agent quota in the footer (Display: footer, or right tool window + footer): the quota icon, then
+ * each running profile's name with its used percent above a small bar, separated by `|`. The profile
+ * nearest its 5h limit comes first, so a narrow window hides the ones with room to spare. Its left
+ * edge is aligned with the editor panel's. Click for details.
  */
 export function StatusBarQuotaChips() {
   const dock = useQuotaDock()
   const open = useQuotaPopup((s) => s.open)
-  const { groups } = useQuotaGroups()
+  const profiles = useFooterProfiles()
   const ref = useRef<HTMLButtonElement>(null)
+  const [list, setList] = useState<HTMLSpanElement | null>(null)
   const editorLeft = useEditorLeft()
   const [offset, setOffset] = useState(0)
-  const shown = dockShowsFooter(dock) && groups.length > 0
+  const shown = dockShowsFooter(dock) && profiles.length > 0
+  const hidden = useHiddenCount(shown ? list : null, profiles.length)
 
   useLayoutEffect(() => {
     const button = ref.current
@@ -55,6 +80,9 @@ export function StatusBarQuotaChips() {
   }, [shown, editorLeft, offset])
 
   if (!shown) return null
+  const summary = profiles
+    .map((row) => `${row.label}: ${row.pct === null ? 'no reading' : `${row.pct}% used`} (${row.detail})`)
+    .join('\n')
   return (
     <button
       ref={ref}
@@ -63,27 +91,25 @@ export function StatusBarQuotaChips() {
       style={{ marginLeft: offset }}
       aria-haspopup="dialog"
       aria-expanded={open}
-      title="Agent quota: click for all profiles"
+      title={`Agent quota, click for all profiles\n${summary}`}
       onClick={toggleQuotaPopup}
       data-testid="status-bar-quota-chips"
     >
       <Icon name={QUOTA_ICON} size={16} />
-      {groups.map((group, index) => {
-        const { pct, name } = group.shown
-        return (
-          <Fragment key={group.agent}>
-            {index > 0 && <span className="omt-q-subtle">·</span>}
-            <span className="omt-q-chip">
-              {group.name}
-              {group.active && group.profiles.length > 1 && <span className="omt-q-subtle">({name})</span>}
+      <span ref={setList} className="omt-q-profiles">
+        {profiles.map((row) => (
+          <span key={row.key} className="omt-q-prof" data-active={row.active || undefined} data-testid="quota-footer-profile">
+            <span className="omt-q-prof-name">{row.label}</span>
+            <span className="omt-q-meter">
+              <span className="omt-q-meter-pct">{row.pct === null ? '–' : `${row.pct}%`}</span>
               <span className="omt-q-mini">
-                <i style={{ width: `${pct ?? 0}%`, background: usageColor(pct) }} />
+                <i style={{ width: `${row.pct ?? 0}%`, background: usageColor(row.pct) }} />
               </span>
-              {pct === null ? '–' : `${pct}%`}
             </span>
-          </Fragment>
-        )
-      })}
+          </span>
+        ))}
+      </span>
+      {hidden > 0 && <span className="omt-q-subtle">+{hidden}</span>}
     </button>
   )
 }

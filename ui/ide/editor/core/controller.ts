@@ -1550,7 +1550,9 @@ export class EditorController implements SlotHost {
     const s = useTabs.getState();
     const srcPane = s.panes[paneId];
     const srcSlot = srcPane?.active ? this.slots.get(srcPane.active) : undefined;
-    const r = splitPane(s, paneId, dir);
+    const srcTab = srcPane?.tabs.find((t) => t.id === srcPane.active);
+    const copy = !(srcTab && useContributions.getState().editorKinds.get(srcTab.input.kind)?.splitOpensEmpty);
+    const r = splitPane(s, paneId, dir, copy);
     useTabs.setState(r.state, true);
     const newTab = r.state.panes[r.paneId]?.active;
     if (newTab) {

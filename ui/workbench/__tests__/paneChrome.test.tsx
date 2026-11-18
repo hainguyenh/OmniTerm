@@ -15,6 +15,7 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
   }),
 }))
 
+import { getAction } from '../../ide/platform/actions'
 import { omnitermActionId } from '../../platform/omnitermActions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
@@ -23,8 +24,10 @@ import { LayoutPresetPicker } from '../layout/LayoutPresetPicker'
 import { registerPaneTitleActions, TOGGLE_MAXIMIZE_PANE } from '../layout/paneTitleActions'
 import { resetQuotaStore, updateQuota } from '../../features/agent-quota/quotaStore'
 import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
+import { clearPaneConsole, registerPaneConsole } from '../../utils/paneConsoles'
 import { SessionAgentFooter, SessionAgentHeader } from '../sessions/SessionAgentHeader'
 import { useSessionBridge } from '../sessions/sessionBridge'
+import { NEW_SESSION_IN_PANE } from '../sessions/paneQuickStartStore'
 import { paintOnGroup } from '../sessions/sessionIcons'
 
 afterEach(() => {
@@ -35,15 +38,17 @@ afterEach(() => {
 })
 
 describe('pane title actions', () => {
-  it('adds Maximize to the editor actions, New Session to every pane tab strip and the empty pane, and removes them again', () => {
+  it('adds Maximize to the editor actions, New Session to every pane tab strip, the session picker to the empty pane, and removes them again', () => {
     const dispose = registerPaneTitleActions()
     expect(slots.items).toEqual([
       expect.objectContaining({ slot: 'editor.title', action: TOGGLE_MAXIMIZE_PANE, icon: 'fullscreen' }),
       expect.objectContaining({ slot: 'editor.pane', action: omnitermActionId('newSession'), icon: 'plus' }),
-      expect.objectContaining({ slot: 'editor.emptyPane', action: omnitermActionId('newSession') }),
+      expect.objectContaining({ slot: 'editor.emptyPane', action: NEW_SESSION_IN_PANE }),
     ])
+    expect(getAction(NEW_SESSION_IN_PANE)).toBeDefined()
     dispose()
     expect(slots.disposed).toBe(3)
+    expect(getAction(NEW_SESSION_IN_PANE)).toBeUndefined()
   })
 })
 
@@ -125,6 +130,24 @@ describe('session agent header', () => {
     expect(container.textContent).toBe('Fix the login bug')
     act(() => clearStoredSessions())
   })
+
+  // Regression: the UI revamp dropped the old pane header, and with it the only place the Agent
+  // Quota loading artwork was drawn.
+  it('shows the pace artwork while the agent works, and nothing while it is idle', () => {
+    const session = { id: 't1', connId: 't1', name: 'pwsh', connType: 'LOCAL', workspaceId: null, status: 'connected' as const, cwd: 'D:/work', hasCommand: false }
+    act(() => {
+      setPanePresence({ t1: presence })
+      useSessionBridge.setState({ sessions: [{ ...session, busy: false }] })
+    })
+    const { container } = render(<SessionAgentHeader sessionId="t1" />)
+    const zone = screen.getByTestId('agent-activity-zone')
+    expect(zone.querySelector('.aq-busy-art')).toBeNull()
+    act(() => useSessionBridge.setState({ sessions: [{ ...session, busy: true }] }))
+    const art = container.querySelector('.aq-busy-art')
+    expect(art).not.toBeNull()
+    expect(art?.getAttribute('data-loading-tier')).toBe('onTrack')
+    expect(art?.querySelector('img')).not.toBeNull()
+  })
 })
 
 describe('session agent footer', () => {
@@ -156,6 +179,36 @@ describe('session agent footer', () => {
       }))
     })
     expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 64%')
+  })
+
+  it('exports, clears and renews the console from beside Attach files', () => {
+    act(() => setPanePresence({ t1: presence }))
+    const events: { type: string; detail: unknown }[] = []
+    const record = (event: Event) => events.push({ type: event.type, detail: (event as CustomEvent).detail })
+    window.addEventListener('omniterm:save-terminal-output', record)
+    window.addEventListener('omniterm:renew-session', record)
+    const term = { clear: vi.fn() }
+    const registration = registerPaneConsole('t1', term)
+    try {
+      render(<SessionAgentFooter sessionId="t1" />)
+      const toolbar = screen.getByRole('toolbar', { name: 'Agent actions' })
+      const labels = Array.from(toolbar.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') ?? button.title)
+      expect(labels.map((label) => label.split(' ')[0])).toEqual(['Attach', 'Export', 'Clear', 'Renew'])
+
+      fireEvent.click(screen.getByRole('button', { name: /^Export the whole console/ }))
+      fireEvent.click(screen.getByRole('button', { name: /^Clear the console/ }))
+      fireEvent.click(screen.getByRole('button', { name: /^Renew the console/ }))
+      expect(events).toEqual([
+        { type: 'omniterm:save-terminal-output', detail: { sessionId: 't1' } },
+        { type: 'omniterm:renew-session', detail: 't1' },
+      ])
+      expect(term.clear).toHaveBeenCalledTimes(1)
+    } finally {
+      registration.dispose()
+      window.removeEventListener('omniterm:save-terminal-output', record)
+      window.removeEventListener('omniterm:renew-session', record)
+    }
+    expect(clearPaneConsole('t1')).toBe(false)
   })
 })
 

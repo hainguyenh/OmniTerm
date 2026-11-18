@@ -8,6 +8,7 @@ import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import type { MainLayoutProps } from '../mainLayoutShared'
 import { useMainLayoutBase } from '../useMainLayoutBase'
+import { openAlwaysAwake, useAwakeIndicator } from '../../workbench/awake/awakeIndicatorStore'
 
 const showAlert = vi.fn(async () => {})
 const showConfirm = vi.fn(async () => true)
@@ -97,11 +98,16 @@ describe('useMainLayoutBase complete behavior', () => {
     await waitFor(() => expect(result.current.alwaysAwakeAvailable).toBe(true))
     await waitFor(() => expect(result.current.alwaysAwake.keepingAwake).toBe(true))
     expect(onState).toHaveBeenCalledTimes(1)
+    // The workbench stripe button sees the state and opens the dialog through its window event.
+    expect(useAwakeIndicator.getState()).toEqual({ available: true, enabled: true, keepingAwake: true })
+    act(() => openAlwaysAwake())
+    expect(result.current.alwaysAwakeOpen).toBe(true)
 
     on = false
     act(() => changed.forEach((fn) => fn()))
     await waitFor(() => expect(result.current.alwaysAwakeAvailable).toBe(false))
     expect(unsubscribe).toHaveBeenCalledTimes(1)
+    expect(useAwakeIndicator.getState().available).toBe(false)
     unmount()
   })
 

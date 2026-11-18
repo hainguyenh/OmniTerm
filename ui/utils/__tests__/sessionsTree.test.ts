@@ -92,6 +92,24 @@ describe('buildSessionsTree', () => {
     expect(sections[0]?.groups.map(g => g.label)).toEqual(['prod-api'])
   })
 
+  it('keeps a running agent visible when its project is no longer in the scoped workspace', () => {
+    const tabs = [{ id: 'tx', connId: 'c', name: 'claude' }]
+    const sections = buildSessionsTree(input({
+      tabs,
+      connById: () => conn('c', { type: 'LOCAL', localCwd: 'D:/removed/project' }),
+      scopeWorkspaceId: 'w1',
+      agentOf: () => 'claude',
+    }))
+    const listed = sections[0]?.groups.flatMap(g => g.sessions.map(s => s.id)) ?? []
+    expect(listed).toContain('tx')
+    const terminalOnly = buildSessionsTree(input({
+      tabs,
+      connById: () => conn('c', { type: 'LOCAL', localCwd: 'D:/removed/project' }),
+      scopeWorkspaceId: 'w1',
+    }))
+    expect(terminalOnly[0]?.groups.flatMap(g => g.sessions.map(s => s.id))).not.toContain('tx')
+  })
+
   it('marks agent sessions', () => {
     const [first] = groups()
     expect(first?.sessions.map(s => s.kind)).toEqual(['terminal', 'agent'])

@@ -2,6 +2,7 @@ import { provideProjectPopup, registerTitleItem } from '../ide/workbench/contrib
 
 import { ProjectFilterItem } from './titlebar/ProjectFilterItem'
 import { ThemeModeButton } from './titlebar/ThemeModeButton'
+import { ThemePickerButton } from './titlebar/ThemePickerButton'
 import { WorkspacePopup } from './titlebar/WorkspacePopup'
 import { UpdateTitleIndicator } from './updater/updateIndicator'
 
@@ -24,6 +25,14 @@ export function registerTitleControls(): () => void {
       align: 'left',
       priority: 5,
       component: ProjectFilterItem,
+    }),
+    registerTitleItem({
+      id: 'omniterm.themePicker',
+      title: 'Theme Picker',
+      align: 'right',
+      priority: 1,
+      trailing: true,
+      component: ThemePickerButton,
     }),
     registerTitleItem({
       id: 'omniterm.themeMode',

@@ -148,6 +148,11 @@ export interface EditorKindContribution {
   /** Its tabs are never evicted by the tab limit (a live session must not be killed by opening files). */
   exemptFromTabLimit?: boolean;
   /**
+   * Split Right / Split Down of its tab opens an empty pane instead of a copy of the tab: a copy of
+   * a live session would start a process the user did not ask for. The empty pane offers what to start.
+   */
+  splitOpensEmpty?: boolean;
+  /**
    * The editor owns a document with unsaved state (a notebook): it takes part in
    * the dirty mark, Save All, autosave and the close prompts. Tabs with equal
    * `input.key` (splits) share one document.

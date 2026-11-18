@@ -99,6 +99,15 @@ describe('findLinkOrPathAt', () => {
     expect(match?.text).toBe('C:\\projects\\app\\log.txt')
   })
 
+  it('reads the line and column printed after a path, keeping them out of the path text', () => {
+    expect(findLinkOrPathAt('see src/a.ts:12:5 now', 6)).toMatchObject({ text: 'src/a.ts', line: 12, col: 5 })
+    expect(findLinkOrPathAt('at src/a.ts(7,2)', 4)).toMatchObject({ text: 'src/a.ts', line: 7, col: 2 })
+    expect(findLinkOrPathAt('see src/a.ts:12.', 6)).toMatchObject({ text: 'src/a.ts', line: 12 })
+    const plain = findLinkOrPathAt('wrote .bizreq/outbox/56069-decision-task.md', 8)
+    expect(plain?.text).toBe('.bizreq/outbox/56069-decision-task.md')
+    expect(plain?.line).toBeUndefined()
+  })
+
   it('does NOT match a bare filename with no path separator', () => {
     // `changelog.md` reads as a project file only WITH a separator — without one, it is just a word.
     expect(findLinkOrPathAt('the changelog changelog.md is updated', 18)).toBeNull()

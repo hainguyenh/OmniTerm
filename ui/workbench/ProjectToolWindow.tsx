@@ -7,6 +7,7 @@ import { IconButton } from '../ide/ui'
 import { useSelectedWorkspace } from '../platform/workspaceStore'
 
 import { addFolderToWorkspace, addWorkspaceFromFolder } from './titlebar/workspaceActions'
+import { WorkspaceHeader } from './WorkspaceHeader'
 import { useProjectFilterStore } from './projectFilterStore'
 
 /** Project header: select the opened file, collapse all. */
@@ -81,7 +82,8 @@ export function ProjectToolWindow(_props: ProjectToolWindowProps) {
   if (!root) return <NoProjectFolders />
   return (
     <div className="flex h-full w-full flex-col overflow-hidden" data-testid="project-tool-window">
-      <ProjectView />
+      <WorkspaceHeader />
+      <div className="min-h-0 flex-1 overflow-hidden"><ProjectView /></div>
     </div>
   )
 }

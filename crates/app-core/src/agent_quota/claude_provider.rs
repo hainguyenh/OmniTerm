@@ -1,6 +1,7 @@
-//! Claude usage from the CLI's own `/usage` command, run exactly as the user runs the profile:
-//! through its launcher (`claude-th -p /usage`) when the terminal used one, otherwise `claude` with
-//! the profile's `CLAUDE_CONFIG_DIR`. The CLI does its own sign-in; this reads no token and makes no
+//! Claude usage, first from the record the OmniTerm status line bridge keeps while a Claude session
+//! of the profile replies (see claude_bridge.rs), else from the CLI's own `/usage` command, run
+//! exactly as the user runs the profile: through its launcher (`claude-th -p /usage`) when the
+//! terminal used one, otherwise `claude` with the profile's `CLAUDE_CONFIG_DIR`. The CLI does its own sign-in; this reads no token and makes no
 //! request of its own. Output that cannot be read is retried once and then reported as
 //! `parse_failed` — never as zero usage — unless the profile config holds the reading Claude Code
 //! cached last.
@@ -10,6 +11,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+use super::claude_bridge::{parse_usage_record, usage_file};
 use super::claude_usage::parse_claude_usage;
 use super::deps::{CliOptions, ProviderDeps};
 use super::iso_time::parse_iso;
@@ -21,6 +23,7 @@ use super::types::{
 
 const USAGE_TIMEOUT: Duration = Duration::from_secs(8);
 const CONFIG_TAIL: u64 = 1_000_000;
+const BRIDGE_TAIL: u64 = 64 * 1024;
 
 fn is_email_local(c: char) -> bool {
     is_word(c) || matches!(c, '.' | '+' | '-')
@@ -134,11 +137,29 @@ pub(crate) fn find_trusted_dir(raw: Option<&str>, fallback: &Path) -> PathBuf {
         .unwrap_or_else(|| fallback.to_path_buf())
 }
 
+/// The status line bridge's fresh record for the profile. A launcher without a known directory
+/// sets its own, so there is no record to look for.
+fn bridge_reading(
+    profile_dir: Option<&Path>,
+    launcher: Option<&str>,
+    deps: &dyn ProviderDeps,
+) -> Option<QuotaSnapshot> {
+    let dir = match (profile_dir, launcher) {
+        (Some(dir), _) => dir.to_path_buf(),
+        (None, None) => deps.home().join(AgentKind::Claude.default_dir()),
+        (None, Some(_)) => return None,
+    };
+    parse_usage_record(&deps.read_tail(&usage_file(&dir), BRIDGE_TAIL)?, deps.now())
+}
+
 pub fn fetch_claude_usage(
     profile_dir: Option<&Path>,
     launcher: Option<&str>,
     deps: &dyn ProviderDeps,
 ) -> QuotaSnapshot {
+    if let Some(reading) = bridge_reading(profile_dir, launcher, deps) {
+        return reading;
+    }
     let Some(command) = agent_command(AgentKind::Claude, profile_dir, launcher, deps) else {
         return QuotaSnapshot::failure(
             deps.now(),
@@ -197,3 +218,7 @@ mod tests;
 #[cfg(test)]
 #[path = "provider_config_tests.rs"]
 mod config_tests;
+
+#[cfg(test)]
+#[path = "claude_provider_bridge_tests.rs"]
+mod bridge_tests;

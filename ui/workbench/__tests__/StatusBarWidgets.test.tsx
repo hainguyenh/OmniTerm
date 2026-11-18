@@ -86,4 +86,33 @@ describe('StatusBarWidgets', () => {
     render(<StatusBarQuotaChips />)
     expect(screen.getByTestId('status-bar-quota-chips').textContent).toContain('42%')
   })
+
+  it('shows each running profile by name, the one nearest its 5h limit first', () => {
+    const snapshot = (usedPct: number) => ({
+      fetchedAt: Date.now(),
+      windows: [{ kind: 'session' as const, label: '5h', usedPct, resetsAt: Date.now() + 3600000 }],
+    })
+    const profileOf = (key: string, profileName: string, usedPct: number) => ({
+      key, agent: 'claude' as const, profileName, profileDir: null, launcher: null, history: [],
+      errorStreak: 0, nextFetchAt: 0, fetching: false, wake: {}, waking: false, snapshot: snapshot(usedPct),
+    })
+    const terminalOf = (sessionId: string, profileKey: string, profileName: string) => ({
+      sessionId, agent: 'claude' as const, pid: 1, startTime: 1, profileDir: null, profileName,
+      subAgentCount: 0, launcher: null, instanceKey: `${sessionId}:1:1`, profileKey,
+    })
+    updateQuota((s) => ({
+      ...s,
+      available: true,
+      config: { ...s.config, enabled: true, dock: 'footer' },
+      terminals: { a: terminalOf('a', 'claude:work', 'work'), b: terminalOf('b', 'claude:home', 'home') },
+      profiles: {
+        'claude:work': profileOf('claude:work', 'work', 35),
+        'claude:home': profileOf('claude:home', 'home', 87),
+        'claude:idle': profileOf('claude:idle', 'idle', 99),
+      },
+    }))
+    render(<StatusBarQuotaChips />)
+    const rows = screen.getAllByTestId('quota-footer-profile').map((row) => row.textContent)
+    expect(rows).toEqual(['home87%', 'work35%'])
+  })
 })

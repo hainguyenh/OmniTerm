@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 
 import { Button, Checkbox, Dialog, Select, type DialogButton } from '../../ide/ui'
 import { Spinner } from '../../ide/ui/Spinner'
@@ -15,6 +15,9 @@ const AGE_OPTIONS = [
   { value: '30', label: '30+ days' },
 ]
 
+/** Idle time that keeps recent work safe: nothing newer than this is offered by default. */
+export const DEFAULT_IDLE_DAYS = 7
+
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? '' : 's'}`
 
 /** Overlay: the dialog, mounted only while open. */
@@ -26,15 +29,17 @@ export function TempCleanupOverlay() {
 }
 
 /**
- * Clean Temp Files: the kinds of entry in the OS temp folder with their sizes, biggest first.
+ * Clean Temp Files: the kinds of entry in the OS temp folder (folders by name, loose files by
+ * extension) with their sizes, biggest first. Opening the dialog reads nothing: scanning a large
+ * temp folder is slow, so it runs only when asked.
  * Deleting removes the ticked kinds' entries that have not changed for the chosen time; whatever
  * is locked or refused is skipped and reported. Nothing is read from inside the entries.
  */
 export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
   const [groups, setGroups] = useState<TempGroup[] | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [days, setDays] = useState(1)
-  const [busy, setBusy] = useState<'scan' | 'clean' | null>('scan')
+  const [days, setDays] = useState(DEFAULT_IDLE_DAYS)
+  const [busy, setBusy] = useState<'scan' | 'clean' | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -52,10 +57,6 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
       setBusy(null)
     }
   }, [])
-
-  useEffect(() => {
-    void scan()
-  }, [scan])
 
   const toggle = (key: string, on: boolean) =>
     setSelected((current) => {
@@ -94,7 +95,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
 
   const message = confirming
     ? `Delete entries of ${plural(chosen.length, 'kind')} (up to ${formatBytes(selectedBytes(all, selected))}) idle for ${days === 0 ? 'any time' : `${days}+ days`}? This cannot be undone.`
-    : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : ''))
+    : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
 
   return (
     <Dialog
@@ -134,7 +135,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
           />
           <span className="flex-1" />
           <Button icon="refresh" disabled={busy !== null} onClick={() => void scan()} data-testid="temp-cleanup-rescan">
-            Rescan
+            {groups ? 'Rescan' : 'Scan'}
           </Button>
         </div>
         {error && <span className="text-[var(--danger)]">{error}</span>}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { MoonStar, X } from 'lucide-react'
 import { useEscToClose } from '../../hooks/useEscToClose'
-import { DURATIONS, expiryFor, formatDeadline, fromLocalInput, scheduleFromStatus, toLocalInput, type Schedule } from './awakeSchedule'
+import { DURATIONS, expiryFor, formatDeadline, fromLocalInput, MAX_HOURS, scheduleFromStatus, toLocalInput, type Schedule } from './awakeSchedule'
 
 export default function AlwaysAwakeModal({
   status,
@@ -120,7 +120,7 @@ export default function AlwaysAwakeModal({
           </fieldset>
           <div>
             <p className="text-xs font-semibold text-theme-fg mb-2">Keep awake for</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {DURATIONS.map(([value, label]) => {
                 const selected = schedule.duration === value
                 return (
@@ -146,6 +146,24 @@ export default function AlwaysAwakeModal({
             </div>
             {/* The buttons alone never showed which instant was chosen, so a changed schedule looked
                 identical to the default. */}
+            {schedule.duration === 'hours' && (
+              <label className="mt-2 flex items-center gap-2 text-xs text-theme-dim">
+                <input
+                  type="number"
+                  aria-label="Keep awake for hours"
+                  min={0.5}
+                  max={MAX_HOURS}
+                  step={0.5}
+                  value={Number.isFinite(schedule.hours) ? schedule.hours : ''}
+                  onChange={(event) => {
+                    const hours = event.target.value === '' ? Number.NaN : Number(event.target.value)
+                    setSchedule((current) => ({ ...current, hours }))
+                  }}
+                  className="w-20 rounded-lg border border-theme-border bg-theme-bg px-2 py-1.5 text-xs text-theme-fg focus:border-theme-accent focus:outline-none"
+                />
+                hours from now
+              </label>
+            )}
             {schedule.duration === 'custom' && (
               <input
                 type="datetime-local"
@@ -160,7 +178,11 @@ export default function AlwaysAwakeModal({
               />
             )}
             {expiresAtMs === null
-              ? <p className="mt-2 text-[11px] text-theme-error">Pick a time in the future.</p>
+              ? (
+                <p className="mt-2 text-[11px] text-theme-error">
+                  {schedule.duration === 'hours' ? `Enter more than 0 and at most ${MAX_HOURS} hours.` : 'Pick a time in the future.'}
+                </p>
+              )
               : <p className="mt-2 text-[11px] text-theme-dim">Until {formatDeadline(expiresAtMs)}</p>}
           </div>
           <div

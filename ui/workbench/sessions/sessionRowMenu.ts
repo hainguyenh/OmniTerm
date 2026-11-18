@@ -1,7 +1,7 @@
 import { getQuotaState, quotaCommands } from '../../features/agent-quota/quotaStore'
 import { isHeld } from '../../features/agent-quota/quotaGuard'
 import type { MenuItem } from '../../ide/ui/Menu'
-import { QUICK_START_AGENTS, type QuickStartProject } from '../../utils/sessionQuickStart'
+import { QUICK_START_AGENTS, type ClaudeProfileChoice, type QuickStartProject } from '../../utils/sessionQuickStart'
 import { undockSession } from '../terminalDock/terminalDockStore'
 
 import { sessionById, useSessionBridge } from './sessionBridge'
@@ -47,13 +47,26 @@ export function sessionRowMenuItems(sessionId: string, show: () => void): MenuIt
 export function projectStartMenuItems(
   project: QuickStartProject,
   start: (project: QuickStartProject, command: string | null) => void,
+  claudeProfiles: readonly ClaudeProfileChoice[] = [],
 ): MenuItem[] {
   return [
     { kind: 'header', label: project.label },
-    ...QUICK_START_AGENTS.map((agent): MenuItem => ({
-      label: agent.command ? `New ${agent.label} Session` : 'New Terminal',
-      icon: agent.command ? `agent-${agent.id}` : 'terminal',
-      run: () => start(project, agent.command),
-    })),
+    ...QUICK_START_AGENTS.map((agent): MenuItem => {
+      const item: MenuItem = {
+        label: agent.command ? `New ${agent.label} Session` : 'New Terminal',
+        icon: agent.command ? (agent.icon ?? `agent-${agent.id}`) : 'terminal',
+        run: () => start(project, agent.command),
+      }
+      // With several Claude profiles on this machine, the row also opens a list to pick one from.
+      if (agent.id !== 'claude' || claudeProfiles.length < 2) return item
+      return {
+        ...item,
+        submenu: claudeProfiles.map((choice): MenuItem => ({
+          label: choice.label,
+          verbatim: true,
+          run: () => start(project, choice.command),
+        })),
+      }
+    }),
   ]
 }

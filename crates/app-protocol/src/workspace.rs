@@ -8,6 +8,9 @@ pub struct WorkspaceFolder {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
+    /// Switched off for now: kept in the workspace, skipped by the project tree, search and scans.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

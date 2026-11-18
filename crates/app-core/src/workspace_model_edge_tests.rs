@@ -16,12 +16,14 @@ fn workspace(id: &str, parent_id: Option<&str>, order: usize) -> Workspace {
                 name: id.to_string(),
                 path: "/tmp".to_string(),
                 color: None,
+                disabled: false,
             },
             WorkspaceFolder {
                 id: "other".to_string(),
                 name: "other".to_string(),
                 path: "/srv".to_string(),
                 color: None,
+                disabled: false,
             },
         ],
         parent_id: parent_id.map(str::to_string),
@@ -135,4 +137,27 @@ fn normalizing_with_an_unknown_insertion_only_densifies_siblings() {
         .map(|item| (item.id.as_str(), item.order))
         .collect();
     assert_eq!(orders, vec![("a", 0), ("b", 1)]);
+}
+
+#[test]
+fn a_disabled_folder_stays_in_the_workspace_but_is_not_active() {
+    let mut ws = workspace("w", None, 0);
+    set_folder_disabled(&mut ws, "other", true).unwrap();
+    assert_eq!(ws.folders.len(), 2, "disabling is not removing");
+    let active: Vec<_> = active_folders(&ws).map(|f| f.id.as_str()).collect();
+    assert_eq!(active, vec!["folder-w"]);
+    set_folder_disabled(&mut ws, "other", false).unwrap();
+    assert_eq!(active_folders(&ws).count(), 2);
+    assert!(set_folder_disabled(&mut ws, "missing", true).is_err());
+}
+
+#[test]
+fn the_disabled_flag_round_trips_and_is_omitted_when_off() {
+    let mut ws = workspace("w", None, 0);
+    set_folder_disabled(&mut ws, "other", true).unwrap();
+    let json = serde_json::to_value(&ws).unwrap();
+    assert_eq!(json["folders"][0].get("disabled"), None);
+    assert_eq!(json["folders"][1]["disabled"], true);
+    let back: Workspace = serde_json::from_value(json).unwrap();
+    assert!(back.folders[1].disabled && !back.folders[0].disabled);
 }

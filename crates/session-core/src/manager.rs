@@ -1,14 +1,14 @@
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use crate::manifest::{self, SessionManifest};
+use crate::output::{spawn_reader, Output};
 use dashmap::DashMap;
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use session_protocol::{
     DaemonStatus, LaunchSpec, PersistencePolicy, ServerMessage, SessionLifecycle, SessionSummary,
 };
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
-use crate::manifest::{self, SessionManifest};
-use crate::output::{spawn_reader, Output};
 const INITIAL_COLS: u16 = 80;
 const INITIAL_ROWS: u16 = 24;
 pub struct AttachedSession {
@@ -324,12 +324,16 @@ impl SessionManager {
     }
 
     pub fn client_disconnected(&self, client_id: &str) -> bool {
-        let owned: Vec<_> = self.sessions.iter().filter_map(|entry| {
-            entry.owner_client.lock().ok()
-                .is_some_and(|owner| owner.as_str() == client_id)
-                .then(|| entry.key().clone())
-        }).collect();
-        for id in owned { let _ = self.disconnect(&id); }
+        let owns = |owner: &Mutex<String>| owner.lock().is_ok_and(|name| *name == client_id);
+        let owned: Vec<_> = self
+            .sessions
+            .iter()
+            .filter(|entry| owns(&entry.owner_client))
+            .map(|entry| entry.key().clone())
+            .collect();
+        for id in owned {
+            let _ = self.disconnect(&id);
+        }
         self.sessions.is_empty()
     }
 
@@ -390,5 +394,4 @@ impl SessionManager {
             log::warn!("[sessiond] could not persist {id}: {error}");
         }
     }
-
 }

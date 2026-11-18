@@ -34,6 +34,7 @@ vi.mock('../sessions/sessionTabActions', () => ({ showSessionTab: mocks.showSess
 
 import { useTabs } from '../../ide/editor/core/controller'
 import { useProject } from '../../ide/platform/project'
+import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { EDITOR_TAB_MIME } from '../../ide/workbench/contributions'
 import { resetSessionBridge, useSessionBridge, type SessionBridgeApi, type SessionInfo } from '../sessions/sessionBridge'
 import { SESSION_DRAG } from '../sessions/sessionDrag'
@@ -153,6 +154,19 @@ describe('Terminal tool window', () => {
     rows[1]!.submenu![0]!.run()
     expect((started.mock.calls[0]![0] as CustomEvent).detail).toEqual({ cwd: 'D:/work/web/', shell: 'pwsh' })
     window.removeEventListener('omniterm:new-session', started)
+  })
+
+  it('lists the enabled projects of the selected workspace, even before the IDE project has opened them', () => {
+    useProject.setState({ project: null } as never)
+    useWorkspaceStore.setState({
+      workspaces: [{ id: 'w1', name: 'dev', order: 0, pins: [], folders: [
+        { id: 'a', name: 'a', path: 'D:/work/a' }, { id: 'b', name: 'b', path: 'D:/work/b', disabled: true }, { id: 'c', name: 'c', path: 'D:/work/c' },
+      ] }],
+      selection: 'w1',
+    } as never)
+    const rows = (projectMenuItems([{ id: 'pwsh', label: 'PowerShell' }]) as { label?: string; submenu?: unknown }[]).filter((item) => item.submenu)
+    expect(rows.map((row) => row.label)).toEqual(['a', 'c'])
+    useWorkspaceStore.setState({ workspaces: [], selection: null } as never)
   })
 
   it('lends the shown docked session its terminal surface', () => {

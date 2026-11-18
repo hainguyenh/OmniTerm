@@ -62,7 +62,8 @@ function collect(state: TabsState): TabRef[] {
  *
  * - tabs of unknown sessions (another window's, or ended) close silently, never killing anything;
  * - the old single "Sessions" tab goes;
- * - a split / "open in opposite group" duplicate of a session tab becomes a new shell in the same folder;
+ * - a duplicate of a session tab ("open in opposite group"; a split opens an empty pane instead)
+ *   becomes a new shell in the same folder;
  * - live sessions of the workspace shown that have no tab get one (the first time, from the old grid);
  * - with no project open, tabs of other workspaces' sessions close silently (their sessions keep running);
  * - a session docked in the Terminal tool window has no tab: one it still has closes silently.

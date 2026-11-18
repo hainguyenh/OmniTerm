@@ -3,6 +3,8 @@ import { registerActions } from '../../ide/platform/actions'
 import { registerToolWindow, toolWindowService } from '../../ide/workbench/contributions'
 
 import { RunConsoleTabs, RunConsoleToolWindow } from './RunConsoleToolWindow'
+import { RunDockActions } from './RunDockActions'
+import { useRunDockMenu } from './useRunDockMenu'
 import { runScriptWithUnifiedRunner } from './scriptRunProducer'
 
 /**
@@ -24,6 +26,8 @@ export function registerRunWorkbench(): () => void {
       requiresProject: false,
       component: RunConsoleToolWindow,
       headerContent: RunConsoleTabs,
+      headerActions: RunDockActions,
+      headerMenu: useRunDockMenu,
       useBadge: () => useRun.getState().sessions.filter(isLive).length || null,
     }),
   )

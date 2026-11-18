@@ -16,7 +16,11 @@ import {
   addWorkspaceFromFolder,
   createWorkspace,
   importWorkspaceFile,
+  activeFolders,
+  enableAllFolders,
+  exportWorkspaceFile,
   removeFolderFromWorkspace,
+  setFolderDisabled,
   workspaceFolderAt,
 } from '../workspaceActions'
 
@@ -29,6 +33,8 @@ const api = {
   create: vi.fn(),
   addFolder: vi.fn(),
   removeFolder: vi.fn(),
+  setFolderDisabled: vi.fn(),
+  exportFile: vi.fn(),
 }
 const refresh = vi.fn(async () => undefined)
 const setSelection = vi.fn()
@@ -54,6 +60,43 @@ describe('workspace actions', () => {
     await createWorkspace('  Work  ')
     expect(api.create).toHaveBeenCalledWith('Work')
     expect(setSelection).toHaveBeenCalledTimes(3)
+  })
+
+  it('switches a project off without removing it and shows the rest of the folders again', async () => {
+    useProjectFilterStore.setState({ filter: 'D:/Work/App' })
+    await setFolderDisabled('w1', folder, true)
+    expect(api.setFolderDisabled).toHaveBeenCalledWith('w1', 'f1', true)
+    expect(api.removeFolder).not.toHaveBeenCalled()
+    expect(useProjectFilterStore.getState().filter).toBe('all')
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps a filter on another project when a project is switched off, and on when switched back', async () => {
+    useProjectFilterStore.setState({ filter: 'D:/Other' })
+    await setFolderDisabled('w1', folder, true)
+    expect(useProjectFilterStore.getState().filter).toBe('D:/Other')
+    await setFolderDisabled('w1', folder, false)
+    expect(api.setFolderDisabled).toHaveBeenLastCalledWith('w1', 'f1', false)
+  })
+
+  it('lists only the folders that are on, and enables every disabled one', async () => {
+    const off = { id: 'f2', name: 'lib', path: 'D:/Work/Lib', disabled: true }
+    const mixed: Workspace = { ...workspace, folders: [folder, off] }
+    expect(activeFolders(mixed)).toEqual([folder])
+    expect(activeFolders(null)).toEqual([])
+    await enableAllFolders(mixed)
+    expect(api.setFolderDisabled).toHaveBeenCalledTimes(1)
+    expect(api.setFolderDisabled).toHaveBeenCalledWith('w1', 'f2', false)
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves a workspace as a VS Code file and ignores a cancelled picker', async () => {
+    api.exportFile.mockResolvedValueOnce(null)
+    await exportWorkspaceFile(workspace)
+    expect(api.exportFile).toHaveBeenCalledWith('w1', 'Work')
+    api.exportFile.mockRejectedValueOnce(new Error('disk full'))
+    await exportWorkspaceFile(workspace)
+    expect(diagError).toHaveBeenCalled()
   })
 
   it('refreshes without selecting when the picker was cancelled, and ignores a blank name', async () => {

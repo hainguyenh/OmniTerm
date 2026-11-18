@@ -7,6 +7,7 @@ fn workspace_folder_round_trips_through_json() {
         name: "Root".to_string(),
         path: "/path/to/root".to_string(),
         color: None,
+        disabled: false,
     };
     let json = serde_json::to_string(&folder).expect("serialize folder");
     let back: WorkspaceFolder = serde_json::from_str(&json).expect("deserialize folder");
@@ -24,8 +25,8 @@ fn workspace_pin_supports_defaults_and_round_trip() {
     let back: WorkspacePin = serde_json::from_str(&json).expect("deserialize pin");
     assert_eq!(pin, back);
 
-    let from_minimal: WorkspacePin = serde_json::from_str(r#"{"folderId":"folder#1"}"#)
-        .expect("deserialize minimal pin");
+    let from_minimal: WorkspacePin =
+        serde_json::from_str(r#"{"folderId":"folder#1"}"#).expect("deserialize minimal pin");
     assert_eq!(from_minimal.folder_id, "folder#1");
     assert_eq!(from_minimal.path, "");
 }
@@ -40,6 +41,7 @@ fn workspace_supports_optional_and_default_fields() {
             name: "OmniTerm".to_string(),
             path: "/repo".to_string(),
             color: None,
+            disabled: false,
         }],
         parent_id: Some("ws#parent".to_string()),
         order: 3,
@@ -74,6 +76,7 @@ fn workspace_appearance_fields_round_trip() {
             name: "Appearance".to_string(),
             path: "/appearance".to_string(),
             color: Some("purple".to_string()),
+            disabled: false,
         }],
         parent_id: None,
         order: 0,
@@ -81,9 +84,9 @@ fn workspace_appearance_fields_round_trip() {
         color: Some("blue".to_string()),
         icon: Some("star".to_string()),
     };
-    let back: Workspace = serde_json::from_str(
-        &serde_json::to_string(&ws).expect("serialize workspace appearance"),
-    ).expect("deserialize workspace appearance");
+    let back: Workspace =
+        serde_json::from_str(&serde_json::to_string(&ws).expect("serialize workspace appearance"))
+            .expect("deserialize workspace appearance");
     assert_eq!(back, ws);
 }
 
@@ -96,6 +99,7 @@ fn workspace_import_debug_and_clone() {
             name: "One".to_string(),
             path: "/one".to_string(),
             color: None,
+            disabled: false,
         }],
     };
     let cloned = import.clone();

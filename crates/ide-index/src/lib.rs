@@ -217,6 +217,17 @@ impl ProjectIndex {
         true
     }
 
+    /// Indexes the whole project now (the "Index Project" command): starts an index still waiting
+    /// for [`Self::release`], and otherwise rescans the tree for files the watchers missed
+    /// (unchanged files are not re-read).
+    pub fn reindex(&self) {
+        if self.shared.is_held() {
+            self.shared.release();
+        } else {
+            self.shared.enqueue(Job::Rescan);
+        }
+    }
+
     /// File types changed (the registry the index shares was updated): re-parses
     /// the files whose language under `before` differs from the current one.
     pub fn languages_changed(&self, before: Arc<LanguageRegistry>) {

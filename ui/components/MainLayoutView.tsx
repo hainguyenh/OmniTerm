@@ -28,7 +28,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     workspaceId: model.selectedWorkspaceId?.split('::')[0] ?? null,
     workspaceFolders: (model.workspaces ?? [])
       .find(workspace => workspace.id === model.selectedWorkspaceId?.split('::')[0])
-      ?.folders.map(folder => folder.path).join('|') ?? '',
+      ?.folders.filter(folder => !folder.disabled).map(folder => folder.path).join('|') ?? '',
   })
   usePublishSessionBridge(model, true)
   useSyncEditorLayout(model, true)

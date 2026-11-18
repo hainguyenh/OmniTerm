@@ -59,7 +59,36 @@ export interface SeDeps {
   inFileSet?(set: ProjectFileSet, path: string): boolean;
   /** Endpoints of the project, for request-path matches. */
   routes?(): Promise<EndpointEntry[]>;
+  /** What sits at an absolute path (`file`, `dir`…), or null when nothing does. */
+  entryKind?(path: string): Promise<string | null>;
 }
+
+/**
+ * The file a pasted path names, when it exists: an absolute path as is, a relative one under the
+ * project root. Checked on disk because the index leaves out ignored folders (`.bizreq/outbox`,
+ * build output…), so a path copied from an agent's output may never match an indexed file.
+ */
+export async function pastedPathFile(
+  text: string,
+  root: string | null,
+  entryKind: ((path: string) => Promise<string | null>) | undefined,
+): Promise<FileMatch | null> {
+  if (!entryKind || !text.includes("/")) return null;
+  const absolute = text.startsWith("/") || /^[A-Za-z]:\//.test(text);
+  const relative = text.replace(/^(?:\.\/)+/, "");
+  const path = absolute ? text : root ? `${root.replace(/\/+$/, "")}/${relative}` : null;
+  if (!path) return null;
+  try {
+    if ((await entryKind(path)) !== "file") return null;
+  } catch {
+    return null;
+  }
+  return { path, relPath: absolute ? path : relative, score: 0, indices: [] };
+}
+
+/** Paths compare without regard to slash direction or case (Windows drives and folders). */
+const samePath = (a: string, b: string) =>
+  a.replace(/\\/g, "/").toLowerCase() === b.replace(/\\/g, "/").toLowerCase();
 
 export interface SeRequest {
   query: string;
@@ -253,8 +282,13 @@ export class SeController {
               ? (path: string) => (!scope || scope(path)) && (!filter || passesFilter(filter, path))
               : null;
           // Over-fetch so a narrowed scope still fills the section.
-          const fetched = await this.deps.findFiles(text, keep ? limit * 4 + 1 : limit + 1);
-          const matches = keep ? fetched.filter((m) => keep(m.path)) : fetched;
+          const [fetched, pasted] = await Promise.all([
+            this.deps.findFiles(text, keep ? limit * 4 + 1 : limit + 1),
+            pastedPathFile(text, this.deps.root(), this.deps.entryKind),
+          ]);
+          const found = keep ? fetched.filter((m) => keep(m.path)) : fetched;
+          // A pasted path that names an existing file leads, even when the index has not got it.
+          const matches = pasted ? [pasted, ...found.filter((m) => !samePath(m.path, pasted.path))] : found;
           this.set(
             id,
             gen,

@@ -296,7 +296,10 @@ interface Window {
       addFolder: (workspaceId: string) => Promise<import('./domain').Workspace | null>
       removeFolder: (workspaceId: string, folderId: string) => Promise<import('./domain').Workspace>
       renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('./domain').Workspace>
+      setFolderDisabled: (workspaceId: string, folderId: string, disabled: boolean) => Promise<import('./domain').Workspace>
       importFile: () => Promise<import('./domain').Workspace | null>
+      /** Asks where to save, writes a `.code-workspace` and resolves its path (null when cancelled). */
+      exportFile: (workspaceId: string, defaultName: string) => Promise<string | null>
       remove: (id: string) => Promise<void>
       rename: (workspaceId: string, name: string) => Promise<import('./domain').Workspace>
       setAppearance: (workspaceId: string, color?: import('./domain').Workspace['color'], icon?: import('./domain').Workspace['icon']) => Promise<import('./domain').Workspace>

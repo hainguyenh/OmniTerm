@@ -1,7 +1,8 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
 import { formatAttachmentPaths, installAttachmentDrop, saveAttachmentFiles, type SavedAttachment } from './attachmentInput'
-import { handleLargeTextPaste, largePasteThresholds } from './largeTextPaste'
+import { handleLargeTextPaste, largePasteThresholds, saveTextAsAttachment } from './largeTextPaste'
+import { keepPasteForReview } from './pasteReview'
 import { formatPowerShellScriptForPaste } from './paste'
 import { markPastedScript, type PastedScriptMarkup } from './pastedScriptDecoration'
 
@@ -39,6 +40,10 @@ export const createNativePasteGate = ({
   onFilesSaved?: (saved: SavedAttachment[]) => void
   sessionId?: string
 }): ((event: ClipboardEvent) => void) => {
+  // Text pasted into an agent pane also lands on its attachment list, to read back later.
+  const keepForReview = (text: string) => {
+    if (canInsertImagePaths()) void keepPasteForReview(text, sessionId, saveTextAsAttachment, onFilesSaved)
+  }
   return (event: ClipboardEvent) => {
     const cancelNativePaste = () => {
       event.preventDefault()
@@ -86,11 +91,13 @@ export const createNativePasteGate = ({
           sessionId,
           noteLocalEcho,
           onFilesSaved,
+          onPastedInline: keepForReview,
         })
         return
       }
       noteLocalEcho()
       term.paste(text)
+      keepForReview(text)
     }
   }
 }
@@ -218,6 +225,10 @@ export const createTerminalClipboard = (
   let scriptMarkup: PastedScriptMarkup | null = null
   let disposeDrop = () => {}
 
+  const keepForReview = (text: string) => {
+    if (canInsertImagePaths()) void keepPasteForReview(text, sessionId, saveTextAsAttachment, onFilesSaved)
+  }
+
   const typeAttachments = (saved: SavedAttachment[]) => {
     if (saved.length === 0) return
     onFilesSaved?.(saved)
@@ -277,11 +288,13 @@ export const createTerminalClipboard = (
               noteLocalEcho: () => onBeforePaste?.(),
               onFilesSaved,
               canInsertImagePaths: canInsertImagePaths(),
+              onPastedInline: keepForReview,
             })
             return
           }
           onBeforePaste?.()
           term.paste(text)
+          keepForReview(text)
           return
         }
         // Text clipboard empty: an image may be on it. When path insertion is enabled, the
@@ -323,6 +336,7 @@ export const createTerminalClipboard = (
         if (text) {
           onBeforePaste?.()
           term.paste(text)
+          keepForReview(text)
         }
       } finally {
         pasteInFlight = false

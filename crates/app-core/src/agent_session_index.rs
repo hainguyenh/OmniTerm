@@ -16,7 +16,7 @@
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent_session_header::{read_header, SessionHeader};
 
@@ -24,12 +24,15 @@ use crate::agent_session_header::{read_header, SessionHeader};
 mod delete;
 #[path = "agent_session_gemini.rs"]
 mod gemini;
+#[path = "agent_session_purge.rs"]
+mod purge;
 #[path = "agent_session_readers.rs"]
 mod readers;
 #[path = "agent_session_roots.rs"]
 mod roots;
 
 pub use delete::delete_sessions;
+pub use purge::purge_probe_sessions;
 use readers::describe_all;
 pub use roots::session_roots;
 #[cfg(test)]
@@ -87,6 +90,9 @@ pub struct AgentSessionFile {
     pub cwd: Option<String>,
     /// First prompt, shortened.
     pub title: Option<String>,
+    /// No prompt was ever typed (an agent started and left, or a probe that only ran `/usage`):
+    /// the agent's own resume list shows it with nothing in it.
+    pub empty: bool,
     /// Modification time, epoch milliseconds.
     pub last_active: u64,
     /// Bytes on disk (the transcript file).
@@ -232,6 +238,8 @@ fn describe(candidate: Candidate<'_>, header: SessionHeader) -> Option<AgentSess
         profile: root.profile.clone(),
         session_id,
         cwd: header.cwd,
+        // Antigravity's databases are never opened, so nothing is known about their prompts.
+        empty: root.agent != SessionAgent::Agy && header.title.is_none(),
         title: header.title,
         last_active,
         size,
@@ -240,12 +248,29 @@ fn describe(candidate: Candidate<'_>, header: SessionHeader) -> Option<AgentSess
 }
 
 /// Every conversation of every root, newest first, at most [`MAX_SESSIONS`].
+pub fn list_sessions(roots: &[SessionRoot]) -> Vec<AgentSessionFile> {
+    list_sessions_idle(roots, 0)
+}
+
+/// [`list_sessions`] for the conversations idle for at least `min_idle_ms`. The age is applied
+/// before the [`MAX_SESSIONS`] cut: a clean-up looks for the OLD transcripts, and cutting the
+/// newest first would drop exactly those on a machine with more than the cap.
 ///
 /// The files are ranked by their modification time alone, and only the ones kept are opened: a
 /// machine with tens of thousands of transcripts used to have every one of them parsed before the
 /// list was cut, which left the cleanup dialog waiting for minutes.
-pub fn list_sessions(roots: &[SessionRoot]) -> Vec<AgentSessionFile> {
+pub fn list_sessions_idle(roots: &[SessionRoot], min_idle_ms: u64) -> Vec<AgentSessionFile> {
     let mut candidates = candidates(roots);
+    if min_idle_ms > 0 {
+        let now = u64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |elapsed| elapsed.as_millis()),
+        )
+        .unwrap_or(u64::MAX);
+        let cutoff = now.saturating_sub(min_idle_ms);
+        candidates.retain(|candidate| candidate.last_active <= cutoff);
+    }
     candidates.sort_by(|a, b| {
         b.last_active
             .cmp(&a.last_active)

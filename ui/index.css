@@ -154,7 +154,7 @@ html.win-window .app-window-rounded {
 
 /* Force global font-family override. The workbench is excluded: it follows the IDE design
    tokens (Inter 13px UI, ui/ide/styles), which the UI mock uses too, instead of the terminal theme's font. */
-:is(html, body, #root, button, input, select, textarea, kbd, span, div, p, a):not([data-workbench], [data-workbench] *) {
+:is(html, body, #root, button, input, select, textarea, kbd, span, div, p, a):not([data-workbench], [data-workbench] *, [data-ide-surface], [data-ide-surface] *) {
   font-family: var(--theme-font-family, var(--theme-font-sans));
 }
 
@@ -291,8 +291,10 @@ html.win-window .app-window-rounded {
 
 /* Fix input field readability in light themes (prevent white-on-white text). The workbench is
    excluded: its fields draw their own frame (box-shadow) and background from the IDE tokens, which
-   these !important declarations would otherwise override. */
-:is(input, select, textarea):not([data-workbench] *) {
+   these !important declarations would otherwise override. IDE dialogs and popups are portaled to
+   <body>, outside the workbench, so they carry `data-ide-surface` to be excluded the same way;
+   without it their search boxes took the terminal theme's background and lost their frame. */
+:is(input, select, textarea):not([data-workbench] *, [data-ide-surface] *) {
   color: var(--theme-fg) !important;
   background-color: var(--theme-bg) !important;
   border-color: var(--theme-border) !important;

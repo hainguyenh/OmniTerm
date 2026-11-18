@@ -101,6 +101,7 @@ export const DEFERRED_WORKBENCH_STEPS: ReadonlyArray<readonly [string, LoadActiv
   ['remote-dev', () => import('../ide/features/remote-dev').then((m) => m.activate)],
   ['updater', () => import('./updater/registerUpdaterWorkbench').then((m) => m.registerUpdaterWorkbench)],
   ['agent-quota', () => import('./quota/registerQuotaWorkbench').then((m) => m.registerQuotaWorkbench)],
+  ['always-awake', () => import('./awake/registerAwakeStripe').then((m) => m.registerAwakeStripe)],
   ['todo', () => import('../ide/features/todo').then((m) => m.activate)],
   ['scratch', () => import('../ide/features/scratch').then((m) => m.activate)],
   ['libraries', () => import('../ide/features/libraries').then((m) => m.activate)],

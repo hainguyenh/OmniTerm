@@ -21,9 +21,13 @@ async fn linked_projects_share_navigation_but_keep_files_repositories_and_run_di
     Workspace::save(&root, "Full stack", vec![roots[0].clone()], true).unwrap();
     // The default scan delay is as long as the idle wait below.
     std::fs::create_dir(base.join("config")).unwrap();
-    std::fs::write(base.join("config/settings.toml"), "[index]
+    std::fs::write(
+        base.join("config/settings.toml"),
+        "[index]
 scanDelayMs = 0
-").unwrap();
+",
+    )
+    .unwrap();
     let host = Host::new(HostConfig {
         config_dir: base.join("config"),
         data_dir: base.join("data"),

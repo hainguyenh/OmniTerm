@@ -3,8 +3,8 @@
 //! takes ids from a listing, never paths.
 
 use app_core::agent_session_index::{
-    delete_sessions, list_sessions, session_roots, AgentSessionFile, DeleteReport, SessionAgent,
-    SessionRoot,
+    delete_sessions, list_sessions_idle, session_roots, AgentSessionFile, DeleteReport,
+    SessionAgent, SessionRoot,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -18,6 +18,9 @@ fn home_dir() -> Result<PathBuf, String> {
         .map(PathBuf::from)
         .ok_or_else(|| "No home directory.".to_string())
 }
+
+/// Ten years: a longer idle time is the same as "nothing".
+const MAX_IDLE_DAYS: u32 = 3650;
 
 /// The most profiles one listing may be narrowed to.
 const MAX_PROFILES: usize = 256;
@@ -58,9 +61,11 @@ fn narrowed(roots: Vec<SessionRoot>, profiles: Option<&[String]>) -> Vec<Session
 }
 
 /// The conversations of the given agent profiles (all of them without `profiles`), newest first.
+/// `older_than_days` keeps only the conversations idle that long, applied before the listing cap.
 #[tauri::command]
 pub async fn agent_session_files_list(
     profiles: Option<Vec<String>>,
+    older_than_days: Option<u32>,
 ) -> Result<Vec<AgentSessionFile>, String> {
     if let Some(profiles) = &profiles {
         if profiles.len() > MAX_PROFILES || profiles.iter().any(|profile| profile.len() > 128) {
@@ -68,8 +73,12 @@ pub async fn agent_session_files_list(
         }
     }
     let home = home_dir()?;
+    let min_idle_ms = u64::from(older_than_days.unwrap_or(0).min(MAX_IDLE_DAYS)) * 86_400_000;
     tauri::async_runtime::spawn_blocking(move || {
-        list_sessions(&narrowed(session_roots(&home), profiles.as_deref()))
+        list_sessions_idle(
+            &narrowed(session_roots(&home), profiles.as_deref()),
+            min_idle_ms,
+        )
     })
     .await
     .map_err(|error| format!("Session listing failed: {error}"))

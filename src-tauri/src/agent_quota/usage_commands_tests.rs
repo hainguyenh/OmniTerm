@@ -37,6 +37,22 @@ fn answers_while_the_feature_is_on_and_validates_requests_at_the_boundary() {
         snapshot.error,
         Some(app_core::agent_quota::QuotaError::Unsupported)
     );
+    let request = json!({ "agent": "codex", "profileDir": empty.path().to_string_lossy() });
+    let passive = block_on(agent_quota_ensure_passive(handle.clone(), request));
+    assert_eq!(
+        passive,
+        Ok(false),
+        "no session log yet: the inline probe stays"
+    );
+    let claude = tempfile::tempdir().expect("temp dir");
+    let request = json!({ "agent": "claude", "profileDir": claude.path().to_string_lossy() });
+    let passive = block_on(agent_quota_ensure_passive(handle.clone(), request));
+    assert_eq!(
+        passive,
+        Ok(true),
+        "the bridge is installed into the profile"
+    );
+    assert!(claude.path().join("settings.json").exists());
     let scratch = block_on(agent_quota_probe_dir(handle)).expect("the scratch dir");
     assert!(scratch.ends_with("omniterm-wake"), "{scratch}");
 }
@@ -57,5 +73,7 @@ fn refuses_to_run_anything_while_the_feature_is_off() {
     .is_err());
     assert!(block_on(agent_quota_list_profiles(handle.clone())).is_err());
     assert!(block_on(agent_quota_probe_dir(handle.clone())).is_err());
+    let request = json!({ "agent": "claude" });
+    assert!(block_on(agent_quota_ensure_passive(handle.clone(), request)).is_err());
     crate::builtin_features::set_enabled(&handle, AGENT_QUOTA, true).expect("switched on");
 }

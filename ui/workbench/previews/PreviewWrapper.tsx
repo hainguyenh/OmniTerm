@@ -7,9 +7,10 @@ import { JsonGraphPreview } from '../../components/editor/preview/JsonGraphPrevi
 import { SvgPreview } from '../../components/editor/preview/SvgPreview'
 import { editorController } from '../../ide/editor/core/controller'
 import { basename } from '../../ide/platform/project'
+import { executeAction } from '../../ide/platform/actions'
 import { FloatingToolbar, IconButton } from '../../ide/ui'
 
-import { usePreviewModeStore, type PreviewWrapperKind } from './previewKinds'
+import { isHtml, usePreviewModeStore, type PreviewWrapperKind } from './previewKinds'
 
 const VIEW_MODES = [
   { mode: 'code', icon: 'editor-only', title: 'Editor only' },
@@ -18,7 +19,7 @@ const VIEW_MODES = [
 ] as const
 
 /** The view-mode switch: IDE icon buttons, so it takes the active theme's colours and tooltips. */
-export function PreviewTabActions({ tabId }: { tabId: string }) {
+export function PreviewTabActions({ tabId, path }: { tabId: string; path?: string }) {
   const mode = usePreviewModeStore((s) => s.modes[tabId]) ?? 'split'
   const setMode = usePreviewModeStore((s) => s.setMode)
 
@@ -34,7 +35,21 @@ export function PreviewTabActions({ tabId }: { tabId: string }) {
           onClick={() => setMode(tabId, m.mode)}
         />
       ))}
+      {path && isHtml(path) && <OpenInBrowserButton path={path} />}
     </div>
+  )
+}
+
+/** Opens the HTML file through the built-in local server in the default browser, so scripts and relative assets work. */
+function OpenInBrowserButton({ path }: { path: string }) {
+  return (
+    <IconButton
+      icon="web"
+      size="small"
+      title="Open in Browser (local server)"
+      data-testid="preview-open-in-browser"
+      onClick={() => void executeAction('web.openInBrowser', { path })}
+    />
   )
 }
 
@@ -138,7 +153,7 @@ export function PreviewWrapper({
   const floating = (target: RefObject<HTMLDivElement | null>) =>
     !actionsInTabs && (
       <FloatingToolbar targetRef={target}>
-        <PreviewTabActions tabId={tabId} />
+        <PreviewTabActions tabId={tabId} path={path} />
       </FloatingToolbar>
     )
 
@@ -159,14 +174,24 @@ export function PreviewWrapper({
               : 'relative flex flex-col flex-1 min-w-0 min-h-0 h-full overflow-hidden'
         }
         style={mode === 'preview' ? { display: 'none' } : undefined}
+        // Hidden with the preview-only layout: the editor's corner actions go with it, so the floating
+        // editor actions must not attach there (`shownCorner` skips aria-hidden parents).
+        aria-hidden={mode === 'preview' ? true : undefined}
       >
         {children}
         {mode !== 'preview' && floating(codeRef)}
       </div>
       {mode !== 'code' && (
-        <div ref={previewRef} className="relative flex-1 min-w-0 min-h-0 h-full overflow-hidden bg-[var(--bg-app)]">
-          {mode === 'preview' && floating(previewRef)}
-          <div className="h-full w-full overflow-auto">{renderVisualizer()}</div>
+        <div ref={previewRef} className="relative flex flex-1 flex-col min-w-0 min-h-0 h-full overflow-hidden bg-[var(--bg-app)]">
+          {/* Preview only has no editor to carry the switch, and a floating one is unreachable over an
+              iframe, so this bar stays: Editor only / Split / Preview only, and Open in Browser. */}
+          {mode === 'preview' && (
+            <div className="flex flex-none items-center justify-end gap-1 border-b border-[var(--border)] px-2 py-0.5" data-testid="preview-only-bar">
+              <span className="mr-auto truncate text-[11px] text-[var(--fg-muted)]">{fileName}</span>
+              <PreviewTabActions tabId={tabId} path={path} />
+            </div>
+          )}
+          <div className="min-h-0 w-full flex-1 overflow-auto">{renderVisualizer()}</div>
         </div>
       )}
     </div>
