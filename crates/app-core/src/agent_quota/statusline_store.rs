@@ -1,7 +1,8 @@
 //! The status line a Claude conversation last showed, kept so OmniTerm can show it in the pane the
 //! conversation runs in. The status line bridge (claude_bridge_run.rs) writes, after every render,
-//! the exact text it printed to `<profile>/omniterm/statuslines/<session_id>.json`; the pane footer
-//! reads it back by the conversation id the pane tracks.
+//! the exact text it printed to `<profile>/omniterm/statuslines/<session_id>.json`, with how full
+//! the conversation's context window was; the pane footer reads it back by the conversation id the
+//! pane tracks.
 //!
 //! Writing never fails the status line: any error only means the footer falls back to the quota.
 //! The session id names a file, so only plain ids (letters, digits, `-`, `_`) are ever used.
@@ -10,6 +11,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
+use serde::Serialize;
 use serde_json::{json, Value};
 
 use super::claude_bridge::{BRIDGE_DIR, MAX_AGE_MS};
@@ -23,6 +25,16 @@ const MAX_TEXT_CHARS: usize = 2000;
 const PRUNE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
 /// Clock skew tolerated for a record written "in the future".
 const FUTURE_SKEW_MS: i64 = 60 * 1000;
+
+/// What a conversation's status line last showed, for its pane's footer.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatuslineRecord {
+    /// The exact text the bridge printed (terminal escapes included).
+    pub text: String,
+    /// How full the context window was, in percent, when Claude Code reported it.
+    pub context_pct: Option<f64>,
+}
 
 /// The session id when it is safe as a file name, else `None`.
 pub(crate) fn safe_session_id(id: &str) -> Option<&str> {
@@ -49,6 +61,7 @@ pub(crate) fn store_statusline(
     profile_dir: &Path,
     input: Option<&Value>,
     text: &str,
+    context_pct: Option<f64>,
     now_ms: i64,
 ) -> io::Result<()> {
     let Some(file) = input
@@ -60,7 +73,12 @@ pub(crate) fn store_statusline(
     };
     let first_write = !file.exists();
     let text: String = text.chars().take(MAX_TEXT_CHARS).collect();
-    let record = json!({ "version": 1, "writtenAt": now_ms, "text": text });
+    let record = json!({
+        "version": 1,
+        "writtenAt": now_ms,
+        "text": text,
+        "contextPct": context_pct,
+    });
     write_atomic(&file, &record.to_string())?;
     // A new conversation is the moment to drop the records of long-finished ones.
     if first_write {
@@ -87,8 +105,8 @@ fn prune(dir: &Path, now: SystemTime) {
     }
 }
 
-/// The record's text, or `None` when it is malformed, blank or older than the quota records.
-pub(crate) fn parse_statusline_record(raw: &str, now_ms: i64) -> Option<String> {
+/// The record, or `None` when it is malformed, blank or older than the quota records.
+pub(crate) fn parse_statusline_record(raw: &str, now_ms: i64) -> Option<StatuslineRecord> {
     let doc: Value = serde_json::from_str(raw).ok()?;
     let written = doc.get("writtenAt").and_then(Value::as_i64)?;
     if now_ms.saturating_sub(written) > MAX_AGE_MS
@@ -96,14 +114,27 @@ pub(crate) fn parse_statusline_record(raw: &str, now_ms: i64) -> Option<String> 
     {
         return None;
     }
-    doc.get("text")
+    let text = doc
+        .get("text")
         .and_then(Value::as_str)
-        .filter(|text| !text.trim().is_empty())
-        .map(str::to_string)
+        .filter(|text| !text.trim().is_empty())?;
+    let context_pct = doc
+        .get("contextPct")
+        .and_then(Value::as_f64)
+        .filter(|pct| pct.is_finite())
+        .map(|pct| pct.clamp(0.0, 100.0));
+    Some(StatuslineRecord {
+        text: text.to_string(),
+        context_pct,
+    })
 }
 
 /// The status line a conversation of this profile last showed, while it is fresh.
-pub fn read_statusline(profile_dir: &Path, session_id: &str, now_ms: i64) -> Option<String> {
+pub fn read_statusline(
+    profile_dir: &Path,
+    session_id: &str,
+    now_ms: i64,
+) -> Option<StatuslineRecord> {
     let file = statusline_file(profile_dir, session_id)?;
     let raw = std::fs::read_to_string(file).ok()?;
     parse_statusline_record(&raw, now_ms)

@@ -3,18 +3,18 @@
 //! the `remaining_fraction` and `reset_time`. The bridge (OmniTerm run with
 //! `--omniterm-agy-statusline`) keeps the last of them in
 //! `<profile>/antigravity-cli/omniterm/agy-usage.json`, and the Antigravity provider reads that
-//! record instead of running `agy -p /usage` while it is fresh.
+//! record instead of running `agy -p /usage` once the agent has reported.
 //!
 //! Like the Claude bridge, it is the CLI's own reading, written by a process the CLI started: no
-//! token is read and no request is made. A record that is old, malformed or whose window has rolled
-//! over is no reading at all, so the provider falls back to `agy -p /usage`.
+//! token is read and no request is made. Only a profile without a readable record falls back to
+//! `agy -p /usage`, which leaves a throwaway conversation behind on every run.
 
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
 use super::agy_usage::{is_agy_model_match, pick_windows, Reading};
-use super::claude_bridge::{BRIDGE_DIR, MAX_AGE_MS};
+use super::claude_bridge::BRIDGE_DIR;
 use super::iso_time::parse_iso;
 use super::types::{AgentKind, ModelFamily, QuotaSnapshot, QuotaSource, WindowKind};
 
@@ -110,7 +110,9 @@ fn family_of(model: &str) -> Option<ModelFamily> {
         .find(|family| is_agy_model_match(model, *family))
 }
 
-/// A stored record as a reading, or `None` when it is stale, malformed or a window has reset since.
+/// The stored record as a reading, at any age, or `None` when it is malformed. The agent reports
+/// whenever its state changes, so between records nothing on this profile drew on the quota: a
+/// window that rolled over since is a new one, unused.
 pub(crate) fn parse_agy_record(
     raw: &str,
     now: i64,
@@ -118,7 +120,7 @@ pub(crate) fn parse_agy_record(
 ) -> Option<QuotaSnapshot> {
     let doc: Value = serde_json::from_str(raw).ok()?;
     let written = doc.get("writtenAt").and_then(Value::as_i64)?;
-    if now.saturating_sub(written) > MAX_AGE_MS || written > now.saturating_add(FUTURE_SKEW_MS) {
+    if written > now.saturating_add(FUTURE_SKEW_MS) {
         return None;
     }
     let mut readings = Vec::new();
@@ -132,14 +134,12 @@ pub(crate) fn parse_agy_record(
             .and_then(Value::as_i64)
             .filter(|at| *at > 0);
         // The window rolled over after the record was written: its percentage no longer applies.
-        if resets_at.is_some_and(|at| at <= now) {
-            return None;
-        }
+        let rolled = resets_at.is_some_and(|at| at <= now);
         readings.push(Reading {
             kind,
             model: id.clone(),
-            used_pct: used.clamp(0.0, 100.0),
-            resets_at,
+            used_pct: if rolled { 0.0 } else { used.clamp(0.0, 100.0) },
+            resets_at: resets_at.filter(|_| !rolled),
         });
     }
     if readings.is_empty() {

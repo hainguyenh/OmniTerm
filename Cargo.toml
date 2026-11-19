@@ -48,7 +48,7 @@ grep-searcher = "0.1"
 grep-regex = "0.1"
 grep-matcher = "0.1"
 redb = "4"
-gix = { version = "0.89", default-features = false }
+gix = { version = "0.90", default-features = false }
 insta = { version = "1", features = ["yaml"] }
 proptest = "1"
 tempfile = "3"

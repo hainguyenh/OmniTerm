@@ -32,6 +32,8 @@ mod temp_note_ipc;
 #[path = "ipc_transfer_tests.rs"]
 mod transfer_ipc;
 
+#[path = "ipc_workspace_connection_tests.rs"]
+mod workspace_connection_ipc;
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
 #[path = "ipc_workspace_tests.rs"]

@@ -122,7 +122,7 @@ fn the_same_folder_is_recognised_through_a_different_spelling() {
 }
 
 #[test]
-fn disabled_folders_are_left_out_of_the_project() {
+fn disabled_folders_stay_in_the_project_so_a_toggle_never_reopens_it() {
     let folder = |id: &str, disabled: bool| app_protocol::workspace::WorkspaceFolder {
         id: id.to_string(),
         name: id.to_string(),
@@ -140,17 +140,17 @@ fn disabled_folders_are_left_out_of_the_project() {
         color: None,
         icon: None,
     };
-    assert_eq!(
-        project_folders(&workspace),
-        vec![PathBuf::from("/work/a"), PathBuf::from("/work/c")]
-    );
-    // One folder left is a plain folder project; none left closes the project.
+    let all = vec![
+        PathBuf::from("/work/a"),
+        PathBuf::from("/work/b"),
+        PathBuf::from("/work/c"),
+    ];
+    assert_eq!(project_folders(&workspace), all);
+    // One folder still on: every folder is still part of the project.
     workspace.folders[2].disabled = true;
+    assert_eq!(project_folders(&workspace), all);
+    // None left on closes the project.
     let containers = PathBuf::from("/c");
-    assert_eq!(
-        plan(&containers, "w", "W", project_folders(&workspace)),
-        ProjectPlan::Folder(PathBuf::from("/work/a"))
-    );
     workspace.folders[0].disabled = true;
     assert_eq!(
         plan(&containers, "w", "W", project_folders(&workspace)),

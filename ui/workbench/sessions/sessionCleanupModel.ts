@@ -153,42 +153,22 @@ export async function deleteSessionFiles(ids: readonly string[]): Promise<Delete
   return { deleted, failed }
 }
 
-/** Ids per delete call: each call rescans the profiles it names, so progress shows between them. */
-export const DELETE_BATCH_SIZE = 25
-
-/** `items` cut into runs of at most `size`, in order. */
-export function chunk<T>(items: readonly T[], size: number): T[][] {
-  const step = Math.max(1, Math.floor(size))
-  const runs: T[][] = []
-  for (let start = 0; start < items.length; start += step) runs.push(items.slice(start, start + step))
-  return runs
+/** Stops the running delete before its next session. */
+export async function cancelSessionDelete(): Promise<void> {
+  try {
+    await invoke<void>('agent_session_files_delete_cancel')
+  } catch {
+    // Nothing running any more: the delete has ended on its own.
+  }
 }
 
-/**
- * Deletes `ids` a batch at a time, reporting how many were handled after each one. A batch that
- * fails as a whole marks its ids failed and the rest still run.
- */
-export async function deleteInBatches(
-  ids: readonly string[],
-  onProgress: (done: number) => void,
-  size = DELETE_BATCH_SIZE,
-  remove: (batch: readonly string[]) => Promise<DeleteReport> = deleteSessionFiles,
-): Promise<DeleteReport> {
-  const total: DeleteReport = { deleted: [], failed: [] }
-  let done = 0
-  for (const batch of chunk(ids, size)) {
-    try {
-      const report = await remove(batch)
-      total.deleted.push(...report.deleted)
-      total.failed.push(...report.failed)
-    } catch (cause) {
-      const reason = cause instanceof Error ? cause.message : String(cause)
-      total.failed.push(...batch.map((id): [string, string] => [id, reason]))
-    }
-    done += batch.length
-    onProgress(done)
-  }
-  return total
+/** The backend's progress event of a session delete. */
+export const SESSION_PROGRESS_EVENT = 'session-cleanup:progress'
+
+/** The listing without the conversations `deleted`: the table updates without scanning again. */
+export function withoutDeleted(files: readonly AgentSessionFile[], deleted: readonly string[]): AgentSessionFile[] {
+  const gone = new Set(deleted)
+  return files.filter((file) => !gone.has(file.id))
 }
 
 /** A transcript written this recently may belong to an agent OmniTerm does not track (another terminal). */

@@ -37,12 +37,16 @@ fn keeps_the_printed_text_per_conversation_and_reads_it_back() {
         dir.path(),
         Some(&input),
         "\u{1b}[32mOpus\u{1b}[0m · 5h 4%\n",
+        Some(27.5),
         NOW,
     )
     .expect("store");
     assert_eq!(
-        read_statusline(dir.path(), SESSION, NOW + 1000).as_deref(),
-        Some("\u{1b}[32mOpus\u{1b}[0m · 5h 4%\n")
+        read_statusline(dir.path(), SESSION, NOW + 1000),
+        Some(StatuslineRecord {
+            text: "\u{1b}[32mOpus\u{1b}[0m · 5h 4%\n".to_string(),
+            context_pct: Some(27.5),
+        })
     );
     let file = dir
         .path()
@@ -61,7 +65,7 @@ fn writes_nothing_without_a_usable_session_id() {
         Some(json!({})),
         Some(json!({ "session_id": "../evil" })),
     ] {
-        store_statusline(dir.path(), input.as_ref(), "line", NOW).expect("no error");
+        store_statusline(dir.path(), input.as_ref(), "line", None, NOW).expect("no error");
     }
     assert!(!dir.path().join("omniterm").exists());
 }
@@ -72,9 +76,19 @@ fn a_stale_future_blank_or_malformed_record_is_no_status_line() {
         json!({ "version": 1, "writtenAt": written, "text": text }).to_string()
     };
     assert_eq!(
-        parse_statusline_record(&record(NOW, "a"), NOW).as_deref(),
-        Some("a")
+        parse_statusline_record(&record(NOW, "a"), NOW),
+        Some(StatuslineRecord {
+            text: "a".to_string(),
+            context_pct: None,
+        })
     );
+    // A context share out of range is clamped; one that is not a number is no share.
+    let read = |pct: Value| {
+        let raw = json!({ "writtenAt": NOW, "text": "a", "contextPct": pct }).to_string();
+        parse_statusline_record(&raw, NOW).and_then(|record| record.context_pct)
+    };
+    assert_eq!(read(json!(140.0)), Some(100.0));
+    assert_eq!(read(json!("12")), None);
     assert_eq!(
         parse_statusline_record(&record(NOW - MAX_AGE_MS - 1, "a"), NOW),
         None
@@ -92,8 +106,10 @@ fn a_stale_future_blank_or_malformed_record_is_no_status_line() {
 fn cuts_a_very_long_text() {
     let dir = tempfile::tempdir().expect("temp dir");
     let input = json!({ "session_id": SESSION });
-    store_statusline(dir.path(), Some(&input), &"é".repeat(5000), NOW).expect("store");
-    let text = read_statusline(dir.path(), SESSION, NOW).expect("text");
+    store_statusline(dir.path(), Some(&input), &"é".repeat(5000), None, NOW).expect("store");
+    let text = read_statusline(dir.path(), SESSION, NOW)
+        .expect("text")
+        .text;
     assert_eq!(text.chars().count(), MAX_TEXT_CHARS);
 }
 
@@ -116,14 +132,19 @@ fn the_bridge_stores_what_it_prints_chained_or_its_own() {
     })
     .to_string();
     let own = statusline_output(dir.path(), &input, NOW, &no_chain);
-    assert_eq!(read_statusline(dir.path(), SESSION, NOW), Some(own));
+    assert_eq!(
+        read_statusline(dir.path(), SESSION, NOW).map(|record| record.text),
+        Some(own)
+    );
 
     let previous = json!({ "previousStatusLine": { "command": "my-line" } });
     write_atomic(&bridge_file(dir.path()), &previous.to_string()).expect("bridge.json");
     let chained = |_: &str, _: &str| Some("my line\n".to_string());
     statusline_output(dir.path(), &input, NOW, &chained);
     assert_eq!(
-        read_statusline(dir.path(), SESSION, NOW).as_deref(),
+        read_statusline(dir.path(), SESSION, NOW)
+            .map(|record| record.text)
+            .as_deref(),
         Some("my line\n")
     );
 }

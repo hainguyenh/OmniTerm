@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use app_core::agent_quota::{
     agy_bridge_status, bridge_profile_dir, bridge_status, install_agy_bridge, install_bridge,
-    read_statusline, remove_agy_bridge, remove_bridge, BridgeStatus, Platform,
+    read_statusline, remove_agy_bridge, remove_bridge, BridgeStatus, Platform, StatuslineRecord,
 };
 use app_core::builtin_features::AGENT_QUOTA;
 use tauri::{AppHandle, Manager, Runtime};
@@ -110,14 +110,15 @@ pub async fn agent_quota_agy_bridge_remove<R: Runtime>(
         .map_err(|error| format!("Could not remove the Antigravity status line bridge: {error}"))
 }
 
-/// The status line a Claude conversation of the profile last showed, for its pane's footer; `None`
-/// while there is no fresh one (or Agent Quota, which installs the bridge, is off).
+/// The status line a Claude conversation of the profile last showed and how full its context was,
+/// for its pane's footer; `None` while there is no fresh one (or Agent Quota, which installs the
+/// bridge, is off).
 #[tauri::command]
 pub async fn agent_quota_statusline_text<R: Runtime>(
     app: AppHandle<R>,
     profile_dir: String,
     session_id: String,
-) -> Result<Option<String>, String> {
+) -> Result<Option<StatuslineRecord>, String> {
     if !crate::builtin_features::is_enabled(&app, AGENT_QUOTA) {
         return Ok(None);
     }

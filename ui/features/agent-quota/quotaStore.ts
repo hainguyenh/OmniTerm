@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react'
 import type { AgentKind, QuotaSnapshot } from './usage/types'
 import type { SessionAgent } from './agentQuotaAPI'
 import type { AgentConfig, AgentOverride, QuotaConfig } from './quotaConfig'
+import type { ProfileActivity, UsageRisk } from './profileCensus'
 import type { GuardState } from './quotaGuard'
 import type { Sample } from './smartInterval'
 import type { WakeMemory } from './wakePolicy'
@@ -34,6 +35,11 @@ export interface ProfileQuota {
   snapshot?: QuotaSnapshot
   /** Last reading without an error, shown (marked stale) while newer ones fail. */
   lastGood?: QuotaSnapshot
+  /** When the agent last wrote the status line bridge record applied here (bridgeFollower.ts). */
+  bridgeAt?: number
+  /** How closely the quota is read, and the sessions behind that (profileCensus.ts). */
+  risk?: UsageRisk
+  activity?: ProfileActivity | null
   history: Sample[]
   errorStreak: number
   nextFetchAt: number

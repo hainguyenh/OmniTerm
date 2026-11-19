@@ -8,8 +8,8 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use serde_json::Value;
 
-use super::agy_provider::fetch_agy_usage;
-use super::claude_provider::fetch_claude_usage;
+use super::agy_provider::{agy_bridge_reading, detect_agy_active_family, fetch_agy_usage};
+use super::claude_provider::{bridge_reading, fetch_claude_usage_within};
 use super::codex_rollout::fetch_codex_usage;
 use super::deps::{Platform, ProviderDeps};
 use super::launcher::is_launcher_name;
@@ -70,6 +70,9 @@ pub fn parse_fetch_request(value: &Value) -> Result<FetchUsageRequest, String> {
             _ => None,
         },
         model_family_auto: family == Some("auto"),
+        max_record_age_ms: field(value, "maxRecordAgeMs")
+            .and_then(Value::as_i64)
+            .filter(|ms| *ms >= 0),
     })
 }
 
@@ -202,7 +205,9 @@ impl<D: ProviderDeps> QuotaService<D> {
                 let dir = request.profile_dir.as_deref();
                 let launcher = request.launcher.as_deref();
                 match request.agent {
-                    AgentKind::Claude => fetch_claude_usage(dir, launcher, deps),
+                    AgentKind::Claude => {
+                        fetch_claude_usage_within(dir, launcher, request.max_record_age_ms, deps)
+                    }
                     AgentKind::Codex => fetch_codex_usage(dir, deps).unwrap_or_else(|error| {
                         QuotaSnapshot::failure(deps.now(), QuotaError::Failed, error.to_string())
                     }),
@@ -211,6 +216,25 @@ impl<D: ProviderDeps> QuotaService<D> {
             },
             |message| QuotaSnapshot::failure(now, QuotaError::Failed, message),
         )
+    }
+
+    /// Only what the profile's status line bridge last recorded, at any age: a small file read,
+    /// never a CLI run, so the renderer can follow the bridge as closely as Claude Code
+    /// renders its status line. Codex has no bridge (its log is read by `fetch_usage`).
+    pub fn bridge_reading(&self, request: &FetchUsageRequest) -> Option<QuotaSnapshot> {
+        let deps = &self.deps;
+        let dir = request.profile_dir.as_deref();
+        let launcher = request.launcher.as_deref();
+        match request.agent {
+            AgentKind::Claude => bridge_reading(dir, launcher, deps),
+            AgentKind::Agy => {
+                let active = request
+                    .model_family
+                    .or_else(|| detect_agy_active_family(dir, deps));
+                agy_bridge_reading(dir, launcher, active, deps)
+            }
+            AgentKind::Codex => None,
+        }
     }
 
     pub fn wake(&self, request: &WakeRequest) -> WakeResult {

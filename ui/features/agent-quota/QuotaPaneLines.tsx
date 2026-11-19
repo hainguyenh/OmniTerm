@@ -8,7 +8,7 @@ import { QuotaOverridePopover } from './QuotaOverridePopover'
 import { QuotaLine } from './QuotaLine'
 import { effectiveConfig, pruneOverride, wakeConfigWithEnabled } from './quotaConfig'
 import { isHeld } from './quotaGuard'
-import { shouldHideWeekly } from './quotaPolicy'
+import { isWeeklyVisible } from './quotaPolicy'
 import { clearManualPause, quotaCommands, setEditing, setOverride, setReviewSession, useCoarseNow, useQuota } from './quotaStore'
 import { UsageReadCallout } from './UsageReadCallout'
 import { AGENT_PROBES } from './usageProbeCore'
@@ -104,12 +104,10 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
   }
   const stale = !!profile?.snapshot?.error
   const weeklyWindow = rawWindows.find((window) => window.kind === 'weekly')
-  // The terminal's "Show weekly quota" override beats the global auto-hide.
-  const weeklyHidden = !override?.showWeekly && display.weeklyAutoHide && !!weeklyWindow
-    && shouldHideWeekly(weeklyWindow, display.weeklyThresholdPct ?? 60)
+  // The terminal's "Show weekly quota" choice beats the global line switch and auto-hide.
+  const weeklyHidden = !!weeklyWindow && !isWeeklyVisible(weeklyWindow, display, override?.showWeekly)
   const windows = rawWindows
-    .filter((window) => display.lines[window.kind])
-    .filter((window) => !(window.kind === 'weekly' && weeklyHidden))
+    .filter((window) => (window.kind === 'weekly' ? !weeklyHidden : display.lines[window.kind]))
   const wakeEnabled = config.wake.mode !== 'off'
   const setLimit = (kind: WindowKind) => (limit: number) =>
     setOverride(terminal.instanceKey, pruneOverride(global, { ...override, limits: { ...override?.limits, [kind]: limit } }))

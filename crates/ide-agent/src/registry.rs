@@ -576,7 +576,8 @@ fn install_npm(
     check_spec(&spec)?;
     let npm = which::which("npm").map_err(|_| IdeError::unavailable(format!("npm is required to install {name}")))?;
     let mut cmd = Command::new(npm);
-    cmd.arg("install").arg("--prefix").arg(dir).args(["--no-audit", "--no-fund"]).arg(&spec).current_dir(dir);
+    // Registry packages are third-party: never run their install-time lifecycle scripts.
+    cmd.arg("install").arg("--prefix").arg(dir).args(["--ignore-scripts", "--no-audit", "--no-fund"]).arg(&spec).current_dir(dir);
     ide_tools::run_streamed(cmd, cancel, emit)?;
     let modules = dir.join("node_modules");
     let manifest: serde_json::Value = fs::read_to_string(modules.join(name).join("package.json"))

@@ -4,6 +4,9 @@ import { listen } from '@tauri-apps/api/event'
 import { scanPaneAgents } from '../../utils/paneAgentScan'
 
 import type { AgentKind, DiscoveredProfile, FetchUsageRequest, QuotaSnapshot, QuotaWindow, WakeRequest, WakeResult } from './usage/types'
+import type { ProfileCensus } from './profileCensus'
+
+import { parseProfileCensus } from './profileCensus'
 
 /** The main agent Rust found in a terminal session (`agent_quota_detect`). */
 export interface SessionAgent {
@@ -159,6 +162,13 @@ export interface AgentQuotaAPI {
   getHeld?(sessionId?: string): Promise<FrozenProcess[]>
   terminate(sessionId: string, pid: number, startTime: number): Promise<number>
   fetchUsage(request: FetchUsageRequest): Promise<QuotaSnapshot>
+  /**
+   * Only the profile's status line bridge record, at any age: a small file read, never a CLI run
+   * (see bridgeFollower.ts). Null without one, and on any failure.
+   */
+  readBridge?(request: FetchUsageRequest): Promise<QuotaSnapshot | null>
+  /** The Claude sessions per profile on this whole machine (see profileCensus.ts). */
+  census?(): Promise<ProfileCensus[]>
   wake(request: WakeRequest): Promise<WakeResult>
   listProfiles?(): Promise<DiscoveredProfile[]>
   /**
@@ -202,6 +212,11 @@ export function createAgentQuotaAPI(): AgentQuotaAPI {
       (value) => parseSnapshot(value),
       (error: unknown) => ({ windows: [], fetchedAt: Date.now(), error: 'failed' as const, message: String(error).slice(0, 300) }),
     ),
+    readBridge: (request) => invoke<unknown>('agent_quota_bridge_reading', { request }).then(
+      (value) => (isRecord(value) ? parseSnapshot(value) : null),
+      () => null,
+    ),
+    census: () => invoke<unknown>('agent_quota_profile_census').then(parseProfileCensus),
     wake: (request) => invoke<unknown>('agent_quota_wake', { request }).then(
       (value) => (isRecord(value) ? { ok: value.ok === true, message: typeof value.message === 'string' ? value.message : undefined } : { ok: false, message: 'No answer.' }),
       (error: unknown) => ({ ok: false, message: String(error).slice(0, 300) }),

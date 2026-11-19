@@ -64,6 +64,18 @@ pub async fn agent_quota_fetch_usage<R: Runtime>(
     blocking(move || service().fetch_usage(&request)).await
 }
 
+/// The profile's status line bridge record while it is fresh, or `None`: cheap enough for the
+/// renderer to poll every few seconds, so a reading lands as soon as the agent reports it.
+#[tauri::command]
+pub async fn agent_quota_bridge_reading<R: Runtime>(
+    app: AppHandle<R>,
+    request: Value,
+) -> Result<Option<QuotaSnapshot>, String> {
+    ensure_enabled(&app)?;
+    let request = parse_fetch_request(&request)?;
+    blocking(move || service().bridge_reading(&request)).await
+}
+
 /// Whether the profile reports its quota by itself (a status line bridge, installed here when
 /// missing, or Codex's session log); when it does, the renderer skips the inline pane probe.
 #[tauri::command]

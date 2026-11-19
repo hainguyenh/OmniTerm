@@ -31,7 +31,8 @@ export function intervalForProfile(
     history: profile.history,
     pressure: Math.max(0, ...configs.map((config) => pressure(reading, config))),
     headroom: sessionLimit - (session?.usedPct ?? 0),
-    busy: terminals.some((terminal) => busy[terminal.sessionId]),
+    // Sessions outside the panes may be spending the quota (profileCensus.ts): read at the busy pace.
+    busy: profile.risk === 'danger' || terminals.some((terminal) => busy[terminal.sessionId]),
     errorStreak: profile.errorStreak,
     now,
     random,

@@ -5,7 +5,7 @@ import type { Connection, Workspace } from '../domain'
 import { useStoredSessions, type StoredAgentSession } from '../utils/agentSessionStorage'
 import { useAllPanePresence } from '../utils/agentPresenceStore'
 import type { QuickStartProject } from '../utils/sessionQuickStart'
-import { buildSessionsTree, resumableCount, type SessionsFilter, type SessionsTreeTab } from '../utils/sessionsTree'
+import { buildSessionsTree, storedSessionCount, type SessionsFilter, type SessionsTreeInput, type SessionsTreeTab } from '../utils/sessionsTree'
 import { scopedWorkspaceId, selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
 import BookmarksPanel, { type BookmarksPanelProps } from './BookmarksPanel'
 import { SessionSectionView } from './SessionsTreeView'
@@ -60,13 +60,14 @@ const SessionsPanel: React.FC<SessionsPanelProps> = ({
   const stored = useStoredSessions()
   const scopeWorkspaceId = useWorkspaceStore(scopedWorkspaceId)
   const currentWorkspaceId = useWorkspaceStore((state) => selectedWorkspaceId(state.selection))
-  const sections = useMemo(() => buildSessionsTree({
-    tabs, workspaces, connById, isEditor, filter, stored, scopeWorkspaceId,
+  const treeInput = useMemo((): Omit<SessionsTreeInput, 'filter'> => ({
+    tabs, workspaces, connById, isEditor, stored, scopeWorkspaceId,
     // An agent pane belongs to the folder it was started in, even after the shell moved elsewhere.
     cwdOf: (id) => presence[id]?.launchCwd ?? sessionCwds[id],
     agentOf: (id) => presence[id]?.agent,
-  }), [tabs, workspaces, connById, isEditor, filter, stored, scopeWorkspaceId, sessionCwds, presence])
-  const resumable = resumableCount(stored)
+  }), [tabs, workspaces, connById, isEditor, stored, scopeWorkspaceId, sessionCwds, presence])
+  const sections = useMemo(() => buildSessionsTree({ ...treeInput, filter }), [treeInput, filter])
+  const resumable = useMemo(() => storedSessionCount(buildSessionsTree({ ...treeInput, filter: 'resume' })), [treeInput])
   const filters: ReadonlyArray<{ id: SessionsFilter | 'bookmarks'; label: string }> = [
     { id: 'all', label: 'All' },
     { id: 'terminals', label: 'Terminals' },

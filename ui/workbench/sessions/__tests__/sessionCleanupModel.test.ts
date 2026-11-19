@@ -6,8 +6,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeM
 import type { StoredAgentSession } from '../../../utils/agentSessionStorage'
 import {
   agentLabel,
-  chunk,
-  deleteInBatches,
+  cancelSessionDelete,
   filterCleanupRows,
   formatAge,
   formatBytes,
@@ -20,6 +19,7 @@ import {
   scanCoversAge,
   selectAllKeys,
   sortCleanupRows,
+  withoutDeleted,
   type AgentSessionFile,
 } from '../sessionCleanupModel'
 
@@ -150,23 +150,15 @@ describe('session cleanup model', () => {
     expect(selectAllKeys(rows, false).size).toBe(0)
   })
 
-  it('cuts ids into batches in order', () => {
-    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
-    expect(chunk([], 3)).toEqual([])
-    expect(chunk([1, 2], 0)).toEqual([[1], [2]])
+  it('drops the deleted conversations from the listing and keeps the rest in order', () => {
+    const files = [file({ id: 'a' }), file({ id: 'b' }), file({ id: 'c' })]
+    expect(withoutDeleted(files, ['b', 'x']).map((item) => item.id)).toEqual(['a', 'c'])
   })
 
-  it('deletes in batches, reports progress after each, and keeps going past a failed batch', async () => {
-    const ids = ['a', 'b', 'c', 'd', 'e']
-    const remove = vi.fn(async (batch: readonly string[]) => {
-      if (batch.includes('c')) throw new Error('locked')
-      return { deleted: [...batch], failed: [] }
-    })
-    const progress: number[] = []
-    const report = await deleteInBatches(ids, (done) => progress.push(done), 2, remove)
-    expect(remove.mock.calls.map(([batch]) => batch)).toEqual([['a', 'b'], ['c', 'd'], ['e']])
-    expect(progress).toEqual([2, 4, 5])
-    expect(report).toEqual({ deleted: ['a', 'b', 'e'], failed: [['c', 'locked'], ['d', 'locked']] })
+  it('asks the backend to stop a delete and ignores a delete that has already ended', async () => {
+    invokeMock.mockRejectedValueOnce(new Error('not running'))
+    await expect(cancelSessionDelete()).resolves.toBeUndefined()
+    expect(invokeMock).toHaveBeenCalledWith('agent_session_files_delete_cancel')
   })
 })
 

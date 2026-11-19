@@ -8,7 +8,8 @@ import { SvgPreview } from '../../components/editor/preview/SvgPreview'
 import { editorController } from '../../ide/editor/core/controller'
 import { basename } from '../../ide/platform/project'
 import { executeAction } from '../../ide/platform/actions'
-import { FloatingToolbar, IconButton } from '../../ide/ui'
+import { copyMenuFor, FloatingToolbar, IconButton, selectableText, showContextMenu } from '../../ide/ui'
+import { copySelectionOnKeyDown } from '../../ide/ui/selectableText'
 
 import { isHtml, usePreviewModeStore, type PreviewWrapperKind } from './previewKinds'
 
@@ -191,7 +192,23 @@ export function PreviewWrapper({
               <PreviewTabActions tabId={tabId} path={path} />
             </div>
           )}
-          <div className="min-h-0 w-full flex-1 overflow-auto">{renderVisualizer()}</div>
+          {/* The workbench body is unselectable chrome; the rendered file is content the user reads
+              and copies, so it opts back in to mouse selection, with Ctrl+C and a right-click Copy. */}
+          <div
+            className={`min-h-0 w-full flex-1 overflow-auto outline-none ${selectableText}`}
+            data-testid="preview-content"
+            // Focusable, so Ctrl+C after a mouse selection reaches this handler.
+            tabIndex={-1}
+            onKeyDown={(event) => { copySelectionOnKeyDown(event) }}
+            onContextMenu={(event) => {
+              const items = copyMenuFor(event.target)
+              if (!items) return
+              event.preventDefault()
+              showContextMenu(event, items)
+            }}
+          >
+            {renderVisualizer()}
+          </div>
         </div>
       )}
     </div>

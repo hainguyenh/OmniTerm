@@ -334,3 +334,34 @@
 .checkProblemLink:hover {
   text-decoration: underline;
 }
+/* The Commit tab's project choice (several repositories): one radio per changed project. */
+.projectPicker {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.projectChoice {
+  min-width: 0;
+  max-width: 100%;
+}
+.projectChoiceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.projectName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.projectBranch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--fg-subtle);
+  font-size: var(--fs-tiny);
+}

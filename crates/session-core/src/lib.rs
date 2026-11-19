@@ -24,6 +24,7 @@ mod server;
 mod summary;
 #[cfg(unix)]
 mod suspend;
+mod terminal_modes;
 mod transport;
 
 pub use client::{SessionDaemonClient, SessionSubscription};

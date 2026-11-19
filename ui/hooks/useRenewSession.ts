@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { Connection } from '../domain'
 import { findSessionByTabId, clearActiveForTab } from '../utils/agentSessionStorage'
 import { getPanePresence } from '../utils/agentPresenceStore'
-import { formatAgentProfileCommand } from '../utils/agentRegistry'
+import { agentRelaunchCommand } from '../utils/agentRelaunch'
 import { diag } from '../diag'
 
 /** A session of the window as the shell keeps it. */
@@ -110,15 +110,8 @@ export function useRenewSession({
         return
       }
 
-      const stored = findSessionByTabId(sessionId)
-      const cwd = sessionCwds[sessionId] ?? conn.localCwd ?? stored?.cwd ?? null
-      // A pane whose Claude never wrote a session file has no stored entry, but the live process
-      // tree still says which agent and profile to start fresh.
-      const command = stored
-        ? formatAgentProfileCommand(stored.agent, stored.launcher, stored.profileName)
-        : presence
-          ? formatAgentProfileCommand(presence.agent, presence.launcher, presence.profileName)
-          : null
+      const cwd = sessionCwds[sessionId] ?? conn.localCwd ?? findSessionByTabId(sessionId)?.cwd ?? null
+      const command = agentRelaunchCommand(sessionId)
 
       renewing.add(sessionId)
       try {

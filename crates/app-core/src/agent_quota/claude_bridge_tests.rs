@@ -78,12 +78,77 @@ fn distrusts_old_future_malformed_and_rolled_over_records() {
         parse_usage_record(&json!({ "writtenAt": NOW }).to_string(), NOW),
         None
     );
-    // Written before the 5-hour reset, read after it: the percentage belongs to the old window.
-    let after_reset = RESET_S * 1000 + 1;
+    // Written before every reset, read after them: no percentage belongs to the current windows.
+    let after_week = (RESET_S + 86_400) * 1000 + 1;
     assert_eq!(
-        parse_usage_record(&record(42.0, 13.0, after_reset - 1_000), after_reset),
+        parse_usage_record(&record(42.0, 13.0, after_week - 1_000), after_week),
         None
     );
+}
+
+#[test]
+fn leaves_out_only_the_window_that_rolled_over() {
+    // The 5-hour window reset since the record was written; the weekly one still holds.
+    let after_reset = RESET_S * 1000 + 1;
+    let snapshot = parse_usage_record(&record(42.0, 13.0, after_reset - 1_000), after_reset)
+        .expect("the weekly window");
+    assert_eq!(snapshot.windows.len(), 1);
+    assert_eq!(snapshot.windows[0].kind, WindowKind::Weekly);
+    assert_eq!(snapshot.windows[0].used_pct, 13.0);
+}
+
+#[test]
+fn the_last_record_serves_the_status_line_at_any_age() {
+    let old = NOW - 5 * MAX_AGE_MS;
+    let raw = record(42.0, 13.0, old);
+    assert_eq!(parse_usage_record(&raw, NOW), None);
+    let last = last_usage_record(&raw, NOW).expect("the last record");
+    assert_eq!(last.windows.len(), 2);
+    assert_eq!(last_usage_record("not json", NOW), None);
+}
+
+#[test]
+fn the_last_record_counts_a_window_that_rolled_over_as_unused() {
+    // Read after both resets: nothing drew on the new windows, or the agent would have reported.
+    let after_week = (RESET_S + 86_400) * 1000 + 1;
+    let last = last_usage_record(&record(42.0, 13.0, NOW), after_week).expect("the last record");
+    assert_eq!(last.fetched_at, NOW);
+    assert_eq!(last.windows.len(), 2);
+    assert!(last
+        .windows
+        .iter()
+        .all(|window| window.used_pct == 0.0 && window.resets_at.is_none()));
+}
+
+#[test]
+fn reads_how_full_the_context_window_is() {
+    assert_eq!(
+        context_pct(&json!({ "context_window": { "used_percentage": 31.6 } })),
+        Some(31.6)
+    );
+    let worked_out = json!({
+        "context_window": {
+            "context_window_size": 200_000,
+            "current_usage": {
+                "input_tokens": 10_000,
+                "cache_creation_input_tokens": 20_000,
+                "cache_read_input_tokens": 30_000,
+                "output_tokens": 99_999,
+            },
+        },
+    });
+    assert_eq!(context_pct(&worked_out), Some(30.0));
+    assert_eq!(
+        context_pct(&json!({ "context_window": { "used_percentage": 250.0 } })),
+        Some(100.0)
+    );
+    for missing in [
+        json!({}),
+        json!({ "context_window": { "context_window_size": 0, "current_usage": {} } }),
+        json!({ "context_window": { "context_window_size": 200_000 } }),
+    ] {
+        assert_eq!(context_pct(&missing), None, "{missing}");
+    }
 }
 
 #[test]
@@ -100,11 +165,20 @@ fn clamps_percentages_and_ignores_unusable_resets() {
 
 #[test]
 fn prints_a_short_quota_line() {
-    let kept = usage_record(&input(42.4, 13.0), NOW);
-    assert_eq!(status_text(kept.as_ref()), "5h 42% · 7d 13%");
+    let kept = usage_record(&input(42.4, 13.0), NOW).expect("a record");
+    let reading = parse_usage_record(&kept.to_string(), NOW);
+    assert_eq!(status_text(reading.as_ref(), None), "5h 42% · wk 13%");
     assert_eq!(
-        status_text(None),
+        status_text(reading.as_ref(), Some(31.6)),
+        "ctx 32% · 5h 42% · wk 13%"
+    );
+    assert_eq!(
+        status_text(None, None),
         "Claude quota: waiting for the first reply"
+    );
+    assert_eq!(
+        status_text(None, Some(4.0)),
+        "ctx 4% · Claude quota: waiting for the first reply"
     );
 }
 

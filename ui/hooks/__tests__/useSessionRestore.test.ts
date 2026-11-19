@@ -7,7 +7,7 @@ import { diag } from '../../diag'
 import type { Connection } from '../../domain'
 import { useSessionRestore } from '../useSessionRestore'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
-import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
+import { clearStoredSessions, upsertSession, type StoredAgentSession } from '../../utils/agentSessionStorage'
 
 const registeredConn = (over: Partial<Connection> = {}): Connection => ({
   id: 'adhoc-fresh-99',
@@ -172,6 +172,37 @@ describe('useSessionRestore', () => {
       'powershell', null, undefined, 'F:/repo',
       'claude-th --resume 11111111-1111-4111-8111-111111111111',
     )
+  })
+
+  it('resumes each remembered session in one pane only when several panes share a project folder', async () => {
+    mockOpen.mockResolvedValue(registeredConn())
+    const session = (id: string, tabId?: string): StoredAgentSession => ({
+      id: `claude:${id}`,
+      ...(tabId ? { tabId } : {}),
+      agent: 'claude',
+      profileName: 'claude',
+      sessionId: id,
+      cwd: 'F:/repo',
+      state: 'interrupted' as const,
+      updatedAt: Date.now(),
+    })
+    // One session lost its pane binding; the other is bound to the second pane of the snapshot.
+    upsertSession(session('11111111-1111-4111-8111-111111111111'))
+    upsertSession(session('22222222-2222-4222-8222-222222222222', 'old-tab-2'))
+    const saved = snapshot()
+    const pane = (id: string) => ({ ...saved.activeTabs[0]!, id, name: 'PowerShell' })
+    saved.activeTabs = [pane('old-tab-0'), pane('old-tab-1'), pane('old-tab-2')]
+    const s = setters()
+
+    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
+    await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
+
+    const commands = mockOpen.mock.calls.map(call => call[4])
+    expect(commands).toEqual([
+      'claude --resume 11111111-1111-4111-8111-111111111111',
+      null,
+      'claude --resume 22222222-2222-4222-8222-222222222222',
+    ])
   })
 
   it('does not repeat restore when ordinary connection callbacks change', async () => {

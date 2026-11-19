@@ -14,6 +14,7 @@ import {
   paceTier,
   paceTooltip,
   pressure,
+  isWeeklyVisible,
   shouldHideWeekly,
   trackLabels,
   zoneFor,
@@ -163,6 +164,23 @@ describe('shouldHideWeekly', () => {
 
   it('never hides a non-weekly window', () => {
     expect(shouldHideWeekly({ kind: 'session', label: 's', usedPct: 5, resetsAt: NOW + 60 * 3_600_000 }, NOW)).toBe(false)
+  })
+})
+
+describe('isWeeklyVisible', () => {
+  const weekly = (usedPct: number) => ({ kind: 'weekly' as const, label: 'w', usedPct })
+  const display = DEFAULT_QUOTA_CONFIG.display
+
+  it('follows the auto-hide rule without a terminal choice', () => {
+    expect(isWeeklyVisible(weekly(10), display, undefined)).toBe(false)
+    expect(isWeeklyVisible(weekly(75), display, undefined)).toBe(true)
+    expect(isWeeklyVisible(weekly(10), { ...display, weeklyAutoHide: false }, undefined)).toBe(true)
+    expect(isWeeklyVisible(weekly(75), { ...display, lines: { ...display.lines, weekly: false } }, undefined)).toBe(false)
+  })
+
+  it('lets a terminal choice beat the rules both ways', () => {
+    expect(isWeeklyVisible(weekly(10), display, true)).toBe(true)
+    expect(isWeeklyVisible(weekly(75), display, false)).toBe(false)
   })
 })
 

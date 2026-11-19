@@ -39,11 +39,27 @@ describe("styling regression check", () => {
   // showed the wrong colour in light/dark mode.
   it("keeps the legacy input colours off the IDE's portaled dialogs and popups", () => {
     const content = fs.readFileSync(path.join(ROOT, "ui", "index.css"), "utf8");
-    const rule = content.match(/(:is\(input, select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
+    const rule = content.match(/(:is\(input[^{]*select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
     expect(rule?.[1]).toContain("[data-workbench] *");
     expect(rule?.[1]).toContain("[data-ide-surface] *");
     const font = content.match(/(:is\(html, body[^{]*)\{\s*font-family: var\(--theme-font-family/);
     expect(font?.[1]).toContain("[data-ide-surface] *");
+  });
+
+  // Regression: the legacy input colours covered a checked radio's accent fill with the page
+  // background, so a selected radio in a light-theme plugin dialog drew a white dot on white.
+  it("leaves radios, checkboxes, ranges and colour inputs out of the legacy input colours", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "index.css"), "utf8");
+    const rule = content.match(/(:is\(input[^{]*select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
+    expect(rule?.[1]).toContain('input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])');
+  });
+
+  // Regression: `button { border: 0 }` reset the border style to none, so the `border` utility on
+  // OmniTerm's tab and segmented buttons drew nothing.
+  it("resets button borders by width only, keeping a solid style for border utilities", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "ide", "styles", "global.css"), "utf8");
+    const button = content.match(/^button \{([^}]*)\}/m);
+    expect(button?.[1]).toContain("border: 0 solid;");
   });
 
   it("hides off-screen panes without collapsing their layout box", () => {

@@ -19,6 +19,7 @@ vi.mock('../../ide/editor/core/controller', () => ({
   }),
 }))
 
+import { selectableText } from '../../ide/ui'
 import { PreviewWrapper } from '../previews/PreviewWrapper'
 import { usePreviewModeStore } from '../previews/previewKinds'
 
@@ -61,5 +62,24 @@ describe('HTML preview only mode', () => {
     expect(screen.queryByTestId('preview-open-in-browser')).toBeNull()
     act(() => usePreviewModeStore.setState({ modes: { t1: 'split' } }))
     expect(screen.queryByTestId('preview-only-bar')).toBeNull()
+  })
+
+  // Regression: the workbench body is unselectable, and the preview never opted back in, so text
+  // in Preview only could not be selected with the mouse or copied.
+  it('lets the user select the rendered file with the mouse and copy it', () => {
+    render(<PreviewWrapper kind="markdown" path="/w/a.md" tabId="t1" />)
+    const content = screen.getByTestId('preview-content')
+    expect(content.className).toContain(selectableText)
+    expect(content.tabIndex).toBe(-1)
+
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    content.innerHTML = '<p>copy me</p>'
+    const range = document.createRange()
+    range.selectNodeContents(content.firstChild!)
+    window.getSelection()!.removeAllRanges()
+    window.getSelection()!.addRange(range)
+    fireEvent.keyDown(content, { key: 'c', ctrlKey: true })
+    expect(writeText).toHaveBeenCalledWith('copy me')
   })
 })

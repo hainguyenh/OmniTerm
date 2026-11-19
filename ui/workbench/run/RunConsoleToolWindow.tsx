@@ -7,7 +7,7 @@ import {
   RunView as UpstreamRunView,
 } from '../../ide/features/run/RunView'
 import { executeAction } from '../../ide/platform/actions'
-import { Icon } from '../../ide/ui'
+import { Button, Icon } from '../../ide/ui'
 
 export interface RunConsoleToolWindowProps {
   id?: string
@@ -47,34 +47,23 @@ export function RunConsoleToolWindow(_props: RunConsoleToolWindowProps = {}) {
       className="flex h-full w-full flex-col justify-between overflow-y-auto p-4 text-center select-none"
       data-testid="run-console-empty-state"
     >
-      <div className="my-auto flex flex-col items-center justify-center space-y-4">
-        <div className="rounded-full bg-[var(--surface-hover,rgba(255,255,255,0.05))] p-4 text-[var(--foreground-muted,#888)]">
+      <div className="my-auto flex flex-col items-center justify-center gap-4">
+        <div className="rounded-full bg-[var(--bg-hover)] p-4 text-[var(--fg-muted)]">
           <Icon name="toolwindow-run" size={32} />
         </div>
-        <div className="max-w-md space-y-1">
-          <h3 className="text-sm font-medium text-[var(--foreground,#eee)]">Run Console</h3>
-          <p className="text-xs leading-relaxed text-[var(--foreground-muted,#888)]">
-            Run configurations or tests with Shift+F10 or select a configuration from the title bar
-          </p>
+        <h3 className="text-sm font-medium text-[var(--fg-strong)]">Run Console</h3>
+        {/* Right under the title, well apart so one is not clicked for the other. */}
+        <div className="flex flex-wrap items-center justify-center gap-6" data-testid="run-console-actions">
+          <Button variant="primary" icon="run" onClick={handleRun}>
+            Run Selected
+          </Button>
+          <Button variant="secondary" icon="settings" onClick={handleEditConfigs}>
+            Edit Configurations…
+          </Button>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={handleRun}
-            className="flex items-center gap-1.5 rounded bg-[var(--accent,#007acc)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-hover,#0062a3)] focus:outline-none"
-          >
-            <Icon name="run" size={14} />
-            <span>Run Selected</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleEditConfigs}
-            className="flex items-center gap-1.5 rounded border border-[var(--border,rgba(255,255,255,0.1))] bg-[var(--surface,rgba(255,255,255,0.03))] px-3 py-1.5 text-xs font-medium text-[var(--foreground,#eee)] transition-colors hover:bg-[var(--surface-hover,rgba(255,255,255,0.08))] focus:outline-none"
-          >
-            <Icon name="settings" size={14} />
-            <span>Edit Configurations…</span>
-          </button>
-        </div>
+        <p className="max-w-md text-xs leading-relaxed text-[var(--fg-muted)]">
+          Run configurations or tests with Shift+F10 or select a configuration from the title bar
+        </p>
       </div>
     </div>
   )

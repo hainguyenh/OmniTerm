@@ -30,6 +30,8 @@ export interface SessionBridgeApi {
   killSession(id: string, sessionAlreadyClosed?: boolean): void
   /** Starts a new shell in the same working folder and workspace as `id`. */
   newSessionLike(id: string): void
+  /** Starts the agent `id` runs, with the same profile, in a new session in the same folder and workspace. */
+  duplicateAgent?(id: string): void
   reconnect(id: string): void
   /** `skipTerminalCloseConfirm` is on: closing never asks. */
   skipConfirm(): boolean

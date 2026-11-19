@@ -6,7 +6,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
+const listeners = new Map<string, (event: { payload: unknown }) => void>()
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async (event: string, handler: (event: { payload: unknown }) => void) => {
+    listeners.set(event, handler)
+    return () => listeners.delete(event)
+  },
+}))
 
+import { useTasks } from '../../../ide/workbench/tasks'
 import { clearStoredSessions, loadStoredSessions, upsertSession } from '../../../utils/agentSessionStorage'
 import { SessionCleanupOverlay } from '../SessionCleanupDialog'
 import { useSessionCleanup } from '../sessionCleanupStore'
@@ -46,6 +54,9 @@ const listCalls = () => invokeMock.mock.calls.filter(([command]) => command === 
 
 describe('SessionCleanupDialog', () => {
   beforeEach(() => {
+    useSessionCleanup.setState({ open: false, files: null, scanned: [], scannedDays: 0, scanning: false, error: null, job: null, status: null })
+    useTasks.setState({ tasks: [] })
+    listeners.clear()
     localStorage.clear()
     clearStoredSessions()
     invokeMock.mockReset()
@@ -132,7 +143,7 @@ describe('SessionCleanupDialog', () => {
     expect(rows.map((row) => row.querySelector('td:nth-child(2)')?.textContent)).toEqual(['Gemini CLI', 'Antigravity'])
   })
 
-  it('deletes every selected session in batches with progress, then scans again', async () => {
+  it('deletes every selected session in one call with progress, runs on hidden, and updates the list without scanning again', async () => {
     const many = Array.from({ length: 60 }, (_, index) => ({
       id: `claude:claude:s${index}`,
       agent: 'claude',
@@ -143,13 +154,13 @@ describe('SessionCleanupDialog', () => {
       lastActive: Date.now() - DAY - index,
       size: 1024,
     }))
-    const batches: Array<{ ids: string[]; resolve: () => void }> = []
+    const calls: Array<{ ids: string[]; resolve: () => void }> = []
     invokeMock.mockImplementation((command: string, args?: { ids: string[] }) => {
       if (command === 'agent_session_profiles_list') return Promise.resolve(profiles)
       if (command === 'agent_session_files_list') return Promise.resolve(many)
       if (command === 'agent_session_files_delete') {
         const ids = args?.ids ?? []
-        return new Promise((resolve) => batches.push({ ids, resolve: () => resolve({ deleted: ids, failed: [] }) }))
+        return new Promise((resolve) => calls.push({ ids, resolve: () => resolve({ deleted: ids, failed: [] }) }))
       }
       return Promise.reject(new Error(command))
     })
@@ -161,22 +172,43 @@ describe('SessionCleanupDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /Delete…/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }))
 
-    await waitFor(() => expect(batches).toHaveLength(1))
-    expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting 0 of 60…')
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]?.ids).toHaveLength(60)
+    expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting: Starting…')
     expect((screen.getByTestId('session-cleanup-scan') as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: 'Delete Permanently' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByLabelText('Select all') as HTMLInputElement).disabled).toBe(true)
-    await act(async () => batches[0]?.resolve())
-    await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting 25 of 60…'))
+    await waitFor(() => expect(listeners.has('session-cleanup:progress')).toBe(true))
+    act(() => listeners.get('session-cleanup:progress')?.({ payload: { phase: 'delete', done: 25, total: 60, bytes: 25_600 } }))
+    expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleting: 25 of 60 sessions · 25 KB freed')
+    expect(useTasks.getState().tasks).toEqual([expect.objectContaining({ id: 'omniterm.sessionCleanup', fraction: 25 / 60, done: false })])
 
-    for (let index = 1; index < 3; index += 1) {
-      await waitFor(() => expect(batches).toHaveLength(index + 1))
-      await act(async () => batches[index]?.resolve())
-    }
-    expect(batches.map((batch) => batch.ids.length)).toEqual([25, 25, 10])
-    expect(new Set(batches.flatMap((batch) => batch.ids)).size).toBe(60)
-    await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toContain('Deleted 60 sessions'))
-    expect(listCalls()).toHaveLength(2)
+    // Hiding the dialog leaves the delete running in the status bar.
+    fireEvent.click(screen.getByRole('button', { name: 'Run in Background' }))
+    expect(screen.queryByTestId('session-cleanup-dialog')).toBeNull()
+    await act(async () => calls[0]?.resolve())
+    await waitFor(() => expect(useSessionCleanup.getState().job).toBeNull())
+    expect(useSessionCleanup.getState().status).toBe('Deleted 60 sessions.')
+    expect(useSessionCleanup.getState().files).toEqual([])
+    expect(listCalls()).toHaveLength(1)
+  })
+
+  it('cancels a running delete from the dialog', async () => {
+    let finish: (report: unknown) => void = () => undefined
+    invokeMock.mockImplementation((command: string) => {
+      if (command === 'agent_session_profiles_list') return Promise.resolve(profiles)
+      if (command === 'agent_session_files_list') return Promise.resolve(listing)
+      if (command === 'agent_session_files_delete') return new Promise((resolve) => (finish = resolve))
+      return Promise.resolve(undefined)
+    })
+    await scanAll()
+    await screen.findAllByTestId('session-cleanup-row')
+    fireEvent.click(screen.getByLabelText('Select Codex run'))
+    fireEvent.click(screen.getByRole('button', { name: /Delete…/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Permanently' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(invokeMock).toHaveBeenCalledWith('agent_session_files_delete_cancel')
+    expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Cancelling…')
+    await act(async () => finish({ deleted: [], failed: [['codex:codex:x', 'Cancelled']] }))
+    await waitFor(() => expect(screen.getByTestId('session-cleanup-status').textContent).toBe('Deleted 0 sessions. Cancelled before 1 session.'))
   })
 
   it('names a session without a prompt "No conversation" and can show only those', async () => {

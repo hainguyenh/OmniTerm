@@ -8,7 +8,7 @@ import type { CommitOptions, CommitSelection, PartialCommitFile } from "@/bindin
 import { call, commands } from "@/platform/ipc";
 import { workflowSettings } from "@/platform/workflowSettings";
 import { maybeEditorService, provideCommitService, useCommitCheckProviders } from "@/workbench/contributions";
-import { commitRepos, planCommit, restrictPlan, type CommitPlan } from "./changes";
+import { commitRepos, commitTarget, planCommit, restrictPlan, type CommitPlan } from "./changes";
 import type { CommitProblem } from "./commitChecks";
 import { useChangelists, withListDefaults } from "./changelists";
 import { useCommit } from "./commitStore";
@@ -42,7 +42,13 @@ export function installDraftRevision(): () => void {
 export function currentPlan(): CommitPlan {
   const { status, root, roots } = useVcs.getState();
   const checks = withListDefaults(status, root ?? "", useChangelists.getState().state, useCommit.getState().checks);
-  return restrictPlan(planCommit(status, checks), roots, useCommit.getState().commitRepo);
+  return restrictPlan(planCommit(status, checks), roots, currentTarget());
+}
+
+/** The project a commit goes to in a workspace of several repositories (`null` with one). */
+export function currentTarget(): string | null {
+  const { status, roots } = useVcs.getState();
+  return commitTarget(status, roots, useCommit.getState().commitRepo);
 }
 
 /**
@@ -80,7 +86,8 @@ export async function selectionOf(plan: CommitPlan): Promise<CommitSelection> {
   const partial = await partialCommitFiles(plan.partial);
   // Like IDEA, every repository with included changes gets a commit with the same message.
   const roots = useVcs.getState().roots;
-  const repos = commitRepos(plan.included, roots, currentRepo());
+  // Amend or concluding a merge with nothing included: the chosen project, else the current one.
+  const repos = commitRepos(plan.included, roots, currentTarget() ?? currentRepo());
   // The commit is made from a copy of the index, so changes left out keep their
   // staged state and the other repositories' indexes stay as they are.
   const stage = [...plan.stage, ...partial.whole];

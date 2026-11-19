@@ -233,6 +233,21 @@ export function buildChangeTree(
     });
 }
 
+/**
+ * The change tree of one project of several (the Commit tab's target): its groups, with folders
+ * relative to `repo` and change lists to the workspace root `listRoot`, without a project node.
+ */
+export function buildProjectChangeTree(
+  status: readonly FileStatus[],
+  repo: string,
+  listRoot: string,
+  groupByDir: boolean,
+  lists?: ChangelistState,
+  byStaging = false,
+): ChangeNode[] {
+  return buildGroups(status, repo, listRoot, groupByDir, lists, byStaging);
+}
+
 /** Prefixes every key below a project, so the same group or folder of two projects stays distinct. */
 function scopeKeys(nodes: ChangeNode[], repo: string): ChangeNode[] {
   for (const n of nodes) {
@@ -512,25 +527,44 @@ export function changedPathsUnder(paths: readonly string[], status: readonly Fil
     .filter((p) => wanted.some((w) => p === w || p.startsWith(`${w}/`)));
 }
 
-/** Repositories (in `roots` order) holding at least one of the included files. */
-export function includedRepos(included: readonly FileStatus[], roots: readonly string[]): string[] {
-  const holding = new Set(included.map((f) => rootOf(f.path, roots)));
+/** Repositories (in `roots` order) holding at least one change the change tree shows. */
+export function changedRepos(status: readonly FileStatus[], roots: readonly string[]): string[] {
+  const holding = new Set(status.filter((f) => groupOf(f)).map((f) => rootOf(f.path, roots)));
   return roots.filter((r) => holding.has(r));
 }
 
-/** The repository a commit goes to: the chosen one while it has included files, else the first that has. */
+/** The chosen repository while it is one of `repos`, else the first of them. */
 export function pickCommitRepo(repos: readonly string[], chosen: string | null): string | null {
   return chosen && repos.includes(chosen) ? chosen : (repos[0] ?? null);
 }
 
 /**
- * With included changes in several repositories, a commit covers only the chosen one; the
- * other repositories' changes stay as they are for their own commit.
+ * The one project the Commit tab works on in a workspace of several repositories: the
+ * chosen one while it has changes, else the first that has. `null` with a single repository.
  */
-export function restrictPlan(plan: CommitPlan, roots: readonly string[], chosen: string | null): CommitPlan {
-  const repos = includedRepos(plan.included, roots);
-  if (repos.length < 2) return plan;
-  const repo = pickCommitRepo(repos, chosen);
+export function commitTarget(
+  status: readonly FileStatus[],
+  roots: readonly string[],
+  chosen: string | null,
+): string | null {
+  return roots.length < 2 ? null : pickCommitRepo(changedRepos(status, roots), chosen);
+}
+
+/** The changes of `repo` (all of them without a target). */
+export function changesOfRepo(
+  status: readonly FileStatus[],
+  roots: readonly string[],
+  repo: string | null,
+): readonly FileStatus[] {
+  return repo ? status.filter((f) => rootOf(f.path, roots) === repo) : status;
+}
+
+/**
+ * A commit covers only the target project (`commitTarget`); the other projects' changes stay
+ * as they are for their own commit. Without a target the plan is left alone.
+ */
+export function restrictPlan(plan: CommitPlan, roots: readonly string[], repo: string | null): CommitPlan {
+  if (!repo) return plan;
   const inRepo = (path: string) => rootOf(path, roots) === repo;
   return {
     stage: plan.stage.filter(inRepo),

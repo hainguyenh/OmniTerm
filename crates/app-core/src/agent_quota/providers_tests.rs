@@ -77,7 +77,14 @@ fn claude_runs_the_profile_launcher_the_terminal_used_leaving_the_profile_to_it(
     let (exe, args, options) = deps.run(0);
     assert_eq!(
         (exe, args),
-        (launcher, vec!["-p".to_string(), "/usage".to_string()])
+        (
+            launcher,
+            vec![
+                "-p".to_string(),
+                "/usage".to_string(),
+                "--no-session-persistence".to_string()
+            ]
+        )
     );
     assert_eq!(has_env(&options, "CLAUDE_CONFIG_DIR"), None);
     assert_eq!(options.cwd, Some(deps.tmp.clone()));

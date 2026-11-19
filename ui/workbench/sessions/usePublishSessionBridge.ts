@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { MainLayoutModel } from '../../components/useMainLayoutController'
 import { useTabs } from '../../ide/editor/core/controller'
 import { shellLabel } from '../../shellOptions'
+import { agentRelaunchCommand } from '../../utils/agentRelaunch'
 import { workspaceForConnection } from '../../utils/workspaceIdentity'
 
 import { deriveGrid } from './editorLayoutBridge'
@@ -33,6 +34,18 @@ function sessionInfos(model: MainLayoutModel): SessionInfo[] {
     })
 }
 
+/** Where a session like `id` starts: its shell, workspace and current working folder. */
+function launchTarget(model: MainLayoutModel, id: string) {
+  const tab = model.activeTabs.find((item) => item.id === id)
+  const conn = tab ? model.connById(tab.connId) : undefined
+  const local = conn?.type === 'LOCAL' ? conn : undefined
+  return {
+    shell: local?.shell,
+    workspaceId: workspaceForConnection(model.workspaces ?? [], conn)?.id ?? model.selectedWorkspaceId,
+    cwd: (local ? model.sessionCwds?.[id] ?? local.localCwd : null) ?? null,
+  }
+}
+
 /**
  * Hands the window's sessions, and the operations on them, to the session editor tabs. The
  * editor lives below the app root and outside React's data flow, so the shell publishes here;
@@ -45,12 +58,14 @@ export function usePublishSessionBridge(model: MainLayoutModel, enabled: boolean
     () => ({
       killSession: (id, sessionAlreadyClosed = false) => latest.current.closeTabs([id], true, sessionAlreadyClosed),
       newSessionLike: (id) => {
-        const current = latest.current
-        const tab = current.activeTabs.find((item) => item.id === id)
-        const conn = tab ? current.connById(tab.connId) : undefined
-        const cwd = (conn?.type === 'LOCAL' ? current.sessionCwds?.[id] ?? conn.localCwd : null) ?? null
-        const workspaceId = workspaceForConnection(current.workspaces ?? [], conn)?.id ?? current.selectedWorkspaceId
-        current.requestNewSession(conn?.type === 'LOCAL' ? conn.shell : undefined, workspaceId, cwd)
+        const target = launchTarget(latest.current, id)
+        latest.current.requestNewSession(target.shell, target.workspaceId, target.cwd)
+      },
+      duplicateAgent: (id) => {
+        const command = agentRelaunchCommand(id)
+        if (!command) return
+        const target = launchTarget(latest.current, id)
+        latest.current.requestNewSession(target.shell, target.workspaceId, target.cwd, command)
       },
       reconnect: (id) => latest.current.reconnectSession(id),
       toggleDetach: (id) => latest.current.detachControl?.toggle(id),

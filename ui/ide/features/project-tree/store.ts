@@ -60,6 +60,10 @@ export interface ViewOptions extends TreeOptions {
   showMembers: boolean;
   /** Show the location of each project root beside its name. */
   showRootPaths: boolean;
+  /** List the External Libraries node below the project (OmniTerm hides it by default). */
+  showExternalLibraries: boolean;
+  /** List the Scratches node below the project (OmniTerm hides it by default). */
+  showScratches: boolean;
 }
 
 export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
@@ -72,7 +76,17 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   previewTab: false,
   showMembers: false,
   showRootPaths: true,
+  // Rarely used in OmniTerm: off until switched on (Scratches and Consoles still lists the scratches).
+  showExternalLibraries: false,
+  showScratches: false,
 };
+
+/** Whether the Project view lists a contributed root below the project, as the view options say. */
+export function showsContributedRoot(id: string, options: Pick<ViewOptions, "showExternalLibraries" | "showScratches">) {
+  if (id === "externalLibraries") return options.showExternalLibraries;
+  if (id === "scratches") return options.showScratches;
+  return true;
+}
 
 function storedOptions(): ViewOptions {
   const options = { ...DEFAULT_VIEW_OPTIONS, ...readJson<Partial<ViewOptions>>(OPTIONS_KEY) };
@@ -284,7 +298,14 @@ export function selectModel(s: ProjectTreeState): TreeModel {
         files,
         s.options.foldersFirst,
       );
-    else model = withExtraRoots(project(), contributed, s.listings, options, placeholder);
+    else
+      model = withExtraRoots(
+        project(),
+        contributed.filter((r) => showsContributedRoot(r.id, s.options)),
+        s.listings,
+        options,
+        placeholder,
+      );
     if (s.unity && s.mode === "unity" && model.roots[0])
       model.roots[0].detail = s.unity.editorVersion ? `Unity ${s.unity.editorVersion}` : "Unity";
     const libraries = extraFolders(contributed).flatMap((r) =>

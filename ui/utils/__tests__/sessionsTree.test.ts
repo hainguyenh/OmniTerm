@@ -2,7 +2,7 @@ import type { Connection, Workspace } from '../../domain'
 import { describe, expect, it } from 'vitest'
 
 import type { StoredAgentSession } from '../agentSessionStorage'
-import { buildSessionsTree, NO_WORKSPACE_SECTION, resumableCount, type SessionGroup, type SessionSection, type SessionsTreeInput } from '../sessionsTree'
+import { buildSessionsTree, NO_WORKSPACE_SECTION, storedSessionCount, type SessionGroup, type SessionSection, type SessionsTreeInput } from '../sessionsTree'
 
 const stored = (patch: Partial<StoredAgentSession>): StoredAgentSession => ({
   id: 'claude:s1', agent: 'claude', profileName: 'claude', sessionId: 's1', cwd: 'D:/workspace/OmniTerm/ui',
@@ -155,6 +155,17 @@ describe('buildSessionsTree', () => {
   })
 
   it('counts resumable sessions', () => {
-    expect(resumableCount([stored({}), stored({ id: 'x', state: 'saved' }), stored({ id: 'y', state: 'active' })])).toBe(2)
+    const all = [stored({}), stored({ id: 'x', state: 'saved' }), stored({ id: 'y', state: 'active' })]
+    expect(storedSessionCount(buildSessionsTree(input({ filter: 'resume', stored: all })))).toBe(2)
+  })
+
+  it('counts only the resumable sessions the scoped workspace lists', () => {
+    const all = [
+      stored({ id: 'site', cwd: 'D:/other/site' }),
+      stored({ id: 'api', cwd: 'D:/other/api/src' }),
+      stored({ id: 'elsewhere', cwd: 'D:/workspace/OmniTerm' }),
+    ]
+    const sections = buildSessionsTree(input({ filter: 'resume', stored: all, workspaces: [workspace, second], scopeWorkspaceId: 'w2' }))
+    expect(storedSessionCount(sections)).toBe(2)
   })
 })

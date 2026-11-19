@@ -103,5 +103,10 @@ export function createWorkspaceAPI() {
     ...treeEdits,
     loadConnections: (workspaceId: string) =>
       invoke<Connection[]>('load_workspace_connections', { workspaceId }).catch(() => []),
+    /** Saves an SSH or Remote Desktop profile into the workspace's `.omniterm/connections.json`. */
+    saveConnection: (workspaceId: string, connection: Connection) =>
+      invoke<Connection>('save_workspace_connection', { workspaceId, connection }),
+    deleteConnection: (workspaceId: string, connectionId: string) =>
+      invoke<boolean>('delete_workspace_connection', { workspaceId, connectionId }),
   }
 }

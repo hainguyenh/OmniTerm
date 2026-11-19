@@ -72,8 +72,11 @@ describe('QuotaEngine with profiles that report their quota by themselves', () =
     await run(T0 + 5_000)
     expect(probe).not.toHaveBeenCalled()
     expect(launchHold.release).toHaveBeenCalledWith('s1')
-    // The background read takes over at once for a profile with no reading yet.
+    // The background read takes over for a profile with no reading yet, once its agent had a
+    // moment to report through the bridge.
     await run(T0 + 6_000)
+    expect(api.fetchUsage).not.toHaveBeenCalled()
+    await run(T0 + 13_000)
     expect(api.fetchUsage).toHaveBeenCalledWith(expect.objectContaining({ agent: 'claude' }))
     expect(getQuotaState().profiles['claude:c:\\p\\work']?.snapshot?.source).toBe('statusline')
   })

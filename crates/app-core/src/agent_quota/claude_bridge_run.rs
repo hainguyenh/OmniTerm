@@ -19,8 +19,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde_json::{json, Value};
 
 use super::claude_bridge::{
-    blocked_reason, bridge_file, guard_limits, parse_usage_record, status_text, usage_file,
-    usage_record,
+    blocked_reason, bridge_file, context_pct, guard_limits, last_usage_record, parse_usage_record,
+    status_text, usage_file, usage_record,
 };
 use super::statusline_store::store_statusline;
 
@@ -98,16 +98,25 @@ pub(crate) fn statusline_output(
 ) -> String {
     let doc = serde_json::from_str::<Value>(input).ok();
     let record = doc.as_ref().and_then(|doc| usage_record(doc, now));
+    let usage = usage_file(profile);
     if let Some(record) = &record {
         // A failed write only costs freshness: the provider then asks the CLI.
-        let _ = write_atomic(&usage_file(profile), &record.to_string());
+        let _ = write_atomic(&usage, &record.to_string());
     }
+    let context = doc.as_ref().and_then(context_pct);
     let output = chained_command(profile)
         .and_then(|command| chain(&command, input))
         .filter(|output| !output.trim().is_empty())
-        .unwrap_or_else(|| format!("{}\n", status_text(record.as_ref())));
+        .unwrap_or_else(|| {
+            // Before the session's first reply the input has no rate limits: the line shows what
+            // the profile reported last, as long as one of its windows still holds.
+            let reading = std::fs::read_to_string(&usage)
+                .ok()
+                .and_then(|raw| last_usage_record(&raw, now));
+            format!("{}\n", status_text(reading.as_ref(), context))
+        });
     // The pane footer shows this text; a failed write only leaves the footer on the quota.
-    let _ = store_statusline(profile, doc.as_ref(), &output, now);
+    let _ = store_statusline(profile, doc.as_ref(), &output, context, now);
     output
 }
 
@@ -231,7 +240,7 @@ pub fn run_statusline_mode(args: &[String]) -> i32 {
     let input = read_stdin();
     let output = match profile_arg(args) {
         Some(profile) => statusline_output(&profile, &input, now_ms(), &run_chain),
-        None => format!("{}\n", status_text(None)),
+        None => format!("{}\n", status_text(None, None)),
     };
     print_status(&output)
 }

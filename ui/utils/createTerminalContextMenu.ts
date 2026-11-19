@@ -1,7 +1,8 @@
-import type { Terminal } from '@xterm/xterm'
+import type { ILinkHandler, Terminal } from '@xterm/xterm'
 import {
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
+  oscLinkTarget,
   type DetectedLinkOrPath,
   type TerminalLinkMenuKind,
 } from './terminalLinks'
@@ -50,10 +51,13 @@ export interface TerminalContextMenuHandlers {
   /** `contextmenu` listener — copies a selection; on a URL or path shows its menu (with Paste);
    *  anywhere else pastes. */
   onContextMenu: (e: MouseEvent) => void
-  /** `mousedown` listener — surfaces the link/path overlay when the platform link-modifier + left
-   *  button lands on a URL or file path. Falls through silently for non-link clicks so xterm keeps
-   *  its normal selection / caret behaviour. */
+  /** `mousedown` listener (capture phase) — surfaces the link/path overlay when the platform
+   *  link-modifier + left button lands on a URL or file path. Falls through silently for non-link
+   *  clicks so xterm keeps its normal selection / caret behaviour. */
   onLinkClick: (e: MouseEvent) => void
+  /** xterm's `linkHandler` for OSC 8 hyperlinks: a modifier click on one opens its file or shows its
+   *  URL menu, as a plain-text detection would. */
+  linkHandler: ILinkHandler
 }
 
 /**
@@ -112,14 +116,31 @@ export const createTerminalContextMenu =
       if (e.button !== 0) return
       const detected = detectAt(e)
       if (!detected) return
+      // Stopped before xterm sees it: a TUI with mouse reporting on (agy, Claude in some modes)
+      // would otherwise get the click too, and an OSC 8 link under it would activate a second time.
       e.preventDefault()
       e.stopPropagation()
       e.stopImmediatePropagation()
       args.term.focus()
-      const menu = menuFor(e, detected)
-      if (detected.kind === 'path' && args.openPath) args.openPath(menu)
+      activate(menuFor(e, detected))
+    }
+
+    const activate = (menu: TerminalLinkMenuState): void => {
+      if (menu.kind === 'path' && args.openPath) args.openPath(menu)
       else args.setLinkMenu(menu)
     }
 
-    return { onContextMenu, onLinkClick }
+    const linkHandler: ILinkHandler = {
+      // `file://` links reach `activate` too; `oscLinkTarget` keeps only local files and HTTP(S).
+      allowNonHttpProtocols: true,
+      activate: (e, uri) => {
+        if (!isTerminalLinkModifierClick(e) || e.button !== 0) return
+        const target = oscLinkTarget(uri)
+        if (!target) return
+        args.term.focus()
+        activate({ x: e.clientX, y: e.clientY, ...target })
+      },
+    }
+
+    return { onContextMenu, onLinkClick, linkHandler }
   }

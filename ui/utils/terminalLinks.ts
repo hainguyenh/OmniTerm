@@ -175,3 +175,35 @@ export const registerPlainUrlLinks = (term: Terminal) => {
   if (typeof term.registerLinkProvider !== 'function') return { dispose: () => {} }
   return term.registerLinkProvider(provider)
 }
+
+/**
+ * What an OSC 8 hyperlink points at, in the shape a plain-text detection has: an HTTP(S) URL, or a
+ * local file from a `file://` URI (`file:///D:/w/a.ts`, `file://localhost/home/a.ts:12:5`). Agent
+ * TUIs print these with a label (`a.ts`) that names no path the plain-text detector could find.
+ * Any other scheme, a remote host, or a malformed URI is no link.
+ */
+export const oscLinkTarget = (uri: string): Omit<DetectedLinkOrPath, 'start' | 'end'> | null => {
+  const url = safeHttpUrl(uri)
+  if (url) return { kind: 'url', text: url.href }
+  let parsed: URL
+  try {
+    parsed = new URL(uri)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'file:' || (parsed.host !== '' && parsed.host !== 'localhost')) return null
+  let path: string
+  try {
+    path = decodeURIComponent(parsed.pathname)
+  } catch {
+    return null
+  }
+  // `/D:/w/a.ts` is the Windows path `D:/w/a.ts`.
+  if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1)
+  if (!path || /[\u0000-\u001f\u007f]/.test(path)) return null
+  const located = /^(.*?)(?::(\d+)(?::(\d+))?)$/.exec(path)
+  const row = Number(located?.[2])
+  if (!located || !(row > 0)) return { kind: 'path', text: path }
+  const col = Number(located[3])
+  return { kind: 'path', text: located[1], line: row, ...(col > 0 ? { col } : {}) }
+}

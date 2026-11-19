@@ -113,6 +113,9 @@ describe('LspStatusWidget & lspServersStore', () => {
     expect(screen.getByTestId('lsp-install-guidance')).toBeTruthy()
     expect(screen.getByText('rustup component add rust-analyzer')).toBeTruthy()
 
+    // Only the theme's own tokens: undefined ones fell back to dark colours in the light theme.
+    expect(document.body.innerHTML).not.toMatch(/--(foreground|surface|primary|error|border-subtle)\b|--\w+-bg\b|#[0-9a-f]{3,6}\b|text-white/)
+
     // Clicking restart invokes lsp.restart action
     const restartBtn = screen.getByTestId('lsp-restart-button')
     fireEvent.click(restartBtn)

@@ -213,10 +213,35 @@ describe('QuotaPaneLines', () => {
     seed({ profiles: [profile(reading(40, 10))] })
     render(<QuotaPaneLines sessionId="s1" />)
     fireEvent.click(screen.getByRole('button', { name: 'Quota limits for this terminal' }))
-    fireEvent.click(screen.getByRole('switch', { name: 'Always show the weekly quota line in this terminal' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Show the weekly quota line in this terminal' }))
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
     expect(getQuotaState().overrides['s1:10:100']).toEqual({ showWeekly: true })
     expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
+  })
+
+  // Regression: the toggle stayed off (or was missing with auto-hide off) while the rules showed
+  // the weekly line, so a terminal could not hide it.
+  it('turns "Show weekly quota" on while the rules show the line, and hides it when switched off', () => {
+    seed({ profiles: [profile(reading(40, 75))] }) // weekly 75% used: over the 60% auto-hide threshold
+    render(<QuotaPaneLines sessionId="s1" />)
+    expect(screen.getByTestId('aq-line-weekly')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Quota limits for this terminal' }))
+    const toggle = screen.getByRole('switch', { name: 'Show the weekly quota line in this terminal' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(toggle)
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    expect(getQuotaState().overrides['s1:10:100']).toEqual({ showWeekly: false })
+    expect(screen.queryByTestId('aq-line-weekly')).toBeNull()
+  })
+
+  it('offers "Show weekly quota" with the auto-hide off, switched on as the line shows', () => {
+    seed({
+      profiles: [profile(reading(40, 10))],
+      config: { ...DEFAULT_QUOTA_CONFIG, display: { ...DEFAULT_QUOTA_CONFIG.display, weeklyAutoHide: false } },
+    })
+    render(<QuotaPaneLines sessionId="s1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Quota limits for this terminal' }))
+    expect(screen.getByRole('switch', { name: 'Show the weekly quota line in this terminal' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('names the profile by its launcher, hides a disabled wake button and marks a held agent', () => {

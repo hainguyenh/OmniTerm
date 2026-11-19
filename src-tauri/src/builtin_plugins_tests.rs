@@ -108,10 +108,22 @@ fn an_optional_plugin_is_only_replaced_when_installed_and_changed() {
 #[test]
 fn license_header_is_switched_off_once_when_an_earlier_build_installed_it() {
     assert!(DEFAULT_OFF_PLUGINS.contains(&"license-header"));
-    assert!(!BUILTIN_PLUGINS.contains(&"license-header"), "a built-in plugin is never off by default");
-    assert!(needs_default_off(true, false), "an installed copy without the marker is switched off");
-    assert!(!needs_default_off(true, true), "the user's later choice is kept");
-    assert!(!needs_default_off(false, false), "nothing to switch off when it is not installed");
+    assert!(
+        !BUILTIN_PLUGINS.contains(&"license-header"),
+        "a built-in plugin is never off by default"
+    );
+    assert!(
+        needs_default_off(true, false),
+        "an installed copy without the marker is switched off"
+    );
+    assert!(
+        !needs_default_off(true, true),
+        "the user's later choice is kept"
+    );
+    assert!(
+        !needs_default_off(false, false),
+        "nothing to switch off when it is not installed"
+    );
 }
 
 #[test]

@@ -55,7 +55,7 @@ function makeHandler(overrides: {
     paste: vi.fn(),
   }
   const setLinkMenu = overrides.setLinkMenu ?? vi.fn()
-  const { onContextMenu, onLinkClick } = createTerminalContextMenu({
+  const { onContextMenu, onLinkClick, linkHandler } = createTerminalContextMenu({
     term,
     termElRef,
     clipboard,
@@ -66,6 +66,7 @@ function makeHandler(overrides: {
   return {
     onContextMenu,
     onLinkClick,
+    linkHandler,
     term,
     clipboard,
     setLinkMenu,
@@ -277,5 +278,34 @@ describe('createTerminalContextMenu — onContextMenu (paste-fallback)', () => {
 
     onPasteClick(click({ clientX: 700, clientY: 6 }))
     expect(suppressPaste).toHaveBeenCalledOnce()
+  })
+})
+
+describe('createTerminalContextMenu — OSC 8 hyperlinks', () => {
+  // An agent prints `[a.ts](file:///D:/w/a.ts)` as the label `a.ts`: only xterm knows the target.
+  it('opens a modifier-clicked file link in the editor, with its line and column', () => {
+    const openPath = vi.fn()
+    const { linkHandler, setLinkMenu } = makeHandler({ openPath })
+    expect(linkHandler.allowNonHttpProtocols).toBe(true)
+    linkHandler.activate(click({ ctrlKey: true, clientX: 5, clientY: 6 }), 'file:///D:/w/a%20b.ts:12:5', { start: { x: 1, y: 1 }, end: { x: 4, y: 1 } })
+    expect(openPath).toHaveBeenCalledWith(expect.objectContaining({ kind: 'path', text: 'D:/w/a b.ts', line: 12, col: 5 }))
+    expect(setLinkMenu).not.toHaveBeenCalled()
+  })
+
+  it('shows the URL menu for a web link and ignores a click without the modifier or another scheme', () => {
+    const { linkHandler, setLinkMenu } = makeHandler()
+    const range = { start: { x: 1, y: 1 }, end: { x: 4, y: 1 } }
+    linkHandler.activate(click({ ctrlKey: false }), 'https://example.test/docs', range)
+    linkHandler.activate(click({ ctrlKey: true }), 'javascript:alert(1)', range)
+    linkHandler.activate(click({ ctrlKey: true }), 'file://server/share/a.ts', range)
+    expect(setLinkMenu).not.toHaveBeenCalled()
+    linkHandler.activate(click({ ctrlKey: true, clientX: 7, clientY: 8 }), 'https://example.test/docs', range)
+    expect(setLinkMenu).toHaveBeenCalledWith({ x: 7, y: 8, kind: 'url', text: 'https://example.test/docs' })
+  })
+
+  it('without an editor, offers a file link in the Copy/Open menu', () => {
+    const { linkHandler, setLinkMenu } = makeHandler()
+    linkHandler.activate(click({ ctrlKey: true, clientX: 1, clientY: 2 }), 'file:///home/me/a.ts', { start: { x: 1, y: 1 }, end: { x: 4, y: 1 } })
+    expect(setLinkMenu).toHaveBeenCalledWith({ x: 1, y: 2, kind: 'path', text: '/home/me/a.ts' })
   })
 })

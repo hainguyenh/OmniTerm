@@ -62,17 +62,37 @@ fn reads_the_record_for_the_running_model_family() {
 }
 
 #[test]
-fn a_stale_future_or_rolled_over_record_is_no_reading() {
+fn a_future_or_malformed_record_is_no_reading() {
     let record = agy_usage_record(&input(), now())
         .expect("record")
         .to_string();
-    assert!(parse_agy_record(&record, now() + MAX_AGE_MS + 1, None).is_none());
     assert!(parse_agy_record(&record, now() - 5 * 60 * 1000, None).is_none());
-    assert!(
-        parse_agy_record(&record, now() + 3_600_000, None).is_none(),
-        "the 5-hour window reset at that moment"
-    );
     assert!(parse_agy_record("not json", now(), None).is_none());
+}
+
+#[test]
+fn an_old_record_still_stands_and_a_rolled_over_window_starts_unused() {
+    let record = agy_usage_record(&input(), now())
+        .expect("record")
+        .to_string();
+    let later = now() + 24 * 3_600_000;
+    let snapshot = parse_agy_record(&record, later, None).expect("the old record");
+    let session = snapshot
+        .windows
+        .iter()
+        .find(|window| window.kind == WindowKind::Session)
+        .expect("the 5-hour window");
+    assert_eq!(
+        session.used_pct, 0.0,
+        "it reset after the record was written"
+    );
+    assert_eq!(session.resets_at, None);
+    let weekly = snapshot
+        .windows
+        .iter()
+        .find(|window| window.kind == WindowKind::Weekly)
+        .expect("weekly");
+    assert_eq!(weekly.used_pct, 25.0, "the weekly window still holds");
 }
 
 #[test]
@@ -89,7 +109,7 @@ fn prints_a_short_line_or_waits() {
 }
 
 #[test]
-fn the_provider_uses_a_fresh_record_without_running_the_cli() {
+fn the_provider_uses_the_record_without_running_the_cli() {
     let record = agy_usage_record(&input(), now())
         .expect("record")
         .to_string();

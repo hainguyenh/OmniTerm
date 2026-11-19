@@ -2,13 +2,20 @@ import { useMemo, useState, type ReactNode } from 'react'
 
 import { Button, Checkbox, Dialog, Select, type DialogButton } from '../../ide/ui'
 import { Spinner } from '../../ide/ui/Spinner'
-import { removeStoredSession, useStoredSessions } from '../../utils/agentSessionStorage'
+import { useStoredSessions } from '../../utils/agentSessionStorage'
+import { progressText } from '../cleanupJob'
 
 import { SessionCleanupTable } from './SessionCleanupTable'
-import { useSessionCleanup } from './sessionCleanupStore'
+import {
+  cancelSessionDeleteNow,
+  deleteSessionRows,
+  forgetRows,
+  scanSessions,
+  useSessionCleanup,
+  type SessionDeleteJob,
+} from './sessionCleanupStore'
 import {
   agentLabel,
-  deleteInBatches,
   filterCleanupRows,
   scanCoversAge,
   formatBytes,
@@ -22,7 +29,7 @@ import {
   type CleanupSort,
   type SessionProfile,
 } from './sessionCleanupModel'
-import { useSessionProfiles, useSessionScan } from './useSessionCleanupScan'
+import { useSessionProfiles } from './useSessionCleanupScan'
 
 const AGE_OPTIONS = [
   { value: '0', label: 'Any time' },
@@ -34,10 +41,9 @@ const AGE_OPTIONS = [
 
 type Pending = 'files' | 'list' | null
 
-/** How far a delete has got: ids handled out of the ids sent. */
-interface Progress {
-  done: number
-  total: number
+/** The footer text of a running delete. */
+function jobMessage(job: SessionDeleteJob): string {
+  return job.cancelling ? 'Cancelling…' : `Deleting: ${progressText(job.progress, 'sessions', 'freed')}`
 }
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? '' : 's'}`
@@ -68,22 +74,27 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 /**
  * Clean Up Sessions: every agent conversation on disk and every session OmniTerm remembers, by
  * agent and profile, most recently active first. Deleting removes the agent's transcript and
- * OmniTerm's entry, a batch at a time with progress; "Remove from List" only forgets OmniTerm's
- * entry. Sessions running in an open pane cannot be selected.
+ * OmniTerm's entry with progress, and keeps running when the dialog is hidden (the status bar's
+ * Background Tasks shows it, with Cancel); "Remove from List" only forgets OmniTerm's entry.
+ * Sessions running in an open pane cannot be selected.
  */
 export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
   const profiles = useSessionProfiles()
-  const { files, scanned, scannedDays, scanning, error, scan, rescan } = useSessionScan()
+  const files = useSessionCleanup((s) => s.files)
+  const scanned = useSessionCleanup((s) => s.scanned)
+  const scannedDays = useSessionCleanup((s) => s.scannedDays)
+  const scanning = useSessionCleanup((s) => s.scanning)
+  const error = useSessionCleanup((s) => s.error)
+  const job = useSessionCleanup((s) => s.job)
+  const status = useSessionCleanup((s) => s.status)
   const stored = useStoredSessions()
   const [filter, setFilter] = useState<CleanupFilter>({ agent: 'all', profile: 'all', olderThanDays: 0 })
   const [sort, setSort] = useState<CleanupSort>({ column: 'lastActive', descending: true })
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [pending, setPending] = useState<Pending>(null)
-  const [progress, setProgress] = useState<Progress | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
   const [now] = useState(() => Date.now())
   const [shown, setShown] = useState(ROWS_PER_PAGE)
-  const running = progress !== null
+  const running = job !== null
 
   const scope = useMemo(() => profilesToScan(profiles ?? [], filter), [profiles, filter])
   // The rows shown come from a scan that covered the chosen agent and profile.
@@ -103,55 +114,42 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
     setPending(null)
   }
   const startScan = () => {
-    setStatus(null)
     setSelected(new Set())
     setShown(ROWS_PER_PAGE)
-    void scan(scope, filter.olderThanDays)
+    void scanSessions(scope, filter.olderThanDays)
   }
 
-  const forget = (targets: readonly CleanupRow[]) => targets.forEach((row) => row.storedId && removeStoredSession(row.storedId))
-
   const removeFromList = () => {
-    forget(listed)
-    setStatus(`Removed ${plural(listed.length, 'session')} from the OmniTerm list.`)
+    forgetRows(listed)
+    useSessionCleanup.setState({ status: `Removed ${plural(listed.length, 'session')} from the OmniTerm list.` })
     setSelected(new Set())
     setPending(null)
   }
 
-  const deleteChosen = async () => {
+  const deleteChosen = () => {
     const targets = chosen
-    const fileIds = targets.flatMap((row) => row.fileId ?? [])
-    setProgress({ done: 0, total: fileIds.length })
-    try {
-      const report = await deleteInBatches(fileIds, (done) => setProgress({ done, total: fileIds.length }))
-      const deleted = new Set(report.deleted)
-      forget(targets.filter((row) => !row.fileId || deleted.has(row.fileId)))
-      const failed = report.failed.length ? ` ${plural(report.failed.length, 'session')} could not be deleted: ${report.failed[0]?.[1]}.` : ''
-      setStatus(`Deleted ${plural(targets.length - report.failed.length, 'session')}.${failed}`)
-      setSelected(new Set())
-      setPending(null)
-      await rescan()
-    } catch (cause) {
-      setStatus(`Delete failed: ${String(cause)}`)
-    } finally {
-      setProgress(null)
-      setPending(null)
-    }
+    setSelected(new Set())
+    setPending(null)
+    void deleteSessionRows(targets)
   }
 
-  const buttons: DialogButton[] = pending
+  const buttons: DialogButton[] = running
     ? [
-        {
-          label: pending === 'files' ? 'Delete Permanently' : 'Remove',
-          role: 'default',
-          disabled: running,
-          onClick: pending === 'files' ? () => void deleteChosen() : removeFromList,
-        },
-        { label: 'Back', role: 'cancel', disabled: running, onClick: () => setPending(null) },
+        { label: 'Run in Background', role: 'default', onClick: onClose },
+        { label: 'Cancel', role: 'cancel', disabled: job.cancelling, onClick: cancelSessionDeleteNow },
       ]
-    : [{ label: 'Close', role: 'cancel', disabled: running, onClick: onClose }]
+    : pending
+      ? [
+          {
+            label: pending === 'files' ? 'Delete Permanently' : 'Remove',
+            role: 'default',
+            onClick: pending === 'files' ? deleteChosen : removeFromList,
+          },
+          { label: 'Back', role: 'cancel', onClick: () => setPending(null) },
+        ]
+      : [{ label: 'Close', role: 'cancel', onClick: onClose }]
 
-  const actions = pending ? null : (
+  const actions = pending || running ? null : (
     <span className="flex items-center gap-3">
       <Button
         icon="close"
@@ -167,8 +165,8 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
     </span>
   )
 
-  const message = progress
-    ? progress.done < progress.total ? `Deleting ${progress.done} of ${progress.total}…` : 'Scanning again…'
+  const message = job
+    ? jobMessage(job)
     : pending === 'files'
       ? `Delete ${plural(chosen.length, 'session')} (${formatBytes(bytes)}) and their agent files? This cannot be undone.`
       : pending === 'list'
@@ -184,7 +182,8 @@ export function SessionCleanupDialog({ onClose }: { onClose: () => void }) {
     </span>
   )
 
-  const close = running ? () => undefined : pending ? () => setPending(null) : onClose
+  // Closing while a delete runs hides the dialog; the delete goes on in the status bar.
+  const close = pending && !running ? () => setPending(null) : onClose
 
   return (
     <Dialog

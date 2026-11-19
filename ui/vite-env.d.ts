@@ -148,6 +148,14 @@ interface UpdateState {
 
 type AlwaysAwakeMode = 'always' | 'activeOnly'
 
+interface LocalSshSession {
+  sessionId: string
+  pid: number
+  user?: string
+  host: string
+  port?: string
+}
+
 interface AlwaysAwakeStatus {
   enabled: boolean
   mode: AlwaysAwakeMode
@@ -163,6 +171,8 @@ interface Window {
     connections: {
       load: () => Promise<{ folders: any[]; connections: Array<{ id: string; name: string; type: 'SSH' | 'RDP' | 'LOCAL'; host: string; port: string; user: string; passwordHelpUrl?: string; parentId?: string; redirectDrives?: boolean; shell?: 'wsl' | 'powershell' | 'cmd'; localArgs?: string; localCwd?: string; localCommand?: string; localKeepOpen?: boolean }> }>
       save: (data: any) => Promise<void>
+      /** `ssh` clients running under local terminals: where each connects, never its other arguments. */
+      localSshSessions: () => Promise<LocalSshSession[]>
     }
     plugin: {
       list: () => Promise<PluginDescriptor[]>
@@ -316,6 +326,8 @@ interface Window {
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>
       loadConnections: (workspaceId: string) => Promise<import('./domain').Connection[]>
+      saveConnection: (workspaceId: string, connection: import('./domain').Connection) => Promise<import('./domain').Connection>
+      deleteConnection: (workspaceId: string, connectionId: string) => Promise<boolean>
     }
     tempNotes: import('./tempNotesAPI').TempNotesAPI
     updates: {

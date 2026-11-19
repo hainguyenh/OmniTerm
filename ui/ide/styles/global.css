@@ -69,7 +69,10 @@ button {
   font: inherit;
   color: inherit;
   background: none;
-  border: 0;
+  /* Width 0 hides the frame; the solid style (as in Tailwind's preflight) lets a `border` utility
+     class show one again. A bare `border: 0` reset the style to none, so OmniTerm's segmented and
+     tab buttons lost the border their classes ask for. */
+  border: 0 solid;
   padding: 0;
   /* Desktop convention: controls keep the arrow; only links get the hand. */
   cursor: default;

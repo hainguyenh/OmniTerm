@@ -44,14 +44,19 @@ pub(crate) fn needs_default_off(installed: bool, already_applied: bool) -> bool 
 
 /// Switches off, once per installation, the default-off plugins an earlier build installed.
 fn apply_default_off(app: &AppHandle<Wry>, state: &AppState, installed: &[String]) {
-    let Ok(dir) = app.path().app_data_dir() else { return };
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
     let markers = dir.join("plugin-defaults");
     for id in DEFAULT_OFF_PLUGINS {
         let marker = markers.join(format!("{id}.off"));
         let plugin = plugin_id(id);
         if needs_default_off(installed.contains(&plugin), marker.is_file()) {
             if let Err(error) = state.plugins.set_enabled(&plugin, false) {
-                log::warn!("[builtin-plugins] could not switch {id} off: {}", error.message);
+                log::warn!(
+                    "[builtin-plugins] could not switch {id} off: {}",
+                    error.message
+                );
                 continue;
             }
         }

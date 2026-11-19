@@ -293,11 +293,16 @@ html.win-window .app-window-rounded {
    excluded: its fields draw their own frame (box-shadow) and background from the IDE tokens, which
    these !important declarations would otherwise override. IDE dialogs and popups are portaled to
    <body>, outside the workbench, so they carry `data-ide-surface` to be excluded the same way;
-   without it their search boxes took the terminal theme's background and lost their frame. */
-:is(input, select, textarea):not([data-workbench] *, [data-ide-surface] *) {
+   without it their search boxes took the terminal theme's background and lost their frame.
+   Toggle inputs are left out: this would cover a checked radio's accent fill (white on white). */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):not([data-workbench] *, [data-ide-surface] *) {
   color: var(--theme-fg) !important;
   background-color: var(--theme-bg) !important;
   border-color: var(--theme-border) !important;
+}
+/* Light `--theme-border` is a faint divider; text fields take the IDE field frame to stay visible. */
+:root[data-theme="light"] :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):not([data-workbench] *, [data-ide-surface] *) {
+  border-color: var(--border-button, var(--theme-border)) !important;
 }
 /* Dim AND italic: a placeholder is an example, not a value. Without the slant, a greyed-out
    "192.168.1.1" reads as a host that is already filled in. */

@@ -137,6 +137,18 @@ describe('session agent header', () => {
     act(() => clearStoredSessions())
   })
 
+  it('duplicates the agent from beside the title through the session bridge', () => {
+    const duplicateAgent = vi.fn()
+    act(() => {
+      setPanePresence({ t1: presence })
+      useSessionBridge.setState({ api: { killSession: vi.fn(), newSessionLike: vi.fn(), reconnect: vi.fn(), skipConfirm: () => false, setSkipConfirm: vi.fn(), duplicateAgent } })
+    })
+    render(<SessionAgentHeader sessionId="t1" />)
+    fireEvent.click(screen.getByRole('button', { name: /^Duplicate/ }))
+    expect(duplicateAgent).toHaveBeenCalledWith('t1')
+    act(() => useSessionBridge.setState({ api: null }))
+  })
+
   // Regression: the UI revamp dropped the old pane header, and with it the only place the Agent
   // Quota loading artwork was drawn.
   it('shows the pace artwork while the agent works, and nothing while it is idle', () => {
@@ -167,10 +179,10 @@ describe('session agent footer', () => {
   })
 
   // Attach file and the quota moved from the header to the pane footer, beside the font size controls.
-  it('offers Attach file and shows the quota once read', () => {
+  it('offers Attach file and shows the quota as bars once read', () => {
     act(() => setPanePresence({ t1: presence }))
     render(<SessionAgentFooter sessionId="t1" />)
-    expect(screen.queryByTestId('agent-footer-quota')).toBeNull()
+    expect(screen.queryByTestId('agent-footer-meters')).toBeNull()
     expect(screen.getByRole('button', { name: 'Attachments' }).closest('[role=toolbar]')?.getAttribute('aria-label')).toBe('Agent actions')
     act(() => {
       updateQuota((state) => ({
@@ -181,12 +193,14 @@ describe('session agent footer', () => {
           'claude:default': {
             key: 'claude:default', agent: 'claude', profileName: 'claude', profileDir: null, launcher: null, history: [], errorStreak: 0,
             nextFetchAt: 0, fetching: false, wake: {}, waking: false,
-            lastGood: { fetchedAt: 0, windows: [{ kind: 'session', label: '5h', usedPct: 63.6 }] },
+            lastGood: { fetchedAt: 0, windows: [{ kind: 'session', label: '5h', usedPct: 63.6 }, { kind: 'weekly', label: 'wk', usedPct: 12 }] },
           },
         },
       }))
     })
-    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 64%')
+    expect(screen.getByTestId('agent-footer-meter-session').textContent).toBe('5h64%')
+    expect(screen.getByTestId('agent-footer-meter-weekly').textContent).toBe('wk12%')
+    expect(screen.getAllByRole('meter').map((meter) => meter.getAttribute('aria-valuenow'))).toEqual(['64', '12'])
   })
 
   // Regression: the footer floated over the terminal and covered the agent's last line.
@@ -213,18 +227,37 @@ describe('session agent footer', () => {
     },
   }))
 
-  it('shows the agent status line in place of the quota, as one plain row', async () => {
-    invoke.mockResolvedValue('\x1b[32mOpus 4\x1b[0m  ~/work\n\x1b]8;;https://x\x075h 4%\x1b]8;;\x07\n')
+  it('draws the quota and the context as bars and keeps the status line text for the tooltip', async () => {
+    invoke.mockResolvedValue({ text: '\x1b[32mOpus 4\x1b[0m  ~/work\n\x1b]8;;https://x\x075h 4%\x1b]8;;\x07\n', contextPct: 41.6 })
     act(() => {
       setPanePresence({ t1: { ...presence, claudeSessionId: conversation } })
       withQuota('C:/Users/me/.claude')
     })
     render(<SessionAgentFooter sessionId="t1" />)
-    const line = await screen.findByTestId('agent-footer-statusline')
-    expect(line.textContent).toBe('Opus 4 ~/work · 5h 4%')
-    expect(line.getAttribute('title')).toBe('Opus 4 ~/work · 5h 4%')
-    expect(screen.queryByTestId('agent-footer-quota')).toBeNull()
+    const context = await screen.findByTestId('agent-footer-meter-context')
+    expect(context.textContent).toBe('ctx42%')
+    expect(screen.getByTestId('agent-footer-meter-session').textContent).toBe('5h12%')
+    expect(screen.getByTestId('agent-footer-meters').getAttribute('title')).toBe('Opus 4 ~/work · 5h 4%')
+    expect(screen.queryByTestId('agent-footer-statusline')).toBeNull()
     expect(invoke).toHaveBeenCalledWith('agent_quota_statusline_text', { profileDir: 'C:/Users/me/.claude', sessionId: conversation })
+    invoke.mockReset()
+    invoke.mockResolvedValue(null)
+  })
+
+  it('shows the status line as one plain row while there is no bar to draw', async () => {
+    invoke.mockResolvedValue({ text: 'Opus 4 · main', contextPct: null })
+    act(() => {
+      setPanePresence({ t1: { ...presence, claudeSessionId: conversation } })
+      updateQuota((state) => ({
+        ...state,
+        config: { ...state.config, enabled: true },
+        terminals: { t1: { sessionId: 't1', agent: 'claude', pid: 1, startTime: 0, profileDir: 'C:/p', profileName: 'claude', subAgentCount: 0, launcher: null, instanceKey: 'i1', profileKey: 'claude:default' } },
+      }))
+    })
+    render(<SessionAgentFooter sessionId="t1" />)
+    const line = await screen.findByTestId('agent-footer-statusline')
+    expect(line.textContent).toBe('Opus 4 · main')
+    expect(screen.queryByTestId('agent-footer-meters')).toBeNull()
     invoke.mockReset()
     invoke.mockResolvedValue(null)
   })
@@ -241,12 +274,13 @@ describe('session agent footer', () => {
     })
     expect(invoke).toHaveBeenCalled()
     expect(screen.queryByTestId('agent-footer-statusline')).toBeNull()
-    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 12%')
+    expect(screen.queryByTestId('agent-footer-meter-context')).toBeNull()
+    expect(screen.getByTestId('agent-footer-meter-session').textContent).toBe('5h12%')
 
     invoke.mockClear()
     act(() => setPanePresence({ t1: presence }))
     expect(invoke).not.toHaveBeenCalled()
-    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 12%')
+    expect(screen.getByTestId('agent-footer-meter-session').textContent).toBe('5h12%')
   })
 
   it('exports, clears and renews the console from beside the attachments list', () => {

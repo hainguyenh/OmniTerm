@@ -1,67 +1,96 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
-import { EmptyState, IconButton, Tree } from '../../ide/ui'
+import { EmptyState, IconButton, showContextMenu, Tree } from '../../ide/ui'
 import { isAllScope, scopedWorkspaceId, useSelectedWorkspace, useWorkspaceStore } from '../../platform/workspaceStore'
 
+import { useSessionBridge } from '../sessions/sessionBridge'
+import { showSessionTab } from '../sessions/sessionTabActions'
 import { useShellPanels } from '../shellPanelsStore'
+import { connectionRowMenu, newConnectionMenu } from './connectionActions'
+import { ConnectionFormDialog } from './ConnectionFormDialog'
 import {
   buildConnectionTree,
   expandableKeys,
+  isLeaf,
   nodeDetail,
   nodeIcon,
   nodeLabel,
+  type ActiveSsh,
   type ConnectionNode,
 } from './connectionNodes'
+import { useLocalSshSessions } from './useLocalSshSessions'
 
 export const CONNECTIONS_TOOL_WINDOW = 'omniterm.connections'
 
-const childrenOf = (node: ConnectionNode) => (node.kind === 'connection' ? undefined : node.children)
+const childrenOf = (node: ConnectionNode) => (isLeaf(node) ? undefined : node.children)
+
+/** The `ssh` sessions typed in terminals, each with its terminal's name. */
+function useActiveSsh(): readonly ActiveSsh[] {
+  const sessions = useLocalSshSessions()
+  const terminals = useSessionBridge((s) => s.sessions)
+  return useMemo(
+    () => sessions.map((session) => ({ session, terminal: terminals.find((item) => item.id === session.sessionId)?.name ?? '' })),
+    [sessions, terminals],
+  )
+}
 
 /**
  * Saved SSH, Remote Desktop and local connections of the workspace in scope, grouped by type (and
- * by workspace under "All workspaces"). Enter or double-click connects; typing filters the tree.
+ * by workspace under "All workspaces"), under the `ssh` sessions running unsaved in a terminal.
+ * Enter or double-click connects (or shows that terminal); right-click edits, deletes or saves;
+ * typing filters the tree.
  */
 export function ConnectionsToolWindow() {
   const panel = useShellPanels((s) => s.connections)
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const workspaceId = useWorkspaceStore(scopedWorkspaceId)
+  const active = useActiveSsh()
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
   const connections = panel?.connections
   const roots = useMemo(
-    () => buildConnectionTree(connections ?? [], workspaces, workspaceId),
-    [connections, workspaces, workspaceId],
+    () => buildConnectionTree(connections ?? [], workspaces, workspaceId, active),
+    [connections, workspaces, workspaceId, active],
   )
   const expanded = useMemo(() => new Set(expandableKeys(roots).filter((key) => !collapsed.has(key))), [roots, collapsed])
   if (!panel) return null
   return (
-    <Tree<ConnectionNode>
-      roots={roots}
-      getKey={(node) => node.key}
-      getLabel={nodeLabel}
-      getChildren={childrenOf}
-      isExpandable={(node) => node.kind !== 'connection'}
-      getIcon={nodeIcon}
-      getDetail={nodeDetail}
-      expanded={expanded}
-      onExpandedChange={(_next, node, isExpanded) =>
-        setCollapsed((current) => {
-          const next = new Set(current)
-          if (isExpanded) next.delete(node.key)
-          else next.add(node.key)
-          return next
-        })}
-      onActivate={(node) => {
-        if (node.kind === 'connection') panel.onConnect(node.connection)
-      }}
-      speedSearch
-      speedSearchMode="filter"
-      aria-label="Connections"
-      empty={(
-        <EmptyState title="No saved connections">
-          {workspaceId ? 'This workspace has no saved connections.' : 'No workspace has saved connections.'}
-        </EmptyState>
-      )}
-    />
+    <>
+      <Tree<ConnectionNode>
+        roots={roots}
+        getKey={(node) => node.key}
+        getLabel={nodeLabel}
+        getChildren={childrenOf}
+        isExpandable={(node) => !isLeaf(node)}
+        getIcon={nodeIcon}
+        getDetail={nodeDetail}
+        expanded={expanded}
+        onExpandedChange={(_next, node, isExpanded) =>
+          setCollapsed((current) => {
+            const next = new Set(current)
+            if (isExpanded) next.delete(node.key)
+            else next.add(node.key)
+            return next
+          })}
+        onActivate={(node) => {
+          if (node.kind === 'connection') panel.onConnect(node.connection)
+          else if (node.kind === 'ssh-session') showSessionTab(node.session.sessionId)
+        }}
+        onContextMenu={(node, _selection, event) => {
+          event.preventDefault()
+          showContextMenu(event, node ? connectionRowMenu(node, workspaceId) : newConnectionMenu(workspaceId))
+        }}
+        speedSearch
+        speedSearchMode="filter"
+        aria-label="Connections"
+        empty={(
+          <EmptyState title="No saved connections">
+            {workspaceId ? 'This workspace has no saved connections.' : 'No workspace has saved connections.'}
+            {' Use + to add an SSH or Remote Desktop connection.'}
+          </EmptyState>
+        )}
+      />
+      <ConnectionFormDialog />
+    </>
   )
 }
 
@@ -78,6 +107,7 @@ export function ConnectionsHeaderActions() {
           {label}
         </span>
       )}
+      <NewConnectionButton />
       <IconButton
         icon="refresh"
         title="Refresh"
@@ -87,5 +117,24 @@ export function ConnectionsHeaderActions() {
         data-testid="connections-refresh-button"
       />
     </>
+  )
+}
+
+/** "+": a menu of the profile types the workspace in scope can save. */
+function NewConnectionButton() {
+  const workspaceId = useWorkspaceStore(scopedWorkspaceId)
+  const ref = useRef<HTMLButtonElement>(null)
+  return (
+    <IconButton
+      ref={ref}
+      icon="plus"
+      title="New Connection"
+      size="small"
+      data-testid="connections-new-button"
+      onClick={() => {
+        const rect = ref.current?.getBoundingClientRect()
+        showContextMenu({ x: rect?.left ?? 0, y: rect?.bottom ?? 0 }, newConnectionMenu(workspaceId))
+      }}
+    />
   )
 }

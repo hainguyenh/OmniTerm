@@ -149,9 +149,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const term = new Terminal(createTerminalOptions({
       isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
-    // xterm's linkHandler is a no-op — `onLinkClick` owns modifier-click activation; `registerPlainUrlLinks` keeps the hover cue (see terminalLinks.ts).
-    term.options.linkHandler = { activate: () => {} }
-
     termRef.current = term
 
     const api = createSessionChannel(
@@ -262,7 +259,9 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     )
     let suppressNativePasteUntil = 0
 
-    const { onContextMenu, onLinkClick } = createTerminalContextMenu({
+    // `onLinkClick` owns modifier-clicks on plain-text links, `linkHandler` those on OSC 8 hyperlinks
+    // (an agent's `[a.ts](file:///…)`); `registerPlainUrlLinks` keeps the hover cue.
+    const { onContextMenu, onLinkClick, linkHandler } = createTerminalContextMenu({
       term,
       termElRef: terminalRef,
       clipboard,
@@ -270,6 +269,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       setSuppressPaste: () => { suppressNativePasteUntil = performance.now() + 250 },
       openPath: isLocal ? (link) => void openTerminalPath(link, cwdRef.current) : undefined,
     })
+    term.options.linkHandler = linkHandler
     menuPasteRef.current = () => { term.focus(); void clipboard.paste() }
     const onNativePaste = createNativePasteGate({
       term,
@@ -282,7 +282,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
-    termEl.addEventListener('mousedown', onLinkClick)
+    termEl.addEventListener('mousedown', onLinkClick, true)
     // Alt+Click moves the cursor by emitting the equivalent arrow-key burst — but only when the
     // program has NOT enabled mouse reporting (plain clicks keep native selection either way).
     // See ui/terminal/altClickNavigation.ts for the translation.
@@ -399,7 +399,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       titleDisposable.dispose()
       for (const disposable of paneDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
-      termEl.removeEventListener('mousedown', onLinkClick)
+      termEl.removeEventListener('mousedown', onLinkClick, true)
       termEl.removeEventListener('mousedown', onAltClickMove)
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)

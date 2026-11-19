@@ -168,6 +168,9 @@ pub struct FetchUsageRequest {
     pub model_family: Option<ModelFamily>,
     /// Whether the request said `auto` explicitly; part of the in-flight key, as before.
     pub model_family_auto: bool,
+    /// Claude: the oldest status line record the caller still takes, in ms; an older one sends the
+    /// read to the CLI. `None` takes the record at any age (the CLI runs only without one).
+    pub max_record_age_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

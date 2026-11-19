@@ -179,3 +179,61 @@ fn links_are_not_followed() {
     assert_eq!(report.removed, 1);
     assert!(outside.join("keep.txt").exists(), "the target stays");
 }
+
+#[test]
+fn a_clean_up_reports_progress_and_what_each_group_lost() {
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    let dir = tempdir().expect("tempdir");
+    let root = temp_root(&dir);
+    for name in ["claude-1a2b3c", "claude-4d5e6f", "claude-778899"] {
+        fs::create_dir_all(root.join(name).join("deep")).unwrap();
+        fs::write(root.join(name).join("deep").join("f.txt"), b"12345").unwrap();
+    }
+    fs::write(root.join("keep.log"), b"x").unwrap();
+    let steps = AtomicU64::new(0);
+    let cancel = AtomicBool::new(false);
+    let count = |_: Step| {
+        steps.fetch_add(1, Ordering::Relaxed);
+    };
+    let progress = Progress {
+        on_step: &count,
+        cancel: &cancel,
+    };
+    let later = SystemTime::now() + Duration::from_secs(5);
+    let keys = vec!["claude-*".to_string()];
+    let report = clean_with(&root, Some(&keys), Duration::ZERO, later, &progress).unwrap();
+    assert_eq!(report.removed, 3);
+    assert_eq!(
+        report.freed_bytes, 15,
+        "counted while removing, without sizing first"
+    );
+    assert_eq!(steps.load(Ordering::Relaxed), 3);
+    assert_eq!(
+        report.groups,
+        vec![GroupResult {
+            key: "claude-*".to_string(),
+            removed: 3,
+            freed_bytes: 15,
+        }]
+    );
+    assert!(root.join("keep.log").exists());
+}
+
+#[test]
+fn a_cancelled_clean_up_removes_nothing_more() {
+    use std::sync::atomic::AtomicBool;
+    let dir = tempdir().expect("tempdir");
+    let root = temp_root(&dir);
+    fs::write(root.join("a.tmp"), b"x").unwrap();
+    let cancel = AtomicBool::new(true);
+    let progress = Progress {
+        on_step: &|_| {},
+        cancel: &cancel,
+    };
+    let later = SystemTime::now() + Duration::from_secs(5);
+    let report = clean_with(&root, None, Duration::ZERO, later, &progress).unwrap();
+    assert_eq!(report.removed, 0);
+    assert_eq!(report.kept, 1);
+    assert!(root.join("a.tmp").exists());
+    assert!(scan_with(&root, &progress).unwrap().is_empty());
+}

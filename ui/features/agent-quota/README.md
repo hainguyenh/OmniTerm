@@ -30,9 +30,47 @@ engine, its UI and every native quota command (the state is kept in the app sett
 
 | Agent | Source |
 | --- | --- |
-| Claude Code | The status line bridge's record (below) while it is under 10 minutes old; otherwise `claude -p /usage`, run the way the user runs the profile: through its launcher (`claude-th -p /usage`) when the terminal used one, else `claude` with the profile's `CLAUDE_CONFIG_DIR` |
+| Claude Code | The status line bridge's last record (below), as young as the profile's risk asks (next section); otherwise `claude -p /usage --no-session-persistence`, run the way the user runs the profile: through its launcher (`claude-th -p /usage`) when the terminal used one, else `claude` with the profile's `CLAUDE_CONFIG_DIR` |
 | Codex | The newest `rate_limits` event in `<CODEX_HOME>/sessions/**/rollout-*.jsonl`, which Codex writes after every reply |
-| Antigravity | The Antigravity status line bridge's record (below) while it is under 10 minutes old; otherwise `agy -p /usage`, run the same way as Claude's |
+| Antigravity | The Antigravity status line bridge's last record (below), at any age; only a profile without one runs `agy -p /usage`, the same way as Claude's |
+
+While a Claude or Antigravity profile is open, the engine also follows its bridge record
+(`bridgeFollower.ts`, `agent_quota_bridge_reading`: a small file read every 2 s, never a CLI run), so
+a new reading lands as soon as the agent renders its status line instead of at the next background
+read. While the bridge reported within the last 10 minutes, a CLI or inline reading never replaces
+its reading (`quotaReading.ts`): a CLI run that started before the agent reported must not roll the
+profile back.
+
+Claude's CLI read runs with `--no-session-persistence`, so it leaves no conversation behind in the
+profile. Antigravity's has no such flag: once an Antigravity agent has reported through its bridge,
+its last record stands at any age and the CLI is not run again. A window that rolled over since a
+record was written reads as a new, unused one (0%, no reset time yet).
+
+### How closely a Claude profile is read
+
+Every Claude session of a profile spends one quota, and a pane that sits idle says nothing about
+the others. When a Claude agent starts in a pane (and once at start-up for those already running),
+never on a timer, the engine takes a census of the Claude processes on the whole machine, in any
+terminal or app (`agent_quota_profile_census`, `src-tauri/src/agent_quota/agent_census.rs`):
+per profile folder (its `CLAUDE_CONFIG_DIR`, else `~/.claude`, matched however it is spelt) the main
+sessions — sub-agents belong to theirs, OmniTerm's own `/usage` reads are left out — and the
+headless `claude -p` runs among them. A process whose environment cannot be read is not guessed
+into the default profile. Between two censuses the panes are followed by the pane detection that
+runs anyway, and the sessions the census saw outside them are trusted for 15 minutes. A limit
+reached needs no census: the suspend itself looks across the machine for the profile's processes
+(`suspend_targets_for_profile` in `agent_guard.rs`). `profileCensus.ts` turns that into the
+profile's risk:
+
+| Risk | When | Read |
+| --- | --- | --- |
+| `danger` | 2+ sessions, or any headless run (it renders no status line, so the bridge never sees it) | at the busy pace, taking a bridge record up to 2 min old, else the CLI; the pane footer shows `×N` |
+| `active` | one session, working (busy or guarded pane) | a record up to 10 min old, else the CLI |
+| `idle` | one session, idle | nothing once the profile has a reading; the bridge still reports each reply |
+| `unknown` | no census, one older than 15 minutes, or no profile folder to match | the record at any age, the CLI only without one |
+
+A background read that hands back the record already applied changes nothing
+(`isNewBridgeRecord`). The Profiles dialog takes the same record before it starts anything: only a
+profile without one is launched in the hidden terminal to read `/usage`.
 
 When an agent starts in a terminal, the engine asks Rust (`agent_quota_ensure_passive`) whether its
 profile reports its quota by itself: a Claude or Antigravity profile with its bridge installed (the
@@ -55,7 +93,11 @@ Per Claude profile it adds:
 - `statusLine` → `omniterm --omniterm-claude-statusline --profile <dir>`. Claude Code hands it
   `rate_limits` (5-hour and 7-day used percentage and reset) after every reply; it keeps them in
   `<profile>/omniterm/claude-usage.json` and prints the profile's earlier status line (kept in
-  `<profile>/omniterm/bridge.json` and run with the same input) or a short `5h 42% · 7d 13%` line.
+  `<profile>/omniterm/bridge.json` and run with the same input) or a short `ctx 18% · 5h 42% · wk 13%`
+  line: how full the context window is, then the quota windows. Before a session's first reply the
+  input carries no rate limits, so the line shows the profile's last record while a window of it
+  still holds. The text and the context share are kept per conversation (`statuslines/`) for the
+  pane footer, which draws the 5-hour and weekly quota and the context as bars (`FooterMeters.tsx`).
 - A `PreToolUse` hook on `Agent|Task` → `omniterm --omniterm-claude-guard --profile <dir>`. It denies
   a new sub-agent (hook JSON `permissionDecision: "deny"`) while the 5-hour or weekly window is at
   the Claude limit set here, as long as Claude is monitored and "suspend at limit" is on. Sub-agents
@@ -76,8 +118,8 @@ whenever the agent's state changes and hands it a `quota` map (per bucket such a
 `omniterm --omniterm-agy-statusline --profile <AGY_HOME>`, keeps the buckets in
 `antigravity-cli/omniterm/agy-usage.json`, and prints the earlier status line (run with `cmd /c` on
 Windows, `sh -c` elsewhere, as the CLI does) or a short `Quota 5h 18% · wk 6%` line under the
-built-in one (`stack_with_default`). Install, backup, Remove and the 10-minute freshness rule work
-as for Claude. There is no sub-agent guard: the CLI's hooks have no stable home to install into.
+built-in one (`stack_with_default`). Install, backup, Remove and the any-age record work as for
+Claude. There is no sub-agent guard: the CLI's hooks have no stable home to install into.
 
 ## Profiles and launchers
 

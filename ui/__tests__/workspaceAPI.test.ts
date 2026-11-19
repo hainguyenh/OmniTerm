@@ -95,6 +95,17 @@ describe('createWorkspaceAPI', () => {
     await expect(api.loadConnections('w')).resolves.toEqual([])
     expect(invoke).toHaveBeenLastCalledWith('load_workspace_connections', { workspaceId: 'w' })
   })
+
+  it('saves and deletes a workspace connection through its commands', async () => {
+    const api = createWorkspaceAPI()
+    const connection = { id: '', name: '', type: 'SSH' as const, host: 'h', port: '', user: '' }
+    invoke.mockResolvedValueOnce({ ...connection, id: 'c1' })
+    await expect(api.saveConnection('w', connection)).resolves.toMatchObject({ id: 'c1' })
+    expect(invoke).toHaveBeenLastCalledWith('save_workspace_connection', { workspaceId: 'w', connection })
+    invoke.mockResolvedValueOnce(true)
+    await expect(api.deleteConnection('w', 'c1')).resolves.toBe(true)
+    expect(invoke).toHaveBeenLastCalledWith('delete_workspace_connection', { workspaceId: 'w', connectionId: 'c1' })
+  })
 })
 
 describe('createTempNotesAPI', () => {

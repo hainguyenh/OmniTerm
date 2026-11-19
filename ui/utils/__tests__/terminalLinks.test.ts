@@ -7,6 +7,7 @@ import {
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
+  oscLinkTarget,
   registerPlainUrlLinks,
   safeHttpUrl,
 } from '../terminalLinks'
@@ -211,5 +212,20 @@ describe('findLinkOrPathInTerminal', () => {
 
     expect(findLinkOrPathInTerminal(terminal, termEl, 50, 100)).toBeNull() // left of rect
     expect(findLinkOrPathInTerminal(terminal, termEl, 100, 50)).toBeNull() // above rect
+  })
+})
+
+describe('oscLinkTarget', () => {
+  it('reads local file URIs as paths, with a trailing line and column', () => {
+    expect(oscLinkTarget('file:///D:/work/a.ts')).toEqual({ kind: 'path', text: 'D:/work/a.ts' })
+    expect(oscLinkTarget('file://localhost/home/me/a.ts:3')).toEqual({ kind: 'path', text: '/home/me/a.ts', line: 3 })
+    expect(oscLinkTarget('file:///C:/My%20Docs/x.md:4:2')).toEqual({ kind: 'path', text: 'C:/My Docs/x.md', line: 4, col: 2 })
+  })
+
+  it('keeps HTTP(S) links and drops every other target', () => {
+    expect(oscLinkTarget('https://example.test/a?b=1')).toEqual({ kind: 'url', text: 'https://example.test/a?b=1' })
+    for (const uri of ['javascript:alert(1)', 'file://evil.host/share/a', 'not a uri', 'https://u:p@example.test/', 'file:///a%0Ab', 'file:///%E0%A4%A']) {
+      expect(oscLinkTarget(uri), uri).toBeNull()
+    }
   })
 })

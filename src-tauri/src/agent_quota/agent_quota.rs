@@ -7,11 +7,13 @@
 //! on resume, when the feature is switched off and when the app exits, and never left suspended
 //! behind a closed window.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use sysinfo::System;
 use tauri::{AppHandle, Manager, Runtime};
 
+#[path = "agent_census.rs"]
+mod agent_census;
 #[path = "agent_detect.rs"]
 mod agent_detect;
 #[path = "agent_guard.rs"]
@@ -25,6 +27,7 @@ mod process_suspend;
 #[path = "usage_commands.rs"]
 pub mod usage_commands;
 
+pub use agent_census::ProfileCensus;
 use agent_detect::{ProcRow, ProcTarget};
 use agent_guard::{NativeOps, ProcOps};
 pub use agent_guard::{SessionAgent, SuspendReport};
@@ -37,6 +40,9 @@ trait ProcSource: Send + Sync {
     /// Rows for acting on one terminal: names plus script-host command lines, no environment.
     fn action_rows(&self, shell: u32) -> Vec<ProcRow>;
     fn start_times(&self, pids: &[u32]) -> HashMap<u32, u64>;
+    /// Rows for the machine-wide Claude census, and the main processes whose environment could
+    /// not be read (see `agent_snapshot::census_rows`).
+    fn census_rows(&self) -> (Vec<ProcRow>, HashSet<u32>);
 }
 
 /// The live process table. Its `System` is reused so sysinfo keeps its buffers, and is only
@@ -81,6 +87,10 @@ impl ProcSource for LiveSource {
 
     fn start_times(&self, pids: &[u32]) -> HashMap<u32, u64> {
         self.with_system(|system| agent_snapshot::start_times(system, pids))
+    }
+
+    fn census_rows(&self) -> (Vec<ProcRow>, HashSet<u32>) {
+        self.with_system(agent_snapshot::census_rows)
     }
 }
 
@@ -163,6 +173,12 @@ impl AgentQuotaState {
         let rows = self.source.detection_rows(&pids);
         let home = agent_snapshot::home_dir();
         agent_guard::detect_sessions(&rows, shells, home.as_deref())
+    }
+
+    fn census(&self) -> Vec<ProfileCensus> {
+        let (rows, unreadable) = self.source.census_rows();
+        let home = agent_snapshot::home_dir();
+        agent_census::claude_census(&rows, &unreadable, home.as_deref())
     }
 
     fn suspend(
@@ -255,6 +271,14 @@ pub async fn agent_quota_detect<R: Runtime>(
 ) -> Result<Vec<SessionAgent>, String> {
     let shells = local_shells(&app);
     blocking(&app, move |state| Ok(state.detect(&shells))).await
+}
+
+/// The Claude sessions on this machine per profile, in any terminal or app (`agent_census.rs`).
+#[tauri::command]
+pub async fn agent_quota_profile_census<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<ProfileCensus>, String> {
+    blocking(&app, |state| Ok(state.census())).await
 }
 
 #[tauri::command]

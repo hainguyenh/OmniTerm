@@ -47,7 +47,48 @@
 }
 .rootLabel {
   color: var(--fg-strong);
+}
+.boldLabel {
   font-weight: 600;
+}
+/* A workspace project that is switched off: still listed, greyed out. */
+.switchedOff {
+  opacity: 0.5;
+}
+.defaultStar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+/* Workspace project row: terminal / default buttons at the right edge, shown on hover. */
+.rootActions {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 0 4px;
+}
+.content:hover .rootActions,
+.content:focus-within .rootActions {
+  display: inline-flex;
+}
+.rootAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.rootAction:hover {
+  background: var(--bg-control);
+  color: var(--fg-strong);
 }
 .moduleLabel {
   font-weight: 600;
@@ -89,6 +130,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg-subtle);
+}
+/* A project root's location: light, dimmed and italic, so the project name stays what the eye reads. */
+.rootPath {
+  font-style: italic;
+  font-weight: 300;
+  opacity: 0.7;
 }
 .badge {
   flex: none;

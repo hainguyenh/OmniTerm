@@ -19,7 +19,7 @@ const DEFAULT_PROFILE_DIR: Record<AgentKind, string> = { claude: '.claude', code
 /** Session + pid + start time: a new agent process in the same terminal is a new instance. */
 export const instanceKeyOf = (agent: SessionAgent) => `${agent.sessionId}:${agent.pid}:${agent.startTime}`
 
-function normalizeDir(dir: string): string {
+export function normalizeDir(dir: string): string {
   const lower = dir.trim().toLowerCase()
   const unified = /^[a-z]:[\\/]/.test(lower) ? lower.replace(/\//g, '\\') : lower
   return unified.replace(/[\\/]+$/, '')

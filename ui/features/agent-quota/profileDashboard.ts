@@ -104,16 +104,37 @@ async function backgroundRead(row: DashboardRow, api: AgentQuotaAPI): Promise<Qu
   }
 }
 
+/**
+ * The rows whose agent already reported through its status line bridge get that record, and are
+ * left out of the hidden run: starting the agent to type `/usage` leaves a conversation behind in
+ * the profile on every scan, and the bridge record is the agent's own reading. Returns the rest.
+ */
+async function readBridges(rows: DashboardRow[], read: NonNullable<AgentQuotaAPI['readBridge']>): Promise<DashboardRow[]> {
+  const found = new Set<string>()
+  await Promise.all(rows.map(async (row) => {
+    if (row.agent === 'codex') return
+    const snapshot = await read({ agent: row.agent, profileDir: row.profileDir, launcher: row.launcher }).catch(() => null)
+    if (!snapshot || snapshot.error || snapshot.windows.length === 0) return
+    found.add(row.key)
+    applyReading(row.key, snapshot)
+  }))
+  return rows.filter((row) => !found.has(row.key))
+}
+
 /** One hidden run at a time: a second Fetch waits for the first instead of opening another terminal. */
 let hiddenRun: Promise<unknown> = Promise.resolve()
 
 /**
- * Read inactive profiles in the hidden terminal (hiddenProfileProbe.ts). A profile it could not
+ * Read inactive profiles from their bridge record, else in the hidden terminal
+ * (hiddenProfileProbe.ts). A profile it could not
  * start, or whose panel it could not read, falls back to the native background read; when that
  * fails too, the hidden run's reason is the one shown.
  */
-async function readProfiles(rows: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
-  markFetching(rows)
+async function readProfiles(all: DashboardRow[], api: AgentQuotaAPI, hidden?: HiddenProbeDeps): Promise<void> {
+  markFetching(all)
+  const read = api.readBridge?.bind(api)
+  const rows = read ? await readBridges(all, read) : all
+  if (rows.length === 0) return
   const probeDir = api.probeDir?.bind(api)
   const deps = hidden ?? (probeDir ? liveHiddenProbeDeps(probeDir) : null)
   const hiddenErrors = new Map<string, string>()

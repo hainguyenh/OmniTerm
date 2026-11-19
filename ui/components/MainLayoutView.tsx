@@ -29,7 +29,8 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     workspaceId: model.selectedWorkspaceId?.split('::')[0] ?? null,
     workspaceFolders: (model.workspaces ?? [])
       .find(workspace => workspace.id === model.selectedWorkspaceId?.split('::')[0])
-      ?.folders.filter(folder => !folder.disabled).map(folder => folder.path).join('|') ?? '',
+      // Every folder, on or off: switching one off greys it out without reopening the project.
+      ?.folders.map(folder => folder.path).join('|') ?? '',
   })
   usePublishSessionBridge(model, true)
   useSyncEditorLayout(model, true)

@@ -10,6 +10,7 @@ fn request(agent: AgentKind, dir: Option<&Path>, launcher: Option<&str>) -> Fetc
         launcher: launcher.map(str::to_string),
         model_family: None,
         model_family_auto: false,
+        max_record_age_ms: None,
     }
 }
 

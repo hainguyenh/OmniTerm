@@ -3,15 +3,27 @@
 //! Explorer is slow here because it counts every file before deleting. This works on the
 //! folder's direct children only: [`scan`] sizes them and groups the ones of one kind (`claude-1a2b`
 //! and `claude-9z8y` are one group), and [`clean`] removes the chosen groups' entries that have not
-//! changed for a while. An entry that cannot be removed (locked, no permission) is skipped and
-//! reported, never retried in a loop. Links are removed, not followed.
+//! changed for a while. Both spread the children over a few threads and report progress
+//! ([`scan_with`], [`clean_with`]); sizes come from the directory listings, and a removal counts
+//! what it frees as it goes instead of sizing the entry first. An entry that cannot be removed
+//! (locked, no permission) is skipped and reported, never retried in a loop. Links are removed,
+//! not followed.
 
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, SystemTime};
+
+use crate::parallel::{par_map, Tally};
+
+#[path = "temp_cleanup_walk.rs"]
+mod walk;
+
+pub use crate::parallel::{Progress, Step};
+use walk::{measure, remove_tree};
 
 /// Entries a skipped list keeps; the rest are only counted.
 const MAX_SKIPPED_LISTED: usize = 50;
@@ -38,14 +50,25 @@ pub struct SkippedEntry {
     pub reason: String,
 }
 
+/// What a clean-up did to one group: the renderer updates its list from this instead of scanning
+/// the whole temp folder again.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupResult {
+    pub key: String,
+    pub removed: u64,
+    pub freed_bytes: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanReport {
     pub removed: u64,
     pub freed_bytes: u64,
-    /// Entries left because they are too new, or were not removable.
+    /// Entries left because they are too new, were not removable, or the clean-up was cancelled.
     pub kept: u64,
     pub skipped: Vec<SkippedEntry>,
+    pub groups: Vec<GroupResult>,
 }
 
 /// The kind of entry `name` is: runs of digits and of 6+ hex/`-`/`_` characters become `*`.
@@ -92,10 +115,17 @@ pub fn entry_key(path: &Path) -> String {
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    if fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir()) {
-        return group_key(&name);
+    key_of(
+        &name,
+        fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir()),
+    )
+}
+
+fn key_of(name: &str, is_dir: bool) -> String {
+    if is_dir {
+        return group_key(name);
     }
-    match Path::new(&name).extension().and_then(|e| e.to_str()) {
+    match Path::new(name).extension().and_then(|e| e.to_str()) {
         Some(ext) if !ext.is_empty() && ext.len() <= 12 => {
             format!("*.{} files", ext.to_ascii_lowercase())
         }
@@ -106,32 +136,6 @@ pub fn entry_key(path: &Path) -> String {
 fn secs(time: SystemTime) -> u64 {
     time.duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
-}
-
-/// Files and bytes under `path`, links not followed; unreadable parts count as nothing.
-fn measure(path: &Path) -> (u64, u64) {
-    let (mut files, mut bytes) = (0, 0);
-    let mut stack = vec![path.to_path_buf()];
-    while let Some(current) = stack.pop() {
-        let Ok(meta) = fs::symlink_metadata(&current) else {
-            continue;
-        };
-        if meta.is_dir() {
-            if let Ok(children) = fs::read_dir(&current) {
-                stack.extend(children.flatten().map(|child| child.path()));
-            }
-        } else {
-            files += 1;
-            bytes += meta.len();
-        }
-    }
-    (files, bytes)
-}
-
-fn modified(path: &Path) -> Option<SystemTime> {
-    fs::symlink_metadata(path)
-        .and_then(|meta| meta.modified())
-        .ok()
 }
 
 /// A usable temp folder: an existing directory that is not a drive root or a top-level folder.
@@ -148,19 +152,64 @@ fn checked_root(root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// A direct child of the temp folder, as its directory listing describes it.
+struct Child {
+    path: PathBuf,
+    name: String,
+    key: String,
+    is_dir: bool,
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+/// The direct children of `root`, from one listing: kind, size and age come with the entries.
+fn children(root: &Path) -> Result<Vec<Child>, String> {
+    let listing =
+        fs::read_dir(root).map_err(|error| format!("Cannot read {}: {error}", root.display()))?;
+    Ok(listing
+        .flatten()
+        .map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let meta = entry.metadata().ok();
+            // A link is an entry of its own, never followed: it is grouped and sized as a file.
+            let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            Child {
+                key: key_of(&name, is_dir),
+                is_dir,
+                len: meta.as_ref().map_or(0, fs::Metadata::len),
+                modified: meta.and_then(|meta| meta.modified().ok()),
+                path: entry.path(),
+                name,
+            }
+        })
+        .collect())
+}
+
 /// Groups the direct children of `root`, the biggest group first.
 pub fn scan(root: &Path) -> Result<Vec<TempGroup>, String> {
+    scan_with(root, &silent())
+}
+
+/// [`scan`] with progress after every child, sized on several threads. Cancelling returns the
+/// groups of the children sized so far.
+pub fn scan_with(root: &Path, progress: &Progress<'_>) -> Result<Vec<TempGroup>, String> {
     checked_root(root)?;
+    let children = children(root)?;
+    let total = children.len() as u64;
+    let tally = Tally::default();
+    let sized = par_map(children, |child| {
+        if progress.cancelled() {
+            return None;
+        }
+        let (files, bytes) = measure(&child.path, child.is_dir, child.len, progress);
+        tally.finish(bytes, total, progress);
+        Some((child, files, bytes))
+    });
     let mut groups: BTreeMap<String, TempGroup> = BTreeMap::new();
-    let children =
-        fs::read_dir(root).map_err(|error| format!("Cannot read {}: {error}", root.display()))?;
-    for child in children.flatten() {
-        let path = child.path();
-        let (files, bytes) = measure(&path);
-        let changed = modified(&path).map_or(0, secs);
-        let key = entry_key(&path);
-        let group = groups.entry(key.clone()).or_insert(TempGroup {
-            key,
+    for (child, files, bytes) in sized.into_iter().flatten() {
+        let changed = child.modified.map_or(0, secs);
+        let group = groups.entry(child.key.clone()).or_insert(TempGroup {
+            key: child.key,
             entries: 0,
             files: 0,
             bytes: 0,
@@ -178,50 +227,6 @@ pub fn scan(root: &Path) -> Result<Vec<TempGroup>, String> {
     Ok(list)
 }
 
-fn remove_once(path: &Path, is_dir: bool) -> io::Result<()> {
-    if is_dir {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    }
-}
-
-/// Removes `path` whatever it is; a read-only entry is made writable and removed once more.
-fn remove_entry(path: &Path) -> io::Result<()> {
-    let is_dir = fs::symlink_metadata(path)?.is_dir();
-    match remove_once(path, is_dir) {
-        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
-            clear_read_only(path);
-            remove_once(path, is_dir)
-        }
-        other => other,
-    }
-}
-
-fn clear_read_only(path: &Path) {
-    let mut stack = vec![path.to_path_buf()];
-    while let Some(current) = stack.pop() {
-        let Ok(meta) = fs::symlink_metadata(&current) else {
-            continue;
-        };
-        if meta.file_type().is_symlink() {
-            continue;
-        }
-        let mut permissions = meta.permissions();
-        if permissions.readonly() {
-            // The Windows read-only attribute; the entry is deleted right after.
-            #[allow(clippy::permissions_set_readonly_false)]
-            permissions.set_readonly(false);
-            let _ = fs::set_permissions(&current, permissions);
-        }
-        if meta.is_dir() {
-            if let Ok(children) = fs::read_dir(&current) {
-                stack.extend(children.flatten().map(|child| child.path()));
-            }
-        }
-    }
-}
-
 /// Removes the direct children of `root` that belong to one of `keys` (every group for `None`) and
 /// have not changed for `older_than`. What cannot be removed is skipped and listed in the report.
 pub fn clean(
@@ -230,39 +235,67 @@ pub fn clean(
     older_than: Duration,
     now: SystemTime,
 ) -> Result<CleanReport, String> {
+    clean_with(root, keys, older_than, now, &silent())
+}
+
+/// [`clean`] on several threads, each entry removed in one pass that counts what it frees, with
+/// progress after every entry. Cancelling stops at the next file; what was removed stays removed.
+pub fn clean_with(
+    root: &Path,
+    keys: Option<&[String]>,
+    older_than: Duration,
+    now: SystemTime,
+    progress: &Progress<'_>,
+) -> Result<CleanReport, String> {
     checked_root(root)?;
     let cutoff = now
         .checked_sub(older_than)
         .unwrap_or(SystemTime::UNIX_EPOCH);
     let mut report = CleanReport::default();
-    let children =
-        fs::read_dir(root).map_err(|error| format!("Cannot read {}: {error}", root.display()))?;
-    let entries: Vec<PathBuf> = children.flatten().map(|child| child.path()).collect();
-    for path in entries {
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        if keys.is_some_and(|keys| !keys.contains(&entry_key(&path))) {
+    let mut chosen = Vec::new();
+    for child in children(root)? {
+        if keys.is_some_and(|keys| !keys.contains(&child.key)) {
             continue;
         }
-        if modified(&path).is_some_and(|changed| changed > cutoff) {
+        if child.modified.is_some_and(|changed| changed > cutoff) {
             report.kept += 1;
             continue;
         }
-        let (_, bytes) = measure(&path);
-        match remove_entry(&path) {
-            Ok(()) => {
+        chosen.push(child);
+    }
+    let total = chosen.len() as u64;
+    let tally = Tally::default();
+    let removed = par_map(chosen, |child| {
+        if progress.cancelled() {
+            return (child, None);
+        }
+        let removal = remove_tree(&child.path, progress);
+        tally.finish(removal.freed, total, progress);
+        (child, Some(removal))
+    });
+    for (child, removal) in removed {
+        let Some(removal) = removal else {
+            report.kept += 1;
+            continue;
+        };
+        report.freed_bytes += removal.freed;
+        let group = group_result(&mut report.groups, &child.key);
+        group.freed_bytes += removal.freed;
+        match removal.error {
+            // Gone already (another process cleaned it) counts as removed: nothing to report.
+            None => {
                 report.removed += 1;
-                report.freed_bytes += bytes;
+                group.removed += 1;
             }
-            // Gone already (another process cleaned it): nothing to report.
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
+            Some(error) if error.kind() == io::ErrorKind::NotFound => {
+                report.removed += 1;
+                group.removed += 1;
+            }
+            Some(error) => {
                 report.kept += 1;
                 if report.skipped.len() < MAX_SKIPPED_LISTED {
                     report.skipped.push(SkippedEntry {
-                        name,
+                        name: child.name,
                         reason: error.to_string(),
                     });
                 }
@@ -270,6 +303,30 @@ pub fn clean(
         }
     }
     Ok(report)
+}
+
+/// The per-group line of a report for `key`, added on first use.
+fn group_result<'a>(groups: &'a mut Vec<GroupResult>, key: &str) -> &'a mut GroupResult {
+    let index = match groups.iter().position(|group| group.key == key) {
+        Some(index) => index,
+        None => {
+            groups.push(GroupResult {
+                key: key.to_string(),
+                ..GroupResult::default()
+            });
+            groups.len() - 1
+        }
+    };
+    &mut groups[index]
+}
+
+/// Progress for the callers that do not show any.
+fn silent() -> Progress<'static> {
+    static NEVER: AtomicBool = AtomicBool::new(false);
+    Progress {
+        on_step: &|_| {},
+        cancel: &NEVER,
+    }
 }
 
 #[cfg(test)]

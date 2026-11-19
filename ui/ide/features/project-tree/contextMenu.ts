@@ -31,6 +31,7 @@ import {
   vcsArg,
 } from "./operations";
 import { isSameOrInside } from "./paths";
+import { isDefaultRoot } from "./rootToggle";
 import { tx } from "@/platform/i18n";
 
 /** Keys handled by the project view itself (the default keymap has no entries for them). */
@@ -163,7 +164,8 @@ export function contextMenuItems(nodes: ProjectNode[]): MenuItem[] {
     push(
       // OmniTerm: the workspace catalog owns the folder list (`ide_set_project` rebuilds the
       // container from it), so removing it there is what lasts.
-      { kind: "action", action: "omniterm.workspace.setDefaultProject", arg: single.path },
+      // The default project needs no "Set as Default"; its row already carries the star.
+      !isDefaultRoot(single.path) && { kind: "action", action: "omniterm.workspace.setDefaultProject", arg: single.path },
       { kind: "action", action: "omniterm.workspace.removeFolder", arg: single.path },
       { kind: "separator" },
     );

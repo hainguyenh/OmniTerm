@@ -144,6 +144,12 @@ describe('overrides', () => {
     expect(effectiveConfig(global, { autoResume: false }).autoResume).toBe(false)
   })
 
+  it('keeps the weekly choice of a terminal either way: shown or hidden', () => {
+    expect(pruneOverride(global, { showWeekly: true })).toEqual({ showWeekly: true })
+    expect(pruneOverride(global, { showWeekly: false })).toEqual({ showWeekly: false })
+    expect(pruneOverride(global, { showWeekly: undefined })).toBeNull()
+  })
+
   it('prunes fields that match the global value, dropping empty overrides', () => {
     expect(pruneOverride(global, { limits: { session: 90 }, suspendAtLimit: true, autoResume: true, resumeRecovery: global.resumeRecovery })).toBeNull()
     expect(pruneOverride(global, {})).toBeNull()

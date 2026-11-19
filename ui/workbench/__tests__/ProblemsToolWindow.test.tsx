@@ -89,6 +89,9 @@ describe('ProblemsToolWindow & problemsStore', () => {
     // Items rendered
     const items = screen.getAllByTestId('problem-item')
     expect(items.length).toBe(3)
+
+    // Only the theme's own tokens: undefined ones fell back to dark colours in the light theme.
+    expect(document.body.innerHTML).not.toMatch(/--(foreground|surface|primary|error|border-subtle)\b|--\w+-bg\b|#[0-9a-f]{3,6}\b/)
   })
 
   it('filters problems by severity when toggle buttons are clicked', () => {

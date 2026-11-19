@@ -55,6 +55,26 @@ describe('profile dashboard reads through the hidden terminal', () => {
     expect(manual('claude-c')).toMatchObject({ reading: ok(60), fetching: false })
   })
 
+  it('takes the bridge record of a profile that has one, and starts only the others hidden', async () => {
+    const bridged: QuotaSnapshot = { windows: [{ kind: 'session', label: 's', usedPct: 42 }], fetchedAt: T0, source: 'statusline' }
+    vi.mocked(probeProfilesHidden).mockImplementation(async (targets, _deps, onResult) => {
+      for (const target of targets) onResult(target.key, ok(5))
+      return []
+    })
+    const readBridge = vi.fn(async (request: { launcher?: string | null }) => (request.launcher === 'claude-a' ? bridged : null))
+    const fetchUsage = vi.fn(async () => ok(1))
+    await fetchAllMissingProfiles([row('claude-a'), row('claude-b')], { ...api(fetchUsage), readBridge })
+
+    expect(vi.mocked(probeProfilesHidden).mock.calls[0][0].map((target) => target.key)).toEqual(['claude:launcher:claude-b'])
+    expect(manual('claude-a')).toMatchObject({ reading: bridged, fetching: false })
+    expect(manual('claude-b')).toMatchObject({ reading: ok(5), fetching: false })
+    expect(fetchUsage).not.toHaveBeenCalled()
+
+    vi.mocked(probeProfilesHidden).mockClear()
+    await fetchInactiveProfile(row('claude-a'), { ...api(fetchUsage), readBridge })
+    expect(probeProfilesHidden).not.toHaveBeenCalled()
+  })
+
   it('runs one hidden terminal at a time, and uses only the background read without a scratch folder', async () => {
     let finishFirst: () => void = () => {}
     const order: string[] = []

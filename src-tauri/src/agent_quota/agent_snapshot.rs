@@ -13,7 +13,7 @@
 
 use super::agent_detect::{ProcRow, PROFILE_ENV};
 use crate::proc_activity::ProcTable;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 /// The environment keys kept from a process, matched case-insensitively (Windows spells them
@@ -150,6 +150,45 @@ pub fn fill_profile_env(system: &mut System, rows: &mut [ProcRow], targets: &[u3
             row.env = profile_env(process.environ());
         }
     }
+}
+
+/// Rows for the machine-wide census of Claude sessions (`agent_census.rs`): names for every
+/// process, command lines for script hosts and for main Claude processes, and the profile
+/// environment of the main Claude processes only. Returns the main processes whose environment
+/// could not be read (another user's, or an elevated one): their profile is unknown.
+pub fn census_rows(system: &mut System) -> (Vec<ProcRow>, HashSet<u32>) {
+    ProcTable::snapshot(system);
+    let mut rows: Vec<ProcRow> = system
+        .processes()
+        .values()
+        .map(|process| ProcRow {
+            pid: process.pid().as_u32(),
+            parent: process.parent().map(|parent| parent.as_u32()).unwrap_or(0),
+            start_time: process.start_time(),
+            image: process.name().to_string_lossy().into_owned(),
+            cmd: Vec::new(),
+            env: Vec::new(),
+        })
+        .collect();
+    let hosts = super::agent_detect::script_host_pids(&rows);
+    fill_command_lines(system, &mut rows, &hosts);
+    let mains: Vec<u32> = super::agent_census::claude_mains(&rows)
+        .into_iter()
+        .map(|index| rows[index].pid)
+        .collect();
+    fill_command_lines(system, &mut rows, &mains);
+    fill_profile_env(system, &mut rows, &mains);
+    // A process always has an environment; an empty one is one the read was refused.
+    let unreadable = mains
+        .iter()
+        .copied()
+        .filter(|pid| {
+            system
+                .process(Pid::from_u32(*pid))
+                .map_or(true, |process| process.environ().is_empty())
+        })
+        .collect();
+    (rows, unreadable)
 }
 
 /// Current start time of each still-running pid in `pids`. A pid missing from the result has

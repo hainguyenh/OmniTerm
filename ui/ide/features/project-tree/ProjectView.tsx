@@ -100,6 +100,7 @@ import {
   type Editing,
 } from "./store";
 import { RootCheckbox } from "./RootCheckbox";
+import { useManagedRoot, type ManagedRoot } from "./rootToggle";
 import styles from "./ProjectView.module.css";
 
 function onClipboard(e: ReactClipboardEvent<HTMLDivElement>, action: string) {
@@ -306,9 +307,18 @@ const Row = memo(function Row({
   const faded = node.ignored || deco.faded;
   // IDEA dims the icon of excluded folders only; git-ignored ones just get the ignored colour.
   const dimIcon = node.excluded;
+  // OmniTerm workspace folders: only the default project is bold; a switched-off one is greyed out.
+  const managed = useManagedRoot(node.root && !node.icon ? node.path : "");
+  const projectRoot = node.root && !node.icon;
+  const boldRoot = projectRoot && (!managed || managed.isDefault);
   return (
     <span
-      className={clsx(styles.content, cut && styles.cut, dropTarget && styles.dropTarget)}
+      className={clsx(
+        styles.content,
+        cut && styles.cut,
+        dropTarget && styles.dropTarget,
+        managed && !managed.active && styles.switchedOff,
+      )}
       data-project-path={node.placeholder ? undefined : node.path}
       data-project-key={node.key}
       data-dir={node.dir || undefined}
@@ -340,7 +350,8 @@ const Row = memo(function Row({
               styles.label,
               node.root && styles.rootName,
               // Only the project itself is bold (IDEA); contributed roots like Scratches are not.
-              ((node.root && !node.icon) || node.bold) && styles.rootLabel,
+              (projectRoot || node.bold) && styles.rootLabel,
+              (boldRoot || node.bold) && styles.boldLabel,
               // Maven / Gradle module folders are bold too, as in IDEA.
               moduleFolder && styles.moduleLabel,
               faded && !deco.color && styles.excluded,
@@ -351,18 +362,64 @@ const Row = memo(function Row({
             indices={matches}
             tone="accent"
           />
+          {managed?.isDefault && (
+            <span className={styles.defaultStar} title="Default project" data-testid="project-root-default">
+              <Icon name="star" size={12} />
+            </span>
+          )}
           {deco.suffix && !(node.root && !node.icon) && (
             <DecorationSuffix segments={deco.suffix} color={deco.suffixColor} />
           )}
-          {detail && <span className={styles.detail}>{detail}</span>}
+          {detail && <span className={clsx(styles.detail, node.root && styles.rootPath)}>{detail}</span>}
           {/* A project root reads "name  path  [branch]" (OmniTerm's Project panel). */}
           {deco.suffix && node.root && !node.icon && <DecorationSuffix segments={bracketedBranch(deco.suffix)} />}
           {deco.badge && <span className={styles.badge}>{deco.badge}</span>}
+          {managed && <RootHoverActions managed={managed} name={node.label} />}
         </>
       )}
     </span>
   );
 });
+
+/** The buttons at the right of a workspace project's row, shown on hover: terminal here, default star. */
+function RootHoverActions({ managed, name }: { managed: ManagedRoot; name: string }) {
+  const stop = (e: ReactMouseEvent | ReactPointerEvent) => e.stopPropagation();
+  return (
+    <span className={styles.rootActions} data-testid="project-root-actions">
+      <button
+        type="button"
+        className={styles.rootAction}
+        title="Open Terminal Here"
+        aria-label={`Open terminal in ${name}`}
+        onPointerDown={stop}
+        onDoubleClick={stop}
+        onClick={(e) => {
+          e.stopPropagation();
+          managed.openTerminal();
+        }}
+      >
+        <Icon name="terminal" size={14} />
+      </button>
+      {/* The default project already shows its star next to the name. */}
+      {!managed.isDefault && (
+        <button
+          type="button"
+          className={styles.rootAction}
+          title="Set as Default Project"
+          aria-label={`Set ${name} as default project`}
+          onPointerDown={stop}
+          onDoubleClick={stop}
+          onClick={(e) => {
+            e.stopPropagation();
+            managed.setDefault();
+          }}
+        >
+          <Icon name="star-outline" size={14} />
+        </button>
+      )}
+    </span>
+  );
+}
 
 /** A root's branch suffix as `[head]`, followed by its incoming / outgoing counts. */
 function bracketedBranch(segments: readonly DecorationSegment[]): DecorationSegment[] {

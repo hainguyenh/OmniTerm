@@ -49,13 +49,13 @@ import { useToolWindowLayout } from "@/workbench/toolwindows/store";
 import {
   aggregateCheck,
   buildChangeTree,
+  buildProjectChangeTree,
+  changesOfRepo,
   checkOf,
   filesOf,
   groupOf,
   ignoreTargets,
-  includedRepos,
   isPartiallyStaged,
-  pickCommitRepo,
   planCommit,
   restrictPlan,
   toggledCheck,
@@ -93,7 +93,8 @@ import {
   workingDiffData,
 } from "./diffInput";
 import { DiffEditor } from "./DiffEditor";
-import { KIND_COLOR, KIND_LABEL, fileCount, formatTime, repoLabel, stashLabel, stripSlash } from "./model";
+import { KIND_COLOR, KIND_LABEL, fileCount, formatTime, stashLabel, stripSlash } from "./model";
+import { CommitProjectPicker, useCommitTarget } from "./CommitProjectPicker";
 import { call, commands } from "@/platform/ipc";
 import type { FileStatus } from "@/bindings";
 import { OperationBanner } from "./operations";
@@ -462,69 +463,45 @@ function useCommitChecks() {
   return useMemo(() => withListDefaults(status, root, lists, userChecks), [status, root, lists, userChecks]);
 }
 
-/** Number of changes the commit would include. */
+/** Number of changes the commit would include (only the target project's, with several). */
 export function useIncludedCount(): number {
   const status = useVcs((s) => s.status);
   const roots = useVcs((s) => s.roots);
-  const commitRepo = useCommit((s) => s.commitRepo);
+  const target = useCommitTarget();
   const checks = useCommitChecks();
   return useMemo(
-    () => restrictPlan(planCommit(status, checks), roots, commitRepo).included.length,
-    [status, checks, roots, commitRepo],
+    () => restrictPlan(planCommit(status, checks), roots, target).included.length,
+    [status, checks, roots, target],
   );
-}
-
-/** The repositories holding included changes, and the one the next commit goes to. */
-function useCommitTargets(): { repos: string[]; selected: string | null } {
-  const status = useVcs((s) => s.status);
-  const roots = useVcs((s) => s.roots);
-  const commitRepo = useCommit((s) => s.commitRepo);
-  const checks = useCommitChecks();
-  return useMemo(() => {
-    const repos = includedRepos(planCommit(status, checks).included, roots);
-    return { repos, selected: pickCommitRepo(repos, commitRepo) };
-  }, [status, checks, roots, commitRepo]);
 }
 
 /**
  * The Commit tool window's Commit tab: changes with inclusion checkboxes above the
- * message, with an optional embedded preview of the selected file's diff beside them
- * (issue #1599).
+ * message. Preview Diff shows the selected file's diff in a preview editor tab.
  */
 function ChangesPanel() {
   const included = useIncludedCount();
-  const preview = useCommit((s) => s.commitDiffPreview);
-  const path = useCommit((s) => (s.selection.length === 1 ? s.selection[0] : null));
-  const hasChanges = useVcs((s) => s.status.length > 0);
   return (
-    <SplitGroup orientation="horizontal" className={styles.split}>
+    <SplitGroup orientation="vertical" className={styles.split}>
       <SplitPanel defaultSize="62%" minSize="20%">
-        <SplitGroup orientation="vertical" className={styles.split}>
-          <SplitPanel defaultSize="62%" minSize="20%">
-            <ChangesTree mode="commit" />
-          </SplitPanel>
-          <SplitHandle />
-          <SplitPanel defaultSize="38%" minSize="120px">
-            <CommitPanel included={included} />
-          </SplitPanel>
-        </SplitGroup>
+        <ChangesTree mode="commit" />
       </SplitPanel>
-      {preview && (
-        <>
-          <SplitHandle />
-          <SplitPanel defaultSize="38%" minSize="120px">
-            {path ? (
-              <DiffEditor input={diffInput(workingDiffData(path))} />
-            ) : (
-              <EmptyState>
-                <T>{hasChanges ? "Select a file to preview its changes" : "No changes to preview"}</T>
-              </EmptyState>
-            )}
-          </SplitPanel>
-        </>
-      )}
+      <SplitHandle />
+      <SplitPanel defaultSize="38%" minSize="120px">
+        <CommitPanel included={included} />
+      </SplitPanel>
     </SplitGroup>
   );
+}
+
+/**
+ * Preview Diff of the Commit tab: the selected file's diff in the editor's preview tab,
+ * leaving the focus in the tree so the arrow keys walk the changes.
+ */
+export function previewInEditor(node: ChangeNode | undefined, roots: readonly ChangeNode[]): boolean {
+  if (node?.type !== "file" || !node.path) return false;
+  void openDiff(changeNodeDiffData(roots, node), { preview: true, focus: false });
+  return true;
 }
 
 /**
@@ -586,9 +563,15 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
 
   const repos = useVcs((s) => s.roots);
   const projectRoots = useEffectiveRoots();
+  // A commit covers one project: with several, the Commit tab and dialog show only the chosen one's changes.
+  const commitTarget = useCommitTarget();
+  const target = mode === "local" ? null : commitTarget;
   const roots = useMemo(
-    () => buildChangeTree(status, root, groupByDir, lists, repos, groupByStaging),
-    [status, root, groupByDir, lists, repos, groupByStaging],
+    () =>
+      target
+        ? buildProjectChangeTree(changesOfRepo(status, repos, target), target, root, groupByDir, lists, groupByStaging)
+        : buildChangeTree(status, root, groupByDir, lists, repos, groupByStaging),
+    [status, root, groupByDir, lists, repos, groupByStaging, target],
   );
   const [byKey, parents] = useMemo(() => {
     const m = new Map<string, ChangeNode>();
@@ -642,6 +625,7 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
   // keeping focus in the tree (a click or arrow key walks the changes).
   const followSelection = (nodes: readonly ChangeNode[]) => {
     const node = nodes.length === 1 ? nodes[0] : undefined;
+    if (mode === "commit" && commitDiffPreview && previewInEditor(node, roots)) return;
     if (mode === "dialog" || node?.type !== "file" || !node.path) return;
     const active = maybeEditorService()?.activeInput?.();
     if (active?.kind !== DIFF_KIND || active.key !== followedDiff.current) return;
@@ -718,16 +702,35 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
             ])
           }
         />
-        {/* WebStorm's Preview Diff: an embedded diff of the selection beside the changes (#1599). */}
+        {/* Preview Diff: the selected file's diff follows the selection in the editor's preview tab. */}
         {mode === "commit" && (
           <IconButton
             icon="editor-preview"
-            title="Preview Diff"
+            title="Preview Diff in Editor"
             size="small"
             pressed={commitDiffPreview}
-            onClick={() => setCommitDiffPreview(!commitDiffPreview)}
+            onClick={() => {
+              setCommitDiffPreview(!commitDiffPreview);
+              if (!commitDiffPreview) previewInEditor(selected.size === 1 ? selectedNodes()[0] : undefined, roots);
+            }}
           />
         )}
+        <span className={styles.sep} />
+        {/* The changes as a folder tree, or as a flat list with each file's directory beside it. */}
+        <IconButton
+          icon="hierarchy"
+          title="Show as Tree"
+          size="small"
+          pressed={groupByDir}
+          onClick={() => setGroupByDir(true)}
+        />
+        <IconButton
+          icon="list"
+          title="Show as List"
+          size="small"
+          pressed={!groupByDir}
+          onClick={() => setGroupByDir(false)}
+        />
         <span className={styles.sep} />
         {mode !== "dialog" && (
           <IconButton icon="locate" title="Select Opened File" size="small" onClick={selectOpened} />
@@ -741,6 +744,7 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
         />
       </div>
       {mode !== "dialog" && <OperationBanner />}
+      {mode !== "local" && <CommitProjectPicker />}
       <div
         className={styles.treeWrap}
         onKeyDownCapture={(e) => {
@@ -997,8 +1001,6 @@ export function useCommitRunner(included: number, onCommitted?: () => void): Com
 export function CommitMessageField({ included, runner }: { included: number; runner: CommitRunner }) {
   const message = useCommit((s) => s.message);
   const amend = useCommit((s) => s.amend);
-  const targets = useCommitTargets();
-  const projectRoot = useVcs((s) => s.root);
   const focusTick = useCommit((s) => s.focusTick);
   const ref = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<HTMLButtonElement>(null);
@@ -1034,14 +1036,6 @@ export function CommitMessageField({ included, runner }: { included: number; run
     <>
       <div className={styles.commitBar}>
         <Checkbox checked={amend} onChange={(v) => void setAmend(v)} label="Amend" />
-        {targets.repos.length > 1 && targets.selected && (
-          <Select
-            aria-label="Project to commit"
-            value={targets.selected}
-            onChange={(repo) => useCommit.setState({ commitRepo: repo })}
-            options={targets.repos.map((repo) => ({ value: repo, label: repoLabel(repo, projectRoot) }))}
-          />
-        )}
         <IconButton
           ref={historyRef}
           icon="history"

@@ -6,7 +6,7 @@ import {
   DebugToolWindow as UpstreamDebugToolWindow,
 } from '../../ide/features/debugger/ui/DebugToolWindow'
 import { executeAction } from '../../ide/platform/actions'
-import { Icon } from '../../ide/ui'
+import { Button, Icon } from '../../ide/ui'
 
 export interface DebuggerToolWindowProps {
   id?: string
@@ -46,34 +46,23 @@ export function DebuggerToolWindow(_props: DebuggerToolWindowProps = {}) {
       className="flex h-full w-full flex-col justify-between overflow-y-auto p-4 text-center select-none"
       data-testid="debugger-empty-state"
     >
-      <div className="my-auto flex flex-col items-center justify-center space-y-4">
-        <div className="rounded-full bg-[var(--surface-hover,rgba(255,255,255,0.05))] p-4 text-[var(--foreground-muted,#888)]">
+      <div className="my-auto flex flex-col items-center justify-center gap-4">
+        <div className="rounded-full bg-[var(--bg-hover)] p-4 text-[var(--fg-muted)]">
           <Icon name="toolwindow-debug" size={32} />
         </div>
-        <div className="max-w-md space-y-1">
-          <h3 className="text-sm font-medium text-[var(--foreground,#eee)]">Debugger</h3>
-          <p className="text-xs leading-relaxed text-[var(--foreground-muted,#888)]">
-            Debugger: Inspect call stacks, threads, variables, and watch expressions
-          </p>
+        <h3 className="text-sm font-medium text-[var(--fg-strong)]">Debugger</h3>
+        {/* Right under the title, well apart so one is not clicked for the other. */}
+        <div className="flex flex-wrap items-center justify-center gap-6" data-testid="debugger-actions">
+          <Button variant="primary" icon="debug" onClick={handleStartDebug}>
+            Start Debugging
+          </Button>
+          <Button variant="secondary" icon="view-breakpoints" onClick={handleViewBreakpoints}>
+            View Breakpoints…
+          </Button>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-          <button
-            type="button"
-            onClick={handleStartDebug}
-            className="flex items-center gap-1.5 rounded bg-[var(--accent,#007acc)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--accent-hover,#0062a3)] focus:outline-none"
-          >
-            <Icon name="debug" size={14} />
-            <span>Start Debugging</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleViewBreakpoints}
-            className="flex items-center gap-1.5 rounded border border-[var(--border,rgba(255,255,255,0.1))] bg-[var(--surface,rgba(255,255,255,0.03))] px-3 py-1.5 text-xs font-medium text-[var(--foreground,#eee)] transition-colors hover:bg-[var(--surface-hover,rgba(255,255,255,0.08))] focus:outline-none"
-          >
-            <Icon name="view-breakpoints" size={14} />
-            <span>View Breakpoints…</span>
-          </button>
-        </div>
+        <p className="max-w-md text-xs leading-relaxed text-[var(--fg-muted)]">
+          Debugger: Inspect call stacks, threads, variables, and watch expressions
+        </p>
       </div>
     </div>
   )

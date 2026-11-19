@@ -11,6 +11,7 @@ import { confirmDisableSuspend, confirmResumeNow } from './dangerConfirm'
 import { isSafePrompt } from './usage/prompt'
 import { AGENT_LABELS, clampLimit, effectiveConfig, pruneOverride, wakeConfigWithEnabled, WINDOW_LABELS } from './quotaConfig'
 import { isHeld } from './quotaGuard'
+import { isWeeklyVisible } from './quotaPolicy'
 import { clearManualPause, quotaCommands, setEditing, setOverride, useQuota } from './quotaStore'
 
 const WAKE_MODES: Array<{ id: WakeMode; label: string }> = [
@@ -18,6 +19,15 @@ const WAKE_MODES: Array<{ id: WakeMode; label: string }> = [
   { id: 'afterReset', label: 'After each session reset' },
   { id: 'timeOfDay', label: 'Every day at a time' },
 ]
+
+/** Why the weekly line is shown or hidden in this terminal: its own choice, or the global rules. */
+function weeklyToggleNote(choice: boolean | undefined, shown: boolean, threshold: number): string {
+  if (choice === true) return 'Always shown in this terminal.'
+  if (choice === false) return 'Always hidden in this terminal.'
+  return shown
+    ? 'Shown by the global rules; switch off to hide it here.'
+    : `Hidden while weekly usage is below ${threshold}% (global rules).`
+}
 
 const FIELD = 'bg-theme-bg border border-theme-border rounded-lg text-xs text-theme-fg px-2 py-1 focus:outline-none focus:border-theme-accent'
 
@@ -102,6 +112,9 @@ export function QuotaOverridePopover({
   const config = effectiveConfig(global, draft)
   const committedConfig = effectiveConfig(global, committed)
   const kinds: WindowKind[] = windows && windows.length > 0 ? windows.map((window) => window.kind) : ['session', 'weekly']
+  const weeklyWindow = windows?.find((window) => window.kind === 'weekly')
+  // The toggle mirrors what the strip shows, so a line the rules show can be switched off too.
+  const weeklyShown = isWeeklyVisible(weeklyWindow, display, draft?.showWeekly)
   const wakeEnabled = config.wake.mode !== 'off'
   const hasWakeOverride = draft?.wake !== undefined
   const promptValid = !wakeEnabled || isSafePrompt(config.wake.prompt)
@@ -174,15 +187,13 @@ export function QuotaOverridePopover({
         </label>
       ))}
 
-      {display.weeklyAutoHide && (
+      {kinds.includes('weekly') && (
         <ToggleRow
           label="Show weekly quota"
-          description={draft?.showWeekly
-            ? 'Always shown in this terminal.'
-            : `Hidden while weekly usage is below ${display.weeklyThresholdPct ?? 60}% (global auto-hide).`}
-          checked={Boolean(draft?.showWeekly)}
-          onChange={() => apply({ showWeekly: !draft?.showWeekly })}
-          ariaLabel="Always show the weekly quota line in this terminal"
+          description={weeklyToggleNote(draft?.showWeekly, weeklyShown, display.weeklyThresholdPct ?? 60)}
+          checked={weeklyShown}
+          onChange={() => apply({ showWeekly: !weeklyShown })}
+          ariaLabel="Show the weekly quota line in this terminal"
         />
       )}
 

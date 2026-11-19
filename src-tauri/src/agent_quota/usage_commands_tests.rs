@@ -58,6 +58,41 @@ fn answers_while_the_feature_is_on_and_validates_requests_at_the_boundary() {
 }
 
 #[test]
+fn reads_only_the_bridge_record() {
+    let _guard = crate::test_support::lock();
+    let app = app();
+    let handle = app.handle().clone();
+    let profile = tempfile::tempdir().expect("temp profile");
+    let request = || json!({ "agent": "claude", "profileDir": profile.path().to_string_lossy() });
+    let none = block_on(agent_quota_bridge_reading(handle.clone(), request()));
+    assert_eq!(none, Ok(None), "no record: nothing, and no CLI run");
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock after 1970")
+        .as_millis() as i64;
+    let record = json!({
+        "version": 1,
+        "writtenAt": now,
+        "rateLimits": { "five_hour": { "used_percentage": 33.0, "resets_at": now / 1000 + 3600 } },
+    });
+    let dir = profile.path().join("omniterm");
+    std::fs::create_dir_all(&dir).expect("bridge folder");
+    std::fs::write(dir.join("claude-usage.json"), record.to_string()).expect("record");
+    let reading = block_on(agent_quota_bridge_reading(handle.clone(), request()))
+        .expect("read")
+        .expect("the bridge record");
+    assert_eq!(reading.fetched_at, now);
+    assert_eq!(reading.windows[0].used_pct, 33.0);
+
+    let rejected = block_on(agent_quota_bridge_reading(
+        handle,
+        json!({ "agent": "gpt" }),
+    ));
+    assert_eq!(rejected.expect_err("unknown agent"), "Unknown agent");
+}
+
+#[test]
 fn refuses_to_run_anything_while_the_feature_is_off() {
     let _guard = crate::test_support::lock();
     let app = app();
@@ -75,5 +110,7 @@ fn refuses_to_run_anything_while_the_feature_is_off() {
     assert!(block_on(agent_quota_probe_dir(handle.clone())).is_err());
     let request = json!({ "agent": "claude" });
     assert!(block_on(agent_quota_ensure_passive(handle.clone(), request)).is_err());
+    let request = json!({ "agent": "claude" });
+    assert!(block_on(agent_quota_bridge_reading(handle.clone(), request)).is_err());
     crate::builtin_features::set_enabled(&handle, AGENT_QUOTA, true).expect("switched on");
 }

@@ -87,7 +87,7 @@ export function QuotaLinesSettings({ display, onChange, now }: {
         <CompactSwitch
           label="Auto-hide weekly quota"
           note={`while under ${threshold}%`}
-          hint={'A terminal can still show it: its quota settings have "Show weekly quota".'}
+          hint={'Each terminal can still show or hide it with "Show weekly quota" in its quota settings.'}
           checked={display.weeklyAutoHide}
           onChange={() => onChange({ ...display, weeklyAutoHide: !display.weeklyAutoHide })}
           ariaLabel="Auto-hide the weekly line when plenty remains"

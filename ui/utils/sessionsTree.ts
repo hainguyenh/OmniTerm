@@ -121,9 +121,16 @@ function isResumable(session: StoredAgentSession): boolean {
   return session.state === 'interrupted' || session.state === 'saved'
 }
 
-/** Number of remembered sessions waiting to be resumed or discarded. */
-export function resumableCount(stored: readonly StoredAgentSession[]): number {
-  return stored.filter(isResumable).length
+/**
+ * Number of remembered sessions the tree lists, waiting to be resumed or discarded. Counted from
+ * the tree, so the Resume chip never counts a session of another workspace the scoped tree hides.
+ */
+export function storedSessionCount(sections: readonly SessionSection[]): number {
+  let count = 0
+  for (const section of sections) {
+    for (const group of section.groups) count += group.sessions.filter((node) => node.stored).length
+  }
+  return count
 }
 
 /** Two different projects can share a folder name; number them so rows stay distinguishable. */

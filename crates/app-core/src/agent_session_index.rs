@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent_session_header::{read_header, SessionHeader};
+use crate::parallel::par_map;
 
 #[path = "agent_session_delete.rs"]
 mod delete;
@@ -31,7 +32,8 @@ mod readers;
 #[path = "agent_session_roots.rs"]
 mod roots;
 
-pub use delete::delete_sessions;
+pub use crate::parallel::{Progress, Step};
+pub use delete::{delete_sessions, delete_sessions_with};
 pub use purge::purge_probe_sessions;
 use readers::describe_all;
 pub use roots::session_roots;
@@ -122,11 +124,44 @@ fn regular_files(dir: &Path) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
-/// Regular files with the `.jsonl` extension directly inside `dir`.
-fn jsonl_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files = regular_files(dir);
-    files.retain(|path| path.extension().is_some_and(|ext| ext == "jsonl"));
-    files
+/// A transcript file with the metadata its directory listing gave.
+type Listed = (PathBuf, fs::Metadata);
+
+/// Regular `.jsonl` files directly inside `dir`, with their metadata from the listing itself: on
+/// Windows that costs no `stat` per file, which is most of a large profile's listing time.
+fn jsonl_entries(dir: &Path) -> Vec<Listed> {
+    fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_file()))
+                .filter(|entry| {
+                    Path::new(&entry.file_name())
+                        .extension()
+                        .is_some_and(|ext| ext == "jsonl")
+                })
+                .filter_map(|entry| Some((entry.path(), entry.metadata().ok()?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// `paths` with their metadata; a path that is gone (or a link) is left out.
+fn with_metadata(paths: Vec<PathBuf>) -> Vec<Listed> {
+    paths
+        .into_iter()
+        .filter_map(|path| {
+            let meta = fs::symlink_metadata(&path)
+                .ok()
+                .filter(fs::Metadata::is_file)?;
+            Some((path, meta))
+        })
+        .collect()
+}
+
+/// The transcripts of every folder in `dirs`, the folders listed on a few threads.
+fn jsonl_in(dirs: Vec<PathBuf>) -> Vec<Listed> {
+    par_map(dirs, |dir| jsonl_entries(&dir)).concat()
 }
 
 fn real_subdirs(dir: &Path) -> Vec<PathBuf> {
@@ -143,21 +178,18 @@ fn real_subdirs(dir: &Path) -> Vec<PathBuf> {
 
 /// Transcript files of one profile: Claude's one level under `projects/`, Codex's three levels
 /// (year, month, day) under `sessions/`, Gemini CLI's chats and Antigravity's conversations.
-fn transcript_files(root: &SessionRoot) -> Vec<PathBuf> {
+fn transcript_files(root: &SessionRoot) -> Vec<Listed> {
     match root.agent {
-        SessionAgent::Claude => real_subdirs(&root.dir.join("projects"))
-            .iter()
-            .flat_map(|dir| jsonl_files(dir))
-            .collect(),
+        SessionAgent::Claude => jsonl_in(real_subdirs(&root.dir.join("projects"))),
         SessionAgent::Codex => {
             let mut dirs = vec![root.dir.join("sessions")];
             for _ in 0..3 {
                 dirs = dirs.iter().flat_map(|dir| real_subdirs(dir)).collect();
             }
-            dirs.iter().flat_map(|dir| jsonl_files(dir)).collect()
+            jsonl_in(dirs)
         }
-        SessionAgent::Gemini => gemini::gemini_chats(root),
-        SessionAgent::Agy => gemini::agy_conversations(root),
+        SessionAgent::Gemini => with_metadata(gemini::gemini_chats(root)),
+        SessionAgent::Agy => with_metadata(gemini::agy_conversations(root)),
     }
 }
 
@@ -202,22 +234,20 @@ fn candidates(roots: &[SessionRoot]) -> Vec<Candidate<'_>> {
     roots
         .iter()
         .flat_map(|root| {
-            transcript_files(root).into_iter().filter_map(move |path| {
-                let meta = fs::symlink_metadata(&path).ok()?;
-                let last_active = meta
-                    .modified()
-                    .ok()
-                    .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-                    .map_or(0, |elapsed| {
-                        u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
-                    });
-                Some(Candidate {
+            transcript_files(root)
+                .into_iter()
+                .map(move |(path, meta)| Candidate {
                     root,
-                    path,
-                    last_active,
+                    last_active: meta
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                        .map_or(0, |elapsed| {
+                            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+                        }),
                     size: meta.len(),
+                    path,
                 })
-            })
         })
         .collect()
 }

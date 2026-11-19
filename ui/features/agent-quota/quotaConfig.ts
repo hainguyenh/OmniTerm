@@ -117,7 +117,7 @@ export interface AgentOverride {
   autoResume?: boolean
   /** Optional per-terminal wake profile; absent means the global profile applies. */
   wake?: WakeConfig
-  /** Show the weekly line in this terminal even while the global auto-hide would hide it. */
+  /** Show (`true`) or hide (`false`) the weekly line in this terminal; absent follows the global rules. */
   showWeekly?: boolean
   /** Optional per-terminal resume recovery settings. */
   resumeRecovery?: Partial<ResumeRecoveryConfig>
@@ -337,8 +337,8 @@ export function pruneOverride(global: AgentConfig, override: AgentOverride): Age
     ...(override.wake && !sameWakeConfig(override.wake, global.wake) ? { wake: override.wake } : {}),
     ...(override.resumeRecovery && !sameRecoveryConfig(effectiveRecovery, global.resumeRecovery) ? { resumeRecovery: override.resumeRecovery } : {}),
     ...(override.agyModelFamily && override.agyModelFamily !== global.agyModelFamily ? { agyModelFamily: override.agyModelFamily } : {}),
-    // Display-only: there is no global counterpart, so only `true` is a difference worth keeping.
-    ...(override.showWeekly ? { showWeekly: true } : {}),
+    // Display-only: either choice overrides the weekly rules, so both `true` and `false` are kept.
+    ...(typeof override.showWeekly === 'boolean' ? { showWeekly: override.showWeekly } : {}),
   }
   return Object.keys(pruned).length > 0 ? pruned : null
 }

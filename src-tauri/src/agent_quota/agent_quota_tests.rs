@@ -54,6 +54,9 @@ impl ProcSource for FakeSource {
             .map(|row| (row.pid, row.start_time))
             .collect()
     }
+    fn census_rows(&self) -> (Vec<ProcRow>, std::collections::HashSet<u32>) {
+        (self.rows.clone(), std::collections::HashSet::new())
+    }
 }
 
 type Calls = Arc<Mutex<Vec<(&'static str, u32)>>>;
@@ -154,6 +157,18 @@ fn detect_reports_the_launcher_and_skips_ssh_and_pid_less_sessions() {
     assert_eq!(found[0].session_id, "local");
     assert_eq!(found[0].agent.launcher.as_deref(), Some("claude-th"));
     assert_eq!(found[0].agent.pid, 102);
+}
+
+#[test]
+fn census_counts_the_sessions_of_the_machine_without_any_pane() {
+    let fixture = Fixture::new(table());
+    let found = run(agent_quota_profile_census(fixture.handle())).expect("census");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        (found[0].sessions, found[0].headless),
+        (1, 0),
+        "the `-p` sub-agent belongs to its session"
+    );
 }
 
 #[test]

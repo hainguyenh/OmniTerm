@@ -9,7 +9,7 @@ import { diag } from '../diag'
 import type { RestoreOutcome } from '../utils/sessionRecoveryTypes'
 import { formatAgentResumeCommand } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
-import { findSessionByTabId, loadStoredSessions, upsertSession } from '../utils/agentSessionStorage'
+import { findSessionByTabId, loadStoredSessions, upsertSession, type StoredAgentSession } from '../utils/agentSessionStorage'
 import { whenAgentSessionsHydrated } from '../utils/agentSessionDurable'
 import { markRestoredPane } from '../utils/agentPresenceStore'
 import { agentLaunchedBy, noteAgentLaunch } from '../utils/agentLaunchSignal'
@@ -66,10 +66,30 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   gemini: 'Gemini CLI',
 }
 
-function resumeCommandForTab(tab: PersistedTab, savedConn?: PersistedConn): string | null {
-  const stored = findSessionByTabId(tab.id)
-    ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
-    ?? loadStoredSessions().find(item => item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
+/**
+ * The remembered agent session a restored pane resumes: the one bound to its tab id, else the one
+ * its recovery names, else an interrupted one started in the same folder. Every session is resumed
+ * by one pane at most (`claimed`), and the folder fallback never takes a session bound to another
+ * pane of the snapshot (`reserved`): several panes of one project folder (common in a workspace of
+ * several projects) would otherwise all resume the same agent while its siblings stay listed as
+ * interrupted, so the resumed panes and the Sessions tab disagree.
+ */
+export function claimStoredSession(
+  tab: PersistedTab,
+  reserved: ReadonlySet<string>,
+  claimed: Set<string>,
+): StoredAgentSession | undefined {
+  const stored = loadStoredSessions()
+  const free = (item: StoredAgentSession) => !claimed.has(item.id)
+  const cwd = tab.recovery.cwd?.toLowerCase()
+  const found = [findSessionByTabId(tab.id)].find((item): item is StoredAgentSession => !!item && free(item))
+    ?? (tab.recovery.agentSessionId ? stored.find(item => free(item) && item.sessionId === tab.recovery.agentSessionId) : undefined)
+    ?? (cwd ? stored.find(item => free(item) && !reserved.has(item.id) && item.state === 'interrupted' && item.cwd?.toLowerCase() === cwd) : undefined)
+  if (found) claimed.add(found.id)
+  return found
+}
+
+function resumeCommandForTab(tab: PersistedTab, savedConn: PersistedConn | undefined, stored: StoredAgentSession | undefined): string | null {
   const rawAgent = stored?.agent ?? tab.recovery.agent
   const agentName = parseAgentTitle(tab.name)?.agentName
     ?? parseAgentTitle(savedConn?.name)?.agentName
@@ -132,6 +152,9 @@ export function useSessionRestore(input: SessionRestoreInput): void {
       const outcomes: Record<string, RestoreOutcome> = {}
       const unresolvedIds: string[] = []
       const attemptedIds: string[] = []
+      const snapshotTabIds = new Set(snapshot.activeTabs.map(tab => tab.id))
+      const reserved = new Set(loadStoredSessions().filter(item => item.tabId && snapshotTabIds.has(item.tabId)).map(item => item.id))
+      const claimed = new Set<string>()
 
       for (const tab of snapshot.activeTabs) {
         if (cancelled || latestInput.current.shouldRestoreTab?.(tab) === false || latestInput.current.isRestoreAllowed?.(tab.id) === false) continue
@@ -147,7 +170,8 @@ export function useSessionRestore(input: SessionRestoreInput): void {
 
         if ((savedConn?.type ?? conn?.type) === 'LOCAL' && savedConn) {
           try {
-            const resumeCommand = resumeCommandForTab(tab, savedConn)
+            const stored = claimStoredSession(tab, reserved, claimed)
+            const resumeCommand = resumeCommandForTab(tab, savedConn, stored)
             const opened = await window.omnitermAPI.shells.open(
               savedConn.shell ?? tab.recovery.shell,
               savedConn.workspaceId ?? null,
@@ -162,9 +186,6 @@ export function useSessionRestore(input: SessionRestoreInput): void {
                 // folder-trust answer and `/usage` read without the user typing into it first.
                 const agent = agentLaunchedBy(resumeCommand)
                 if (agent) noteAgentLaunch(tab.id, agent)
-                const stored = findSessionByTabId(tab.id)
-                  ?? (tab.recovery.agentSessionId ? loadStoredSessions().find(item => item.sessionId === tab.recovery.agentSessionId) : undefined)
-                  ?? loadStoredSessions().find(item => item.state === 'interrupted' && item.cwd && tab.recovery.cwd && item.cwd.toLowerCase() === tab.recovery.cwd.toLowerCase())
                 if (stored) {
                   upsertSession({ ...stored, tabId: tab.id, state: 'active', updatedAt: Date.now() })
                   markRestoredPane(tab.id)

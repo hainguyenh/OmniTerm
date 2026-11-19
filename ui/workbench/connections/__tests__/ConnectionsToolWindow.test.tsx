@@ -107,10 +107,10 @@ describe('Connections tool window', () => {
   it('says so when there are no saved connections', () => {
     publish([])
     const view = render(<ConnectionsToolWindow />)
-    expect(screen.getByText('This workspace has no saved connections.')).toBeTruthy()
+    expect(screen.getByText(/^This workspace has no saved connections\. Use \+ to add/)).toBeTruthy()
     act(() => useWorkspaceStore.setState({ scope: 'all' }))
     view.rerender(<ConnectionsToolWindow />)
-    expect(screen.getByText('No workspace has saved connections.')).toBeTruthy()
+    expect(screen.getByText(/^No workspace has saved connections\./)).toBeTruthy()
   })
 
   it('shows the scope in the header and refreshes', () => {

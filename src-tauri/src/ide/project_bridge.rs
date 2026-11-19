@@ -90,10 +90,19 @@ fn same_path(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// The folders that make up the project: a disabled folder stays in the workspace but is left out,
-/// so the project tree, search, index and scans do not see it.
+/// The folders that make up the project. A disabled folder stays in the project, so switching a
+/// folder off or on never reopens it: the Project panel shows it greyed out and OmniTerm's own
+/// scans skip it. A workspace whose folders are all switched off has no project.
 pub(crate) fn project_folders(workspace: &app_protocol::workspace::Workspace) -> Vec<PathBuf> {
-    app_core::workspace_model::active_folders(workspace)
+    if app_core::workspace_model::active_folders(workspace)
+        .next()
+        .is_none()
+    {
+        return Vec::new();
+    }
+    workspace
+        .folders
+        .iter()
         .map(|folder| PathBuf::from(&folder.path))
         .collect()
 }

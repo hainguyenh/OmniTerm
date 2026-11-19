@@ -75,8 +75,12 @@ fn reads_a_conversations_status_line_and_nothing_once_the_feature_is_off() {
         .duration_since(UNIX_EPOCH)
         .expect("clock after 1970")
         .as_millis();
-    let record =
-        serde_json::json!({ "version": 1, "writtenAt": now as i64, "text": "Opus · 5h 4%" });
+    let record = serde_json::json!({
+        "version": 1,
+        "writtenAt": now as i64,
+        "text": "Opus · 5h 4%",
+        "contextPct": 12.5,
+    });
     let file = profile.path().join("omniterm").join("statuslines");
     std::fs::create_dir_all(&file).expect("statuslines folder");
     std::fs::write(file.join(format!("{session}.json")), record.to_string()).expect("record");
@@ -86,7 +90,9 @@ fn reads_a_conversations_status_line_and_nothing_once_the_feature_is_off() {
         dir.clone(),
         session.clone(),
     ));
-    assert_eq!(text.expect("read").as_deref(), Some("Opus · 5h 4%"));
+    let read = text.expect("read").expect("a status line");
+    assert_eq!(read.text, "Opus · 5h 4%");
+    assert_eq!(read.context_pct, Some(12.5));
     let other = block_on(agent_quota_statusline_text(
         handle.clone(),
         dir.clone(),

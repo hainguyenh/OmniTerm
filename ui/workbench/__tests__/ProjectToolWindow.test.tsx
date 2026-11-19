@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../ide/features/project-tree/ProjectView', () => ({
@@ -20,13 +20,14 @@ const workspaceActions = vi.hoisted(() => ({
 vi.mock('../titlebar/workspaceActions', () => workspaceActions)
 
 import { RootCheckbox } from '../../ide/features/project-tree/RootCheckbox'
-import { useRootChecked } from '../../ide/features/project-tree/rootToggle'
+import { isDefaultRoot, useManagedRoot, useRootChecked } from '../../ide/features/project-tree/rootToggle'
+import { useProjectFilterStore } from '../projectFilterStore'
 import { useProjectTree } from '../../ide/features/project-tree/store'
 import { useContributions } from '../../ide/workbench/contributions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { renderHook } from '@testing-library/react'
 import { useWorkspaceTitleMenu } from '../useWorkspaceTitleMenu'
-import { ProjectToolWindow } from '../ProjectToolWindow'
+import { OmniTermProjectHeaderActions, ProjectToolWindow } from '../ProjectToolWindow'
 import { registerShellToolWindows } from '../registerShellToolWindows'
 import { useTreeViewport } from './treeViewport'
 
@@ -141,6 +142,33 @@ describe('ProjectToolWindow', () => {
     expect(result.current).not.toHaveProperty('detail')
   })
 
+  const itemLabels = (items: ReturnType<typeof useWorkspaceTitleMenu>['items']) =>
+    items.flatMap((item) => (item.kind === undefined || item.kind === 'item' ? [item.label] : []))
+
+  it('offers no Project Files mode and names the Project mode Workspace with several projects', () => {
+    multi()
+    const { result } = renderHook(() => useWorkspaceTitleMenu())
+    const labels = itemLabels(result.current.items)
+    expect(labels).not.toContain('Project Files')
+    expect(labels).toContain('Workspace')
+    expect(labels).not.toContain('Project')
+  })
+
+  it('moves a remembered Project Files mode back to Project', () => {
+    multi()
+    act(() => useProjectTree.setState({ mode: 'projectFiles' }))
+    render(<ProjectToolWindow />)
+    expect(useProjectTree.getState().mode).toBe('project')
+  })
+
+  it('puts Expand All next to Collapse All in the header', () => {
+    render(<OmniTermProjectHeaderActions />)
+    const buttons = screen.getAllByRole('button').map((button) => button.getAttribute('aria-label') ?? button.title)
+    const expand = buttons.findIndex((label) => label?.startsWith('Expand All'))
+    expect(expand).toBeGreaterThanOrEqual(0)
+    expect(buttons[expand + 1]).toMatch(/^Collapse All/)
+  })
+
   it('keeps the Project title for a single project', () => {
     act(() => {
       useWorkspaceStore.setState({
@@ -169,24 +197,55 @@ describe('ProjectToolWindow', () => {
     expect(workspaceActions.setFolderDisabled).not.toHaveBeenCalled()
   })
 
-  it('lists switched-off projects unchecked and activates one when checked', () => {
+  it('keeps a switched-off project in the tree unchecked and activates it when checked', () => {
     multi(true)
     render(<ProjectToolWindow />)
-    fireEvent.click(screen.getByLabelText('b is switched off'))
+    // No separate list of switched-off projects any more: the tree row carries the state.
+    expect(screen.queryByTestId('workspace-header-off')).toBeNull()
+    const { result } = renderHook(() => useRootChecked('/b'))
+    expect(result.current?.checked).toBe(false)
+    act(() => result.current?.toggle())
     expect(workspaceActions.setFolderDisabled).toHaveBeenCalledWith('w1', expect.objectContaining({ id: 'b' }), false)
   })
 
-  it('draws the project toggles as radio buttons that still behave as checkboxes', () => {
+  it('draws the project toggle as a square checkbox with a check mark only while on', () => {
     multi(true)
     render(<ProjectToolWindow />)
-    const off = screen.getByLabelText('b is switched off')
-    expect(off.getAttribute('type')).toBe('checkbox')
-    expect(off.dataset.look).toBe('radio')
-    expect(off.className).toContain('rounded-full')
-    act(() => useWorkspaceStore.setState({ selection: 'w1' } as never))
-    const root = render(<RootCheckbox path="/a" name="a" />)
-    const box = root.getByTestId('project-root-checkbox')
-    expect(box.getAttribute('type')).toBe('checkbox')
-    expect(box.dataset.look).toBe('radio')
+    const on = within(render(<RootCheckbox path="/a" name="a" />).container).getByTestId('project-root-checkbox')
+    expect(on.getAttribute('type')).toBe('checkbox')
+    expect(on.dataset.look).toBe('checkbox')
+    expect((on as HTMLInputElement).checked).toBe(true)
+    expect(on.nextElementSibling?.childElementCount).toBe(1)
+    const off = within(render(<RootCheckbox path="/b" name="b" />).container).getByTestId('project-root-checkbox')
+    expect((off as HTMLInputElement).checked).toBe(false)
+    expect(off.nextElementSibling?.childElementCount).toBe(0)
+  })
+
+  it('marks the first active project as default until another is chosen', () => {
+    multi()
+    useProjectFilterStore.setState({ defaults: {} })
+    render(<ProjectToolWindow />)
+    expect(renderHook(() => useManagedRoot('/a')).result.current?.isDefault).toBe(true)
+    const b = renderHook(() => useManagedRoot('/b'))
+    expect(b.result.current?.isDefault).toBe(false)
+    act(() => b.result.current?.setDefault())
+    expect(useProjectFilterStore.getState().defaults.w1).toBe('/b')
+    expect(isDefaultRoot('/b')).toBe(true)
+    expect(isDefaultRoot('/a')).toBe(false)
+  })
+
+  it('opens a terminal in the project folder from the row action', () => {
+    multi()
+    render(<ProjectToolWindow />)
+    const listener = vi.fn()
+    window.addEventListener('omniterm:new-session', listener)
+    try {
+      const { result } = renderHook(() => useManagedRoot('/b'))
+      expect(result.current).toBeDefined()
+      act(() => result.current?.openTerminal())
+      expect((listener.mock.calls[0]?.[0] as CustomEvent).detail).toEqual({ cwd: '/b' })
+    } finally {
+      window.removeEventListener('omniterm:new-session', listener)
+    }
   })
 })

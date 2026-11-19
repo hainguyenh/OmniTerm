@@ -28,6 +28,8 @@ export const OPTION_LABELS: Array<[ToggleOption, string]> = [
   ["showExcluded", "Show Excluded Files"],
   ["showMembers", "Show Members"],
   ["showRootPaths", "Show Root Paths"],
+  ["showExternalLibraries", "Show External Libraries"],
+  ["showScratches", "Show Scratches"],
   ["compact", "Compact Middle Packages"],
   ["foldersFirst", "Sort Folders First"],
   ["autoscrollFromSource", "Always Select Opened File"],
@@ -38,7 +40,7 @@ export const OPTION_LABELS: Array<[ToggleOption, string]> = [
 ];
 
 /** The first entries of OPTION_LABELS are Appearance options, the rest Behavior. */
-const APPEARANCE_OPTIONS = 6;
+const APPEARANCE_OPTIONS = 8;
 
 /** Header controls of the Project tool window (IDEA: Locate, Expand/Collapse All). */
 export function ProjectHeaderActions() {

@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react'
+import { useState } from 'react'
 
 import { Button, Checkbox, Dialog, Select, type DialogButton } from '../../ide/ui'
 import { Spinner } from '../../ide/ui/Spinner'
+import { progressText } from '../cleanupJob'
 import { formatBytes } from '../sessions/sessionCleanupModel'
 
-import { cleanTemp, daysSince, scanTemp, selectedBytes, type TempGroup } from './tempCleanupModel'
-import { useTempCleanup } from './tempCleanupStore'
+import { daysSince, selectedBytes } from './tempCleanupModel'
+import { cancelTempJobNow, startTempClean, startTempScan, useTempCleanup, type TempJob } from './tempCleanupStore'
 
 const AGE_OPTIONS = [
   { value: '0', label: 'Any time' },
@@ -28,35 +29,31 @@ export function TempCleanupOverlay() {
   return <TempCleanupDialog onClose={() => setOpen(false)} />
 }
 
+/** The footer text of a running job. */
+function jobMessage(job: TempJob): string {
+  if (job.cancelling) return 'Cancelling…'
+  const verb = job.kind === 'scan' ? 'Scanning' : 'Deleting'
+  return `${verb}: ${progressText(job.progress, 'entries', job.kind === 'scan' ? 'found' : 'freed')}`
+}
+
 /**
  * Clean Temp Files: the kinds of entry in the OS temp folder (folders by name, loose files by
  * extension) with their sizes, biggest first. Opening the dialog reads nothing: scanning a large
- * temp folder is slow, so it runs only when asked.
+ * temp folder takes a while, so it runs only when asked.
  * Deleting removes the ticked kinds' entries that have not changed for the chosen time; whatever
- * is locked or refused is skipped and reported. Nothing is read from inside the entries.
+ * is locked or refused is skipped and reported. A scan or delete keeps running when the dialog is
+ * hidden: the status bar's Background Tasks shows it, with Cancel.
  */
 export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
-  const [groups, setGroups] = useState<TempGroup[] | null>(null)
+  const groups = useTempCleanup((s) => s.groups)
+  const scannedAt = useTempCleanup((s) => s.scannedAt)
+  const job = useTempCleanup((s) => s.job)
+  const status = useTempCleanup((s) => s.status)
+  const error = useTempCleanup((s) => s.error)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [days, setDays] = useState(DEFAULT_IDLE_DAYS)
-  const [busy, setBusy] = useState<'scan' | 'clean' | null>(null)
   const [confirming, setConfirming] = useState(false)
-  const [status, setStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-
-  const scan = useCallback(async () => {
-    setBusy('scan')
-    setError(null)
-    try {
-      setGroups(await scanTemp())
-      setNow(Date.now())
-    } catch (cause) {
-      setError(String(cause))
-    } finally {
-      setBusy(null)
-    }
-  }, [])
+  const busy = job !== null
 
   const toggle = (key: string, on: boolean) =>
     setSelected((current) => {
@@ -66,21 +63,11 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
       return next
     })
 
-  const run = async () => {
+  const run = () => {
     setConfirming(false)
-    setBusy('clean')
-    try {
-      const report = await cleanTemp([...selected], days)
-      const skipped = report.skipped.length
-        ? ` ${plural(report.skipped.length, 'entry')} skipped (in use or refused): ${report.skipped[0]?.name}.`
-        : ''
-      setStatus(`Removed ${plural(report.removed, 'entry')}, freed ${formatBytes(report.freedBytes)}; kept ${report.kept}.${skipped}`)
-      setSelected(new Set())
-      await scan()
-    } catch (cause) {
-      setError(`Clean-up failed: ${String(cause)}`)
-      setBusy(null)
-    }
+    const keys = [...selected]
+    setSelected(new Set())
+    void startTempClean(keys, days)
   }
 
   const all = groups ?? []
@@ -88,19 +75,27 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
   const total = all.reduce((sum, group) => sum + group.bytes, 0)
   const buttons: DialogButton[] = confirming
     ? [
-        { label: 'Delete Permanently', role: 'default', onClick: () => void run() },
+        { label: 'Delete Permanently', role: 'default', onClick: run },
         { label: 'Back', role: 'cancel', onClick: () => setConfirming(false) },
       ]
-    : [{ label: 'Close', role: 'cancel', disabled: busy === 'clean', onClick: onClose }]
+    : busy
+      ? [
+          { label: 'Run in Background', role: 'default', onClick: onClose },
+          { label: 'Cancel', role: 'cancel', disabled: job.cancelling, onClick: cancelTempJobNow },
+        ]
+      : [{ label: 'Close', role: 'cancel', onClick: onClose }]
 
-  const message = confirming
-    ? `Delete entries of ${plural(chosen.length, 'kind')} (up to ${formatBytes(selectedBytes(all, selected))}) idle for ${days === 0 ? 'any time' : `${days}+ days`}? This cannot be undone.`
-    : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
+  const message = job
+    ? jobMessage(job)
+    : confirming
+      ? `Delete entries of ${plural(chosen.length, 'kind')} (up to ${formatBytes(selectedBytes(all, selected))}) idle for ${days === 0 ? 'any time' : `${days}+ days`}? This cannot be undone.`
+      : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
 
   return (
     <Dialog
       open
-      onClose={busy === 'clean' ? () => undefined : onClose}
+      // Closing while a job runs hides the dialog; the job goes on in the status bar.
+      onClose={onClose}
       title="Clean Temp Files"
       width={720}
       minHeight={360}
@@ -109,15 +104,15 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
       buttons={buttons}
       footerStart={
         <span className="flex min-w-0 items-center gap-2">
-          {busy && <Spinner label={busy === 'scan' ? 'Scanning' : 'Deleting'} />}
-          <span className={confirming ? 'text-[var(--danger)]' : 'text-[var(--fg-muted)]'} data-testid="temp-cleanup-status">
+          {busy && <Spinner label={job.kind === 'scan' ? 'Scanning' : 'Deleting'} />}
+          <span className={confirming ? 'text-[var(--danger)]' : 'truncate text-[var(--fg-muted)]'} data-testid="temp-cleanup-status">
             {message}
           </span>
         </span>
       }
       footer={
-        confirming ? null : (
-          <Button icon="trash" disabled={busy !== null || !chosen.length} onClick={() => setConfirming(true)} data-testid="temp-cleanup-delete">
+        confirming || busy ? null : (
+          <Button icon="trash" disabled={!chosen.length} onClick={() => setConfirming(true)} data-testid="temp-cleanup-delete">
             Delete…
           </Button>
         )
@@ -129,15 +124,20 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
           <Select
             aria-label="Idle for"
             value={String(days)}
-            disabled={busy !== null}
+            disabled={busy}
             options={AGE_OPTIONS}
             onChange={(value) => setDays(Number(value))}
           />
           <span className="flex-1" />
-          <Button icon="refresh" disabled={busy !== null} onClick={() => void scan()} data-testid="temp-cleanup-rescan">
+          <Button icon="refresh" disabled={busy} onClick={() => void startTempScan()} data-testid="temp-cleanup-rescan">
             {groups ? 'Rescan' : 'Scan'}
           </Button>
         </div>
+        {job?.kind === 'scan' && job.progress && job.progress.total > 0 && (
+          <div className="h-1 overflow-hidden rounded bg-[var(--border)]" data-testid="temp-cleanup-progress">
+            <div className="h-full bg-[var(--accent)]" style={{ width: `${Math.round((job.progress.done / job.progress.total) * 100)}%` }} />
+          </div>
+        )}
         {error && <span className="text-[var(--danger)]">{error}</span>}
         <div className="min-h-0 flex-1 overflow-auto rounded border border-[var(--border)]">
           <table className="w-full table-fixed border-collapse text-[12px]">
@@ -148,7 +148,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
                     aria-label="Select all"
                     checked={all.length > 0 && chosen.length === all.length}
                     indeterminate={chosen.length > 0 && chosen.length < all.length}
-                    disabled={busy !== null || !all.length}
+                    disabled={busy || !all.length}
                     onChange={(on) => setSelected(on ? new Set(all.map((group) => group.key)) : new Set())}
                   />
                 </th>
@@ -165,14 +165,14 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
                     <Checkbox
                       aria-label={`Select ${group.key}`}
                       checked={selected.has(group.key)}
-                      disabled={busy !== null}
+                      disabled={busy}
                       onChange={(on) => toggle(group.key, on)}
                     />
                   </td>
                   <td className="truncate px-2 py-1" title={group.key}>{group.key}</td>
                   <td className="px-2 py-1 text-right">{group.entries}</td>
                   <td className="px-2 py-1 text-right">{formatBytes(group.bytes)}</td>
-                  <td className="px-2 py-1 text-right">{daysSince(group.newest, now)}d ago</td>
+                  <td className="px-2 py-1 text-right">{daysSince(group.newest, scannedAt)}d ago</td>
                 </tr>
               ))}
             </tbody>

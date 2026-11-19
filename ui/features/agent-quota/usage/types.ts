@@ -52,6 +52,11 @@ export interface FetchUsageRequest {
   /** Name of the profile launcher the user ran (e.g. `claude-th`), resolved by name only. */
   launcher?: string | null
   modelFamily?: 'auto' | 'gemini' | 'claude' | null
+  /**
+   * Claude: the oldest status line record the read still takes, in ms; an older one sends it to
+   * `claude -p /usage`. Absent: the record at any age (profileCensus.ts decides).
+   */
+  maxRecordAgeMs?: number
 }
 
 export interface WakeRequest {

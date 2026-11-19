@@ -106,6 +106,7 @@ function createTauriAPI(): any {
     connections: {
       load: () => invoke('load_connections'),
       save: (data: unknown) => invoke('save_connections', { data }),
+      localSshSessions: () => invoke<LocalSshSession[]>('local_ssh_sessions').catch(() => []),
     },
 
     plugin: {

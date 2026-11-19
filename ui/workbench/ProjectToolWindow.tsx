@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
 import { ProjectView } from '../ide/features/project-tree/ProjectView'
-import { setMemberFilter, useProjectTree } from '../ide/features/project-tree/store'
+import { setMemberFilter, setViewMode, useProjectTree } from '../ide/features/project-tree/store'
 import { shortcutLabel } from '../ide/platform/keymap'
 import { IconButton } from '../ide/ui'
 import { useSelectedWorkspace } from '../platform/workspaceStore'
@@ -10,8 +10,9 @@ import { addFolderToWorkspace, addWorkspaceFromFolder } from './titlebar/workspa
 import { WorkspaceHeader } from './WorkspaceHeader'
 import { useProjectFilterStore } from './projectFilterStore'
 import { useProjectActiveToggles } from './useProjectActiveToggles'
+import { HIDDEN_VIEW_MODES } from './useWorkspaceTitleMenu'
 
-/** Project header: select the opened file, collapse all. */
+/** Project header: select the opened file, expand all, collapse all. */
 export function OmniTermProjectHeaderActions() {
   const alwaysSelect = useProjectTree((s) => s.options.autoscrollFromSource)
 
@@ -28,6 +29,14 @@ export function OmniTermProjectHeaderActions() {
           data-feature="p5.tree.toolbar.locate"
         />
       )}
+      <IconButton
+        icon="expand-all"
+        action="project.expandAll"
+        title="Expand All"
+        size="small"
+        iconSize={16}
+        data-feature="p5.tree.toolbar.expand"
+      />
       <IconButton
         icon="collapse-all"
         action="project.collapseAll"
@@ -50,6 +59,14 @@ function useProjectFilterSync(): void {
   useEffect(() => {
     setMemberFilter(filter === 'all' ? null : filter)
   }, [filter])
+}
+
+/** A view mode OmniTerm no longer offers (Project Files), remembered from before: back to Project. */
+function useOfferedViewMode(): void {
+  const mode = useProjectTree((s) => s.mode)
+  useEffect(() => {
+    if (HIDDEN_VIEW_MODES.has(mode)) setViewMode('project')
+  }, [mode])
 }
 
 /** A workspace without project folders: no tree, only a way to add one. */
@@ -80,6 +97,7 @@ export function ProjectToolWindow(_props: ProjectToolWindowProps) {
   const root = useProjectTree((s) => s.root)
   useProjectFilterSync()
   useProjectActiveToggles()
+  useOfferedViewMode()
 
   if (!root) return <NoProjectFolders />
   return (

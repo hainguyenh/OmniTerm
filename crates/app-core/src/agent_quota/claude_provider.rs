@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::claude_bridge::{parse_usage_record, usage_file};
+use super::claude_bridge::{last_usage_record, usage_file};
 use super::claude_usage::parse_claude_usage;
 use super::deps::{CliOptions, ProviderDeps};
 use super::iso_time::parse_iso;
@@ -137,9 +137,9 @@ pub(crate) fn find_trusted_dir(raw: Option<&str>, fallback: &Path) -> PathBuf {
         .unwrap_or_else(|| fallback.to_path_buf())
 }
 
-/// The status line bridge's fresh record for the profile. A launcher without a known directory
-/// sets its own, so there is no record to look for.
-fn bridge_reading(
+/// The status line bridge's last record for the profile, at any age (see `last_usage_record`). A
+/// launcher without a known directory sets its own, so there is no record to look for.
+pub(crate) fn bridge_reading(
     profile_dir: Option<&Path>,
     launcher: Option<&str>,
     deps: &dyn ProviderDeps,
@@ -149,15 +149,35 @@ fn bridge_reading(
         (None, None) => deps.home().join(AgentKind::Claude.default_dir()),
         (None, Some(_)) => return None,
     };
-    parse_usage_record(&deps.read_tail(&usage_file(&dir), BRIDGE_TAIL)?, deps.now())
+    last_usage_record(&deps.read_tail(&usage_file(&dir), BRIDGE_TAIL)?, deps.now())
 }
 
+/// The profile's quota: its status line record at any age, else the CLI. The service always goes
+/// through `fetch_claude_usage_within`; the provider tests read without an age limit.
+#[cfg(test)]
 pub fn fetch_claude_usage(
     profile_dir: Option<&Path>,
     launcher: Option<&str>,
     deps: &dyn ProviderDeps,
 ) -> QuotaSnapshot {
-    if let Some(reading) = bridge_reading(profile_dir, launcher, deps) {
+    fetch_claude_usage_within(profile_dir, launcher, None, deps)
+}
+
+/// The profile's quota: its status line record while it is at most `max_record_age_ms` old (any age
+/// for `None`), else `claude -p /usage`. The renderer asks for a young record while the profile may
+/// be spending quota the record cannot show yet (several sessions at once, a headless `claude -p`).
+pub fn fetch_claude_usage_within(
+    profile_dir: Option<&Path>,
+    launcher: Option<&str>,
+    max_record_age_ms: Option<i64>,
+    deps: &dyn ProviderDeps,
+) -> QuotaSnapshot {
+    let reading = bridge_reading(profile_dir, launcher, deps).filter(|reading| {
+        max_record_age_ms.map_or(true, |max| {
+            deps.now().saturating_sub(reading.fetched_at) <= max
+        })
+    });
+    if let Some(reading) = reading {
         return reading;
     }
     let Some(command) = agent_command(AgentKind::Claude, profile_dir, launcher, deps) else {
@@ -180,7 +200,12 @@ pub fn fetch_claude_usage(
         timeout: USAGE_TIMEOUT,
         cwd: Some(cwd),
     };
-    let args = ["-p".to_string(), "/usage".to_string()];
+    // Without `--no-session-persistence` every read left a conversation behind in the profile.
+    let args = [
+        "-p".to_string(),
+        "/usage".to_string(),
+        "--no-session-persistence".to_string(),
+    ];
 
     let mut last =
         QuotaSnapshot::failure(deps.now(), QuotaError::Failed, "claude /usage did not run.");

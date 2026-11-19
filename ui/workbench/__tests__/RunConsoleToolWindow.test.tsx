@@ -100,6 +100,16 @@ describe('RunConsoleToolWindow (Feature 28 & Feature 30)', () => {
     expect(executedActions).toContain('run.editConfigs')
   })
 
+  it('puts the actions right under the title and draws them with theme colours only', () => {
+    render(<RunConsoleToolWindow />)
+    const empty = screen.getByTestId('run-console-empty-state')
+    const actions = screen.getByTestId('run-console-actions')
+    expect(screen.getByText('Run Console').nextElementSibling).toBe(actions)
+    expect(actions.className).toContain('gap-6')
+    // Dark-only fallbacks (#eee, white on --surface) made the light theme unreadable.
+    expect(empty.innerHTML).not.toMatch(/--foreground|--surface|#eee/)
+  })
+
   it('renders active run session view when a session is active', () => {
     const dummySession: RunSession = {
       id: 'session-42',

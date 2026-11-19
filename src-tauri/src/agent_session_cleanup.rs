@@ -3,11 +3,18 @@
 //! takes ids from a listing, never paths.
 
 use app_core::agent_session_index::{
-    delete_sessions, list_sessions_idle, session_roots, AgentSessionFile, DeleteReport,
-    SessionAgent, SessionRoot,
+    delete_sessions_with, list_sessions_idle, session_roots, AgentSessionFile, DeleteReport,
+    Progress, SessionAgent, SessionRoot,
 };
 use serde::Serialize;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::{AppHandle, Runtime};
+
+use crate::cleanup_progress::ProgressEmitter;
+
+/// Set by `agent_session_files_delete_cancel`; cleared when a delete starts.
+static CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// The most ids one delete call accepts; a listing never has more.
 const MAX_DELETE_IDS: usize = app_core::agent_session_index::MAX_SESSIONS;
@@ -84,16 +91,39 @@ pub async fn agent_session_files_list(
     .map_err(|error| format!("Session listing failed: {error}"))
 }
 
-/// Deletes the conversations with these ids (from `agent_session_files_list`).
+/// Deletes the conversations with these ids (from `agent_session_files_list`), scanning their
+/// profiles once, with `session-cleanup:progress` events; `agent_session_files_delete_cancel`
+/// stops it before the next id.
 #[tauri::command]
-pub async fn agent_session_files_delete(ids: Vec<String>) -> Result<DeleteReport, String> {
+pub async fn agent_session_files_delete<R: Runtime>(
+    app: AppHandle<R>,
+    ids: Vec<String>,
+) -> Result<DeleteReport, String> {
     if ids.len() > MAX_DELETE_IDS || ids.iter().any(|id| id.len() > 256) {
         return Err("Invalid session list.".to_string());
     }
     let home = home_dir()?;
-    tauri::async_runtime::spawn_blocking(move || delete_sessions(&session_roots(&home), &ids))
-        .await
-        .map_err(|error| format!("Session delete failed: {error}"))
+    CANCEL.store(false, Ordering::Relaxed);
+    let emitter = ProgressEmitter::new(app, "session-cleanup:progress", "delete");
+    tauri::async_runtime::spawn_blocking(move || {
+        let step = |step| emitter.step(step);
+        delete_sessions_with(
+            &session_roots(&home),
+            &ids,
+            &Progress {
+                on_step: &step,
+                cancel: &CANCEL,
+            },
+        )
+    })
+    .await
+    .map_err(|error| format!("Session delete failed: {error}"))
+}
+
+/// Stops the running delete before its next session; the ones deleted stay deleted.
+#[tauri::command]
+pub fn agent_session_files_delete_cancel() {
+    CANCEL.store(true, Ordering::Relaxed);
 }
 
 #[cfg(test)]

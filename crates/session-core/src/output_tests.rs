@@ -280,3 +280,32 @@ fn trim_without_a_newline_never_cuts_inside_a_utf8_character() {
         );
     }
 }
+
+#[test]
+fn attach_switches_the_mouse_back_on_after_the_switch_was_trimmed_away() {
+    let mut output = Output::new("test".into(), false);
+    output.push(b"\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[?2004h");
+    let frame = format!("{}\n", "x".repeat(1023));
+    for _ in 0..(BUFFER_CAP / 1024 + 8) {
+        output.push(frame.as_bytes());
+    }
+    let (_, replay, _) = output.attach(1);
+    assert!(
+        !replay.starts_with(b"\x1b[?1049h"),
+        "the start-up switches fell out of the buffer"
+    );
+    assert!(replay.ends_with(b"x\n\x1b[?1000h\x1b[?1006h\x1b[?2004h"));
+}
+
+#[test]
+fn attach_restores_no_modes_for_seeded_history_or_a_closed_session() {
+    let mut output = Output::new("test".into(), false);
+    output.seed(b"\x1b[?1000h");
+    let (_, replay, _) = output.attach(1);
+    assert_eq!(replay, b"\x1b[?1000h", "history alone switches nothing on");
+
+    output.push(b"\x1b[?1002h");
+    output.status(DaemonStatus::Closed { code: 0 });
+    let (_, replay, _) = output.attach(2);
+    assert_eq!(replay, b"\x1b[?1000h\x1b[?1002h");
+}

@@ -1,5 +1,6 @@
 import { TOKYO_NIGHT } from "./themes";
 import { staticShellOptions } from "./shellOptions";
+import type { Connection } from "./domain";
 
 type Api = Window["omnitermAPI"];
 
@@ -79,6 +80,7 @@ const defaults: Api = {
   connections: {
     load: async () => ({ folders: [], connections: [] }),
     save: async () => {},
+    localSshSessions: async () => [],
   },
   customArt: {
     upload: async () => '',
@@ -171,6 +173,8 @@ const defaults: Api = {
     moveFile: async (_wsId: string, _from: string, to: string) => to,
     deleteFile: async () => {},
     loadConnections: async () => [],
+    saveConnection: async (_workspaceId: string, connection: Connection) => connection,
+    deleteConnection: async () => true,
   },
   connect: {
     rdp: async () => ({ ok: true }),

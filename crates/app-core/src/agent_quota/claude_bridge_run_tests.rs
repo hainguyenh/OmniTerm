@@ -54,10 +54,35 @@ fn stores_the_reading_and_prints_its_own_line_without_an_earlier_status_line() {
 fn keeps_the_last_record_when_the_input_has_no_rate_limits() {
     let dir = tempfile::tempdir().expect("temp dir");
     statusline_output(dir.path(), &status_input(42.0), NOW, &no_chain);
+    // Before the session's first reply, the line shows what the profile reported last.
     let output = statusline_output(dir.path(), "{\"session_id\":\"s\"}", NOW, &no_chain);
-    assert_eq!(output, "Claude quota: waiting for the first reply\n");
+    assert_eq!(output, "5h 42%\n");
     let stored = std::fs::read_to_string(usage_file(dir.path())).expect("the earlier record");
     assert!(stored.contains("42"));
+}
+
+#[test]
+fn waits_for_the_first_reply_without_any_record() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = statusline_output(dir.path(), "{\"session_id\":\"s\"}", NOW, &no_chain);
+    assert_eq!(output, "Claude quota: waiting for the first reply\n");
+}
+
+#[test]
+fn shows_how_full_the_context_window_is() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let input = json!({
+        "context_window": { "used_percentage": 18.2 },
+        "rate_limits": {
+            "five_hour": { "used_percentage": 42.0, "resets_at": 1_790_003_600 },
+            "seven_day": { "used_percentage": 13.0, "resets_at": 1_790_400_000 },
+        },
+    })
+    .to_string();
+    assert_eq!(
+        statusline_output(dir.path(), &input, NOW, &no_chain),
+        "ctx 18% · 5h 42% · wk 13%\n"
+    );
 }
 
 #[test]

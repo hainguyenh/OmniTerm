@@ -1,5 +1,5 @@
 import type { QuotaSnapshot, QuotaWindow, WindowKind } from './usage/types'
-import type { AgentConfig, PaceTier } from './quotaConfig'
+import type { AgentConfig, DisplayConfig, PaceTier } from './quotaConfig'
 
 /**
  * Zones are fractions of the *limit*, not of 100%: with the limit at 80%, 64% used is already
@@ -163,7 +163,7 @@ export function formatResetAbsolute(at: number): string {
 /**
  * The weekly auto-hide rule (Settings → Agent Quota → "Auto-hide weekly while usage < N%"): the
  * weekly line is hidden while its usage is below the threshold (default 60%), and shows again the
- * moment usage reaches it. A terminal can opt out with its "Show weekly quota" override.
+ * moment usage reaches it. A terminal overrides it either way with "Show weekly quota".
  */
 export function shouldHideWeekly(window: QuotaWindow, thresholdOrNow?: number, customThreshold?: number): boolean {
   if (window.kind !== 'weekly') return false
@@ -173,6 +173,22 @@ export function shouldHideWeekly(window: QuotaWindow, thresholdOrNow?: number, c
       ? thresholdOrNow
       : 60
   return window.usedPct < threshold
+}
+
+/**
+ * Whether a terminal shows its weekly line. A terminal's "Show weekly quota" choice (`true` or
+ * `false`) beats the rules; without one, the global "Lines › Weekly" switch and the auto-hide rule
+ * decide. The terminal's toggle mirrors this result, so a line the rules show can be hidden too.
+ */
+export function isWeeklyVisible(
+  window: QuotaWindow | undefined,
+  display: Pick<DisplayConfig, 'lines' | 'weeklyAutoHide' | 'weeklyThresholdPct'>,
+  showWeekly: boolean | undefined,
+): boolean {
+  if (typeof showWeekly === 'boolean') return showWeekly
+  if (!display.lines.weekly) return false
+  if (!window || !display.weeklyAutoHide) return true
+  return !shouldHideWeekly(window, display.weeklyThresholdPct ?? 60)
 }
 
 /** The 5h session window's own duration — Claude and Codex both reset it on this cadence. */

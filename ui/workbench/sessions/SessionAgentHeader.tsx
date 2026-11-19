@@ -1,7 +1,7 @@
 import { AttachmentsFooterButton } from '../../components/AttachmentsFooterButton'
 import { useAgentStatusLine } from '../../features/agent-quota/agentStatusLine'
+import { FooterMeters } from '../../features/agent-quota/FooterMeters'
 import { HeaderBusyArt } from '../../features/agent-quota/HeaderBusyArt'
-import { useQuota } from '../../features/agent-quota/quotaStore'
 import { requestRenewFromPane } from '../../hooks/useRenewSession'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { IconButton } from '../../ide/ui'
@@ -14,16 +14,6 @@ import { dispatchTerminalSave } from '../../utils/terminalCopyExtract'
 
 import { useSessionBridge } from './sessionBridge'
 import { useRootDarkMode } from './useRootDarkMode'
-
-/** Used share of the session's rolling quota window, while the quota monitor reads one. */
-function useSessionQuotaPercent(sessionId: string): number | null {
-  return useQuota((state) => {
-    const terminal = state.terminals[sessionId]
-    if (!state.config.enabled || !terminal) return null
-    const window = state.profiles[terminal.profileKey]?.lastGood?.windows.find((item) => item.kind === 'session')
-    return window ? Math.round(window.usedPct) : null
-  })
-}
 
 /** The last segment of a folder path (`D:/work/omniterm` → `omniterm`). */
 const folderName = (path: string | null | undefined): string =>
@@ -43,6 +33,7 @@ function useSessionProjectName(sessionId: string): string {
  * of its conversation (what the agent works on), else the project it works in. The terminal's own
  * name (`pwsh`, the shell's window title) says nothing about the agent, so it is never shown, and
  * the profile is the tab's label. Shown only while an AI agent runs; a plain terminal has no header.
+ * Beside the title, Duplicate starts the same agent and profile in a new terminal at the same folder.
  *
  * While the agent works (its terminal is active), the row up to 80% of its width is the activity zone: the
  * Agent Quota pace artwork travels across it (Settings › Agent Quota › Loading artwork). The zone
@@ -65,6 +56,13 @@ export function SessionAgentHeader({ sessionId }: { sessionId: string }) {
     >
       <Icon name={`ext:omniterm/agent-${brand}`} size={16} />
       <span className="min-w-0 max-w-[70%] shrink truncate text-[var(--fg-strong)]" title={title}>{title}</span>
+      <IconButton
+        icon="copy"
+        size="small"
+        className="flex-none"
+        title="Duplicate: start this agent with the same profile in a new terminal, in the same folder"
+        onClick={() => useSessionBridge.getState().api?.duplicateAgent?.(sessionId)}
+      />
       <span className="relative mr-[20%] flex min-w-[2.75rem] flex-1 self-stretch items-center overflow-x-clip" data-testid="agent-activity-zone">
         {busy && <HeaderBusyArt sessionId={sessionId} darkMode={darkMode} fallback={null} />}
       </span>
@@ -77,8 +75,10 @@ export function SessionAgentHeader({ sessionId }: { sessionId: string }) {
  * last lines (it floated over them before). The pane's font size controls sit centred in it, as
  * they do in a code editor's bottom breadcrumbs (`data-agent-footer`, EditorArea.module.css).
  *
- * At the left the agent's own status line (one row, whole on hover), else the quota used; at the
- * right, just left of the font size controls and the same size: the attachments list (Attach
+ * At the left, bars with numbers for the profile's 5-hour and weekly quota and the conversation's
+ * context: the agent's own status line already prints them as text in the terminal, so the footer
+ * draws them instead (the status line itself shows on hover). With nothing to draw, the status
+ * line as one row. At the right, just left of the font size controls and the same size: the attachments list (Attach
  * files, what this pane attached), Export the console (the whole conversation for Claude, else the
  * terminal buffer), Clear the console, and Renew it (a fresh agent in this pane, asked for and
  * done as Settings › renew strategy says).
@@ -86,8 +86,8 @@ export function SessionAgentHeader({ sessionId }: { sessionId: string }) {
 export function SessionAgentFooter({ sessionId }: { sessionId: string }) {
   const presence = usePanePresence(sessionId)
   const brand = agentBrandFor(presence?.agent)
-  const quota = useSessionQuotaPercent(sessionId)
   const statusLine = useAgentStatusLine(sessionId)
+  const statusText = statusLine?.text ?? undefined
   if (!brand) return null
   return (
     <div
@@ -95,12 +95,13 @@ export function SessionAgentFooter({ sessionId }: { sessionId: string }) {
       data-agent-footer=""
       data-testid="agent-footer"
     >
-      <span className="min-w-0 flex-1 truncate">
-        {statusLine ? (
-          <span title={statusLine} data-testid="agent-footer-statusline">{statusLine}</span>
-        ) : quota !== null && (
-          <span data-testid="agent-footer-quota">quota {quota}%</span>
-        )}
+      <span className="flex min-w-0 flex-1 items-center truncate">
+        <FooterMeters
+          sessionId={sessionId}
+          contextPct={statusLine?.contextPct ?? null}
+          title={statusText}
+          fallback={statusText && <span className="truncate" title={statusText} data-testid="agent-footer-statusline">{statusText}</span>}
+        />
       </span>
       {/* The font size controls are three small buttons 16px from the right edge. */}
       <div

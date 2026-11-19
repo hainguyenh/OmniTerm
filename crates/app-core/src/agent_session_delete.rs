@@ -5,6 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use super::gemini::agy_companions;
 use super::roots::sorted_names;
@@ -12,6 +13,7 @@ use super::{
     candidates, describe, AgentSessionFile, Candidate, DeleteReport, SessionAgent, SessionRoot,
 };
 use crate::agent_session_header::{is_uuid, read_header, SessionHeader};
+use crate::parallel::{Progress, Step};
 
 /// Removes `path` when it is a real file or directory; a symlink or a missing entry is left alone.
 pub(super) fn remove_owned(path: &Path) -> std::io::Result<()> {
@@ -109,6 +111,25 @@ fn find_sessions<'a>(roots: &'a [SessionRoot], ids: &[String]) -> Found<'a> {
 /// name; an id that is not there (already gone, or never a session) is reported as failed and
 /// nothing is touched.
 pub fn delete_sessions(roots: &[SessionRoot], ids: &[String]) -> DeleteReport {
+    static NEVER: AtomicBool = AtomicBool::new(false);
+    delete_sessions_with(
+        roots,
+        ids,
+        &Progress {
+            on_step: &|_| {},
+            cancel: &NEVER,
+        },
+    )
+}
+
+/// [`delete_sessions`] with progress after every id. The profiles are scanned once for the whole
+/// list (a clean-up of thousands used to rescan them for every small batch). Cancelling stops
+/// before the next id; the ids not reached are reported as failed with "Cancelled".
+pub fn delete_sessions_with(
+    roots: &[SessionRoot],
+    ids: &[String],
+    progress: &Progress<'_>,
+) -> DeleteReport {
     let profiles: HashSet<&str> = ids
         .iter()
         .filter_map(|id| id_parts(id))
@@ -121,26 +142,53 @@ pub fn delete_sessions(roots: &[SessionRoot], ids: &[String]) -> DeleteReport {
         .collect();
     let found = find_sessions(&scoped, ids);
     let mut report = DeleteReport::default();
-    for id in ids {
-        let Some((root, session)) = found.get(id) else {
-            report
-                .failed
-                .push((id.clone(), "Session not found".to_string()));
-            continue;
-        };
-        if let Err(error) = remove_owned(&session.path) {
-            report.failed.push((id.clone(), error.to_string()));
-            continue;
+    let total = ids.len() as u64;
+    let mut freed = 0;
+    for (index, id) in ids.iter().enumerate() {
+        if progress.cancelled() {
+            report.failed.extend(
+                ids[index..]
+                    .iter()
+                    .map(|id| (id.clone(), "Cancelled".to_string())),
+            );
+            break;
         }
-        for companion in companions(root, session) {
-            if let Err(error) = remove_owned(&companion) {
-                log::warn!(
-                    "[agent-sessions] could not remove {}: {error}",
-                    companion.display()
-                );
-            }
+        if let Some(size) = delete_one(&found, id, &mut report) {
+            freed += size;
         }
-        report.deleted.push(id.clone());
+        (progress.on_step)(Step {
+            done: index as u64 + 1,
+            total,
+            bytes: freed,
+        });
     }
     report
 }
+
+/// Deletes the conversation `id` and its companions; its transcript's size once deleted.
+fn delete_one(found: &Found<'_>, id: &str, report: &mut DeleteReport) -> Option<u64> {
+    let Some((root, session)) = found.get(id) else {
+        report
+            .failed
+            .push((id.to_string(), "Session not found".to_string()));
+        return None;
+    };
+    if let Err(error) = remove_owned(&session.path) {
+        report.failed.push((id.to_string(), error.to_string()));
+        return None;
+    }
+    for companion in companions(root, session) {
+        if let Err(error) = remove_owned(&companion) {
+            log::warn!(
+                "[agent-sessions] could not remove {}: {error}",
+                companion.display()
+            );
+        }
+    }
+    report.deleted.push(id.to_string());
+    Some(session.size)
+}
+
+#[cfg(test)]
+#[path = "agent_session_delete_tests.rs"]
+mod tests;

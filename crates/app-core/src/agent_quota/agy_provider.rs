@@ -40,6 +40,18 @@ pub fn detect_agy_active_family(
     })
 }
 
+/// The status line bridge's last record for the profile, read for the `active` model family.
+pub(crate) fn agy_bridge_reading(
+    profile_dir: Option<&Path>,
+    launcher: Option<&str>,
+    active: Option<ModelFamily>,
+    deps: &dyn ProviderDeps,
+) -> Option<QuotaSnapshot> {
+    agy_home(profile_dir, launcher, deps.home())
+        .and_then(|home| deps.read_tail(&agy_usage_file(&home), BRIDGE_TAIL))
+        .and_then(|raw| parse_agy_record(&raw, deps.now(), active))
+}
+
 pub fn fetch_agy_usage(
     profile_dir: Option<&Path>,
     launcher: Option<&str>,
@@ -47,11 +59,8 @@ pub fn fetch_agy_usage(
     deps: &dyn ProviderDeps,
 ) -> QuotaSnapshot {
     let active = family.or_else(|| detect_agy_active_family(profile_dir, deps));
-    // The status line bridge's fresh record, when the profile has one: no CLI run needed.
-    let bridged = agy_home(profile_dir, launcher, deps.home())
-        .and_then(|home| deps.read_tail(&agy_usage_file(&home), BRIDGE_TAIL))
-        .and_then(|raw| parse_agy_record(&raw, deps.now(), active));
-    if let Some(reading) = bridged {
+    // The status line bridge's record, once the profile has one: no CLI run needed.
+    if let Some(reading) = agy_bridge_reading(profile_dir, launcher, active, deps) {
         return reading;
     }
     let Some(command) = agent_command(AgentKind::Agy, profile_dir, launcher, deps) else {
