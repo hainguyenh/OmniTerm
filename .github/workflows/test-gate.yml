@@ -190,6 +190,9 @@ jobs:
         run: xvfb-run -a node scripts/run-rust-coverage.mjs
         env:
           CARGO_TARGET_DIR: ${{ github.workspace }}/target/coverage
+          # Xvfb has no DRI3/GBM device, so WebKitGTK's DMA-BUF renderer has nothing to allocate
+          # from; keep the smoke run's web view on the plain shared-memory path.
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
       - uses: actions/upload-artifact@v6
         if: always()
         with:

@@ -19,8 +19,8 @@ interface CommitState {
   groupByStaging: boolean;
   /** Whether the Git window's Local Changes tab previews the selection's diff. */
   diffPreview: boolean;
-  /** Whether the Commit tool window previews the selection's diff beside the changes (#1599). */
-  commitDiffPreview: boolean;
+  /** The Commit tab's project choice (several repositories) is collapsed to its header. */
+  projectsCollapsed: boolean;
   /** User overrides of the inclusion checkboxes (absolute path → state). */
   checks: Map<string, CheckState>;
   /** Changed blocks left out of the commit (absolute path → `hunkKeys`) of `hunks` files. */
@@ -57,7 +57,7 @@ export const useCommit = create<CommitState>(() => ({
   groupByDir: readBool("omniterm.vcs.groupByDir", false),
   groupByStaging: readBool("omniterm.vcs.groupByStaging", false),
   diffPreview: readBool("omniterm.vcs.diffPreview", true),
-  commitDiffPreview: readBool("omniterm.vcs.commitDiffPreview", false),
+  projectsCollapsed: readBool("omniterm.vcs.commitProjectsCollapsed", false),
   checks: new Map(),
   excludedHunks: new Map(),
   selection: [],
@@ -116,10 +116,10 @@ export function setDiffPreview(v: boolean) {
   }
 }
 
-export function setCommitDiffPreview(v: boolean) {
-  useCommit.setState({ commitDiffPreview: v });
+export function setProjectsCollapsed(v: boolean) {
+  useCommit.setState({ projectsCollapsed: v });
   try {
-    localStorage.setItem("omniterm.vcs.commitDiffPreview", String(v));
+    localStorage.setItem("omniterm.vcs.commitProjectsCollapsed", String(v));
   } catch {
     // ignore
   }

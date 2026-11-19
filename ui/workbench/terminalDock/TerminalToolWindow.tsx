@@ -15,6 +15,7 @@ import { SESSION_DRAG } from '../sessions/sessionDrag'
 import { sessionInput } from '../sessions/sessionInput'
 import { showSessionTab } from '../sessions/sessionTabActions'
 import { SessionTabStatus } from '../sessions/SessionTabStatus'
+import { focusSessionTerminal } from '../sessions/sessionTerminalFocus'
 import { agentProfileOf, sessionTabTitle } from '../sessions/sessionTabTitle'
 import { claimSurface, releaseSurface, setSurfaceShown } from '../sessions/surfaceRegistry'
 
@@ -95,6 +96,15 @@ async function closeDocked(id: string): Promise<void> {
   useSessionBridge.getState().api?.killSession(id)
 }
 
+/**
+ * Picking a docked tab hands the keyboard to its terminal. Switching to another session also
+ * focuses it once its surface is attached here; this covers picking the tab already shown.
+ */
+function selectDockedTab(id: string): void {
+  selectDocked(id)
+  focusSessionTerminal(id)
+}
+
 function moveToEditor(id: string): void {
   undockSession(id)
   showSessionTab(id)
@@ -130,7 +140,7 @@ export function TerminalDockTabs() {
       aria-label="Terminal sessions"
       items={items}
       activeId={active}
-      onSelect={selectDocked}
+      onSelect={selectDockedTab}
       onClose={(id) => void closeDocked(id)}
       onContextMenu={(id, event) => {
         event.preventDefault()

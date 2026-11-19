@@ -71,6 +71,18 @@ describe('workspace actions', () => {
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
+  it('hands the default project back to the first active one when the default is switched off', async () => {
+    useProjectFilterStore.setState({ defaults: { w1: 'D:/Work/App', w2: 'D:/Work/App' } })
+    await setFolderDisabled('w1', folder, true)
+    expect(useProjectFilterStore.getState().defaults).toEqual({ w2: 'D:/Work/App' })
+  })
+
+  it('keeps the default project when another project is switched off', async () => {
+    useProjectFilterStore.setState({ defaults: { w1: 'D:/Work/Other' } })
+    await setFolderDisabled('w1', folder, true)
+    expect(useProjectFilterStore.getState().defaults).toEqual({ w1: 'D:/Work/Other' })
+  })
+
   it('keeps a filter on another project when a project is switched off, and on when switched back', async () => {
     useProjectFilterStore.setState({ filter: 'D:/Other' })
     await setFolderDisabled('w1', folder, true)

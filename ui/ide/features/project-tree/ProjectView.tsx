@@ -362,11 +362,7 @@ const Row = memo(function Row({
             indices={matches}
             tone="accent"
           />
-          {managed?.isDefault && (
-            <span className={styles.defaultStar} title="Default project" data-testid="project-root-default">
-              <Icon name="star" size={12} />
-            </span>
-          )}
+          {managed && <RootActions managed={managed} name={node.label} />}
           {deco.suffix && !(node.root && !node.icon) && (
             <DecorationSuffix segments={deco.suffix} color={deco.suffixColor} />
           )}
@@ -374,18 +370,37 @@ const Row = memo(function Row({
           {/* A project root reads "name  path  [branch]" (OmniTerm's Project panel). */}
           {deco.suffix && node.root && !node.icon && <DecorationSuffix segments={bracketedBranch(deco.suffix)} />}
           {deco.badge && <span className={styles.badge}>{deco.badge}</span>}
-          {managed && <RootHoverActions managed={managed} name={node.label} />}
         </>
       )}
     </span>
   );
 });
 
-/** The buttons at the right of a workspace project's row, shown on hover: terminal here, default star. */
-function RootHoverActions({ managed, name }: { managed: ManagedRoot; name: string }) {
+/**
+ * The buttons next to a workspace project's name: the default star (shown on the default project,
+ * on hover for the others; click to set or unset the default), then Open Terminal Here on hover.
+ */
+function RootActions({ managed, name }: { managed: ManagedRoot; name: string }) {
   const stop = (e: ReactMouseEvent | ReactPointerEvent) => e.stopPropagation();
   return (
     <span className={styles.rootActions} data-testid="project-root-actions">
+      <button
+        type="button"
+        className={styles.rootAction}
+        data-pinned={managed.isDefault || undefined}
+        data-testid={managed.isDefault ? "project-root-default" : "project-root-set-default"}
+        title={managed.isDefault ? "Default project: click to unset" : "Set as Default Project"}
+        aria-label={managed.isDefault ? `Unset ${name} as default project` : `Set ${name} as default project`}
+        aria-pressed={managed.isDefault}
+        onPointerDown={stop}
+        onDoubleClick={stop}
+        onClick={(e) => {
+          e.stopPropagation();
+          managed.toggleDefault();
+        }}
+      >
+        <Icon name={managed.isDefault ? "star" : "star-outline"} size={12} />
+      </button>
       <button
         type="button"
         className={styles.rootAction}
@@ -400,23 +415,6 @@ function RootHoverActions({ managed, name }: { managed: ManagedRoot; name: strin
       >
         <Icon name="terminal" size={14} />
       </button>
-      {/* The default project already shows its star next to the name. */}
-      {!managed.isDefault && (
-        <button
-          type="button"
-          className={styles.rootAction}
-          title="Set as Default Project"
-          aria-label={`Set ${name} as default project`}
-          onPointerDown={stop}
-          onDoubleClick={stop}
-          onClick={(e) => {
-            e.stopPropagation();
-            managed.setDefault();
-          }}
-        >
-          <Icon name="star-outline" size={14} />
-        </button>
-      )}
     </span>
   );
 }

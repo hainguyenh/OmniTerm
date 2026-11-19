@@ -5,22 +5,34 @@ import { getPanePresence } from '../../utils/agentPresenceStore'
 import { normalizePastePayload } from '../../utils/paste'
 
 import { useSessionBridge } from './sessionBridge'
+import type { SessionInfo } from './sessionBridge'
 import { showSessionTab } from './sessionTabActions'
 import { activeSessionId } from './sessionToolbar'
 
-const runsAgent = (sessionId: string): boolean => !!getPanePresence(sessionId)?.agent
+/**
+ * Whether an agent CLI runs in the session right now. A local pane's presence can also be inferred
+ * from its tab title alone (pid 0) — the title outlives the agent once it exits, so pasting there
+ * would type the mentions into a plain shell and jump to that tab. Only a detected process counts
+ * locally; a remote pane has no process tree, so its title is all there is.
+ */
+const runsAgent = (session: SessionInfo): boolean => {
+  const presence = getPanePresence(session.id)
+  if (!presence?.agent) return false
+  return session.connType !== 'LOCAL' || presence.pid > 0
+}
 
 /**
  * The session "Send to Agent" types into: the active tab when an agent runs in it, else the most
  * recently opened session with an agent.
  */
 export function agentSessionTarget(): string | null {
-  const active = activeSessionId()
-  if (active && runsAgent(active)) return active
   const sessions = useSessionBridge.getState().sessions
+  const active = activeSessionId()
+  const activeSession = active ? sessions.find((session) => session.id === active) : undefined
+  if (activeSession && runsAgent(activeSession)) return activeSession.id
   for (let index = sessions.length - 1; index >= 0; index--) {
-    const id = sessions[index]!.id
-    if (runsAgent(id)) return id
+    const session = sessions[index]!
+    if (runsAgent(session)) return session.id
   }
   return null
 }

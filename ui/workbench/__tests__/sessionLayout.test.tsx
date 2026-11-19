@@ -116,6 +116,32 @@ describe('SessionTab', () => {
     expect(host.parentElement?.dataset.sessionParking).toBeDefined()
   })
 
+  // Regression: activating a session tab (or Focus Editor / Escape from a tool window) focused the
+  // editor area's box around the tab, so typing reached no terminal until the user clicked into it.
+  it('passes focus given to its editor box on to the session terminal', () => {
+    const asked: unknown[] = []
+    const onFocusTerminal = (event: Event) => asked.push((event as CustomEvent).detail)
+    window.addEventListener('omniterm:focus-terminal', onFocusTerminal)
+    const view = render(
+      <div tabIndex={-1} data-testid="editor-box">
+        <EditorShownProvider value>
+          <SessionTab input={sessionInput('a')} />
+        </EditorShownProvider>
+      </div>,
+    )
+    const box = screen.getByTestId('editor-box')
+    act(() => box.focus())
+    expect(asked).toEqual([{ id: 'a' }])
+    // Focus landing inside the tab (the terminal itself) is not forwarded again.
+    const inner = view.container.querySelector<HTMLElement>('[data-session-tab="a"]')!
+    inner.tabIndex = -1
+    act(() => inner.focus())
+    expect(asked).toHaveLength(1)
+    view.unmount()
+    act(() => box.focus())
+    window.removeEventListener('omniterm:focus-terminal', onFocusTerminal)
+  })
+
   it('renders nothing session-specific for an invalid input', () => {
     const { container } = render(<SessionTab input={{ kind: 'omniterm.session', key: 'bad' }} />)
     expect(container.querySelector('[data-session-tab]')).toBeNull()

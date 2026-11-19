@@ -1255,8 +1255,16 @@ export class EditorController implements SlotHost {
         return;
       }
       const slot = this.slots.get(tabId);
+      const tab = this.locateTab(tabId)?.tab;
       if (slot?.view) slot.focus();
       else if (slot) slot.wantsFocus = true;
+      else if (tab && !isTextTab(tab))
+        // OmniTerm: a custom editor (a session's terminal) has no slot. Focus its content once the
+        // switch has rendered, as opening one does; otherwise focus stayed on the clicked tab and
+        // typing never reached the terminal until it was clicked into.
+        requestAnimationFrame(() => {
+          if (this.activeTabOf()?.id === tabId) this.focus();
+        });
       else
         void this.ensureSlot(tabId).then((sl) => {
           if (sl && this.activeTabOf()?.id === tabId) {

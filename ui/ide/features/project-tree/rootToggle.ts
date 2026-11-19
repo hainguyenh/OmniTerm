@@ -6,6 +6,8 @@ export interface RootActions {
   toggle: (path: string) => void;
   /** Makes it the workspace's default project (where new terminals and agents start). */
   setDefault: (path: string) => void;
+  /** Forgets the chosen default, so the workspace's first active project is the default again. */
+  clearDefault: () => void;
   /** Opens a terminal in the project folder. */
   openTerminal: (path: string) => void;
 }
@@ -51,6 +53,8 @@ export interface ManagedRoot {
   /** The workspace's default project. */
   isDefault: boolean;
   setDefault: () => void;
+  /** Sets this project as the default, or unsets it when it already is. */
+  toggleDefault: () => void;
   openTerminal: () => void;
 }
 
@@ -65,6 +69,7 @@ export function useManagedRoot(path: string): ManagedRoot | undefined {
     active: checked,
     isDefault,
     setDefault: () => actions.setDefault(path),
+    toggleDefault: () => (isDefault ? actions.clearDefault() : actions.setDefault(path)),
     openTerminal: () => actions.openTerminal(path),
   };
 }

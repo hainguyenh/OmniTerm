@@ -36,6 +36,8 @@ export interface ProjectFilterState {
   /** Shows one project (or all) in the Project panel; picking a project also makes it the default. */
   setFilter: (filter: string | 'all') => void
   setDefaultProject: (workspaceId: string, path: string) => void
+  /** Forgets the chosen default: the workspace's first active project is the default again. */
+  clearDefaultProject: (workspaceId: string) => void
   reset: () => void
 }
 
@@ -51,6 +53,12 @@ export const useProjectFilterStore = create<ProjectFilterState>((set, get) => ({
   },
   setDefaultProject: (workspaceId, path) => {
     const defaults = { ...get().defaults, [workspaceId]: path }
+    set({ defaults })
+    storeDefaults(defaults)
+  },
+  clearDefaultProject: (workspaceId) => {
+    if (!(workspaceId in get().defaults)) return
+    const defaults = Object.fromEntries(Object.entries(get().defaults).filter(([id]) => id !== workspaceId))
     set({ defaults })
     storeDefaults(defaults)
   },

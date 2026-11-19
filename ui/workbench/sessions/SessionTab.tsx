@@ -6,6 +6,7 @@ import { useSessionBridge } from './sessionBridge'
 import { stepSessionFontSize } from './sessionFontSize'
 import { parseSessionInput } from './sessionInput'
 import { SessionAgentFooter, SessionAgentHeader } from './SessionAgentHeader'
+import { focusSessionTerminal } from './sessionTerminalFocus'
 import { claimSurface, releaseSurface, setSurfaceShown } from './surfaceRegistry'
 
 /**
@@ -16,6 +17,7 @@ import { claimSurface, releaseSurface, setSurfaceShown } from './surfaceRegistry
 export function SessionTab({ input }: { input: EditorInput }) {
   const sessionId = parseSessionInput(input)
   const ref = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const shown = useEditorShown()
   const shownRef = useRef(shown)
   shownRef.current = shown
@@ -33,6 +35,19 @@ export function SessionTab({ input }: { input: EditorInput }) {
     if (sessionId) setSurfaceShown(sessionId, owner, shown)
   }, [sessionId, owner, shown])
 
+  // Focusing the editor (clicking the tab, Escape from a tool window, Focus Editor) focuses the
+  // focusable box the editor area wraps this tab in, which is our parent element. The keys belong
+  // to the terminal, so focus moves on into it.
+  useEffect(() => {
+    const box = rootRef.current?.parentElement
+    if (!sessionId || !box) return undefined
+    const onFocus = (event: FocusEvent) => {
+      if (event.target === box) focusSessionTerminal(sessionId)
+    }
+    box.addEventListener('focus', onFocus)
+    return () => box.removeEventListener('focus', onFocus)
+  }, [sessionId])
+
   // The pane's font size controls (and Increase / Decrease Font Size) step this session's terminal.
   useEffect(() => {
     const container = ref.current
@@ -43,7 +58,7 @@ export function SessionTab({ input }: { input: EditorInput }) {
   // The surface box keeps its place between the optional agent header and footer, so either
   // coming and going only resizes the terminal; it never re-parents it.
   return (
-    <div className="flex h-full w-full min-h-0 min-w-0 flex-col">
+    <div ref={rootRef} className="flex h-full w-full min-h-0 min-w-0 flex-col">
       {sessionId && <SessionAgentHeader sessionId={sessionId} />}
       <div ref={ref} className="relative w-full min-h-0 min-w-0 flex-1" data-session-tab={sessionId ?? undefined}>
         {!exists && (

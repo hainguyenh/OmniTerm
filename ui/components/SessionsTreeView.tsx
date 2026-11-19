@@ -10,7 +10,7 @@ import type { QuickStartProject } from '../utils/sessionQuickStart'
 import { useWorkspaceStore } from '../platform/workspaceStore'
 import { workspaceMenuItems } from '../workbench/titlebar/workspaceMenu'
 import { currentClaudeProfiles, refreshClaudeProfiles } from '../utils/useClaudeProfiles'
-import { projectStartMenuItems } from '../workbench/sessions/sessionRowMenu'
+import { claudeProfileMenuItems, projectStartMenuItems } from '../workbench/sessions/sessionRowMenu'
 import { useTerminalDock } from '../workbench/terminalDock/terminalDockStore'
 import { SessionLiveRow } from './SessionLiveRow'
 import { Tooltip } from './Tooltip'
@@ -88,7 +88,20 @@ function EmptyProjectRow({ group, indent, project, onStart }: {
       {project && onStart && (
         <>
           <button type="button" className="rounded px-1 hover:text-theme-fg hover:bg-[var(--theme-hover-bg)]" onClick={() => onStart(project, null)}>Terminal</button>
-          <button type="button" className="rounded px-1 hover:text-theme-fg hover:bg-[var(--theme-hover-bg)]" onClick={() => onStart(project, 'claude')}>Claude</button>
+          <button
+            type="button"
+            title="Start Claude (right-click to pick a profile)"
+            className="rounded px-1 hover:text-theme-fg hover:bg-[var(--theme-hover-bg)]"
+            onClick={() => onStart(project, 'claude')}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              showContextMenu(event, claudeProfileMenuItems(project, onStart, currentClaudeProfiles()))
+              // The menu does not wait for the scan; a profile added since shows up the next time.
+              void refreshClaudeProfiles()
+            }}
+          >
+            Claude
+          </button>
         </>
       )}
     </div>

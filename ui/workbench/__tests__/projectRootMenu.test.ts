@@ -11,7 +11,7 @@ import { setRootToggles } from '../../ide/features/project-tree/rootToggle'
 import { useProject } from '../../ide/platform/project'
 
 const noop = () => undefined
-const actions = { toggle: noop, setDefault: noop, openTerminal: noop }
+const actions = { toggle: noop, setDefault: noop, clearDefault: noop, openTerminal: noop }
 
 const root = (path: string) => ({ key: path, path, label: path.slice(1), root: true, dir: true }) as unknown as ProjectNode
 

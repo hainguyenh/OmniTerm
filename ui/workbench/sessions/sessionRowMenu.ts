@@ -1,7 +1,7 @@
 import { getQuotaState, quotaCommands } from '../../features/agent-quota/quotaStore'
 import { isHeld } from '../../features/agent-quota/quotaGuard'
 import type { MenuItem } from '../../ide/ui/Menu'
-import { QUICK_START_AGENTS, type ClaudeProfileChoice, type QuickStartProject } from '../../utils/sessionQuickStart'
+import { DEFAULT_CLAUDE_CHOICE, QUICK_START_AGENTS, type ClaudeProfileChoice, type QuickStartProject } from '../../utils/sessionQuickStart'
 import { undockSession } from '../terminalDock/terminalDockStore'
 
 import { sessionById, useSessionBridge } from './sessionBridge'
@@ -40,6 +40,27 @@ export function sessionRowMenuItems(sessionId: string, show: () => void): MenuIt
     ...sessionTabMenuItems(sessionId),
     { kind: 'separator' },
     { label: 'Kill Session', icon: 'close', run: () => void killSession(sessionId) },
+  ]
+}
+
+/**
+ * The context menu of a project's "Claude" link: start Claude in the project with one of the
+ * profiles found on this machine. The default is always listed, so the menu is never empty.
+ */
+export function claudeProfileMenuItems(
+  project: QuickStartProject,
+  start: (project: QuickStartProject, command: string | null) => void,
+  claudeProfiles: readonly ClaudeProfileChoice[],
+): MenuItem[] {
+  const choices = claudeProfiles.length ? claudeProfiles : [DEFAULT_CLAUDE_CHOICE]
+  return [
+    { kind: 'header', label: 'Start Claude with profile' },
+    ...choices.map((choice): MenuItem => ({
+      label: choice.label,
+      verbatim: true,
+      icon: 'agent-claude',
+      run: () => start(project, choice.command),
+    })),
   ]
 }
 

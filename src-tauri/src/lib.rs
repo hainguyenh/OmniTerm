@@ -142,8 +142,12 @@ pub fn run() {
                 log::error!("[setup] no 'main' window in tauri.conf.json");
                 return Ok(());
             };
+            // The coverage smoke run has no one to read the inspector, and on a headless runner it
+            // would only add a second web view to tear down on the way out.
             #[cfg(debug_assertions)]
-            window.open_devtools();
+            if !smoke_test {
+                window.open_devtools();
+            }
 
             let win_clone = window.clone();
             window.on_window_event(move |event| {
@@ -184,11 +188,21 @@ pub fn run() {
             // itself runs; launching the real binary under instrumentation covers them without
             // needing a display-visible session or any user interaction.
             if smoke_test {
-                std::thread::spawn(|| {
+                let exit_handle = handle.clone();
+                std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
-                    // std::process::exit (not the handle.exit tauri event-loop exit) so the linked
-                    // LLVM profile runtime's atexit flush runs and the profraw is written.
-                    std::process::exit(0);
+                    // Ask the event loop to quit instead of calling std::process::exit here. Exiting
+                    // from this thread ran libc's atexit handlers and the shared-library destructors
+                    // (Mesa/EGL, WebKitGTK, GLib) while the main thread was still inside GTK and
+                    // WebKit, which SIGSEGVs intermittently on the Xvfb CI runner. `exit` makes
+                    // the main thread leave the GTK loop, destroy the windows, and then call
+                    // std::process::exit itself (tao's `run`), so the LLVM profile runtime's
+                    // atexit flush still runs and the profraw is written.
+                    exit_handle.exit(0);
+                    // A loop that never honours the request must fail the gate, not hang it.
+                    std::thread::sleep(std::time::Duration::from_secs(120));
+                    log::error!("[coverage-smoke] event loop did not exit within 120s");
+                    std::process::exit(1);
                 });
             }
 

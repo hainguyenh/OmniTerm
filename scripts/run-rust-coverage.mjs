@@ -106,7 +106,8 @@ try {
   run(['llvm-cov', ...COVERAGE_BUILD_FLAGS, '--no-report', '--workspace'])
   // Boot the real binary once under instrumentation so the JSON function metric covers the
   // binary-only Wry instantiations (main, run(), with_invoke_handler, and the generated wrapper of
-  // every #[tauri::command]). --coverage-smoke makes run() exit 0 after setup. --no-clean keeps the
+  // every #[tauri::command]). --coverage-smoke makes run() request an event-loop exit after setup,
+  // so the process leaves with code 0 from the main thread and the profile is flushed at exit. --no-clean keeps the
   // test run's profraws so the final report merges both; llvm-cov run requires a report when
   // --no-clean is set, so its stdout table is just discarded -- only coverage data is collected.
   run(['llvm-cov', 'run', ...COVERAGE_BUILD_FLAGS, '--no-clean', '--bin', 'omniterm', '--', '--coverage-smoke'])

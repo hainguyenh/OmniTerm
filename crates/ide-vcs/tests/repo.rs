@@ -1531,6 +1531,8 @@ fn linked_worktree_and_submodule() {
     let repo = Repo::discover(&wt).unwrap().unwrap();
     assert_eq!(std::fs::canonicalize(repo.root()).unwrap(), std::fs::canonicalize(&wt).unwrap());
     assert_eq!(repo.branch_info().unwrap().head.as_deref(), Some("wt-branch"));
+    assert!(repo.is_linked_worktree(), "a `git worktree add` checkout is a linked worktree");
+    assert!(!fx.repo().is_linked_worktree(), "the main working tree is not a linked worktree");
     std::fs::write(wt.join("a.txt"), "changed\n").unwrap();
     let st = repo.status().unwrap();
     assert_eq!(status_of(&st, "a.txt").unstaged, Some(ChangeKind::Modified));
@@ -1554,6 +1556,7 @@ fn linked_worktree_and_submodule() {
     let inner = Repo::discover(&fx.path("sub")).unwrap().unwrap();
     assert_eq!(std::fs::canonicalize(inner.root()).unwrap(), std::fs::canonicalize(fx.path("sub")).unwrap());
     assert_eq!(inner.log(&LogQuery::default()).unwrap().len(), 1);
+    assert!(!inner.is_linked_worktree(), "a submodule is not a linked worktree");
     let outer = fx.repo();
     assert!(outer.status().unwrap().is_empty(), "{:#?}", outer.status().unwrap());
     std::fs::write(fx.path("sub/s.txt"), "dirty\n").unwrap();

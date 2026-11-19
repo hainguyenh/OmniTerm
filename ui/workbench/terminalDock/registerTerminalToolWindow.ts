@@ -2,6 +2,7 @@ import { registerAction } from '../../ide/platform/actions'
 import { registerToolWindow } from '../../ide/workbench/contributions'
 
 import { requestDockedTerminal, TERMINAL_WINDOW } from './terminalDockActions'
+import { installTerminalEscapeClaim } from './terminalEscapeClaim'
 import { startTerminalDockSync, useTerminalDock } from './terminalDockStore'
 import { TerminalDockTabs, TerminalToolWindow } from './TerminalToolWindow'
 
@@ -12,6 +13,7 @@ import { TerminalDockTabs, TerminalToolWindow } from './TerminalToolWindow'
 export function registerTerminalToolWindow(): () => void {
   const disposers = [
     startTerminalDockSync(),
+    installTerminalEscapeClaim(),
     registerToolWindow({
       id: TERMINAL_WINDOW,
       title: 'Terminal',

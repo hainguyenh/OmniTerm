@@ -126,6 +126,11 @@ export async function setFolderDisabled(workspaceId: string, folder: WorkspaceFo
     const filter = useProjectFilterStore.getState()
     // The Project panel was showing only this folder: it is gone from the project now.
     if (disabled && filter.filter !== 'all' && comparable(filter.filter) === comparable(folder.path)) filter.reset()
+    // A switched-off project cannot be where new terminals start: the first active one takes over.
+    const chosenDefault = filter.defaults[workspaceId]
+    if (disabled && chosenDefault && comparable(chosenDefault) === comparable(folder.path)) {
+      filter.clearDefaultProject(workspaceId)
+    }
     await useWorkspaceStore.getState().refresh()
   } catch (error) {
     diag.error('[workspace] could not switch a folder on or off', error)

@@ -208,12 +208,12 @@ describe('ProjectToolWindow', () => {
     expect(workspaceActions.setFolderDisabled).toHaveBeenCalledWith('w1', expect.objectContaining({ id: 'b' }), false)
   })
 
-  it('draws the project toggle as a square checkbox with a check mark only while on', () => {
+  it('draws the project toggle as a rounded box holding a dot only while on', () => {
     multi(true)
     render(<ProjectToolWindow />)
     const on = within(render(<RootCheckbox path="/a" name="a" />).container).getByTestId('project-root-checkbox')
     expect(on.getAttribute('type')).toBe('checkbox')
-    expect(on.dataset.look).toBe('checkbox')
+    expect(on.dataset.look).toBe('dot')
     expect((on as HTMLInputElement).checked).toBe(true)
     expect(on.nextElementSibling?.childElementCount).toBe(1)
     const off = within(render(<RootCheckbox path="/b" name="b" />).container).getByTestId('project-root-checkbox')
@@ -232,6 +232,29 @@ describe('ProjectToolWindow', () => {
     expect(useProjectFilterStore.getState().defaults.w1).toBe('/b')
     expect(isDefaultRoot('/b')).toBe(true)
     expect(isDefaultRoot('/a')).toBe(false)
+  })
+
+  it('unsets the default from its star, handing it back to the first active project', () => {
+    multi()
+    useProjectFilterStore.setState({ defaults: { w1: '/b' } })
+    render(<ProjectToolWindow />)
+    const b = renderHook(() => useManagedRoot('/b'))
+    expect(b.result.current?.isDefault).toBe(true)
+    act(() => b.result.current?.toggleDefault())
+    expect(useProjectFilterStore.getState().defaults.w1).toBeUndefined()
+    expect(isDefaultRoot('/a')).toBe(true)
+    const again = renderHook(() => useManagedRoot('/b'))
+    expect(again.result.current?.isDefault).toBe(false)
+    act(() => again.result.current?.toggleDefault())
+    expect(useProjectFilterStore.getState().defaults.w1).toBe('/b')
+  })
+
+  it('never keeps a switched-off project as the default', () => {
+    multi(true)
+    useProjectFilterStore.setState({ defaults: { w1: '/b' } })
+    render(<ProjectToolWindow />)
+    expect(isDefaultRoot('/b')).toBe(false)
+    expect(isDefaultRoot('/a')).toBe(true)
   })
 
   it('opens a terminal in the project folder from the row action', () => {

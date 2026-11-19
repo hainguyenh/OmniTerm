@@ -94,6 +94,8 @@ pub struct VcsRoot {
     pub head: Option<String>,
     /// HEAD commit; `None` before the first commit.
     pub head_commit: Option<String>,
+    /// A linked worktree (`git worktree add`), not the repository's main working tree.
+    pub linked_worktree: bool,
 }
 
 #[derive(Clone, Serialize, Deserialize, Type)]
@@ -275,7 +277,13 @@ pub fn vcs_roots(host: &Host, window: &str) -> IdeResult<Vec<VcsRoot>> {
         .into_iter()
         .map(|r| {
             let (head, head_commit) = r.head().unwrap_or_default();
-            VcsRoot { root: r.root().to_path_buf().into(), operation: r.operation().ok().flatten(), head, head_commit }
+            VcsRoot {
+                root: r.root().to_path_buf().into(),
+                operation: r.operation().ok().flatten(),
+                head,
+                head_commit,
+                linked_worktree: r.is_linked_worktree(),
+            }
         })
         .collect())
 }

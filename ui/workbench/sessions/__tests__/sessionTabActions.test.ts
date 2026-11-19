@@ -29,7 +29,8 @@ describe('showSessionTab', () => {
     dockSession('b')
     showSessionTab('a')
     expect(useTerminalDock.getState().active).toBe('a')
-    expect(mocks.show).toHaveBeenCalledWith(TERMINAL_WINDOW)
+    // Focused: typing goes straight to the docked terminal.
+    expect(mocks.show).toHaveBeenCalledWith(TERMINAL_WINDOW, true)
     expect(mocks.openInput).not.toHaveBeenCalled()
   })
 

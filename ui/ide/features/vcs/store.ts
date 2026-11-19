@@ -20,6 +20,8 @@ import { effectiveKind, repoLabel, rootOf, statusDecorations, stripSlash } from 
 export interface RepoHead {
   head: string | null;
   headCommit: string | null;
+  /** A linked worktree (`git worktree add`), not the repository's main working tree. */
+  linkedWorktree?: boolean;
 }
 
 export interface VcsState {
@@ -216,7 +218,9 @@ export function refreshNow(): Promise<void> {
       // `null` (before the first refresh) is the primary repository, listed first.
       const shown = s.repo && roots.includes(s.repo) ? s.repo : (roots[0] ?? null);
       const repo = attentionRepo(shown, s.operations, operations) ?? shown;
-      const heads = Object.fromEntries(vcsRoots.map((r) => [r.root, { head: r.head, headCommit: r.headCommit }]));
+      const heads = Object.fromEntries(
+        vcsRoots.map((r) => [r.root, { head: r.head, headCommit: r.headCommit, linkedWorktree: r.linkedWorktree }]),
+      );
       useVcs.setState({ operations, heads });
       const sameRoots = roots.join("\n") === s.roots.join("\n");
       if (repo !== s.repo || !sameRoots) useVcs.setState({ roots: sameRoots ? s.roots : roots, repo });

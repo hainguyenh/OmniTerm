@@ -12,12 +12,18 @@ vi.mock('../../ide/ui/Menu', async (importOriginal) => ({
   showContextMenu: menu.show,
 }))
 vi.mock('../BookmarksPanel', () => ({ default: () => null }))
+const profiles = vi.hoisted(() => ({ list: vi.fn() }))
+vi.mock('../../features/agent-quota/agentQuotaAPI', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  listAgentProfiles: () => profiles.list(),
+}))
 
 import { registerQuotaCommands, resetQuotaStore, updateQuota } from '../../features/agent-quota/quotaStore'
 import type { MenuItem } from '../../ide/ui/Menu'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 import { clearStoredSessions } from '../../utils/agentSessionStorage'
+import { refreshClaudeProfiles } from '../../utils/useClaudeProfiles'
 import { sessionRowLabel } from '../../utils/sessionRowLabel'
 import { resetSessionBridge, useSessionBridge } from '../../workbench/sessions/sessionBridge'
 import SessionsPanel from '../SessionsPanel'
@@ -25,13 +31,15 @@ import SessionsPanel from '../SessionsPanel'
 const local = { id: 'c1', name: 'Local', type: 'LOCAL', host: '', port: '', user: '', localCwd: 'D:/work/app' } as Connection
 const workspace = { id: 'w1', name: 'Work', folders: [{ path: 'D:/work/app' }] } as unknown as Workspace
 
-function setup() {
+const emptyWorkspace = { id: 'w1', name: 'Work', folders: [{ path: 'D:/work/app' }, { path: 'D:/work/lib' }] } as unknown as Workspace
+
+function setup(workspaces: Workspace[] = [workspace]) {
   const onStart = vi.fn()
   const onShowTab = vi.fn()
   render(
     <SessionsPanel
       tabs={[{ id: 't1', connId: 'c1', name: 'pwsh' }]}
-      workspaces={[workspace]}
+      workspaces={workspaces}
       connById={(id) => (id === 'c1' ? local : undefined)}
       isEditor={() => false}
       sessionCwds={{}}
@@ -57,6 +65,7 @@ beforeEach(() => {
   resetPanePresenceForTests()
   resetQuotaStore()
   menu.show.mockClear()
+  profiles.list.mockResolvedValue([])
   useWorkspaceStore.setState({ workspaces: [workspace], selection: 'w1', scope: 'workspace' })
   useSessionBridge.setState({
     sessions: [{ id: 't1', connId: 'c1', name: 'pwsh', connType: 'LOCAL', workspaceId: 'w1', status: 'connected', busy: false, cwd: 'D:/work/app', hasCommand: false }],
@@ -116,5 +125,42 @@ describe('Sessions panel menus', () => {
     run(items, 'Show')
     expect(onShowTab).toHaveBeenCalledWith('t1')
     stop()
+  })
+})
+
+describe('Sessions panel Claude link', () => {
+  /** Scans the profiles first: the menu opens with the last scan's result. */
+  async function setupEmptyProject(found: unknown[]) {
+    profiles.list.mockResolvedValue(found)
+    await act(() => refreshClaudeProfiles())
+    useWorkspaceStore.setState({ workspaces: [emptyWorkspace] })
+    return setup([emptyWorkspace])
+  }
+
+  it('lists the Claude profiles on right-click and starts the chosen one in the project', async () => {
+    const { onStart } = await setupEmptyProject([
+      { agent: 'claude', profileName: 'claude-work', profileDir: null, launcher: 'claude-work' },
+      { agent: 'codex', profileName: 'codex-alt', profileDir: null, launcher: 'codex-alt' },
+    ])
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Claude' }))
+    expect(labels(lastMenu())).toEqual(['Start Claude with profile', 'claude (default)', 'claude-work'])
+    run(lastMenu(), 'claude-work')
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/lib' }), 'claude-work')
+  })
+
+  // Without launchers only the default is offered: the menu still opens so the right-click is not lost.
+  it('offers just the default profile when no other profile is found', async () => {
+    const { onStart } = await setupEmptyProject([])
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'Claude' }))
+    expect(labels(lastMenu())).toEqual(['Start Claude with profile', 'claude (default)'])
+    run(lastMenu(), 'claude (default)')
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/lib' }), 'claude')
+  })
+
+  it('still starts the default profile on a plain click', async () => {
+    const { onStart } = await setupEmptyProject([])
+    fireEvent.click(screen.getByRole('button', { name: 'Claude' }))
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/work/lib' }), 'claude')
+    expect(menu.show).not.toHaveBeenCalled()
   })
 })

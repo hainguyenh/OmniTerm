@@ -55,23 +55,46 @@
 .switchedOff {
   opacity: 0.5;
 }
-.defaultStar {
-  flex: none;
+/* A workspace project's on/off toggle: a rounded box holding an accent dot while on. */
+.rootToggle {
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--border-checkbox, var(--control-off));
+  background: var(--bg-checkbox, var(--bg-button));
+  pointer-events: none;
 }
-/* Workspace project row: terminal / default buttons at the right edge, shown on hover. */
+.rootToggleOn {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.rootToggleDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* Workspace project row: the default star and an open-terminal button, right after the name. */
 .rootActions {
   flex: none;
-  display: none;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  padding: 0 4px;
-}
-.content:hover .rootActions,
-.content:focus-within .rootActions {
   display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+}
+/* The star stays visible on the default project; everything else shows on hover only. */
+.rootAction:not([data-pinned]) {
+  visibility: hidden;
+}
+.content:hover .rootAction,
+.content:focus-within .rootAction {
+  visibility: visible;
+}
+.rootAction[data-pinned] {
+  color: var(--accent);
 }
 .rootAction {
   display: inline-flex;

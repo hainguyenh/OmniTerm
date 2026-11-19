@@ -72,6 +72,28 @@ describe('sendMentionsToAgentSession', () => {
     expect(toComposer).toHaveBeenCalledTimes(1)
   })
 
+  // Regression: after every agent was quit, a local tab still titled after its agent kept a
+  // title-inferred presence (pid 0). "Send to Agent" then typed into that plain shell and jumped to
+  // its tab, which looked like an agent session being opened or resumed out of nowhere.
+  it('ignores a local pane whose agent is only inferred from its stale tab title', () => {
+    setPanePresence({ agent: { agent: 'claude', profileName: 'claude', pid: 0, startTime: 0 } })
+
+    expect(sendMentionsToAgentSession(['@src'], vi.fn())).toBe(true)
+
+    expect(localInput).not.toHaveBeenCalled()
+    expect(mocks.showSessionTab).not.toHaveBeenCalled()
+    expect((mocks.notify.mock.calls[0]![0] as Notice).title).toBe('No agent session to send to')
+  })
+
+  it('trusts the title of a remote pane, which has no process tree to inspect', () => {
+    useSessionBridge.setState({ sessions: [{ ...session('agent'), connType: 'SSH' }] })
+    setPanePresence({ agent: { agent: 'claude', profileName: 'claude', pid: 0, startTime: 0 } })
+
+    sendMentionsToAgentSession(['@src'], vi.fn())
+
+    expect(localInput).toHaveBeenCalledWith('agent', expect.stringContaining('@src '))
+  })
+
   it('sends nothing for no mentions', () => {
     expect(sendMentionsToAgentSession([], vi.fn())).toBe(false)
     expect(mocks.notify).not.toHaveBeenCalled()

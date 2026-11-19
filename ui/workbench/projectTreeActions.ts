@@ -1,9 +1,10 @@
+import type { Workspace } from '../domain'
 import { executeAction, registerAction } from '../ide/platform/actions'
 import { call, commands } from '../ide/platform/ipc'
 import { dirname } from '../ide/platform/project'
 import { isVirtualUri } from '../ide/platform/virtualDocs'
 import { notifications, registerMenuGroup } from '../ide/workbench/contributions'
-import { useWorkspaceStore } from '../platform/workspaceStore'
+import { selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
 
 import { useProjectFilterStore } from './projectFilterStore'
 import { removeFolderFromWorkspace, workspaceFolderAt } from './titlebar/workspaceActions'
@@ -60,7 +61,7 @@ export function registerProjectTreeActions(): () => void {
       icon: 'close',
       run: ({ arg }) => {
         if (typeof arg !== 'string') return
-        const owner = useWorkspaceStore.getState().workspaces.find((workspace) => workspaceFolderAt(workspace, arg))
+        const owner = ownerWorkspaceOf(arg)
         const folder = workspaceFolderAt(owner, arg)
         if (owner && folder) void removeFolderFromWorkspace(owner.id, folder)
       },
@@ -72,7 +73,7 @@ export function registerProjectTreeActions(): () => void {
       description: 'New terminals and agents of this workspace start in the selected project',
       run: ({ arg }) => {
         if (typeof arg !== 'string') return
-        const owner = useWorkspaceStore.getState().workspaces.find((workspace) => workspaceFolderAt(workspace, arg))
+        const owner = ownerWorkspaceOf(arg)
         const folder = workspaceFolderAt(owner, arg)
         if (owner && folder) useProjectFilterStore.getState().setDefaultProject(owner.id, folder.path)
       },
@@ -104,6 +105,19 @@ export function registerProjectTreeActions(): () => void {
   return () => {
     disposers.reverse().forEach((dispose) => dispose())
   }
+}
+
+/**
+ * The workspace a project tree folder belongs to: the selected one, whose tree is shown. The same
+ * folder may sit in several workspaces, and the first of those in the catalog is often another one,
+ * so acting on it there changed nothing the user could see.
+ */
+function ownerWorkspaceOf(path: string): Workspace | undefined {
+  const { workspaces, selection } = useWorkspaceStore.getState()
+  const selectedId = selectedWorkspaceId(selection)
+  const selected = workspaces.find((workspace) => workspace.id === selectedId)
+  if (selected && workspaceFolderAt(selected, path)) return selected
+  return workspaces.find((workspace) => workspaceFolderAt(workspace, path))
 }
 
 /** Starts indexing the whole project in the background and says so (or why it could not). */

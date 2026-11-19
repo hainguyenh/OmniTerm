@@ -20,6 +20,8 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
   notifications: () => ({ notify }),
 }))
 import { menuGroupItems } from '../../ide/workbench/contributions'
+import { useWorkspaceStore } from '../../platform/workspaceStore'
+import { useProjectFilterStore } from '../projectFilterStore'
 import { registerProjectTreeActions } from '../projectTreeActions'
 
 describe('projectTreeActions', () => {
@@ -95,6 +97,24 @@ describe('projectTreeActions', () => {
     } finally {
       unregisterMock()
     }
+  })
+
+  // Regression: with the same folder in several workspaces, "Set as Default Project" wrote the
+  // default of the first workspace in the catalog, not the selected one the tree shows.
+  it('sets the default project of the selected workspace when the folder is in several', async () => {
+    const folders = [{ id: 'a', name: 'a', path: 'D:/work/a' }, { id: 'b', name: 'b', path: 'D:/work/b' }]
+    useWorkspaceStore.setState({
+      workspaces: [
+        { id: 'other', name: 'other', order: 0, pins: [], folders },
+        { id: 'shown', name: 'shown', order: 1, pins: [], folders },
+      ],
+      selection: 'shown',
+    } as never)
+    useProjectFilterStore.setState({ defaults: {} })
+
+    await executeAction('omniterm.workspace.setDefaultProject', 'D:\\work\\b')
+
+    expect(useProjectFilterStore.getState().defaults).toEqual({ shown: 'D:/work/b' })
   })
 
   it('disposes all registered actions cleanly', () => {

@@ -71,7 +71,6 @@ import {
   messageHistory,
   pendingFixup,
   setAmend,
-  setCommitDiffPreview,
   setDiffPreview,
   setGroupByDir,
   setGroupByStaging,
@@ -477,7 +476,7 @@ export function useIncludedCount(): number {
 
 /**
  * The Commit tool window's Commit tab: changes with inclusion checkboxes above the
- * message. Preview Diff shows the selected file's diff in a preview editor tab.
+ * message.
  */
 function ChangesPanel() {
   const included = useIncludedCount();
@@ -492,16 +491,6 @@ function ChangesPanel() {
       </SplitPanel>
     </SplitGroup>
   );
-}
-
-/**
- * Preview Diff of the Commit tab: the selected file's diff in the editor's preview tab,
- * leaving the focus in the tree so the arrow keys walk the changes.
- */
-export function previewInEditor(node: ChangeNode | undefined, roots: readonly ChangeNode[]): boolean {
-  if (node?.type !== "file" || !node.path) return false;
-  void openDiff(changeNodeDiffData(roots, node), { preview: true, focus: false });
-  return true;
 }
 
 /**
@@ -546,7 +535,6 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
   const groupByDir = useCommit((s) => s.groupByDir);
   const groupByStaging = useCommit((s) => s.groupByStaging);
   const diffPreview = useCommit((s) => s.diffPreview);
-  const commitDiffPreview = useCommit((s) => s.commitDiffPreview);
   const doubleClickOpensDiff = useWorkflowSettings((s) => s.vcs.commit.doubleClickOpensDiff);
   const lists = useChangelists((s) => s.state);
   const checks = useCommitChecks();
@@ -625,7 +613,6 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
   // keeping focus in the tree (a click or arrow key walks the changes).
   const followSelection = (nodes: readonly ChangeNode[]) => {
     const node = nodes.length === 1 ? nodes[0] : undefined;
-    if (mode === "commit" && commitDiffPreview && previewInEditor(node, roots)) return;
     if (mode === "dialog" || node?.type !== "file" || !node.path) return;
     const active = maybeEditorService()?.activeInput?.();
     if (active?.kind !== DIFF_KIND || active.key !== followedDiff.current) return;
@@ -702,19 +689,6 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
             ])
           }
         />
-        {/* Preview Diff: the selected file's diff follows the selection in the editor's preview tab. */}
-        {mode === "commit" && (
-          <IconButton
-            icon="editor-preview"
-            title="Preview Diff in Editor"
-            size="small"
-            pressed={commitDiffPreview}
-            onClick={() => {
-              setCommitDiffPreview(!commitDiffPreview);
-              if (!commitDiffPreview) previewInEditor(selected.size === 1 ? selectedNodes()[0] : undefined, roots);
-            }}
-          />
-        )}
         <span className={styles.sep} />
         {/* The changes as a folder tree, or as a flat list with each file's directory beside it. */}
         <IconButton

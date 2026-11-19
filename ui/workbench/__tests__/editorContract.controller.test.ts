@@ -156,3 +156,35 @@ describe('editor contract: confirmClose', () => {
     expect(confirmClose).not.toHaveBeenCalled()
   })
 })
+
+describe('editor contract: activation focus', () => {
+  // Regression: activating a custom editor's tab (a session's terminal) focused nothing, so focus
+  // stayed on the clicked tab and typing never reached the terminal until it was clicked into.
+  it('focuses the content of an activated custom editor tab, unless asked not to', async () => {
+    register('contract-focus')
+    const ctrl = start()
+    await ctrl.openInput({ kind: 'contract-focus', key: 'contract-focus:1' })
+    await ctrl.openInput({ kind: 'contract-focus', key: 'contract-focus:2' })
+    const paneId = useTabs.getState().activePane
+    const [first] = useTabs.getState().panes[paneId]!.tabs
+    const pane = document.createElement('div')
+    pane.dataset.paneId = paneId
+    const box = document.createElement('div')
+    box.tabIndex = -1
+    box.dataset.editorFocus = ''
+    const tabButton = document.createElement('button')
+    pane.append(tabButton, box)
+    document.body.appendChild(pane)
+    try {
+      tabButton.focus()
+      ctrl.activate(paneId, first!.id, false)
+      await flush()
+      expect(document.activeElement).toBe(tabButton)
+      ctrl.activate(paneId, first!.id)
+      await flush()
+      expect(document.activeElement).toBe(box)
+    } finally {
+      pane.remove()
+    }
+  })
+})

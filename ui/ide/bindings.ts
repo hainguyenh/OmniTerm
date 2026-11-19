@@ -9214,6 +9214,8 @@ export type VcsRoot = {
 	head: string | null,
 	/**  HEAD commit; `None` before the first commit. */
 	headCommit: string | null,
+	/**  A linked worktree (`git worktree add`), not the repository's main working tree. */
+	linkedWorktree: boolean,
 };
 
 /**  Version Control (main page) and its sub-pages. */

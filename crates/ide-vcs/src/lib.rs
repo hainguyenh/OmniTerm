@@ -761,6 +761,11 @@ impl Repo {
         let _scope = crate::ExecutionScope::enter(self.execution_allowed.load(std::sync::atomic::Ordering::Acquire));
         refs::head(&self.gix()?)
     }
+    /// A linked worktree (`git worktree add`), not the main working tree. Its git dir
+    /// (`<common>/worktrees/<name>`) holds a `commondir` file; a submodule's does not.
+    pub fn is_linked_worktree(&self) -> bool {
+        self.git_dir.join("commondir").is_file()
+    }
     /// Merge / rebase / cherry-pick… in progress (cheap: no ref walking).
     pub fn operation(&self) -> IdeResult<Option<String>> {
         let _scope = crate::ExecutionScope::enter(self.execution_allowed.load(std::sync::atomic::Ordering::Acquire));

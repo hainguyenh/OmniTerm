@@ -235,6 +235,25 @@ describe('Terminal tool window tabs', () => {
     expect(useTerminalDock.getState().pending).toBe(1)
   })
 
+  // Regression: picking a docked terminal tab left focus on the tab, so typing did not reach the
+  // agent running in it until the terminal itself was clicked.
+  it('hands the keyboard to the terminal of the picked tab', () => {
+    const asked: unknown[] = []
+    const onFocusTerminal = (event: Event) => asked.push((event as CustomEvent).detail)
+    window.addEventListener('omniterm:focus-terminal', onFocusTerminal)
+    publish(info('a', 'pwsh'), info('b', 'bash'))
+    act(() => {
+      dockSession('a')
+      dockSession('b')
+    })
+    render(<TerminalDockTabs />)
+    const tabs = screen.getAllByRole('tab')
+    fireEvent.click(tabs[1]!)
+    fireEvent.click(tabs[1]!)
+    expect(asked).toEqual([{ id: 'b' }, { id: 'b' }])
+    window.removeEventListener('omniterm:focus-terminal', onFocusTerminal)
+  })
+
   it('closes a docked tab: the session leaves the window and ends', async () => {
     publish(info('a', 'pwsh'))
     act(() => dockSession('a'))

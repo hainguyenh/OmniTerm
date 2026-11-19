@@ -13,7 +13,8 @@ import { sessionInput } from './sessionInput'
 export function showSessionTab(sessionId: string): void {
   if (isDocked(sessionId)) {
     selectDocked(sessionId)
-    toolWindowService().show(TERMINAL_WINDOW)
+    // Focused, so typing reaches the terminal (as activating an editor tab does).
+    toolWindowService().show(TERMINAL_WINDOW, true)
     return
   }
   const input = sessionInput(sessionId)

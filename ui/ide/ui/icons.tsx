@@ -485,6 +485,7 @@ const ICONS = {
   "star-outline": "omniterm/vcs/notFavorite",
   tag: "omniterm/vcs/tag",
   "current-branch": "omniterm/vcs/currentBranch",
+  worktree: "omniterm/vcs/worktree",
   // Code review / GitHub pull requests (collaboration-tools, GitHub plugin, DVCS)
   "branch-label": "vcs/branchLabel",
   "current-branch-label": "vcs/currentBranchLabel",
