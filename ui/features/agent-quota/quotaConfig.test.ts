@@ -63,6 +63,11 @@ describe('parseQuotaConfig', () => {
     expect(parsed.agents.claude).not.toHaveProperty('icon')
   })
 
+  it('keeps the pane strip switch, on by default', () => {
+    expect(parseQuotaConfig({}).display.paneStrip).toBe(true)
+    expect(parseQuotaConfig({ display: { paneStrip: false } }).display.paneStrip).toBe(false)
+  })
+
   it('keeps valid pace glyphs and weeklyAutoHide, rejecting malformed ones', () => {
     const parsed = parseQuotaConfig({
       display: {

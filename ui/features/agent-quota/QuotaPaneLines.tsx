@@ -70,6 +70,7 @@ export function QuotaPaneLines({ sessionId }: { sessionId: string }) {
     undefined,
   )
   const now = useCoarseNow(nearestDeadline)
+  if (!display.paneStrip) return null
   if (!enabled) {
     return (
       <div className="aq-monitor-off-strip" data-testid="aq-monitor-off" role="status">

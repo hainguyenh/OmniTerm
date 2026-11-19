@@ -11,9 +11,15 @@ import { registerAction } from '../../ide/platform/actions'
 import { EditorAreaView } from '../../ide/editor/core/view/EditorArea'
 import { registerEditorKind } from '../../ide/workbench/contributions'
 import { omnitermActionId } from '../../platform/omnitermActions'
+import type { SessionsPanelProps } from '../../components/SessionsPanel'
 import { applyPreset } from '../layout/layoutPresets'
 import { registerPaneTitleActions } from '../layout/paneTitleActions'
 import { usePaneQuickStart } from '../sessions/paneQuickStartStore'
+import { useShellPanels } from '../shellPanelsStore'
+
+vi.mock('../../features/agent-quota/agentQuotaAPI', () => ({ listAgentProfiles: () => Promise.resolve([]) }))
+
+const workspace = { id: 'w1', name: 'Work', folders: [{ id: 'f1', name: 'app', path: 'D:/app' }] }
 
 const holder = vi.hoisted(() => ({ controller: null as unknown }))
 vi.mock('../../ide/editor/core/controller', async (original) => ({
@@ -47,6 +53,8 @@ afterEach(() => {
   controller.stop()
   useTabs.setState(initialTabsState(), true)
   usePaneQuickStart.setState({ target: null })
+  useShellPanels.setState({ sessions: null })
+  localStorage.clear()
 })
 
 describe('pane actions', () => {
@@ -82,23 +90,28 @@ describe('pane actions', () => {
     expect(screen.queryByRole('button', { name: 'Tab Actions' })).toBeNull()
   })
 
-  it('make their own pane the active one when pressed, and an empty pane offers the session picker', async () => {
+  it('make their own pane the active one when pressed, and an empty pane starts a session in itself', async () => {
+    const onStart = vi.fn()
+    // The launcher reads only the workspaces and the start callback of the Sessions panel's props.
+    useShellPanels.setState({ sessions: { workspaces: [workspace], onStart } as unknown as SessionsPanelProps })
     await act(() => controller.openInput({ kind: 'test-doc', key: 'test-doc:1' }))
     const first = useTabs.getState().activePane
     act(() => useTabs.setState(applyPreset(useTabs.getState(), '2'), true))
     render(<EditorAreaView />)
-    expect(screen.getByText('Empty pane')).toBeTruthy()
-    const empty = screen.getByText('Empty pane').closest('[data-pane-id]') as HTMLElement
+    const launcher = screen.getByRole('region', { name: 'Start a session in this pane' })
+    const empty = launcher.closest('[data-pane-id]') as HTMLElement
     expect(empty.dataset.paneId).not.toBe(first)
+    expect(screen.getByText('Drop a tab here to move it into this pane')).toBeTruthy()
     act(() => useTabs.setState((state) => ({ ...state, activePane: first }), true))
     const plus = empty.querySelector('button[aria-label="New terminal or agent session in this pane"], button[title="New terminal or agent session in this pane"]') as HTMLElement
     fireEvent.pointerDown(plus)
     expect(useTabs.getState().activePane).toBe(empty.dataset.paneId)
-    // Its button opens the picker (project, then terminal or agent) for this pane: nothing starts yet.
+    // The launcher starts the default terminal in this pane's project, right away.
     act(() => useTabs.setState((state) => ({ ...state, activePane: first }), true))
-    const picker = screen.getByRole('button', { name: 'New session…' })
-    fireEvent.pointerDown(picker)
-    fireEvent.click(picker)
-    expect(usePaneQuickStart.getState().target?.paneId).toBe(empty.dataset.paneId)
+    const terminal = screen.getByRole('button', { name: 'Terminal (default)' })
+    fireEvent.pointerDown(terminal)
+    fireEvent.click(terminal)
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ cwd: 'D:/app' }), null)
+    expect(useTabs.getState().activePane).toBe(empty.dataset.paneId)
   })
 })

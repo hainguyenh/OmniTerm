@@ -31,6 +31,7 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
 }))
 // The session widget reads the editor's tabs; the real editor controller pulls in every contribution.
 vi.mock('../StatusBarSessionWidget', () => ({ StatusBarSessionWidget: () => null }))
+vi.mock('../StatusBarGitWidget', () => ({ StatusBarGitWidget: () => null }))
 
 
 
@@ -44,10 +45,10 @@ describe('StatusBarWidgets', () => {
     registeredItems.length = 0
   })
 
-  it('registers the quota chips and the session widget, not a second branch or bell', () => {
+  it('registers the quota chips, the Git branch and the session widget, not a bell', () => {
     const unregister = registerStatusBarWidgets()
-    // The title bar names the branch and the right stripe holds Notifications, as in IDEA.
-    expect(registeredItems.map((i) => i.id)).toEqual(['omniterm.quotaChips', 'omniterm.sessionInfo'])
+    // The right stripe holds Notifications, as in IDEA, so the bar has no bell.
+    expect(registeredItems.map((i) => i.id)).toEqual(['omniterm.quotaChips', 'omniterm.git', 'omniterm.sessionInfo'])
 
     const quota = registeredItems.find((i) => i.id === 'omniterm.quotaChips')
     expect(quota?.align).toBe('left')
@@ -56,7 +57,7 @@ describe('StatusBarWidgets', () => {
     unregister()
   })
 
-  it('renders StatusBarQuotaChips only while the footer dock is on and an agent profile has a reading', () => {
+  it('renders StatusBarQuotaChips only while the footer dock is on and an agent profile is running', () => {
     updateQuota(() => initialQuotaState())
     const { unmount } = render(<StatusBarQuotaChips />)
     expect(screen.queryByTestId('status-bar-quota-chips')).toBeNull()
@@ -66,6 +67,7 @@ describe('StatusBarWidgets', () => {
       ...s,
       available: true,
       config: { ...s.config, enabled: true, dock: 'footer' },
+      terminals: { a: { sessionId: 'a', agent: 'claude' as const, pid: 1, startTime: 1, profileDir: null, profileName: 'Claude', subAgentCount: 0, launcher: null, instanceKey: 'a:1:1', profileKey: 'claude:default' } },
       profiles: {
         'claude:default': {
           key: 'claude:default',
@@ -87,14 +89,11 @@ describe('StatusBarWidgets', () => {
     expect(screen.getByTestId('status-bar-quota-chips').textContent).toContain('42%')
   })
 
-  it('shows each running profile by name, the one nearest its 5h limit first', () => {
-    const snapshot = (usedPct: number) => ({
-      fetchedAt: Date.now(),
-      windows: [{ kind: 'session' as const, label: '5h', usedPct, resetsAt: Date.now() + 3600000 }],
-    })
+  it('shows only running profiles with their percent, the one nearest its 5h limit first', () => {
     const profileOf = (key: string, profileName: string, usedPct: number) => ({
       key, agent: 'claude' as const, profileName, profileDir: null, launcher: null, history: [],
-      errorStreak: 0, nextFetchAt: 0, fetching: false, wake: {}, waking: false, snapshot: snapshot(usedPct),
+      errorStreak: 0, nextFetchAt: 0, fetching: false, wake: {}, waking: false,
+      snapshot: { fetchedAt: Date.now(), windows: [{ kind: 'session' as const, label: '5h', usedPct, resetsAt: Date.now() + 3600000 }] },
     })
     const terminalOf = (sessionId: string, profileKey: string, profileName: string) => ({
       sessionId, agent: 'claude' as const, pid: 1, startTime: 1, profileDir: null, profileName,
@@ -114,5 +113,6 @@ describe('StatusBarWidgets', () => {
     render(<StatusBarQuotaChips />)
     const rows = screen.getAllByTestId('quota-footer-profile').map((row) => row.textContent)
     expect(rows).toEqual(['home87%', 'work35%'])
+    expect(screen.getByTestId('status-bar-quota-chips').title).toContain('Claude: 2 active profiles')
   })
 })

@@ -1,5 +1,5 @@
-import { useRef } from 'react'
-
+import { AttachmentsFooterButton } from '../../components/AttachmentsFooterButton'
+import { useAgentStatusLine } from '../../features/agent-quota/agentStatusLine'
 import { HeaderBusyArt } from '../../features/agent-quota/HeaderBusyArt'
 import { useQuota } from '../../features/agent-quota/quotaStore'
 import { requestRenewFromPane } from '../../hooks/useRenewSession'
@@ -7,11 +7,9 @@ import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { IconButton } from '../../ide/ui'
 import { Icon } from '../../ide/ui/icons'
 import { useStoredSessions } from '../../utils/agentSessionStorage'
-import { formatAttachmentPaths, saveAttachmentFiles } from '../../utils/attachmentInput'
 import { agentBrandFor } from '../../utils/agentIdentity'
 import { usePanePresence } from '../../utils/agentPresenceStore'
 import { clearPaneConsole } from '../../utils/paneConsoles'
-import { recordSavedAttachments } from '../../utils/sessionAttachmentStore'
 import { dispatchTerminalSave } from '../../utils/terminalCopyExtract'
 
 import { useSessionBridge } from './sessionBridge'
@@ -25,15 +23,6 @@ function useSessionQuotaPercent(sessionId: string): number | null {
     const window = state.profiles[terminal.profileKey]?.lastGood?.windows.find((item) => item.kind === 'session')
     return window ? Math.round(window.usedPct) : null
   })
-}
-
-/** Saves the picked files to the session's attachment folder and types their paths into the agent. */
-async function attachFiles(sessionId: string, files: File[]): Promise<void> {
-  const saved = await saveAttachmentFiles(files, sessionId)
-  if (saved.length === 0) return
-  recordSavedAttachments(sessionId, saved)
-  const paths = formatAttachmentPaths(saved.map(({ info }) => info.path))
-  if (paths) window.omnitermAPI?.connect?.localInput?.(sessionId, paths)
 }
 
 /** The last segment of a folder path (`D:/work/omniterm` → `omniterm`). */
@@ -55,7 +44,7 @@ function useSessionProjectName(sessionId: string): string {
  * name (`pwsh`, the shell's window title) says nothing about the agent, so it is never shown, and
  * the profile is the tab's label. Shown only while an AI agent runs; a plain terminal has no header.
  *
- * While the agent works (its terminal is active), the rest of the row is the activity zone: the
+ * While the agent works (its terminal is active), the row up to 80% of its width is the activity zone: the
  * Agent Quota pace artwork travels across it (Settings › Agent Quota › Loading artwork). The zone
  * keeps its size whether or not art shows, so the title never moves.
  */
@@ -76,43 +65,51 @@ export function SessionAgentHeader({ sessionId }: { sessionId: string }) {
     >
       <Icon name={`ext:omniterm/agent-${brand}`} size={16} />
       <span className="min-w-0 max-w-[70%] shrink truncate text-[var(--fg-strong)]" title={title}>{title}</span>
-      <span className="relative flex min-w-[2.75rem] flex-1 self-stretch items-center overflow-x-clip" data-testid="agent-activity-zone">
+      <span className="relative mr-[20%] flex min-w-[2.75rem] flex-1 self-stretch items-center overflow-x-clip" data-testid="agent-activity-zone">
         {busy && <HeaderBusyArt sessionId={sessionId} darkMode={darkMode} fallback={null} />}
       </span>
     </div>
   )
 }
 
-/** Floating rows share the pane's font size controls' look: faint until pointed at. */
-const FLOATING = 'absolute bottom-2 z-[5] flex items-center gap-px rounded-[var(--radius-small)] bg-[var(--bg-editor,var(--bg-app))] p-px opacity-[.55] transition-opacity hover:opacity-100 focus-within:opacity-100'
-
 /**
- * The agent's part of the pane footer: the quota used at the bottom left, and its actions at the
- * bottom right, just left of the pane's font size controls and the same size: Attach files, Export
- * the console (the whole conversation for Claude, else the terminal buffer), Clear the console, and
- * Renew it (a fresh agent in this pane, asked for and done as Settings › renew strategy says).
+ * The agent's footer: a 26px row of its own under the terminal, so it never covers the agent's
+ * last lines (it floated over them before). The pane's font size controls sit centred in it, as
+ * they do in a code editor's bottom breadcrumbs (`data-agent-footer`, EditorArea.module.css).
+ *
+ * At the left the agent's own status line (one row, whole on hover), else the quota used; at the
+ * right, just left of the font size controls and the same size: the attachments list (Attach
+ * files, what this pane attached), Export the console (the whole conversation for Claude, else the
+ * terminal buffer), Clear the console, and Renew it (a fresh agent in this pane, asked for and
+ * done as Settings › renew strategy says).
  */
 export function SessionAgentFooter({ sessionId }: { sessionId: string }) {
   const presence = usePanePresence(sessionId)
   const brand = agentBrandFor(presence?.agent)
   const quota = useSessionQuotaPercent(sessionId)
-  const input = useRef<HTMLInputElement>(null)
+  const statusLine = useAgentStatusLine(sessionId)
   if (!brand) return null
   return (
-    <>
-      {quota !== null && (
-        <span className={`${FLOATING} left-2.5 h-[22px] px-1.5 text-[var(--fg-muted)]`} data-testid="agent-footer-quota">
-          quota {quota}%
-        </span>
-      )}
+    <div
+      className="flex h-[26px] flex-none items-center gap-2 border-t border-[var(--border)] pl-2.5 pr-[96px] text-[11px] text-[var(--fg-muted)]"
+      data-agent-footer=""
+      data-testid="agent-footer"
+    >
+      <span className="min-w-0 flex-1 truncate">
+        {statusLine ? (
+          <span title={statusLine} data-testid="agent-footer-statusline">{statusLine}</span>
+        ) : quota !== null && (
+          <span data-testid="agent-footer-quota">quota {quota}%</span>
+        )}
+      </span>
       {/* The font size controls are three small buttons 16px from the right edge. */}
-      <div className={`${FLOATING} right-[96px]`} role="toolbar" aria-label="Agent actions" data-testid="agent-footer-actions">
-        <IconButton
-          icon="paperclip"
-          size="small"
-          title="Attach files to this agent: they are saved with the session and their paths typed in"
-          onClick={() => input.current?.click()}
-        />
+      <div
+        className="flex flex-none items-center gap-px opacity-[.55] transition-opacity hover:opacity-100 focus-within:opacity-100"
+        role="toolbar"
+        aria-label="Agent actions"
+        data-testid="agent-footer-actions"
+      >
+        <AttachmentsFooterButton sessionId={sessionId} />
         <IconButton
           icon="download"
           size="small"
@@ -132,18 +129,6 @@ export function SessionAgentFooter({ sessionId }: { sessionId: string }) {
           onClick={() => requestRenewFromPane(sessionId)}
         />
       </div>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        className="hidden"
-        data-testid="agent-header-file-input"
-        onChange={(event) => {
-          const files = Array.from(event.target.files ?? [])
-          event.target.value = ''
-          if (files.length > 0) void attachFiles(sessionId, files)
-        }}
-      />
-    </>
+    </div>
   )
 }

@@ -6,8 +6,8 @@
 export type QuotaDock = 'stripL' | 'stripR' | 'left' | 'right' | 'footer' | 'both' | 'hidden'
 
 export const QUOTA_DOCKS: ReadonlyArray<{ id: QuotaDock; label: string }> = [
-  { id: 'stripL', label: 'Left tab strip — live status line' },
-  { id: 'stripR', label: 'Right tab strip — live status line' },
+  { id: 'stripL', label: 'Left tab strip — quota rings' },
+  { id: 'stripR', label: 'Right tab strip — quota rings' },
   { id: 'left', label: 'Left tool window' },
   { id: 'right', label: 'Right tool window' },
   { id: 'footer', label: 'Footer status line (aligned with the editor)' },

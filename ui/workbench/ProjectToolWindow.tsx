@@ -9,6 +9,7 @@ import { useSelectedWorkspace } from '../platform/workspaceStore'
 import { addFolderToWorkspace, addWorkspaceFromFolder } from './titlebar/workspaceActions'
 import { WorkspaceHeader } from './WorkspaceHeader'
 import { useProjectFilterStore } from './projectFilterStore'
+import { useProjectActiveToggles } from './useProjectActiveToggles'
 
 /** Project header: select the opened file, collapse all. */
 export function OmniTermProjectHeaderActions() {
@@ -78,6 +79,7 @@ function NoProjectFolders() {
 export function ProjectToolWindow(_props: ProjectToolWindowProps) {
   const root = useProjectTree((s) => s.root)
   useProjectFilterSync()
+  useProjectActiveToggles()
 
   if (!root) return <NoProjectFolders />
   return (

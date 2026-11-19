@@ -3,7 +3,8 @@
 //!
 //! - `--omniterm-claude-statusline --profile <dir>`: Claude Code's status line. Keeps the
 //!   `rate_limits` it is handed, then prints the status line the profile had before (run with the
-//!   same input) or a short quota line of its own.
+//!   same input) or a short quota line of its own, and keeps that text per conversation for the
+//!   pane footer (statusline_store.rs).
 //! - `--omniterm-claude-guard --profile <dir>`: a `PreToolUse` hook on the sub-agent tool. Denies a
 //!   new sub-agent while a window is at its Agent Quota limit; allows it on any doubt.
 //!
@@ -21,6 +22,7 @@ use super::claude_bridge::{
     blocked_reason, bridge_file, guard_limits, parse_usage_record, status_text, usage_file,
     usage_record,
 };
+use super::statusline_store::store_statusline;
 
 pub const STATUSLINE_FLAG: &str = "--omniterm-claude-statusline";
 pub const GUARD_FLAG: &str = "--omniterm-claude-guard";
@@ -94,17 +96,19 @@ pub(crate) fn statusline_output(
     now: i64,
     chain: &dyn Fn(&str, &str) -> Option<String>,
 ) -> String {
-    let record = serde_json::from_str::<Value>(input)
-        .ok()
-        .and_then(|doc| usage_record(&doc, now));
+    let doc = serde_json::from_str::<Value>(input).ok();
+    let record = doc.as_ref().and_then(|doc| usage_record(doc, now));
     if let Some(record) = &record {
         // A failed write only costs freshness: the provider then asks the CLI.
         let _ = write_atomic(&usage_file(profile), &record.to_string());
     }
-    chained_command(profile)
+    let output = chained_command(profile)
         .and_then(|command| chain(&command, input))
         .filter(|output| !output.trim().is_empty())
-        .unwrap_or_else(|| format!("{}\n", status_text(record.as_ref())))
+        .unwrap_or_else(|| format!("{}\n", status_text(record.as_ref())));
+    // The pane footer shows this text; a failed write only leaves the footer on the quota.
+    let _ = store_statusline(profile, doc.as_ref(), &output, now);
+    output
 }
 
 /// The settings file of the app that installed the bridge, as `bridge.json` records it.

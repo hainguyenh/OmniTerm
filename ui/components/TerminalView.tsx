@@ -411,7 +411,6 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
-      releaseSessionMedia(id)
       forgetCtrlC(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
@@ -420,6 +419,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term.dispose()
     }
   }, [id, connection, mode])
+
+  // The pane's attachment list and image previews outlive a terminal rebuild (a connection record
+  // refresh or reconnect re-runs the effect above); they are dropped only when the pane itself goes.
+  useEffect(() => () => releaseSessionMedia(id), [id])
 
   // Visibility edges. Declared after the main effect so `termRef` is already populated on mount.
   //

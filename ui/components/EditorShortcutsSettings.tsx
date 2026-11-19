@@ -120,7 +120,7 @@ export const EditorShortcutsSettings: React.FC<EditorShortcutsSettingsProps> = (
     return (
       <div
         key={key}
-        className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20"
+        className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-theme-hover border-b border-theme-border/20"
       >
         <div className={`min-w-0 flex flex-col gap-0.5 ${enabled ? '' : 'opacity-50'}`}>
           <span className="text-xs text-theme-fg font-medium">{label}</span>

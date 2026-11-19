@@ -1,23 +1,32 @@
 /**
  * Web browsers (IDEA's Open In › Browser and the editor's browser bar): HTML
  * and SVG files open in an installed browser through the built-in server, and
- * HTML files get a built-in preview beside the editor. ⌃⇧R in an HTML editor
- * opens the default browser, like IDEA's Run for HTML files.
+ * HTML files get a built-in preview beside the editor or a page in its own
+ * editor tab. ⌃⇧R in an HTML editor opens the system default browser, like
+ * IDEA's Run for HTML files.
  */
 import { registerActions } from "@/platform/actions";
 import { getContext } from "@/platform/context";
 import { basename } from "@/platform/project";
 import { lazyComponent, type MenuItem } from "@/ui";
-import { maybeEditorService, registerMenuGroup, registerTextEditorWrapper } from "@/workbench/contributions";
+import {
+  maybeEditorService,
+  registerEditorKind,
+  registerMenuGroup,
+  registerTextEditorWrapper,
+} from "@/workbench/contributions";
 import {
   browserIcon,
   isHtmlPath,
   isWebPath,
   loadBrowsers,
   openInBrowser,
+  openInEditorTab,
   togglePreview,
   useBrowsers,
   useWebPreview,
+  WEB_PAGE_KIND,
+  webTabPath,
 } from "./browsers";
 import { tx } from "@/platform/i18n";
 
@@ -43,7 +52,8 @@ function browserMenu(path: string): MenuItem {
     label: "Browser",
     icon: "web",
     submenu: [
-      { kind: "action", action: "web.openInBrowser", arg: { path }, label: "Default Browser" },
+      { kind: "action", action: "web.openInBrowser", arg: { path }, label: "System Default Browser" },
+      ...(html ? [{ kind: "action" as const, action: "web.openInEditorTab", arg: { path }, label: "Editor Tab" }] : []),
       { kind: "separator" },
       ...(html ? [{ label: "Built-in Preview", icon: "eye", run: () => void showPreview(path) }] : []),
       ...useBrowsers.getState().list.map((b): MenuItem => ({
@@ -64,11 +74,31 @@ export function activate(): () => void {
       matches: isHtmlPath,
       component: lazyComponent(() => import("./WebEditor").then((m) => m.WebEditor)),
     }),
+    registerEditorKind({
+      kind: WEB_PAGE_KIND,
+      component: lazyComponent(() => import("./WebPageEditor").then((m) => m.WebPageEditor)),
+      title: (input) => basename(webTabPath(input) ?? "Page"),
+      icon: () => "web",
+      restorable: true,
+    }),
     registerActions([
+      {
+        id: "web.openInEditorTab",
+        title: "Open in Editor Tab",
+        description: "Open the HTML file served by the built-in server in an editor tab",
+        category: "View",
+        icon: "web",
+        when: "projectOpen",
+        keywords: ["browser", "html", "preview", "page", "tab", "local server"],
+        run: ({ arg }) => {
+          const path = targetPath(arg);
+          if (path && isHtmlPath(path)) return openInEditorTab(path);
+        },
+      },
       {
         id: "web.openInBrowser",
         title: "Open in Browser",
-        description: "Open the HTML or SVG file in the default browser through the built-in server",
+        description: "Open the HTML or SVG file in the system default browser through the built-in server",
         category: "View",
         icon: "web",
         when: "projectOpen",
@@ -110,6 +140,13 @@ export function activate(): () => void {
             action: "web.openInBrowser",
             arg: { path },
             label: tx`Open '${basename(path)}' in Browser`,
+            icon: "external-link",
+          },
+          {
+            kind: "action",
+            action: "web.openInEditorTab",
+            arg: { path },
+            label: tx`Open '${basename(path)}' in Editor Tab`,
             icon: "web",
           },
         ];

@@ -85,7 +85,7 @@ const CustomArtSettings: React.FC<CustomArtSettingsProps> = ({
           <Tooltip content="Upload custom images (max 2 MB) for idle and loading panes" placement="bottom">
             <button
               type="button"
-              className="p-1 text-theme-dim hover:text-theme-accent transition-colors bg-transparent border-none cursor-help rounded-lg hover:bg-white/5"
+              className="p-1 text-theme-dim hover:text-theme-accent transition-colors bg-transparent border-none cursor-help rounded-lg hover:bg-theme-hover"
               onMouseEnter={() => setShowTooltip(true)}
               onMouseLeave={() => setShowTooltip(false)}
               onClick={(e) => { e.stopPropagation(); setShowTooltip(v => !v) }}

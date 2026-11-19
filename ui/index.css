@@ -309,9 +309,9 @@ input::placeholder, select::placeholder, textarea::placeholder {
 /* ── Custom dialog (DialogHost) — fully driven by theme CSS variables ─────── */
 :root {
   --dialog-tone-info:    var(--theme-accent);
-  --dialog-tone-warning: #e0af68;
-  --dialog-tone-error:   #f7768e;
-  --dialog-tone-success: #9ece6a;
+  --dialog-tone-warning: var(--theme-warning, #e0af68);
+  --dialog-tone-error:   var(--theme-error, #f7768e);
+  --dialog-tone-success: var(--theme-success, #9ece6a);
   --dialog-z: 9999;
 }
 
@@ -437,7 +437,7 @@ input::placeholder, select::placeholder, textarea::placeholder {
 /* Destructive / confirm */
 .nc-dialog-btn-destructive {
   background: var(--dialog-tone-error);
-  color: #1a1b26;
+  color: var(--theme-accent-fg, #1a1b26);
   border-color: transparent;
 }
 

@@ -77,7 +77,7 @@ export default function UpdateSettings({
           </p>
         </div>
         {updateState?.updateAvailable && (
-          <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-theme-success px-2 py-0.5 rounded-full border border-[#9ece6a]/30 bg-[#9ece6a]/10 flex-shrink-0">
+          <span className="flex items-center gap-1 text-[8px] font-bold uppercase tracking-wider text-theme-success px-2 py-0.5 rounded-full border border-theme-success/30 bg-theme-success/10 flex-shrink-0">
             <span className="block h-1.5 w-1.5 rounded-full bg-theme-success" />
             v{updateState.latest} available
           </span>
@@ -86,7 +86,7 @@ export default function UpdateSettings({
 
       <div className="border-t border-theme-border pt-2">
           {updateState?.updateAvailable ? (
-            <div className="rounded-xl bg-theme-accent/8 border border-[#9ece6a]/30 px-3 py-2.5 flex flex-col gap-2">
+            <div className="rounded-xl bg-theme-accent/8 border border-theme-success/30 px-3 py-2.5 flex flex-col gap-2">
               <div className="flex items-center gap-2">
                 <Download className="w-4 h-4 text-theme-success flex-shrink-0" />
                 <span className="text-xs font-semibold text-theme-success">
@@ -112,7 +112,7 @@ export default function UpdateSettings({
                         type="button"
                         disabled={updateChecking}
                         onClick={() => handleDownloadInstaller(true)}
-                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                        className="flex-1 text-[11px] font-bold py-1.5 px-2 rounded-lg bg-theme-accent text-theme-accent-fg hover:brightness-110 disabled:opacity-60 transition-colors"
                       >
                         Install now
                       </button>
@@ -138,7 +138,7 @@ export default function UpdateSettings({
                         type="button"
                         disabled={nativeInstalling || updateChecking}
                         onClick={() => void runNativeInstall()}
-                        className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                        className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:brightness-110 disabled:opacity-60 transition-colors"
                       >
                         {nativeInstalling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                         Download & install
@@ -151,11 +151,11 @@ export default function UpdateSettings({
                       type="button"
                       disabled={updateChecking}
                       onClick={updateState.isPortable ? handleDownloadPortable : () => setInstallerChoiceOpen(true)}
-                      className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#a8db75] disabled:opacity-60 transition-colors"
+                      className="relative flex-1 inline-flex items-center justify-center gap-1.5 text-xs font-bold py-2 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:brightness-110 disabled:opacity-60 transition-colors"
                     >
                       <Download className="w-3.5 h-3.5" />
                       {updateState.isPortable ? 'Download update' : 'Install update'}
-                      <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-[#9ece6a]" />
+                      <span className="absolute -top-0.5 -right-0.5 block h-1.5 w-1.5 rounded-full bg-red-500 ring-1 ring-theme-success" />
                     </button>
                   </Tooltip>
                   <Tooltip content={`Ignore notification for version ${updateState.latest}`} placement="bottom">
@@ -174,7 +174,7 @@ export default function UpdateSettings({
               )}
             </div>
           ) : updateState?.error ? (
-            <div className="rounded-xl bg-theme-error/8 border border-[#f7768e]/30 px-3 py-2.5">
+            <div className="rounded-xl bg-theme-error/8 border border-theme-error/30 px-3 py-2.5">
               <p className="text-[11px] text-theme-error leading-relaxed">
                 Couldn't check for updates: {updateState.error}
               </p>
@@ -183,7 +183,7 @@ export default function UpdateSettings({
                   type="button"
                   onClick={checkForUpdates}
                   disabled={updateChecking}
-                  className="relative mt-2 inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 transition-colors"
+                  className="relative mt-2 inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-2.5 rounded-lg bg-theme-accent text-theme-accent-fg hover:brightness-110 disabled:opacity-60 transition-colors"
                 >
                   {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
                   Retry
@@ -212,7 +212,7 @@ export default function UpdateSettings({
                   type="button"
                   onClick={checkForUpdates}
                   disabled={updateChecking}
-                  className="relative inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-lg bg-theme-accent text-theme-accent-fg hover:bg-[#89ddff] disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  className="relative inline-flex items-center gap-1.5 text-xs font-bold py-1.5 px-3 rounded-lg bg-theme-accent text-theme-accent-fg hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
                 >
                   {updateChecking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
                   Check for updates
@@ -238,7 +238,7 @@ export default function UpdateSettings({
                     type="button"
                     onClick={clearSkippedVersion}
                     aria-label="Clear skipped version — get notified again"
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-theme-bg border border-theme-border text-theme-error hover:border-[#f7768e] transition-colors"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-theme-bg border border-theme-border text-theme-error hover:border-theme-error transition-colors"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

@@ -302,7 +302,13 @@ export function annotationsShown(view: EditorView): boolean {
 
 function setAnnotations(view: EditorView, lines: BlameLine[] | null, path: string, live: boolean) {
   if (!lines) closeBlamePopup(view);
-  view.dispatch({ effects: blameCompartment.reconfigure(lines ? blameExtension(lines, path, live) : []) });
+  const extension = lines ? blameExtension(lines, path, live) : [];
+  // An editor built without `blameSlot()` has no compartment to reconfigure, and reconfiguring a
+  // compartment the state lacks does nothing: append it so Annotate never silently has no effect.
+  const hasSlot = blameCompartment.get(view.state) !== undefined;
+  view.dispatch({
+    effects: hasSlot ? blameCompartment.reconfigure(extension) : StateEffect.appendConfig.of(blameCompartment.of(extension)),
+  });
 }
 
 /** Toggles annotations in `view`; `text` blames that content instead of the file on
@@ -314,6 +320,16 @@ export async function toggleAnnotations(view: EditorView, path: string, text?: s
   }
   try {
     const lines = await call(commands.vcsBlame(path, text ?? null, revision ?? null));
+    if (lines.length === 0 || lines.every(isUncommitted)) {
+      // An empty gutter looks like the action did nothing; say why there is nothing to show.
+      notifications().notify({
+        group: "vcs",
+        level: "info",
+        title: "Nothing to annotate",
+        body: "This file has no committed history yet.",
+      });
+      return;
+    }
     setAnnotations(view, lines, path, text === undefined);
   } catch (e) {
     notifications().notify({

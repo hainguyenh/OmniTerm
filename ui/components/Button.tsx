@@ -25,13 +25,13 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const VARIANT_STYLES: Record<ButtonVariant, string> = {
   default:
-    'border border-theme-border bg-theme-popup text-theme-fg hover:bg-white/10 hover:border-theme-accent active:scale-[0.98]',
+    'border border-theme-border bg-theme-popup text-theme-fg hover:bg-theme-hover hover:border-theme-accent active:scale-[0.98]',
   primary:
     'border border-transparent bg-theme-accent text-theme-accent-fg hover:brightness-110 active:scale-[0.98]',
   secondary:
-    'border border-transparent bg-white/5 text-theme-fg hover:bg-white/10 active:scale-[0.98]',
+    'border border-transparent bg-theme-hover text-theme-fg hover:border-theme-border active:scale-[0.98]',
   ghost:
-    'border border-transparent text-theme-dim hover:text-theme-fg hover:bg-white/5 active:scale-[0.98]',
+    'border border-transparent text-theme-dim hover:text-theme-fg hover:bg-theme-hover active:scale-[0.98]',
   outline:
     'border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent active:scale-[0.98]',
   danger:

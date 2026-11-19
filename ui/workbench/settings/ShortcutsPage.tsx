@@ -60,7 +60,7 @@ export function ShortcutsPage() {
           const binding = shortcuts?.[key] ?? DEFAULT_SHORTCUTS[key] ?? 'None'
           const isRecording = recording === key
           return (
-            <div key={key} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-white/5 border-b border-theme-border/20">
+            <div key={key} className="flex items-center justify-between gap-3 py-1.5 px-2 rounded-lg hover:bg-theme-hover border-b border-theme-border/20">
               <div className="min-w-0 flex flex-col gap-0.5">
                 <span className="text-xs text-theme-fg font-medium">{shortcutLabels[key]}</span>
                 {SHORTCUT_DESCRIPTIONS[key] && (

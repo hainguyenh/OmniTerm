@@ -723,7 +723,9 @@ function HeaderRow({
             aria-expanded={titleOpen}
             onClick={() => setTitleOpen((v) => !v)}
           >
-            <span className={styles.title}>{titleMenu ? tx(titleMenu.label) : titleOf(tw)}</span>
+            <span className={styles.title} title={titleMenu ? tx(titleMenu.label) : undefined}>
+              {titleMenu ? tx(titleMenu.label) : titleOf(tw)}
+            </span>
             <Icon name="chevron-down" size={12} className={styles.titleChevron} />
           </button>
           <Menu

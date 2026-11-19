@@ -53,8 +53,11 @@ import {
   filesOf,
   groupOf,
   ignoreTargets,
+  includedRepos,
   isPartiallyStaged,
+  pickCommitRepo,
   planCommit,
+  restrictPlan,
   toggledCheck,
   type ChangeNode,
 } from "./changes";
@@ -90,7 +93,7 @@ import {
   workingDiffData,
 } from "./diffInput";
 import { DiffEditor } from "./DiffEditor";
-import { KIND_COLOR, KIND_LABEL, fileCount, formatTime, stashLabel, stripSlash } from "./model";
+import { KIND_COLOR, KIND_LABEL, fileCount, formatTime, repoLabel, stashLabel, stripSlash } from "./model";
 import { call, commands } from "@/platform/ipc";
 import type { FileStatus } from "@/bindings";
 import { OperationBanner } from "./operations";
@@ -462,8 +465,25 @@ function useCommitChecks() {
 /** Number of changes the commit would include. */
 export function useIncludedCount(): number {
   const status = useVcs((s) => s.status);
+  const roots = useVcs((s) => s.roots);
+  const commitRepo = useCommit((s) => s.commitRepo);
   const checks = useCommitChecks();
-  return useMemo(() => planCommit(status, checks).included.length, [status, checks]);
+  return useMemo(
+    () => restrictPlan(planCommit(status, checks), roots, commitRepo).included.length,
+    [status, checks, roots, commitRepo],
+  );
+}
+
+/** The repositories holding included changes, and the one the next commit goes to. */
+function useCommitTargets(): { repos: string[]; selected: string | null } {
+  const status = useVcs((s) => s.status);
+  const roots = useVcs((s) => s.roots);
+  const commitRepo = useCommit((s) => s.commitRepo);
+  const checks = useCommitChecks();
+  return useMemo(() => {
+    const repos = includedRepos(planCommit(status, checks).included, roots);
+    return { repos, selected: pickCommitRepo(repos, commitRepo) };
+  }, [status, checks, roots, commitRepo]);
 }
 
 /**
@@ -556,7 +576,10 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
   const checkboxes = mode !== "local";
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // IDEA starts with Unversioned Files collapsed.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(["group:unversioned"]));
+  // With several projects each one has its own Unversioned Files group (keys are scoped by project).
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => new Set(["group:unversioned", ...useVcs.getState().roots.map((r) => `${r}|group:unversioned`)]),
+  );
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const treeRef = useRef<TreeHandle>(null);
   const viewRef = useRef<HTMLButtonElement>(null);
@@ -974,6 +997,8 @@ export function useCommitRunner(included: number, onCommitted?: () => void): Com
 export function CommitMessageField({ included, runner }: { included: number; runner: CommitRunner }) {
   const message = useCommit((s) => s.message);
   const amend = useCommit((s) => s.amend);
+  const targets = useCommitTargets();
+  const projectRoot = useVcs((s) => s.root);
   const focusTick = useCommit((s) => s.focusTick);
   const ref = useRef<HTMLTextAreaElement>(null);
   const historyRef = useRef<HTMLButtonElement>(null);
@@ -1009,6 +1034,14 @@ export function CommitMessageField({ included, runner }: { included: number; run
     <>
       <div className={styles.commitBar}>
         <Checkbox checked={amend} onChange={(v) => void setAmend(v)} label="Amend" />
+        {targets.repos.length > 1 && targets.selected && (
+          <Select
+            aria-label="Project to commit"
+            value={targets.selected}
+            onChange={(repo) => useCommit.setState({ commitRepo: repo })}
+            options={targets.repos.map((repo) => ({ value: repo, label: repoLabel(repo, projectRoot) }))}
+          />
+        )}
         <IconButton
           ref={historyRef}
           icon="history"

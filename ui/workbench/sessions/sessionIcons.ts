@@ -6,6 +6,7 @@ import { registerExternalIcons } from '../../ide/ui/icons'
 import { notifyTabTitlesChanged } from '../../ide/workbench/contributions'
 import { agentBrandFor } from '../../utils/agentIdentity'
 import { getPanePresence, subscribePanePresence } from '../../utils/agentPresenceStore'
+import type { QuickStartAgent } from '../../utils/sessionQuickStart'
 
 import { useSessionBridge } from './sessionBridge'
 
@@ -32,6 +33,13 @@ export function paintOnGroup(svg: string): string {
 export function sessionIconName(sessionId: string | null): string {
   const brand = sessionId ? agentBrandFor(getPanePresence(sessionId)?.agent) : null
   return brand ? iconName(brand) : 'terminal'
+}
+
+/** The icon of a session picker choice: the agent's brand (as its tabs show it), or the terminal glyph. */
+export function quickStartAgentIconName(agent: QuickStartAgent): string {
+  if (!agent.command) return 'terminal'
+  const brand = agentBrandFor(agent.id)
+  return brand ? iconName(brand) : (agent.icon ?? `agent-${agent.id}`)
 }
 
 /**

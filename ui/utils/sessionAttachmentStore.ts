@@ -80,6 +80,17 @@ export const subscribeSessionAttachments = (sessionId: string | null, listener: 
   }
 }
 
+/** Point the list's entries at files that moved (keyed by their old path). */
+export const repointSessionAttachments = (sessionId: string, moved: ReadonlyMap<string, string>): void => {
+  const list = lists.get(sessionId)
+  if (!list?.some((entry) => moved.has(entry.path))) return
+  lists.set(sessionId, list.map((entry) => {
+    const path = moved.get(entry.path)
+    return path ? { ...entry, path, name: baseName(path) } : entry
+  }))
+  notify(sessionId)
+}
+
 /** Pane unmount: forget its list and revoke its image previews. The stored files are kept. */
 export const releaseSessionMedia = (sessionId: string | null): void => {
   if (!sessionId) return

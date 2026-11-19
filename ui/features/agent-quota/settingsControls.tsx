@@ -27,7 +27,7 @@ export function Switch({ checked, onChange, ariaLabel }: { checked: boolean; onC
       aria-checked={checked}
       aria-label={ariaLabel}
       onClick={onChange}
-      className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${checked ? 'bg-theme-accent' : 'bg-[#414868]'}`}
+      className={`shrink-0 w-8 h-4 rounded-full relative transition-colors ${checked ? 'bg-theme-accent' : 'bg-theme-border'}`}
     >
       <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${checked ? 'left-[18px]' : 'left-0.5'}`} />
     </button>

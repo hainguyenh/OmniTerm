@@ -236,12 +236,12 @@ function ConfigChooser() {
       aria-label="Run/Debug Configurations"
       className={styles.chooser}
       trapFocus
+      draggable
     >
-      {mode !== "select" && (
-        <div className={styles.chooserCaption}>
-          <T>{executor === "debug" ? "Debug" : "Run"}</T>
-        </div>
-      )}
+      {/* The header is the handle: drag it to move the chooser off whatever it covers. */}
+      <div className={styles.chooserCaption} data-popup-drag="" data-testid="chooser-drag-handle">
+        <T>{mode === "select" ? "Run/Debug Configurations" : executor === "debug" ? "Debug" : "Run"}</T>
+      </div>
       <div className={styles.chooserSearch}>
         <SearchField
           value={query}

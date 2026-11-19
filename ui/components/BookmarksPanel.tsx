@@ -29,7 +29,7 @@ export interface BookmarksPanelProps {
 }
 
 const iconBtnClass =
-  'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-theme-dim hover:text-theme-fg hover:bg-white/10 transition-colors'
+  'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-theme-dim hover:text-theme-fg hover:bg-theme-hover transition-colors'
 const revealOnHover = 'opacity-0 group-hover:opacity-100 group-hover/folder:opacity-100 focus:opacity-100'
 
 function openFolder(cwd: string | undefined) {

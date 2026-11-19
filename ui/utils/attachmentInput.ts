@@ -4,6 +4,7 @@
  * not the user's original — is what reaches the PTY. That keeps every attachment in one place the
  * user can review from the pane footer and clear from Settings.
  */
+import { attachmentFolderFor } from './attachmentFolder'
 import type { AttachmentInfo } from './attachmentTypes'
 
 /** Matches `MAX_ATTACHMENT_BYTES` in app-core, so an oversized file is skipped before it is read. */
@@ -32,7 +33,7 @@ export const saveAttachmentFiles = async (
     if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) continue
     try {
       const bytes = new Uint8Array(await file.arrayBuffer())
-      const info = await window.omnitermAPI.attachments.save(file.name, bytes, sessionId)
+      const info = await window.omnitermAPI.attachments.save(file.name, bytes, attachmentFolderFor(sessionId))
       if (info) saved.push(info.kind === 'image' ? { info, bytes } : { info })
     } catch {
       // Unreadable or refused (size, disk): leave this file out; the rest still attach.

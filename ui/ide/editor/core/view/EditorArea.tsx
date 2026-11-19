@@ -27,6 +27,7 @@ import {
   useEditorTabTitles,
   useTextEditorWrappers,
   useMenuSlotItems,
+  useWorkbenchSlots,
   type EditorInput,
   type EditorKindContribution,
 } from "@/workbench/contributions";
@@ -518,10 +519,14 @@ function PaneStripActions({ paneId, tab }: { paneId: string; tab: Tab | null }) 
   );
 }
 
-/** OmniTerm: a pane of a split layout without tabs; the `editor.emptyPane` slot offers what to start. */
+/**
+ * OmniTerm: a pane of a split layout without tabs. The `emptyPane` workbench slot (a launcher that
+ * receives the pane) and the `editor.emptyPane` menu slot (buttons) offer what to start in it.
+ */
 function EmptyPane({ paneId }: { paneId: string }) {
   const actions = useActions((s) => s.actions);
   const items = useMenuSlotItems((s) => s.slots["editor.emptyPane"]) ?? [];
+  const Launcher = useWorkbenchSlots((s) => s.emptyPane);
   return (
     <div
       className={styles.emptyPane}
@@ -530,7 +535,7 @@ function EmptyPane({ paneId }: { paneId: string }) {
         activatePane(paneId);
       }}
     >
-      <div>{tx("Empty pane")}</div>
+      {Launcher ? <Launcher paneId={paneId} /> : <div>{tx("Empty pane")}</div>}
       <div className={styles.emptyPaneActions}>
         {items
           .filter((item) => actions.has(item.action))

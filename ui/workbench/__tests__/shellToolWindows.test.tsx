@@ -47,23 +47,23 @@ import { StripePortal } from '../StripePortal'
 describe('shell tool windows', () => {
   beforeEach(() => {
     registered.items = []
-    act(() => useShellPanels.setState({ sessions: null, bookmarks: null }))
+    act(() => useShellPanels.setState({ sessions: null, bookmarks: null, connections: null }))
     act(() => useSessionsView.setState({ quickStartOpen: false, allCollapsed: false, collapsed: {} }))
     document.body.innerHTML = ''
   })
 
-  it('registers Project, Sessions and Problems; bookmarks are not a second stripe button', () => {
+  it('registers Project, Sessions, Connections, Sticky Notes and Problems; bookmarks are not a second stripe button', () => {
     registerShellToolWindows()
     expect(registered.items.map((i) => i.id)).toEqual([
       'project',
-      'omniterm.scm',
       'omniterm.sessions',
+      'omniterm.connections',
+      'omniterm.notes',
       'problems',
     ])
     const leftWindows = registered.items.filter((i) => i.anchor === 'left')
-    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'omniterm.scm', 'omniterm.sessions'])
-    // Source Control needs an open project (a repository); the others work without one.
-    expect(leftWindows.filter((i) => i.id !== 'omniterm.scm').every((i) => i.requiresProject === false)).toBe(true)
+    expect(leftWindows.map((i) => i.id)).toEqual(['project', 'omniterm.sessions', 'omniterm.connections', 'omniterm.notes'])
+    expect(leftWindows.every((i) => i.requiresProject === false)).toBe(true)
     expect(leftWindows[0]?.order).toBe(0)
 
     const problemsWindow = registered.items.find((i) => i.id === 'problems')
@@ -76,10 +76,10 @@ describe('shell tool windows', () => {
   it('gives only the windows of the mock a stripe button by default, and the user choice still wins', () => {
     const off = registerShellToolWindows()
     const tw = (id: string, stripe?: 'onUse') => ({ id, stripe }) as never
-    for (const id of ['project', 'commit', 'bookmarks', 'omniterm.sessions', 'omniterm.terminal', 'run', 'debug', 'git', 'problems', 'notifications']) {
+    for (const id of ['project', 'commit', 'bookmarks', 'omniterm.sessions', 'omniterm.connections', 'omniterm.notes', 'omniterm.terminal', 'run', 'debug', 'git', 'problems', 'notifications']) {
       expect(hasStripeButton(tw(id), {}), id).toBe(true)
     }
-    for (const id of ['structure', 'todo', 'find', 'database', 'agents', 'inspection', 'connections']) {
+    for (const id of ['structure', 'todo', 'find', 'database', 'agents', 'inspection']) {
       expect(hasStripeButton(tw(id), {}), id).toBe(false)
     }
     expect(hasStripeButton(tw('structure'), { structure: true })).toBe(true)

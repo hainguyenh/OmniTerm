@@ -113,6 +113,14 @@
   font-weight: 700;
   letter-spacing: 0.02em;
 }
+/* The run widget: centred between the two drag spacers, buttons spaced to avoid mis-clicks. */
+.center {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 12px;
+}
 .drag {
   flex: 1;
   align-self: stretch;

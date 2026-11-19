@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -25,6 +26,7 @@ import {
   type Placement,
   type VirtualElement,
 } from "@floating-ui/react-dom";
+import { clampDialogOffset } from "./dialogBounds";
 import { FOCUSABLE, onWindowDeactivate, openLayer, trapTab } from "./popupState";
 import styles from "./Popup.module.css";
 
@@ -53,6 +55,11 @@ export interface PopupProps {
   matchWidth?: boolean;
   /** Plain surface without border/shadow styling. */
   unstyled?: boolean;
+  /**
+   * The popup can be moved by any `[data-popup-drag]` element inside it (its header), so it never
+   * stays over what the user wants to see. It stays inside the window.
+   */
+  draggable?: boolean;
 }
 
 function toReference(anchor: PopupAnchor): Element | VirtualElement | null {
@@ -86,8 +93,10 @@ function PopupInner({
   closeOnDeactivate = true,
   matchWidth = false,
   unstyled = false,
+  draggable = false,
   ...aria
 }: PopupProps) {
+  const [moved, setMoved] = useState({ x: 0, y: 0 });
   const reference = toReference(anchor);
   const middleware = useMemo(
     () => [
@@ -135,7 +144,7 @@ function PopupInner({
         trapTab(e, elRef.current);
       }
     };
-    const onPointer = (e: PointerEvent) => {
+    const onPointer = (e: globalThis.PointerEvent) => {
       if (!closeOnOutsideClick) return;
       const target = e.target as Node;
       if (layer.containsFromHere(target)) return;
@@ -173,8 +182,35 @@ function PopupInner({
     target.focus({ preventScroll: true });
   }, [autoFocus]);
 
+  const startDrag = (e: PointerEvent<HTMLDivElement>) => {
+    const el = elRef.current;
+    if (!draggable || !el || e.button !== 0 || !(e.target as Element).closest("[data-popup-drag]")) return;
+    if ((e.target as Element).closest("button, input, a, select, textarea")) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const start = { x: e.clientX - moved.x, y: e.clientY - moved.y };
+    const base = { left: rect.left - moved.x, top: rect.top - moved.y };
+    const move = (ev: globalThis.PointerEvent) => {
+      if (!(ev.buttons & 1)) return up();
+      setMoved(
+        clampDialogOffset(
+          { x: ev.clientX - start.x, y: ev.clientY - start.y },
+          { ...base, width: rect.width, height: rect.height },
+          { width: window.innerWidth, height: window.innerHeight },
+        ),
+      );
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
   return createPortal(
     <div
+      onPointerDown={draggable ? startDrag : undefined}
       ref={(node) => {
         elRef.current = node;
         refs.setFloating(node);
@@ -186,7 +222,11 @@ function PopupInner({
       tabIndex={-1}
       className={clsx(styles.popup, !unstyled && styles.surface, className)}
       data-positioned={isPositioned || undefined}
-      style={{ ...floatingStyles, ...style }}
+      style={{
+        ...floatingStyles,
+        ...style,
+        translate: moved.x || moved.y ? `${moved.x}px ${moved.y}px` : undefined,
+      }}
     >
       {children}
     </div>,

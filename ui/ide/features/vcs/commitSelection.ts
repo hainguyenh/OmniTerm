@@ -8,7 +8,7 @@ import type { CommitOptions, CommitSelection, PartialCommitFile } from "@/bindin
 import { call, commands } from "@/platform/ipc";
 import { workflowSettings } from "@/platform/workflowSettings";
 import { maybeEditorService, provideCommitService, useCommitCheckProviders } from "@/workbench/contributions";
-import { commitRepos, planCommit, type CommitPlan } from "./changes";
+import { commitRepos, planCommit, restrictPlan, type CommitPlan } from "./changes";
 import type { CommitProblem } from "./commitChecks";
 import { useChangelists, withListDefaults } from "./changelists";
 import { useCommit } from "./commitStore";
@@ -24,7 +24,7 @@ export const draftRevision = () => revision;
 
 export function installDraftRevision(): () => void {
   const offCommit = useCommit.subscribe((s, p) => {
-    if (s.message !== p.message || s.amend !== p.amend || s.checks !== p.checks || s.excludedHunks !== p.excludedHunks)
+    if (s.message !== p.message || s.amend !== p.amend || s.checks !== p.checks || s.excludedHunks !== p.excludedHunks || s.commitRepo !== p.commitRepo)
       revision++;
   });
   const offLists = useChangelists.subscribe(() => void revision++);
@@ -40,9 +40,9 @@ export function installDraftRevision(): () => void {
 
 /** The included changes, as the status (refreshed by the caller) and the checkboxes say. */
 export function currentPlan(): CommitPlan {
-  const { status, root } = useVcs.getState();
+  const { status, root, roots } = useVcs.getState();
   const checks = withListDefaults(status, root ?? "", useChangelists.getState().state, useCommit.getState().checks);
-  return planCommit(status, checks);
+  return restrictPlan(planCommit(status, checks), roots, useCommit.getState().commitRepo);
 }
 
 /**

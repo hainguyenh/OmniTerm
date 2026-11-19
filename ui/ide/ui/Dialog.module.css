@@ -78,7 +78,9 @@
   align-items: center;
   gap: 8px;
   padding: 0 6px 0 14px;
-  cursor: default;
+  /* A visible edge marks the title bar as the handle to move the dialog by. */
+  border-bottom: 1px solid var(--border-dialog, var(--border-popup));
+  cursor: move;
   user-select: none;
   touch-action: none;
 }
@@ -88,6 +90,8 @@
   gap: 12px;
 }
 .popupHeader {
+  border-bottom: 1px solid var(--border-popup);
+  cursor: move;
   height: 32px;
   flex: none;
   display: flex;

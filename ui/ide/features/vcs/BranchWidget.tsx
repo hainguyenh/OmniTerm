@@ -37,7 +37,10 @@ import {
   type RepoEntry,
   type RepoRow,
 } from "./repoBranches";
-import { currentRepo, focusRepo, loadBranches, repoName, useVcs } from "./store";
+import { currentRepo, focusRepo, loadBranches, repoName, selectRepo, useVcs } from "./store";
+import { useWorkspaceStore } from "../../../platform/workspaceStore";
+import { decodeWorkspaceSelection } from "../../../utils/workspaceSelection";
+import { rootContaining } from "../../../workbench/footerGitModel";
 import { BranchSync } from "./BranchSync";
 import styles from "./BranchWidget.module.css";
 import { tx } from "@/platform/i18n";
@@ -56,7 +59,25 @@ export function headLabel(branch: { head: string | null; headCommit: string | nu
 /** The current repository (see `currentRepoFor`): the widget and the popup show the same one. */
 function useCurrentRepo(): string | null {
   const path = useEditorRegistry((s) => s.active?.ctx.path ?? null);
-  return useVcs((s) => currentRepoFor(path, s.roots, s.repo));
+  const defaultRepo = useDefaultProjectRepo();
+  return useVcs((s) => currentRepoFor(path, s.roots, defaultRepo ?? s.repo));
+}
+
+/**
+ * The repository of the default (selected) project. Choosing another project selects its
+ * repository, so the title and the branch operations follow it instead of staying on the first.
+ */
+function useDefaultProjectRepo(): string | null {
+  const folder = useWorkspaceStore((s) => {
+    const selection = decodeWorkspaceSelection(s.selection);
+    const folders = s.workspaces.find((w) => w.id === selection?.workspaceId)?.folders?.filter((f) => !f.disabled) ?? [];
+    return (folders.find((f) => f.id === selection?.folderId) ?? folders[0])?.path ?? null;
+  });
+  const repo = useVcs((s) => (folder ? rootContaining(folder, s.roots) : null));
+  useEffect(() => {
+    if (repo) void selectRepo(repo);
+  }, [repo]);
+  return repo;
 }
 
 export function BranchWidget() {

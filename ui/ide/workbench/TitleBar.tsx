@@ -340,6 +340,11 @@ export function TitleBar({
     );
   const entry = (id: string) => <ToolbarEntry key={id} id={id} items={map} />;
   const toolbar = !minimal && !lightEdit;
+  // Items that ask for the middle (the run widget) sit between two spacers, not at an edge.
+  const isCentered = (id: string) => map.get(id)?.center === true;
+  const centered = [...shown.left, ...shown.right].filter(isCentered);
+  const leftIds = shown.left.filter((id) => !isCentered(id));
+  const rightIds = shown.right.filter((id) => !isCentered(id));
   return (
     <header
       ref={setBar}
@@ -357,11 +362,19 @@ export function TitleBar({
           {typeof title === "string" ? <T>{title}</T> : title}
         </span>
       )}
-      {toolbar && shown.left.map(entry)}
+      {toolbar && leftIds.map(entry)}
       <div className={styles.drag} {...windowDragRegion} />
+      {toolbar && centered.length > 0 && (
+        <>
+          <div className={styles.center} data-titlebar-center="">
+            {centered.map(entry)}
+          </div>
+          <div className={styles.drag} {...windowDragRegion} />
+        </>
+      )}
       {!minimal && (
         <>
-          {toolbar && shown.right.map(entry)}
+          {toolbar && rightIds.map(entry)}
           {toolbar && <ContributedToolbar slot="mainToolbar" />}
           <div className={styles.tools}>
             <GearButton customize={menu} />

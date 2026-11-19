@@ -73,8 +73,8 @@ export function QuotaBody() {
 const DOCKS: ReadonlyArray<{ dock: QuotaDock; icon: string; label: string }> = [
   { dock: 'left', icon: DOCK_ICONS.left, label: 'left tool window' },
   { dock: 'right', icon: DOCK_ICONS.right, label: 'right tool window' },
-  { dock: 'stripL', icon: DOCK_ICONS.stripL, label: 'left tab strip as a live status line' },
-  { dock: 'stripR', icon: DOCK_ICONS.stripR, label: 'right tab strip as a live status line' },
+  { dock: 'stripL', icon: DOCK_ICONS.stripL, label: 'left tab strip as quota rings' },
+  { dock: 'stripR', icon: DOCK_ICONS.stripR, label: 'right tab strip as quota rings' },
   { dock: 'footer', icon: DOCK_ICONS.footer, label: 'footer status line' },
 ]
 

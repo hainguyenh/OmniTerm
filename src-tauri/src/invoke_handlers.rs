@@ -139,6 +139,7 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         agent_quota::bridge_commands::agent_quota_agy_bridge_status,
         agent_quota::bridge_commands::agent_quota_agy_bridge_install,
         agent_quota::bridge_commands::agent_quota_agy_bridge_remove,
+        agent_quota::bridge_commands::agent_quota_statusline_text,
         agent_quota::usage_commands::agent_quota_ensure_passive,
         agent_quota::agent_quota_detect,
         agent_quota::agent_quota_suspend,
@@ -162,6 +163,7 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         attachments::import_clipboard_files,
         attachments::list_attachments,
         attachments::clear_attachments,
+        attachments::move_attachments,
         // Git
     ]
 }

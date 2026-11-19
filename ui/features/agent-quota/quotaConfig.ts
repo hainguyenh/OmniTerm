@@ -80,6 +80,8 @@ export interface DisplayConfig {
   /** Hide the weekly line while it is barely used and its reset is still a long way off. */
   weeklyAutoHide: boolean
   weeklyThresholdPct?: number
+  /** Show the quota strip above each terminal; off leaves only the compact footer line. */
+  paneStrip: boolean
   pace: PaceConfig
   artSpeed?: ArtSpeed
   artSize?: ArtSize
@@ -157,6 +159,7 @@ export const DEFAULT_QUOTA_CONFIG: QuotaConfig = {
     customArtSession: true,
     weeklyAutoHide: true,
     weeklyThresholdPct: 60,
+    paneStrip: true,
     pace: { enabled: true, glyphs: DEFAULT_PACE_GLYPHS },
     artSpeed: 'normal',
     artSize: 'normal',
@@ -273,6 +276,7 @@ export function parseQuotaConfig(value: unknown): QuotaConfig {
       animations: bool(display.animations, base.display.animations),
       customArtSession: outdated || customArtSession,
       weeklyAutoHide: bool(display.weeklyAutoHide, base.display.weeklyAutoHide),
+      paneStrip: bool(display.paneStrip, base.display.paneStrip),
       weeklyThresholdPct: num(display.weeklyThresholdPct, base.display.weeklyThresholdPct ?? 60, 0, 100),
       pace: parsePace(display.pace, base.display.pace),
       artSpeed: oneOf(display.artSpeed, ['slow', 'normal', 'fast'] as const, base.display.artSpeed ?? 'normal'),

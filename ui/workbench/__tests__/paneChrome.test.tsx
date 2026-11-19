@@ -15,7 +15,11 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
   }),
 }))
 
+const invoke = vi.hoisted(() => vi.fn(async (..._args: unknown[]): Promise<unknown> => null))
+vi.mock('@tauri-apps/api/core', () => ({ invoke }))
+
 import { getAction } from '../../ide/platform/actions'
+import { useWorkbenchSlots } from '../../ide/workbench/contributions'
 import { omnitermActionId } from '../../platform/omnitermActions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
@@ -27,6 +31,7 @@ import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStor
 import { clearPaneConsole, registerPaneConsole } from '../../utils/paneConsoles'
 import { SessionAgentFooter, SessionAgentHeader } from '../sessions/SessionAgentHeader'
 import { useSessionBridge } from '../sessions/sessionBridge'
+import { EmptyPaneLauncher } from '../sessions/EmptyPaneLauncher'
 import { NEW_SESSION_IN_PANE } from '../sessions/paneQuickStartStore'
 import { paintOnGroup } from '../sessions/sessionIcons'
 
@@ -38,17 +43,18 @@ afterEach(() => {
 })
 
 describe('pane title actions', () => {
-  it('adds Maximize to the editor actions, New Session to every pane tab strip, the session picker to the empty pane, and removes them again', () => {
+  it('adds Maximize to the editor actions, New Session to every pane tab strip, the session launcher to the empty pane, and removes them again', () => {
     const dispose = registerPaneTitleActions()
     expect(slots.items).toEqual([
       expect.objectContaining({ slot: 'editor.title', action: TOGGLE_MAXIMIZE_PANE, icon: 'fullscreen' }),
       expect.objectContaining({ slot: 'editor.pane', action: omnitermActionId('newSession'), icon: 'plus' }),
-      expect.objectContaining({ slot: 'editor.emptyPane', action: NEW_SESSION_IN_PANE }),
     ])
     expect(getAction(NEW_SESSION_IN_PANE)).toBeDefined()
+    expect(useWorkbenchSlots.getState().emptyPane).toBe(EmptyPaneLauncher)
     dispose()
-    expect(slots.disposed).toBe(3)
+    expect(slots.disposed).toBe(2)
     expect(getAction(NEW_SESSION_IN_PANE)).toBeUndefined()
+    expect(useWorkbenchSlots.getState().emptyPane).toBeUndefined()
   })
 })
 
@@ -147,6 +153,8 @@ describe('session agent header', () => {
     expect(art).not.toBeNull()
     expect(art?.getAttribute('data-loading-tier')).toBe('onTrack')
     expect(art?.querySelector('img')).not.toBeNull()
+    // The zone stops at 80% of the header, so the art cannot run past it.
+    expect(zone.className).toContain('mr-[20%]')
   })
 })
 
@@ -163,7 +171,7 @@ describe('session agent footer', () => {
     act(() => setPanePresence({ t1: presence }))
     render(<SessionAgentFooter sessionId="t1" />)
     expect(screen.queryByTestId('agent-footer-quota')).toBeNull()
-    expect(screen.getByRole('button', { name: /^Attach files/ }).closest('[role=toolbar]')?.getAttribute('aria-label')).toBe('Agent actions')
+    expect(screen.getByRole('button', { name: 'Attachments' }).closest('[role=toolbar]')?.getAttribute('aria-label')).toBe('Agent actions')
     act(() => {
       updateQuota((state) => ({
         ...state,
@@ -181,7 +189,67 @@ describe('session agent footer', () => {
     expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 64%')
   })
 
-  it('exports, clears and renews the console from beside Attach files', () => {
+  // Regression: the footer floated over the terminal and covered the agent's last line.
+  it('is a row of its own, never laid over the terminal', () => {
+    act(() => setPanePresence({ t1: presence }))
+    render(<SessionAgentFooter sessionId="t1" />)
+    const footer = screen.getByTestId('agent-footer')
+    expect(footer.hasAttribute('data-agent-footer')).toBe(true)
+    expect(footer.className).not.toMatch(/\babsolute\b/)
+    expect(screen.getByTestId('agent-footer-actions').className).not.toMatch(/\babsolute\b/)
+  })
+
+  const conversation = '11111111-1111-4111-8111-111111111111'
+  const withQuota = (profileDir: string | null) => updateQuota((state) => ({
+    ...state,
+    config: { ...state.config, enabled: true },
+    terminals: { t1: { sessionId: 't1', agent: 'claude', pid: 1, startTime: 0, profileDir, profileName: 'claude', subAgentCount: 0, launcher: null, instanceKey: 'i1', profileKey: 'claude:default' } },
+    profiles: {
+      'claude:default': {
+        key: 'claude:default', agent: 'claude', profileName: 'claude', profileDir, launcher: null, history: [], errorStreak: 0,
+        nextFetchAt: 0, fetching: false, wake: {}, waking: false,
+        lastGood: { fetchedAt: 0, windows: [{ kind: 'session', label: '5h', usedPct: 12 }] },
+      },
+    },
+  }))
+
+  it('shows the agent status line in place of the quota, as one plain row', async () => {
+    invoke.mockResolvedValue('\x1b[32mOpus 4\x1b[0m  ~/work\n\x1b]8;;https://x\x075h 4%\x1b]8;;\x07\n')
+    act(() => {
+      setPanePresence({ t1: { ...presence, claudeSessionId: conversation } })
+      withQuota('C:/Users/me/.claude')
+    })
+    render(<SessionAgentFooter sessionId="t1" />)
+    const line = await screen.findByTestId('agent-footer-statusline')
+    expect(line.textContent).toBe('Opus 4 ~/work · 5h 4%')
+    expect(line.getAttribute('title')).toBe('Opus 4 ~/work · 5h 4%')
+    expect(screen.queryByTestId('agent-footer-quota')).toBeNull()
+    expect(invoke).toHaveBeenCalledWith('agent_quota_statusline_text', { profileDir: 'C:/Users/me/.claude', sessionId: conversation })
+    invoke.mockReset()
+    invoke.mockResolvedValue(null)
+  })
+
+  it('keeps the quota while the agent has no status line, or its conversation is not known', async () => {
+    invoke.mockResolvedValue(null)
+    act(() => {
+      setPanePresence({ t1: { ...presence, claudeSessionId: conversation } })
+      withQuota('C:/Users/me/.claude')
+    })
+    render(<SessionAgentFooter sessionId="t1" />)
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(invoke).toHaveBeenCalled()
+    expect(screen.queryByTestId('agent-footer-statusline')).toBeNull()
+    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 12%')
+
+    invoke.mockClear()
+    act(() => setPanePresence({ t1: presence }))
+    expect(invoke).not.toHaveBeenCalled()
+    expect(screen.getByTestId('agent-footer-quota').textContent).toBe('quota 12%')
+  })
+
+  it('exports, clears and renews the console from beside the attachments list', () => {
     act(() => setPanePresence({ t1: presence }))
     const events: { type: string; detail: unknown }[] = []
     const record = (event: Event) => events.push({ type: event.type, detail: (event as CustomEvent).detail })
@@ -193,7 +261,7 @@ describe('session agent footer', () => {
       render(<SessionAgentFooter sessionId="t1" />)
       const toolbar = screen.getByRole('toolbar', { name: 'Agent actions' })
       const labels = Array.from(toolbar.querySelectorAll('button')).map((button) => button.getAttribute('aria-label') ?? button.title)
-      expect(labels.map((label) => label.split(' ')[0])).toEqual(['Attach', 'Export', 'Clear', 'Renew'])
+      expect(labels.map((label) => label.split(' ')[0])).toEqual(['Attachments', 'Export', 'Clear', 'Renew'])
 
       fireEvent.click(screen.getByRole('button', { name: /^Export the whole console/ }))
       fireEvent.click(screen.getByRole('button', { name: /^Clear the console/ }))

@@ -8,6 +8,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import { resolveTerminalFontFamily } from '../../utils/terminalOptions'
+import { getSessionAttachments, recordPastedImage } from '../../utils/sessionAttachmentStore'
 import TerminalView from '../TerminalView'
 
 const xterm = vi.hoisted(() => {
@@ -412,6 +413,20 @@ describe('TerminalView full lifecycle', () => {
     rerender(<TerminalView id="vis" connection={localConnection} active />)
     expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
     width.mockReturnValue(640)
+  })
+
+  it('keeps the pane attachment list when the connection record is refreshed, and drops it on unmount', () => {
+    installApi()
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:keep')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const { rerender, unmount } = render(<TerminalView id="keep-media" connection={localConnection} />)
+    recordPastedImage('keep-media', { bytes: new Uint8Array([1]), path: '/attachments/paste-1.png' })
+
+    rerender(<TerminalView id="keep-media" connection={{ ...localConnection }} />)
+    expect(getSessionAttachments('keep-media')).toHaveLength(1)
+
+    unmount()
+    expect(getSessionAttachments('keep-media')).toHaveLength(0)
   })
 
   it('refits and repaints when the layout mode changes while the pane stays visible', () => {

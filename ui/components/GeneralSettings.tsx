@@ -53,7 +53,7 @@ interface GeneralSettingsProps {
 
 const LABEL_CLS = 'text-[10px] text-theme-fg uppercase font-bold tracking-widest ml-0.5'
 const FIELD_CLS =
-  'bg-theme-bg border border-theme-border rounded-lg text-xs text-white focus:outline-none focus:border-theme-accent transition-colors'
+  'bg-theme-bg border border-theme-border rounded-lg text-xs text-theme-fg focus:outline-none focus:border-theme-accent transition-colors'
 const CARD_CLS = 'rounded-xl border border-theme-border/60 bg-theme-bg/30 p-4 flex flex-col gap-3.5 shadow-sm'
 const SECTION_TITLE_CLS = 'flex items-center gap-2 text-xs font-bold text-theme-fg tracking-wide uppercase'
 

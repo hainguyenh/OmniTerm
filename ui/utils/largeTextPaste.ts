@@ -14,6 +14,7 @@
  */
 import type { Terminal } from '@xterm/xterm'
 
+import { attachmentFolderFor } from './attachmentFolder'
 import { formatAttachmentPaths, type SavedAttachment } from './attachmentInput'
 import { requestLargeTextPasteDecision } from './largeTextPasteStore'
 
@@ -95,7 +96,7 @@ export const saveTextAsAttachment = async (
   const nameHint = detectTextAttachmentName(text)
   const bytes = new TextEncoder().encode(text)
   try {
-    const info = await window.omnitermAPI.attachments?.save(nameHint, bytes, sessionId)
+    const info = await window.omnitermAPI.attachments?.save(nameHint, bytes, attachmentFolderFor(sessionId))
     return info ? { info } : null
   } catch {
     return null

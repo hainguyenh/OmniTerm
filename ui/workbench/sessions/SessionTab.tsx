@@ -40,8 +40,8 @@ export function SessionTab({ input }: { input: EditorInput }) {
     return registerFontZoomSurface(container, (delta) => stepSessionFontSize(sessionId, delta))
   }, [sessionId])
 
-  // The surface box keeps its place below the optional agent header, so the header coming and
-  // going only resizes the terminal; it never re-parents it.
+  // The surface box keeps its place between the optional agent header and footer, so either
+  // coming and going only resizes the terminal; it never re-parents it.
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col">
       {sessionId && <SessionAgentHeader sessionId={sessionId} />}
@@ -51,8 +51,8 @@ export function SessionTab({ input }: { input: EditorInput }) {
             This session is not running in this window.
           </div>
         )}
-        {sessionId && <SessionAgentFooter sessionId={sessionId} />}
       </div>
+      {sessionId && <SessionAgentFooter sessionId={sessionId} />}
     </div>
   )
 }

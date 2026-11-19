@@ -149,7 +149,17 @@ async function annotate(arg: unknown) {
   const path = argPath(arg);
   let handle = activeEditor();
   if (path && handle?.ctx.path !== path) {
-    await editorService().openFile(path, { focus: true });
+    try {
+      await editorService().openFile(path, { focus: true });
+    } catch (e) {
+      notifications().notify({
+        group: "vcs",
+        level: "error",
+        title: "Cannot annotate",
+        body: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
     handle = editorsFor(path)[0] ?? activeEditor();
   }
   if (!handle) {

@@ -33,6 +33,7 @@ mod profiles;
 mod rate_windows;
 mod reset;
 mod service;
+mod statusline_store;
 mod system_deps;
 mod terminal_text;
 mod types;
@@ -52,6 +53,7 @@ pub use claude_bridge_run::{run_guard_mode, run_statusline_mode, GUARD_FLAG, STA
 pub use deps::Platform;
 pub use passive_source::BridgeTarget;
 pub use service::{parse_fetch_request, parse_wake_request, QuotaService};
+pub use statusline_store::read_statusline;
 pub use system_deps::SystemDeps;
 pub use types::{
     AgentKind, BreakdownEntry, DiscoveredProfile, FetchUsageRequest, ModelFamily, QuotaCredits,

@@ -230,6 +230,7 @@ const defaults: Api = {
     importClipboardFiles: async () => [],
     list: async () => ({ dir: "C:/data/attachments", files: [] }),
     clear: async () => ({ removed: 0, bytes: 0, failed: 0 }),
+    move: async () => [],
   },
   sftp: {
     home: async () => "/home",

@@ -91,7 +91,7 @@ export function TitleControls({
             <button
               type="button"
               onClick={onZoomReset}
-              className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+              className="inline-flex items-center justify-center h-6 px-1.5 rounded-lg border text-[10px] font-mono transition-colors hover:bg-theme-hover border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
             >
               {Math.round(zoomFactor * 100)}%
             </button>
@@ -121,7 +121,7 @@ export function TitleControls({
             type="button"
             onClick={handleToggleMode}
             aria-label={isLightMode ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            className="inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-white/5 border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
+            className="inline-flex items-center justify-center w-6 h-6 rounded-lg border transition-colors hover:bg-theme-hover border-[var(--theme-border)] text-inherit opacity-70 hover:opacity-100"
           >
             {isLightMode ? (
               <Icon name="moon" size={14} />

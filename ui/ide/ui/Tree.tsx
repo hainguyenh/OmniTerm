@@ -85,6 +85,8 @@ export interface TreeProps<T> {
   loadChildren?: (node: T) => void | Promise<void>;
   /** Custom row content (after the chevron). Defaults to icon + highlighted label + `getDetail`. */
   renderNode?: (node: T, state: TreeRowState) => ReactNode;
+  /** Optional control drawn at the start of the row, before the chevron (e.g. a project's active checkbox). */
+  renderPrefix?: (node: T, state: TreeRowState) => ReactNode;
   getIcon?: (node: T, expanded: boolean) => IconName | (string & {}) | undefined;
   /** Muted trailing detail (e.g. a path next to the project root); may include styled content. */
   getDetail?: (node: T) => ReactNode;
@@ -247,6 +249,7 @@ export function Tree<T>(props: TreeProps<T>) {
     isExpandable,
     loadChildren,
     renderNode,
+    renderPrefix,
     getIcon,
     getDetail,
     getColor,
@@ -732,6 +735,7 @@ export function Tree<T>(props: TreeProps<T>) {
                   if (!props.reorder || !reordering.suppressActivation.current) activate(row, e);
                 }}
               >
+                {renderPrefix?.(row.node, state)}
                 <span
                   className={styles.chevron}
                   data-tree-toggle

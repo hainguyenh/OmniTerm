@@ -40,6 +40,8 @@ interface CommitState {
   selectedList: string | null;
   /** Selected shelf tree key: shelf id, optionally followed by NUL and a file path. */
   selectedShelf: string | null;
+  /** Repository the next commit goes to when included changes span several (null: the first that has some). */
+  commitRepo: string | null;
   /** Commit a Fixup… / Squash Into… message was prepared for: offers Commit and Rebase. */
   fixupTarget: Commit | null;
 }
@@ -66,6 +68,7 @@ export const useCommit = create<CommitState>(() => ({
   tab: "changes",
   selectedList: null,
   selectedShelf: null,
+  commitRepo: null,
   fixupTarget: null,
 }));
 

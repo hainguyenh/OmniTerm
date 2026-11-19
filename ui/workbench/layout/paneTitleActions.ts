@@ -1,6 +1,7 @@
 import { registerAction } from '../../ide/platform/actions'
-import { registerMenuSlotItem } from '../../ide/workbench/contributions'
+import { provideEmptyPane, registerMenuSlotItem } from '../../ide/workbench/contributions'
 import { omnitermActionId } from '../../platform/omnitermActions'
+import { EmptyPaneLauncher } from '../sessions/EmptyPaneLauncher'
 import { NEW_SESSION_IN_PANE, openPaneQuickStart } from '../sessions/paneQuickStartStore'
 
 /** The action that maximizes the active pane, or restores the layout from a maximized one. */
@@ -9,8 +10,9 @@ export const TOGGLE_MAXIMIZE_PANE = 'omniterm.toggleMaximizePane'
 /**
  * The buttons of every pane. Maximize acts on the editor shown, so it floats with the editor's
  * actions at its top-right corner (`editor.title`); the new session ends the pane's tab strip
- * (`editor.pane`). An empty pane of a split layout (a split of a session tab is one) offers a
- * button that opens the session picker: the project, then a terminal or an agent (`editor.emptyPane`).
+ * (`editor.pane`). An empty pane of a split layout (a split of a session tab is one) shows the
+ * session launcher inline: the project, then the terminal (default) or an agent. The floating
+ * picker stays an action ("New Session in This Pane…") for the command palette and shortcuts.
  */
 export function registerPaneTitleActions(): () => void {
   const disposers = [
@@ -33,11 +35,7 @@ export function registerPaneTitleActions(): () => void {
       verbatim: true,
       run: openPaneQuickStart,
     }),
-    registerMenuSlotItem('editor.emptyPane', {
-      action: NEW_SESSION_IN_PANE,
-      label: 'New session…',
-      verbatim: true,
-    }),
+    provideEmptyPane(EmptyPaneLauncher),
   ]
   return () => disposers.reverse().forEach((dispose) => dispose())
 }

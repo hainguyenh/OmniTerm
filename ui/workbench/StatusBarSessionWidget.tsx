@@ -1,7 +1,6 @@
 import { RotateCw, Sparkles, Unplug } from 'lucide-react'
 
 import { FrozenSessionStatus } from '../features/agent-quota/paneHosts'
-import { AttachmentsFooterButton } from '../components/AttachmentsFooterButton'
 import MetricsChips from '../components/SessionMetricsChips'
 import { useTabs } from '../ide/editor/core/controller'
 import { usePanePresence } from '../utils/agentPresenceStore'
@@ -43,7 +42,6 @@ export function StatusBarSessionWidget() {
       {remote && (
         <MetricsChips status={session.status} latency={latency} metrics={live.metrics[sessionId]} connectedAt={live.connectedAt[sessionId]} compact />
       )}
-      <AttachmentsFooterButton sessionId={sessionId} />
       {dead && api && (
         <button type="button" className={action} onClick={() => api.reconnect(sessionId)}>
           <RotateCw className="w-3 h-3" /> Reconnect

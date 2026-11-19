@@ -36,7 +36,7 @@ describe('large text paste handling through terminal clipboard', () => {
         readImage: async () => null,
         saveImageTemp: vi.fn(),
       },
-      attachments: { save, importClipboardFiles: vi.fn(async () => []), list: vi.fn(), clear: vi.fn() },
+      attachments: { save, importClipboardFiles: vi.fn(async () => []), list: vi.fn(), clear: vi.fn(), move: vi.fn() },
     }
   })
 

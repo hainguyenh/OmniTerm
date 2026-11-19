@@ -51,7 +51,7 @@ export const FontSizeControl: React.FC<{
       <div className="flex w-full items-center gap-2 rounded-md bg-theme-popup px-2 py-1.5 text-xs text-theme-fg">
         <TextCursorInput className="h-3.5 w-3.5 flex-shrink-0 text-theme-dim" />
         <span className="flex-1">Font size</span>
-        <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
+        <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-theme-hover">
           <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
           <span className={`${compact ? 'w-4' : 'w-5'} text-center font-mono text-[10px] text-theme-fg`} aria-label={scopeLabel}>{fontSize}</span>
           <button type="button" onClick={() => onFontSizeChange(1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>+</button>
@@ -60,7 +60,7 @@ export const FontSizeControl: React.FC<{
     )
   }
   return (
-    <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-black/10">
+    <div className="flex items-center gap-1.5 rounded-lg border px-1 border-theme-border bg-theme-hover">
       <Tooltip content="Decrease font size" placement="bottom">
         <button type="button" onClick={() => onFontSizeChange(-1)} className={`${stepSize} flex items-center justify-center text-theme-dim hover:text-theme-accent transition-colors`}>-</button>
       </Tooltip>
@@ -180,10 +180,10 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
               : compact
                 // Borderless to match the other pane-header buttons (stop, clear, detach…) — only
                 // the icon color signals the open state, same as their hover/active treatment.
-                ? `inline-flex items-center justify-center ${btnSize} rounded transition-colors hover:bg-[#414868] ${
+                ? `inline-flex items-center justify-center ${btnSize} rounded transition-colors hover:bg-theme-hover ${
                   open ? 'text-theme-accent' : 'text-theme-dim hover:text-theme-accent'
                   }`
-                : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-white/5 ${
+                : `inline-flex items-center justify-center ${btnSize} rounded-lg border transition-colors hover:bg-theme-hover ${
                 open
                   ? 'border-[var(--theme-accent)] text-[var(--theme-accent)]'
                   : 'border-theme-border text-inherit opacity-70 hover:opacity-100'
@@ -209,7 +209,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
           >
             <div className="px-3 py-1.5 flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-widest text-theme-dim">
               Theme
-              <span className="normal-case font-medium tracking-normal text-[9px] px-1.5 py-0.5 rounded-full bg-black/10 border border-theme-border">
+              <span className="normal-case font-medium tracking-normal text-[9px] px-1.5 py-0.5 rounded-full bg-theme-hover border border-theme-border">
                 {scopeLabel}
               </span>
             </div>
@@ -223,7 +223,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
                     key={t.id}
                     type="button"
                     onClick={() => { onThemeApply(t.id); setOpen(false) }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-white/5 ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-xs transition-colors hover:bg-theme-hover ${
                       themeId === t.id ? 'text-[var(--theme-accent)] font-bold' : 'text-inherit opacity-85 hover:opacity-100'
                     }`}
                   >
@@ -244,7 +244,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
               <button
                 type="button"
                 onClick={() => { onApplyToAll(); setOpen(false) }}
-                className="w-full flex items-center px-3 py-2 text-xs transition-colors hover:bg-white/5 text-inherit"
+                className="w-full flex items-center px-3 py-2 text-xs transition-colors hover:bg-theme-hover text-inherit"
               >
                 Apply to all terminals
               </button>
@@ -253,7 +253,7 @@ const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
               <button
                 type="button"
                 onClick={() => { setOpen(false); onRemix() }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-white/5 text-inherit"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-xs transition-colors hover:bg-theme-hover text-inherit"
               >
                 <Palette className="w-3.5 h-3.5 text-[var(--theme-accent)]" />Theme Remix…
               </button>

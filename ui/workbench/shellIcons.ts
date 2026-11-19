@@ -7,10 +7,16 @@ const STROKE = 'stroke="#6C707E" stroke-linejoin="round" stroke-linecap="round"'
 
 /** Icon of the Sessions tool window: sparkles (the mock's "agent" glyph). */
 export const SESSIONS_ICON = 'ext:omniterm/sessions'
+/** Icon of the Sticky Notes tool window: a note with a folded corner. */
+export const STICKY_NOTES_ICON = 'ext:omniterm/sticky-notes'
 /** Icon of the Agents tool window (right stripe): a robot head, so it never matches Sessions. */
 export const AGENT_TASKS_ICON = 'ext:omniterm/agent-tasks'
 
 const ICONS: ReadonlyArray<readonly [string, string]> = [
+  [
+    STICKY_NOTES_ICON,
+    svg(`<path d="M3 2.5h10v7L9.5 13.5H3z" ${STROKE}/><path d="M13 9.5H9.5v4M5.5 6h5M5.5 8.5h3" ${STROKE}/>`),
+  ],
   [
     SESSIONS_ICON,
     svg(

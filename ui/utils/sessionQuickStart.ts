@@ -46,6 +46,19 @@ export function quickStartProjects(workspaces: readonly Workspace[]): QuickStart
   return projects
 }
 
+/**
+ * The projects a session picker offers: those of workspace `workspaceId`, else every workspace's.
+ * Listed per workspace first: a folder two workspaces share belongs to both, and the full list
+ * keeps it only under the first one.
+ */
+export function workspaceQuickStartProjects(
+  workspaces: readonly Workspace[],
+  workspaceId: string | null | undefined,
+): QuickStartProject[] {
+  const own = quickStartProjects(workspaces.filter(workspace => workspace.id === workspaceId))
+  return own.length ? own : quickStartProjects(workspaces)
+}
+
 /** One way to start Claude: the default profile, or a profile launcher (`claude-work`). */
 export interface ClaudeProfileChoice {
   /** Shown to the user: the profile's name. */

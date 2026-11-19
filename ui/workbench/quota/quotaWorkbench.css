@@ -184,13 +184,16 @@
   font: inherit;
 }
 
-/* Live status line on a tab strip: one tiny vertical bar per agent. */
+/* Agent quota on a tab strip: one ring per agent, as wide as the stripe allows. */
 .omt-q-stripe {
   display: flex;
+  flex: none;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  width: 34px;
+  width: 100%;
+  min-width: 28px;
+  max-width: 34px;
   margin-top: 4px;
   padding: 6px 0;
   border: 0;
@@ -220,26 +223,23 @@
   font-weight: 700;
 }
 
-.omt-q-stripe-bar {
-  position: relative;
-  width: 6px;
-  height: 30px;
-  overflow: hidden;
-  border-radius: 3px;
-  background: var(--border-strong);
-}
-
-.omt-q-stripe-bar > i {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
+.omt-q-ring {
   display: block;
-  border-radius: 3px;
-  transition: height 0.6s ease;
+  flex: none;
+  overflow: visible;
 }
 
-/* Footer chips: "Claude (work) ▬ 64% · Codex ▬ 31%". */
+.omt-q-ring circle {
+  transition: stroke-dasharray 0.6s ease;
+}
+
+.omt-q-ring-pct {
+  fill: currentColor;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+/* Footer chips: "Claude (1) | Codex (2)", the running profiles per agent. */
 .omt-q-footer {
   display: inline-flex;
   align-items: center;
@@ -260,22 +260,8 @@
   background: var(--bg-toolbar-hover);
 }
 
-.omt-q-mini {
-  display: inline-block;
-  width: 34px;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--border-strong);
-}
-
-.omt-q-mini > i {
-  display: block;
-  height: 100%;
-}
-
-/* Footer: one entry per running profile. The list wraps rather than clips, and only its first
-   line shows, so an entry that does not fit disappears whole (StatusBarQuotaChips counts them). */
+/* Footer: one entry per agent. The list wraps rather than clips, so an entry that does not fit
+   disappears whole. */
 .omt-q-profiles {
   display: flex;
   flex: 0 1 auto;
@@ -303,6 +289,20 @@
 .omt-q-prof[data-active] .omt-q-prof-name {
   color: var(--fg);
   font-weight: 600;
+}
+
+.omt-q-mini {
+  display: inline-block;
+  width: 34px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border-strong);
+}
+
+.omt-q-mini > i {
+  display: block;
+  height: 100%;
 }
 
 /* The percent sits above its bar, the pair as tall as one line of text. */

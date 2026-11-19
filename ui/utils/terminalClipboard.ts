@@ -1,5 +1,6 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SavedPastedImage } from './pastedImageStore'
+import { attachmentFolderFor } from './attachmentFolder'
 import { formatAttachmentPaths, installAttachmentDrop, saveAttachmentFiles, type SavedAttachment } from './attachmentInput'
 import { handleLargeTextPaste, largePasteThresholds, saveTextAsAttachment } from './largeTextPaste'
 import { keepPasteForReview } from './pasteReview'
@@ -72,7 +73,7 @@ export const createNativePasteGate = ({
     if (imageItem) {
       cancelNativePaste()
       void imageItem.getAsFile()?.arrayBuffer().then(async bytes => {
-        const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes), sessionId)
+        const path = await window.omnitermAPI.clipboard.saveImageTemp(new Uint8Array(bytes), attachmentFolderFor(sessionId))
         if (path) {
           onImageSaved?.({ bytes: new Uint8Array(bytes), path })
           noteLocalEcho()
@@ -151,7 +152,7 @@ const readImageFromClipboard = async (sessionId?: string): Promise<SavedPastedIm
         if (!type) continue
         const blob = await item.getType(type)
         const bytes = new Uint8Array(await blob.arrayBuffer())
-        const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, sessionId)
+        const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, attachmentFolderFor(sessionId))
         if (path) return { bytes, path }
       }
     }
@@ -162,7 +163,7 @@ const readImageFromClipboard = async (sessionId?: string): Promise<SavedPastedIm
   if (!image) return null
   const bytes = await pngBytesFromRgba(image)
   if (!bytes) return null
-  const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, sessionId)
+  const path = await window.omnitermAPI.clipboard.saveImageTemp(bytes, attachmentFolderFor(sessionId))
   return path ? { bytes, path } : null
 }
 

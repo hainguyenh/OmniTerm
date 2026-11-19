@@ -44,6 +44,8 @@ export interface ChangeNode {
   changelist?: string;
   /** The active change list's group. */
   active?: boolean;
+  /** A project (repository) node wrapping the groups when several repositories have changes. */
+  project?: boolean;
 }
 
 export function groupOf(fs: FileStatus): GroupId | null {
@@ -180,37 +182,6 @@ function childNodes(files: readonly FileStatus[], root: string, group: GroupId, 
     .map((f) => fileNode(f, root, group, true, scope));
 }
 
-/** With several repositories, a node per repository (IDEA's "Group by Repository") above the files. */
-function repoNodes(
-  files: readonly FileStatus[],
-  root: string,
-  group: GroupId,
-  groupByDir: boolean,
-  scope: string,
-  repos: readonly string[],
-): ChangeNode[] {
-  if (repos.length < 2) return childNodes(files, root, group, groupByDir, scope);
-  const byRepo = new Map<string, FileStatus[]>();
-  for (const f of files) {
-    const repo = rootOf(f.path, repos) ?? root;
-    let list = byRepo.get(repo);
-    if (!list) byRepo.set(repo, (list = []));
-    list.push(f);
-  }
-  const order = (r: string) => (repos.includes(r) ? repos.indexOf(r) : repos.length);
-  return [...byRepo]
-    .sort(([a], [b]) => order(a) - order(b))
-    .map(([repo, own]) => ({
-      key: `${scope}:repo:${repo}`,
-      type: "dir" as const,
-      label: repoLabel(repo, root),
-      group,
-      children: childNodes(own, repo, group, groupByDir, `${scope}@${repo}`),
-      files: own,
-      path: repo,
-    }));
-}
-
 function tagList(nodes: ChangeNode[], id: string): ChangeNode[] {
   for (const n of nodes) {
     n.changelist = id;
@@ -223,7 +194,7 @@ function tagList(nodes: ChangeNode[], id: string): ChangeNode[] {
  * Group roots (Merge Conflicts / Changes / Unversioned Files) with flat or directory
  * children. With change lists, "Changes" is split into one group per list
  * (`ChangelistState.files` keys are project-relative paths). With several
- * repositories (`repos`), each group's files are grouped by repository first. With
+ * repositories (`repos`), a project node per repository wraps its groups. With
  * `byStaging`, "Changes" becomes "Staged Changes" and "Unstaged Changes" instead.
  */
 export function buildChangeTree(
@@ -232,6 +203,52 @@ export function buildChangeTree(
   groupByDir: boolean,
   lists?: ChangelistState,
   repos: readonly string[] = [],
+  byStaging = false,
+): ChangeNode[] {
+  if (repos.length < 2) return buildGroups(status, root, root, groupByDir, lists, byStaging);
+  // Several repositories: a project node on top, then its groups (Changes / Unversioned Files), folders and files.
+  const byRepo = new Map<string, FileStatus[]>();
+  for (const fs of status) {
+    if (!groupOf(fs)) continue;
+    const repo = rootOf(fs.path, repos) ?? root;
+    let list = byRepo.get(repo);
+    if (!list) byRepo.set(repo, (list = []));
+    list.push(fs);
+  }
+  const order = (r: string) => (repos.includes(r) ? repos.indexOf(r) : repos.length);
+  return [...byRepo]
+    .sort(([a], [b]) => order(a) - order(b))
+    .map(([repo, own]): ChangeNode => {
+      const children = scopeKeys(buildGroups(own, repo, root, groupByDir, lists, byStaging), repo);
+      return {
+        key: `project:${repo}`,
+        type: "dir",
+        label: repoLabel(repo, root),
+        group: children[0]?.group ?? "changes",
+        children,
+        files: own,
+        path: repo,
+        project: true,
+      };
+    });
+}
+
+/** Prefixes every key below a project, so the same group or folder of two projects stays distinct. */
+function scopeKeys(nodes: ChangeNode[], repo: string): ChangeNode[] {
+  for (const n of nodes) {
+    n.key = `${repo}|${n.key}`;
+    if (n.children) scopeKeys(n.children, repo);
+  }
+  return nodes;
+}
+
+/** The group nodes of `status`, whose directories are relative to `root` and change lists to `listRoot`. */
+function buildGroups(
+  status: readonly FileStatus[],
+  root: string,
+  listRoot: string,
+  groupByDir: boolean,
+  lists?: ChangelistState,
   byStaging = false,
 ): ChangeNode[] {
   const byGroup = new Map<GroupId, FileStatus[]>();
@@ -253,7 +270,7 @@ export function buildChangeTree(
       ];
       for (const [side, own] of sides) {
         if (!own.length) continue;
-        const children = repoNodes(own, root, side, groupByDir, side, repos);
+        const children = childNodes(own, root, side, groupByDir, side);
         roots.push({
           key: `group:${side}`,
           type: "group",
@@ -268,7 +285,7 @@ export function buildChangeTree(
     if (g === "changes" && lists) {
       const byList = new Map<string, FileStatus[]>(lists.lists.map((l) => [l.id, []]));
       for (const f of files) {
-        const id = lists.files?.[relTo(root, stripSlash(f.path))];
+        const id = lists.files?.[relTo(listRoot, stripSlash(f.path))];
         byList.get(id && byList.has(id) ? id : lists.active)?.push(f);
       }
       for (const l of lists.lists) {
@@ -281,7 +298,7 @@ export function buildChangeTree(
           type: "group",
           label: l.name,
           group: g,
-          children: tagList(repoNodes(own, root, g, groupByDir, scope, repos), l.id),
+          children: tagList(childNodes(own, root, g, groupByDir, scope), l.id),
           files: own,
           changelist: l.id,
           active: l.id === lists.active,
@@ -291,14 +308,19 @@ export function buildChangeTree(
       continue;
     }
     if (!files.length) continue;
-    const children = repoNodes(files, root, g, groupByDir, g, repos);
+    const children = childNodes(files, root, g, groupByDir, g);
     roots.push({ key: `group:${g}`, type: "group", label: GROUP_LABEL[g], group: g, children, files });
   }
   return roots;
 }
 
+/** The group nodes of a tree, looking through project nodes. */
+export function groupNodes(roots: readonly ChangeNode[]): ChangeNode[] {
+  return roots.flatMap((n) => (n.project ? (n.children ?? []) : [n]));
+}
+
 export function changeGroupPaths(roots: readonly ChangeNode[], path: string): string[] {
-  const group = roots.find((node) => node.files.some((file) => stripSlash(file.path) === path));
+  const group = groupNodes(roots).find((node) => node.files.some((file) => stripSlash(file.path) === path));
   if (!group) return [path];
   const paths: string[] = [];
   const walk = (nodes: readonly ChangeNode[]) => {
@@ -326,7 +348,7 @@ export function changeFileNodes(roots: readonly ChangeNode[]): ChangeNode[] {
 
 /** File nodes, in tree order, of the group a file node belongs to. */
 export function groupFileNodes(roots: readonly ChangeNode[], node: ChangeNode): ChangeNode[] {
-  const group = roots.find((r) => r.group === node.group && r.files.some((f) => stripSlash(f.path) === node.path));
+  const group = groupNodes(roots).find((r) => r.group === node.group && r.files.some((f) => stripSlash(f.path) === node.path));
   if (!group) return [node];
   const out: ChangeNode[] = [];
   const walk = (nodes: readonly ChangeNode[]) => {
@@ -488,4 +510,32 @@ export function changedPathsUnder(paths: readonly string[], status: readonly Fil
     .filter((f) => groupOf(f) === "changes")
     .map((f) => stripSlash(f.path))
     .filter((p) => wanted.some((w) => p === w || p.startsWith(`${w}/`)));
+}
+
+/** Repositories (in `roots` order) holding at least one of the included files. */
+export function includedRepos(included: readonly FileStatus[], roots: readonly string[]): string[] {
+  const holding = new Set(included.map((f) => rootOf(f.path, roots)));
+  return roots.filter((r) => holding.has(r));
+}
+
+/** The repository a commit goes to: the chosen one while it has included files, else the first that has. */
+export function pickCommitRepo(repos: readonly string[], chosen: string | null): string | null {
+  return chosen && repos.includes(chosen) ? chosen : (repos[0] ?? null);
+}
+
+/**
+ * With included changes in several repositories, a commit covers only the chosen one; the
+ * other repositories' changes stay as they are for their own commit.
+ */
+export function restrictPlan(plan: CommitPlan, roots: readonly string[], chosen: string | null): CommitPlan {
+  const repos = includedRepos(plan.included, roots);
+  if (repos.length < 2) return plan;
+  const repo = pickCommitRepo(repos, chosen);
+  const inRepo = (path: string) => rootOf(path, roots) === repo;
+  return {
+    stage: plan.stage.filter(inRepo),
+    exclude: plan.exclude.filter(inRepo),
+    included: plan.included.filter((f) => inRepo(f.path)),
+    partial: plan.partial.filter(inRepo),
+  };
 }

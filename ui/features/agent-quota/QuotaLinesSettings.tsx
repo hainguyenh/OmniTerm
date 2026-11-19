@@ -77,6 +77,14 @@ export function QuotaLinesSettings({ display, onChange, now }: {
           ariaLabel="Show the usage pace glyph"
         />
         <CompactSwitch
+          label="Quota strip above terminals"
+          note="off: only the footer line"
+          hint="Hide the strip over each terminal and keep the small quota line in the app footer."
+          checked={display.paneStrip}
+          onChange={() => onChange({ ...display, paneStrip: !display.paneStrip })}
+          ariaLabel="Show the quota strip above each terminal"
+        />
+        <CompactSwitch
           label="Auto-hide weekly quota"
           note={`while under ${threshold}%`}
           hint={'A terminal can still show it: its quota settings have "Show weekly quota".'}

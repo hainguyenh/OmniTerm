@@ -141,6 +141,18 @@ const gapMarks = ViewPlugin.fromClass(
 const SVG = "http://www.w3.org/2000/svg";
 const ARROW_HEIGHT = 16;
 
+/**
+ * Top of a divider arrow for a change spanning [y0, y1]: centred on the part of the change in
+ * view, so a tall change keeps its arrow in sight; an empty change centres on its boundary.
+ */
+export function centeredArrowTop(y0: number, y1: number, viewHeight: number): number {
+  if (y1 - y0 < 2) return y0 - ARROW_HEIGHT / 2;
+  const top = Math.max(y0, 0);
+  const bottom = Math.min(y1, viewHeight);
+  const centre = bottom > top ? (top + bottom) / 2 : (y0 + y1) / 2;
+  return centre - ARROW_HEIGHT / 2;
+}
+
 export interface UnalignedPanesOptions {
   /** Scrolling one pane carries the other along. */
   sync: boolean;
@@ -447,9 +459,7 @@ export class UnalignedPanes {
     this.svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     const offA = mv.a.documentTop - rect.top;
     const offB = mv.b.documentTop - rect.top;
-    const lineHeight = mv.a.defaultLineHeight;
-    const arrowTop = (y0: number, y1: number) =>
-      y1 - y0 < 2 ? y0 - ARROW_HEIGHT / 2 : y0 + (Math.min(lineHeight, y1 - y0) - ARROW_HEIGHT) / 2;
+    const arrowTop = (y0: number, y1: number) => centeredArrowTop(y0, y1, h);
     const arrows = this.opts.arrows;
     const shown = new Set<string>();
     let paths = "";

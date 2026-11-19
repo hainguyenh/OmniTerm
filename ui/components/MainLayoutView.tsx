@@ -5,6 +5,7 @@ import { WorkbenchFrame } from '../workbench/WorkbenchFrame'
 import { SessionTabsShell } from '../workbench/sessions/SessionTabsShell'
 import { showSessionTab } from '../workbench/sessions/sessionTabActions'
 import { resumeWhereItRan } from '../workbench/terminalDock/terminalDockActions'
+import { usePublishConnections } from '../workbench/connections/usePublishConnections'
 import { usePublishSessionBridge, useSyncEditorLayout } from '../workbench/sessions/usePublishSessionBridge'
 import MainLayoutOverlays from './MainLayoutOverlays'
 import { usePublishShellPanels } from './usePublishShellPanels'
@@ -53,6 +54,7 @@ export default function MainLayoutView({ model }: { model: MainLayoutModel }) {
     launchCommandFor: (pin) => formatAgentProfileCommand(pin.agent, pin.launcher, pin.profileName),
   }
   usePublishShellPanels(true, sessionsPanelProps, bookmarksPanelProps)
+  usePublishConnections(model.savedConnections, model.handleConnect, model.setSavedConnections)
   return (
     <WorkbenchFrame>
       <SessionTabsShell model={model} />

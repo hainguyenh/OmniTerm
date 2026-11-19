@@ -25,7 +25,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 8px;
+  padding: 1px 8px;
   border-bottom: 1px solid var(--theme-border);
   background: color-mix(in srgb, var(--theme-bg) 88%, transparent);
   font-size: 10px;
@@ -94,7 +94,7 @@
   grid-template-columns: 2.8rem minmax(40px, 1fr) auto auto;
   align-content: center;
   column-gap: 5px;
-  row-gap: 2px;
+  row-gap: 1px;
 }
 
 .aq-line {
@@ -115,7 +115,7 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  font-size: 11px;
+  font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -133,8 +133,8 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-variant-numeric: tabular-nums;
   color: #ffffff;
-  font-size: 12.5px;
-  font-weight: 800;
+  font-size: 9.5px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.7);
@@ -142,11 +142,11 @@
 }
 
 .aq-size-thin .aq-track-value {
-  font-size: 10.5px;
+  font-size: 8.5px;
 }
 
 .aq-size-thick .aq-track-value {
-  font-size: 14.5px;
+  font-size: 11px;
 }
 
 /*
@@ -185,7 +185,7 @@
 .aq-track {
   position: relative;
   min-width: 0;
-  height: 20px;
+  height: 12px;
   border-radius: 999px;
   overflow: visible;
   background: var(--aq-track-bg);
@@ -195,11 +195,11 @@
 }
 
 .aq-size-thin .aq-track {
-  height: 15px;
+  height: 9px;
 }
 
 .aq-size-thick .aq-track {
-  height: 24px;
+  height: 15px;
 }
 
 .aq-used-container {
@@ -224,8 +224,8 @@
 
 .aq-marker {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
+  top: -2px;
+  bottom: -2px;
   width: 2px;
   margin-left: -1px;
   border-radius: 1px;
@@ -444,7 +444,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
+  padding: 1px;
   border-radius: 4px;
   color: var(--theme-dim);
 }
@@ -484,15 +484,15 @@
  */
 @container (max-width: 760px) {
   .aq-strip .aq-track {
-    height: 14px;
+    height: 10px;
   }
 
   .aq-strip .aq-track-value {
-    font-size: 10px;
+    font-size: 8.5px;
   }
 
   .aq-label {
-    font-size: 10px;
+    font-size: 9px;
   }
 }
 
@@ -504,11 +504,11 @@
   }
 
   .aq-strip .aq-track {
-    height: 12px;
+    height: 9px;
   }
 
   .aq-strip .aq-track-value {
-    font-size: 9px;
+    font-size: 8px;
   }
 
   .aq-meta-name {

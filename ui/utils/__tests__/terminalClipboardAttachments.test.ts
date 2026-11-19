@@ -25,7 +25,7 @@ beforeEach(() => {
   window.omnitermAPI = {
     ...window.omnitermAPI,
     clipboard: { writeText: vi.fn(), readText: async () => '', readImage: async () => null, saveImageTemp: vi.fn() },
-    attachments: { save, importClipboardFiles, list: vi.fn(), clear: vi.fn() },
+    attachments: { save, importClipboardFiles, list: vi.fn(), clear: vi.fn(), move: vi.fn() },
   }
 })
 

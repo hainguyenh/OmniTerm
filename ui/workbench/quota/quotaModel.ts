@@ -126,17 +126,16 @@ function sessionUrgency(profile: QuotaState['profiles'][string]): number {
 }
 
 /**
- * The footer's profiles: those with a running agent (every known one while none runs), the one
- * nearest its 5h limit first. When the bar is too narrow the tail is what gets hidden, so the
- * profiles about to run out stay in sight.
+ * The footer's profiles: only those with a running agent (none while nothing runs, so idle known
+ * profiles never crowd the line), the one nearest its 5h limit first. When the bar is too narrow
+ * the tail is what gets hidden, so the profiles about to run out stay in sight.
  */
 export function footerProfiles(
   state: Pick<QuotaState, 'terminals' | 'profiles'> & { now: number },
   active: ActiveQuotaSession | null,
 ): QuotaFooterProfile[] {
   const running = new Set(Object.values(state.terminals).map((terminal) => terminal.profileKey))
-  const all = Object.values(state.profiles)
-  const shown = all.some((profile) => running.has(profile.key)) ? all.filter((profile) => running.has(profile.key)) : all
+  const shown = Object.values(state.profiles).filter((profile) => running.has(profile.key))
   const agentsByName = new Map<string, Set<AgentKind>>()
   for (const profile of shown) {
     const agents = agentsByName.get(profile.profileName) ?? new Set<AgentKind>()
@@ -158,6 +157,41 @@ export function footerProfiles(
         active: active?.profileKey === profile.key,
       }
     })
+}
+
+export interface QuotaFooterAgent {
+  agent: AgentKind
+  name: string
+  /** Profiles of this agent with a running terminal; the footer counts these, not the known ones. */
+  activeProfiles: number
+  /** The active session runs this agent. */
+  active: boolean
+}
+
+/**
+ * The footer's agents: those with a running profile, or every agent with known profiles while none
+ * runs (each then reads "0 active"). Percentages stay in the popup and the pane strip.
+ */
+export function footerAgents(
+  state: Pick<QuotaState, 'terminals' | 'profiles'>,
+  active: ActiveQuotaSession | null,
+): QuotaFooterAgent[] {
+  const running = new Map<AgentKind, Set<string>>()
+  for (const terminal of Object.values(state.terminals)) {
+    const keys = running.get(terminal.agent) ?? new Set<string>()
+    keys.add(terminal.profileKey)
+    running.set(terminal.agent, keys)
+  }
+  const known = new Set(Object.values(state.profiles).map((profile) => profile.agent))
+  const rows = AGENT_KINDS
+    .filter((agent) => known.has(agent) || running.has(agent))
+    .map((agent): QuotaFooterAgent => ({
+      agent,
+      name: AGENT_NAMES[agent],
+      activeProfiles: running.get(agent)?.size ?? 0,
+      active: active?.agent === agent,
+    }))
+  return rows.some((row) => row.activeProfiles > 0) ? rows.filter((row) => row.activeProfiles > 0) : rows
 }
 
 /** Bar colour by usage, as in the mock: green, amber over 50%, red over 80%. */

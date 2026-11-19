@@ -99,6 +99,7 @@ import {
   useProjectTree,
   type Editing,
 } from "./store";
+import { RootCheckbox } from "./RootCheckbox";
 import styles from "./ProjectView.module.css";
 
 function onClipboard(e: ReactClipboardEvent<HTMLDivElement>, action: string) {
@@ -877,6 +878,7 @@ export function ProjectView() {
         isExpandable={isExpandable}
         loadChildren={loadChildren}
         renderNode={renderNode}
+        renderPrefix={(node) => (node.root && !node.icon ? <RootCheckbox path={node.path} name={node.label} /> : null)}
         rowClassName={(n) => (n.excluded ? styles.excludedRow : undefined)}
         expanded={expanded}
         onExpandedChange={onExpandedChange}

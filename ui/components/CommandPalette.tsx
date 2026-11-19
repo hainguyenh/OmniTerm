@@ -151,11 +151,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   }`}
                 >
                   {conn.type === 'SSH' ? (
-                    <Terminal className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-white' : 'text-theme-accent'}`} />
+                    <Terminal className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-theme-selection-fg' : 'text-theme-accent'}`} />
                   ) : conn.type === 'LOCAL' ? (
-                    <HardDrive className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-white' : 'text-theme-warning'}`} />
+                    <HardDrive className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-theme-selection-fg' : 'text-theme-warning'}`} />
                   ) : (
-                    <Monitor className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-white' : 'text-theme-success'}`} />
+                    <Monitor className={`w-5 h-5 flex-shrink-0 ${isSelected ? 'text-theme-selection-fg' : 'text-theme-success'}`} />
                   )}
                   <div className="flex-1 min-w-0 flex items-center gap-2">
                     <div className="text-sm font-medium truncate">{conn.name}</div>

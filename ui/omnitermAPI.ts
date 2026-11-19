@@ -24,7 +24,7 @@ import { createUpdateAPI } from './updateChecker'
 import { createWorkspaceAPI } from './workspaceAPI'
 import { createTempNotesAPI } from './tempNotesAPI'
 import { createConnectAPI } from './omnitermAPIConnect'
-import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport } from './utils/attachmentTypes'
+import { parseAttachmentInfo, parseAttachmentList, parseAttachmentListing, parseClearReport, parseMovedAttachments } from './utils/attachmentTypes'
 import { scanPaneAgents } from './utils/paneAgentScan'
 import type { DetachedContextUpdate } from './utils/sessionRecoveryTypes'
 import type { DetectedPaneAgent } from './utils/agentSessionDetector'
@@ -198,6 +198,8 @@ function createTauriAPI(): any {
         invoke<unknown>('list_attachments', { sessionId }).then(parseAttachmentListing),
       clear: (sessionId?: string) =>
         invoke<unknown>('clear_attachments', { sessionId }).then(parseClearReport),
+      move: (fromSessionId: string, toSessionId: string) =>
+        invoke<unknown>('move_attachments', { fromSessionId, toSessionId }).then(parseMovedAttachments),
     },
 
     // SFTP rides on SSH, so it arrives with it.

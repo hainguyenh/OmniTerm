@@ -162,7 +162,8 @@
 }
 /* Breadcrumbs at the bottom form a 26px footer: the controls sit centred in it, not across its top
    border, and the crumbs leave them room. */
-.content:has(.codeCrumbsBottom) > .zoomControls {
+.content:has(.codeCrumbsBottom) > .zoomControls,
+.content:has([data-agent-footer]) > .zoomControls {
   bottom: 2px;
 }
 .content:has(> .zoomControls) .codeCrumbsBottom {

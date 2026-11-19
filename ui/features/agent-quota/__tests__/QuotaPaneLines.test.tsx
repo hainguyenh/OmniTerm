@@ -259,3 +259,11 @@ describe('SuspendedOverlay', () => {
     expect(screen.getByRole('button', { name: /Hide freeze overlay/ })).toBeInTheDocument()
   })
 })
+
+describe('QuotaPaneLines pane strip setting', () => {
+  it('renders nothing above the terminal when the strip is switched off', () => {
+    seed({ config: { ...DEFAULT_QUOTA_CONFIG, display: { ...DEFAULT_QUOTA_CONFIG.display, paneStrip: false } } })
+    const { container } = render(<QuotaPaneLines sessionId="s1" />)
+    expect(container.firstChild).toBeNull()
+  })
+})

@@ -1,39 +1,41 @@
 import {
   useProjectHeaderMenu,
-  useProjectTitleMenu,
 } from '../ide/features/project-tree/HeaderActions'
 import { registerOverlay, registerToolWindow } from '../ide/workbench/contributions'
 import { NOTIFICATIONS_TOOL_WINDOW } from '../ide/workbench/Notifications'
-import { useVcs } from '../ide/features/vcs/store'
-import { useActiveAgentCount } from '../utils/agentPresenceStore'
 import { setDefaultStripeWindows } from '../ide/workbench/toolwindows/store'
 
+import { CONNECTIONS_TOOL_WINDOW, ConnectionsHeaderActions, ConnectionsToolWindow } from './connections/ConnectionsToolWindow'
 import { ProblemsToolWindow } from './problems/ProblemsToolWindow'
 import { useProblemsStore } from './problems/problemsStore'
 import { OmniTermProjectHeaderActions, ProjectToolWindow } from './ProjectToolWindow'
 import { QUOTA_TOOL_WINDOW } from './quota/quotaDockState'
-import { ScmToolWindow } from './scm/ScmToolWindow'
 import { SessionCleanupOverlay } from './sessions/SessionCleanupDialog'
+import { useSessionsBadge } from './sessions/useSessionsBadge'
 import { TempCleanupOverlay } from './tempCleanup/TempCleanupDialog'
 import { SessionsHeaderActions, SessionsToolWindow } from './ShellToolWindows'
-import { registerShellIcons, SESSIONS_ICON } from './shellIcons'
+import { registerShellIcons, SESSIONS_ICON, STICKY_NOTES_ICON } from './shellIcons'
+import { StickyNotesToolWindow } from './notes/StickyNotesToolWindow'
+import { useStickyNotesBadge } from './notes/useTempNotesList'
 import { TERMINAL_WINDOW } from './terminalDock/terminalDockActions'
+import { useWorkspaceTitleMenu } from './useWorkspaceTitleMenu'
 
 /**
  * The tool windows that have a stripe button from the start, exactly the default stripe windows.
  * Every other window (Structure, TODO, Find, Database, ...) stays available from the menus and
  * gets its button once opened.
  */
-/** Source Control with a section per project, next to the IDE's Commit window. */
-export const SCM_TOOL_WINDOW = 'omniterm.scm'
+/** Temporary notes (the former Activity Bar's Sticky Notes button). */
+export const STICKY_NOTES_WINDOW = 'omniterm.notes'
 
 export const STRIPE_WINDOWS: readonly string[] = [
   'project',
   'commit',
-  SCM_TOOL_WINDOW,
   'bookmarks',
   QUOTA_TOOL_WINDOW,
   'omniterm.sessions',
+  CONNECTIONS_TOOL_WINDOW,
+  STICKY_NOTES_WINDOW,
   TERMINAL_WINDOW,
   'run',
   'debug',
@@ -43,7 +45,7 @@ export const STRIPE_WINDOWS: readonly string[] = [
 ]
 
 /**
- * Shell tool windows (Project, Sessions, and Problems). Session bookmarks live inside
+ * Shell tool windows (Project, Sessions, Connections, Sticky Notes, and Problems). Session bookmarks live inside
  * Sessions; the Bookmarks stripe button belongs to the editor (editor bookmarks).
  * They have `requiresProject: false`, so they remain accessible even when no workspace is open.
  */
@@ -61,17 +63,7 @@ export function registerShellToolWindows(): () => void {
       component: ProjectToolWindow,
       headerActions: OmniTermProjectHeaderActions,
       headerMenu: useProjectHeaderMenu,
-      titleMenu: useProjectTitleMenu,
-    }),
-    registerToolWindow({
-      id: SCM_TOOL_WINDOW,
-      title: 'Source Control',
-      icon: 'toolwindow-git',
-      anchor: 'left',
-      order: 12,
-      requiresProject: true,
-      component: ScmToolWindow,
-      useBadge: () => useVcs((s) => (s.status.length > 0 ? s.status.length : null)),
+      titleMenu: useWorkspaceTitleMenu,
     }),
     registerToolWindow({
       id: 'omniterm.sessions',
@@ -82,8 +74,29 @@ export function registerShellToolWindows(): () => void {
       requiresProject: false,
       component: SessionsToolWindow,
       headerActions: SessionsHeaderActions,
-      // Like the Commit badge: how many AI agents are running in open panes.
-      useBadge: useActiveAgentCount,
+      // Like the Commit badge: the AI agents running in the panes the Sessions panel lists.
+      useBadge: useSessionsBadge,
+    }),
+    registerToolWindow({
+      id: CONNECTIONS_TOOL_WINDOW,
+      title: 'Connections',
+      icon: 'web',
+      anchor: 'left',
+      // Between Sessions (31) and Sticky Notes (32).
+      order: 31.5,
+      requiresProject: false,
+      component: ConnectionsToolWindow,
+      headerActions: ConnectionsHeaderActions,
+    }),
+    registerToolWindow({
+      id: STICKY_NOTES_WINDOW,
+      title: 'Sticky Notes',
+      icon: STICKY_NOTES_ICON,
+      anchor: 'left',
+      order: 32,
+      requiresProject: false,
+      component: StickyNotesToolWindow,
+      useBadge: useStickyNotesBadge,
     }),
     registerOverlay({ id: 'omniterm.sessions.cleanup', component: SessionCleanupOverlay }),
     registerOverlay({ id: 'omniterm.temp.cleanup', component: TempCleanupOverlay }),

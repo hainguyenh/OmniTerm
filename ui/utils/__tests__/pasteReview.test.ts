@@ -73,7 +73,7 @@ describe('a paste into an agent pane lands on its attachment list', () => {
     window.omnitermAPI = {
       ...window.omnitermAPI,
       clipboard: { writeText: vi.fn(), readText: async () => PROMPT, readImage: async () => null, saveImageTemp: vi.fn() },
-      attachments: { save, importClipboardFiles: vi.fn(async () => []), list: vi.fn(), clear: vi.fn() },
+      attachments: { save, importClipboardFiles: vi.fn(async () => []), list: vi.fn(), clear: vi.fn(), move: vi.fn() },
     }
   })
 

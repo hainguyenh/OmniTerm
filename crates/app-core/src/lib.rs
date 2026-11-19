@@ -9,6 +9,7 @@ pub mod agent_quota;
 pub mod agent_session_header;
 pub mod agent_session_index;
 pub mod agent_sessions;
+pub mod attachment_move;
 pub mod attachments;
 pub mod builtin_features;
 pub mod claude_transcript;

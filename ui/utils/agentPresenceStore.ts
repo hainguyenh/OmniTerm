@@ -105,12 +105,6 @@ export function usePanePresence(tabId: string | null | undefined): PanePresence 
 }
 
 /** Every pane's presence at once — for lists (the tab strip) that cannot call a hook per item. */
-/** How many open panes run an AI agent right now (the badge of the Sessions stripe button); null for none. */
-export function useActiveAgentCount(): number | null {
-  const count = useSyncExternalStore(subscribePanePresence, () => Object.keys(presence).length, () => Object.keys(presence).length)
-  return count > 0 ? count : null
-}
-
 export function useAllPanePresence(): Readonly<Record<string, PanePresence>> {
   return useSyncExternalStore(subscribePanePresence, () => presence, () => presence)
 }

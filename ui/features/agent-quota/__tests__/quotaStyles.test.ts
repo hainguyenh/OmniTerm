@@ -47,10 +47,20 @@ describe('agent quota styles', () => {
     const lines = css('agentQuota.css')
     const split = lines.slice(lines.indexOf('@container (max-width: 760px)'), lines.indexOf('@container (max-width: 440px)'))
     expect(lines.indexOf('@container (max-width: 760px)')).toBeGreaterThan(lines.indexOf('.aq-size-thick .aq-track {'))
-    expect(rule(split, '.aq-strip .aq-track')).toContain('height: 14px')
-    expect(rule(split, '.aq-strip .aq-track-value')).toContain('font-size: 10px')
+    expect(rule(split, '.aq-strip .aq-track')).toContain('height: 10px')
+    expect(rule(split, '.aq-strip .aq-track-value')).toContain('font-size: 8.5px')
     const medium = lines.slice(lines.indexOf('@container (max-width: 440px)'))
-    expect(rule(medium, '.aq-strip .aq-track')).toContain('height: 12px')
+    expect(rule(medium, '.aq-strip .aq-track')).toContain('height: 9px')
+  })
+
+  // Feedback: the strip above each terminal was too tall, even on the thin setting.
+  it('keeps the strip slim at every size setting', () => {
+    const lines = css('agentQuota.css')
+    const px = (selector: string) => Number(rule(lines, selector).match(/height:\s*(\d+)px/)?.[1])
+    expect(px('.aq-size-thin .aq-track')).toBeLessThanOrEqual(9)
+    expect(px('.aq-track')).toBeLessThanOrEqual(12)
+    expect(px('.aq-size-thick .aq-track')).toBeLessThanOrEqual(15)
+    expect(rule(lines, '.aq-strip')).toContain('padding: 1px 8px')
   })
 
   it('paints the profiles dialog with a theme colour that exists', () => {

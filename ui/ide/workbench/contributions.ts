@@ -107,6 +107,8 @@ export interface TitleItemContribution {
   title?: string;
   /** Off in the default toolbar; Customize Main Toolbar lists it unchecked. */
   defaultHidden?: boolean;
+  /** Shown in the middle of the bar, between the left and right groups (the run widget). */
+  center?: boolean;
   /** Right side only: placed after Search Everywhere, next to the gear (the update indicator). */
   trailing?: boolean;
 }
@@ -408,6 +410,13 @@ interface WorkbenchSlots {
   welcome?: ComponentType;
   /** The title bar project widget's popup (open / recent projects). */
   projectPopup?: ComponentType<ProjectPopupProps>;
+  /** OmniTerm: what a pane of a split layout without tabs offers to start in it. */
+  emptyPane?: ComponentType<EmptyPaneProps>;
+}
+
+export interface EmptyPaneProps {
+  /** The empty pane; what starts from it opens there. */
+  paneId: string;
 }
 
 export interface ProjectPopupProps {
@@ -428,6 +437,7 @@ export const provideEditorArea = (component: ComponentType) => provideSlot("edit
 export const provideWelcomeView = (component: ComponentType) => provideSlot("welcome", component);
 export const provideProjectPopup = (component: ComponentType<ProjectPopupProps>) =>
   provideSlot("projectPopup", component);
+export const provideEmptyPane = (component: ComponentType<EmptyPaneProps>) => provideSlot("emptyPane", component);
 
 // ---------------------------------------------------------------------------
 // File editors: `openFile` asks providers whether a path opens in another

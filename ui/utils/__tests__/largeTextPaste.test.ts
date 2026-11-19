@@ -64,6 +64,7 @@ describe('saveTextAsAttachment', () => {
         list: vi.fn(),
         clear: vi.fn(),
         importClipboardFiles: vi.fn(),
+        move: vi.fn(),
       },
     }
   })
@@ -100,6 +101,7 @@ describe('handleLargeTextPaste', () => {
         list: vi.fn(),
         clear: vi.fn(),
         importClipboardFiles: vi.fn(),
+        move: vi.fn(),
       },
     }
   })

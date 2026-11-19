@@ -5,6 +5,7 @@
 //! The renderer never names a directory or a source path. It sends bytes plus a name hint, or asks
 //! this side to import whatever files Explorer put on the clipboard.
 
+use app_core::attachment_move::{self, MovedAttachment};
 use app_core::attachments::{self, AttachmentInfo, ClearReport};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -180,4 +181,24 @@ pub async fn clear_attachments<R: Runtime>(
         attachments::clear_attachments(&dir, temp_dir.as_deref())
     })
     .await
+}
+
+/// Merge a pane's temporary attachment folder into its agent session's folder once the session id
+/// is known, and report where each file went so the renderer can re-point its list.
+#[tauri::command]
+pub async fn move_attachments<R: Runtime>(
+    app: AppHandle<R>,
+    from_session_id: String,
+    to_session_id: String,
+) -> Result<Vec<MovedAttachment>, String> {
+    if from_session_id.trim().is_empty() || to_session_id.trim().is_empty() {
+        return Err("Both attachment folders must be named.".to_string());
+    }
+    let from = attachments_dir(&app, Some(&from_session_id))?;
+    let to = attachments_dir(&app, Some(&to_session_id))?;
+    blocking("Moving attachments", move || {
+        attachment_move::move_attachments(&from, &to)
+    })
+    .await?
+    .map_err(|error| format!("Could not move the attachments: {error}"))
 }

@@ -5,12 +5,15 @@
 //!
 //! The installed commands name this executable, so they keep working only while it stays where it
 //! is; the status says when a profile points at another copy (an older install or a dev build).
+//!
+//! Also reads back the status line text the Claude bridge keeps per conversation (pane footer).
 
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use app_core::agent_quota::{
     agy_bridge_status, bridge_profile_dir, bridge_status, install_agy_bridge, install_bridge,
-    remove_agy_bridge, remove_bridge, BridgeStatus, Platform,
+    read_statusline, remove_agy_bridge, remove_bridge, BridgeStatus, Platform,
 };
 use app_core::builtin_features::AGENT_QUOTA;
 use tauri::{AppHandle, Manager, Runtime};
@@ -105,6 +108,26 @@ pub async fn agent_quota_agy_bridge_remove<R: Runtime>(
     ensure_enabled(&app)?;
     remove_agy_bridge(&profile(&profile_dir)?, &exe()?, Platform::CURRENT)
         .map_err(|error| format!("Could not remove the Antigravity status line bridge: {error}"))
+}
+
+/// The status line a Claude conversation of the profile last showed, for its pane's footer; `None`
+/// while there is no fresh one (or Agent Quota, which installs the bridge, is off).
+#[tauri::command]
+pub async fn agent_quota_statusline_text<R: Runtime>(
+    app: AppHandle<R>,
+    profile_dir: String,
+    session_id: String,
+) -> Result<Option<String>, String> {
+    if !crate::builtin_features::is_enabled(&app, AGENT_QUOTA) {
+        return Ok(None);
+    }
+    let dir = profile(&profile_dir)?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
+    Ok(read_statusline(&dir, &session_id, now))
 }
 
 #[cfg(test)]

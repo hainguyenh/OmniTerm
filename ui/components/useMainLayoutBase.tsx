@@ -13,6 +13,7 @@ import { readStoredSelection, storeSelection } from '../platform/workspaceStore'
 import { reportSessionStartFailure, workspaceHolding } from './sessionStart'
 import { useWorkspaceCatalog } from './useWorkspaceCatalog'
 import { OPEN_ALWAYS_AWAKE_EVENT, publishAwakeIndicator } from '../workbench/awake/awakeIndicatorStore'
+import { loadSavedConnections } from '../workbench/connections/loadSavedConnections'
 export function useMainLayoutBase({
   appSettings, setAppSettings, currentTheme, layoutMode, setLayoutMode, themes = [currentTheme], zoomFactor,
   onZoomReset, resolveAppearance, onActiveTerminalChange, onFontSizeChange, onThemeApply,
@@ -363,10 +364,9 @@ export function useMainLayoutBase({
       let cancelled = false;
       void (async () => {
           try {
-              const workspaces = await window.omnitermAPI.workspace.list();
-              const lists = await Promise.all(workspaces.map(ws => window.omnitermAPI.workspace.loadConnections(ws.id).then(conns => conns.map(connection => ({ ...connection, workspaceId: ws.id })))));
+              const connections = await loadSavedConnections();
               if (!cancelled)
-                  setSavedConnections(lists.flat());
+                  setSavedConnections(connections);
           }
           catch (error) {
               diag.error('[MainLayout] could not load workspace connections', error);

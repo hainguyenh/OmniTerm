@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import { executeAction, registerActions } from "@/platform/actions";
+import { getContext, useContextKeys } from "@/platform/context";
 import { call, commands, isTauri, onIdeEvent } from "@/platform/ipc";
 import { languageFamiliesOf } from "@/platform/languageFamilies";
 import { useProject } from "@/platform/project";
@@ -16,7 +17,10 @@ import { interpreterScope } from "./projectEcosystems";
 interface Status {
   root: string;
   configured: string;
-  visible: boolean;
+  /** A Python build or environment file sits at the top of the project or of a linked project. */
+  marked: boolean;
+  /** `python` and `sdks` were read (only done while the widget can show). */
+  loaded: boolean;
   python: string | null;
   sdks: Sdk[];
 }
@@ -25,6 +29,17 @@ const usePopup = create<{ open: boolean; status: Status | null }>(() => ({ open:
 const close = () => usePopup.setState({ open: false });
 const reset = () => usePopup.setState({ open: false, status: null });
 
+/**
+ * OmniTerm: the widget shows for a Python project, or while a Python file has the focus. A stray
+ * script (a generator, a test fixture) in a TypeScript or Rust project does not make it one, and
+ * neither does a globally saved interpreter.
+ */
+export function pythonStatusVisible(status: Pick<Status, "marked" | "loaded">, pythonEditor: boolean): boolean {
+  return status.loaded && (status.marked || pythonEditor);
+}
+
+const isPythonEditor = () => getContext().editorLangId === "python";
+
 /** Whether the widget is on screen, read straight from the stores (the action runs outside a render). */
 function popupShown(): boolean {
   const project = useProject.getState();
@@ -32,12 +47,8 @@ function popupShown(): boolean {
   const configured = project.settings?.languages?.python?.interpreter ?? "";
   const status = usePopup.getState().status;
   if (!root || !status || status.root !== root || status.configured !== configured) return false;
-  // OmniTerm: a globally saved interpreter does not make every project a Python project.
-  return status.visible;
+  return pythonStatusVisible(status, isPythonEditor());
 }
-
-/** Folders whose Python files belong to a dependency or a build, not to the project. */
-const FOREIGN_DIRS = /(^|\/)(node_modules|vendor|target|dist|build|out|\.git|\.cargo|\.gradle)\//;
 
 /** OmniTerm: whether Python tooling is switched on (Settings › Code › Languages). */
 const pythonOn = () => languageFamiliesOf(useProject.getState().settings).python !== false;
@@ -56,9 +67,19 @@ const markers = [
   ".python-version",
 ];
 
-export function isPythonPath(path: string): boolean {
-  const name = path.replaceAll("\\", "/").split("/").at(-1)!;
-  return /\.(py|pyi|pyw)$/.test(name) || markers.includes(name) || /^requirements[\w.-]*\.txt$/.test(name);
+const normalize = (path: string) => path.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
+
+/**
+ * Whether `path` is a Python build or environment file at the top of one of `roots` (the project
+ * and its linked projects). Files deeper down belong to a fixture, a dependency or a tool folder.
+ */
+export function isPythonProjectMarker(path: string, roots: readonly string[]): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  const slash = normalized.lastIndexOf("/");
+  const name = normalized.slice(slash + 1);
+  if (!markers.includes(name) && !/^requirements[\w.-]*\.txt$/.test(name)) return false;
+  const dir = normalize(normalized.slice(0, Math.max(slash, 0)));
+  return roots.some((root) => !!root && normalize(root) === dir);
 }
 
 export function interpreterChoices(sdks: Sdk[], current: string | null): { path: string; name: string }[] {
@@ -67,41 +88,41 @@ export function interpreterChoices(sdks: Sdk[], current: string | null): { path:
   return [...choices, { path: current, name: current }];
 }
 
-async function hasPythonFiles(): Promise<boolean> {
-  if (!pythonOn()) return false;
+async function hasPythonMarkers(roots: readonly string[]): Promise<boolean> {
   const matches = await Promise.all(
-    [".py", "requirements", ...markers].map((query) => call(commands.findFiles(query, 10000))),
+    ["requirements", ...markers].map((query) => call(commands.findFiles(query, 10000))),
   );
-  // node-gyp and other packages ship `.py` files: those do not make a Node project a Python one.
-  return matches.some((files) =>
-    files.some((file) => isPythonPath(file.path) && !FOREIGN_DIRS.test(file.path.replaceAll("\\", "/"))),
-  );
+  return matches.some((files) => files.some((file) => isPythonProjectMarker(file.path, roots)));
 }
 
 function PythonStatus() {
   const root = useProject((s) => s.project?.root);
+  const linked = useProject((s) => s.project?.workspace?.projects);
   const trusted = useProject((s) => s.project?.trusted !== false);
   const configured = useProject((s) => s.settings?.languages?.python?.interpreter ?? "");
+  const pythonEditor = useContextKeys((s) => s.editorLangId === "python");
   const status = usePopup((s) => s.status);
   const open = usePopup((s) => s.open);
   const anchor = useRef<HTMLButtonElement>(null);
+  useEffect(() => reset, [root, configured, trusted]);
   useEffect(() => {
-    reset();
     if (!root || !trusted || !isTauri()) return;
     let live = true;
     let sequence = 0;
     let detected: Promise<Sdk[]> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const roots = [root, ...(linked ?? [])];
     const refresh = async () => {
       const request = ++sequence;
       try {
-        const visible = await hasPythonFiles();
+        const marked = pythonOn() && (await hasPythonMarkers(roots));
         if (!live || sequence !== request) return;
-        const [python, sdks] =
-          visible
-            ? await Promise.all([effectivePython(), (detected ??= call(commands.sdkDetect("python")))])
-            : [null, [] as Sdk[]];
-        if (live && sequence === request) usePopup.setState({ status: { root, configured, visible, python, sdks } });
+        const loaded = pythonOn() && (marked || pythonEditor);
+        const [python, sdks] = loaded
+          ? await Promise.all([effectivePython(), (detected ??= call(commands.sdkDetect("python")))])
+          : [null, [] as Sdk[]];
+        if (live && sequence === request)
+          usePopup.setState({ status: { root, configured, marked, loaded, python, sdks } });
       } catch (e) {
         console.warn("Cannot refresh Python interpreter status", e);
       }
@@ -129,13 +150,13 @@ function PythonStatus() {
         schedule();
       }),
     ];
+    // The last status stays while a refresh runs: focusing another file does not blink the widget.
     return () => {
       live = false;
       clearTimeout(timer);
       off.forEach((dispose) => dispose());
-      reset();
     };
-  }, [root, configured, trusted]);
+  }, [root, linked, configured, trusted, pythonEditor]);
   // The widget only renders once its project's status is in the store, so the popup action
   // sees the same state as the button without waiting for an effect to publish a flag.
   if (!popupShown() || !status) return null;

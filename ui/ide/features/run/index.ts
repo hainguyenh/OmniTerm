@@ -381,7 +381,7 @@ export function activate(): () => void {
       headerContent: lazyComponent(() => import("./RunView").then((m) => m.RunTabs)),
       useBadge: useRunningCount,
     }),
-    registerTitleItem({ id: "run.widget", title: "Run Widget", align: "right", priority: 0, component: RunWidgetGate }),
+    registerTitleItem({ id: "run.widget", title: "Run Widget", align: "right", priority: 0, center: true, component: RunWidgetGate }),
     registerRunAnythingProvider(runConfigsRunAnything),
     registerBuiltinTypes(),
     registerRunConfigType(junitType),

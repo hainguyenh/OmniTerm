@@ -33,6 +33,35 @@ pub(crate) const BUILTIN_PLUGINS: &[&str] = &[
 /// (one made with a nightly toolchain burned its whole CPU budget while activating) keeps running.
 pub(crate) const OPTIONAL_PLUGINS: &[&str] = &["git-toolbox", "license-header", "solidity"];
 
+/// Optional plugins an earlier build installed (and so enabled) unasked. They are switched off once;
+/// the marker file keeps a later choice of the user, including enabling it again, from being undone.
+pub(crate) const DEFAULT_OFF_PLUGINS: &[&str] = &["license-header"];
+
+/// Whether an installed default-off plugin must be switched off now: only before its marker exists.
+pub(crate) fn needs_default_off(installed: bool, already_applied: bool) -> bool {
+    installed && !already_applied
+}
+
+/// Switches off, once per installation, the default-off plugins an earlier build installed.
+fn apply_default_off(app: &AppHandle<Wry>, state: &AppState, installed: &[String]) {
+    let Ok(dir) = app.path().app_data_dir() else { return };
+    let markers = dir.join("plugin-defaults");
+    for id in DEFAULT_OFF_PLUGINS {
+        let marker = markers.join(format!("{id}.off"));
+        let plugin = plugin_id(id);
+        if needs_default_off(installed.contains(&plugin), marker.is_file()) {
+            if let Err(error) = state.plugins.set_enabled(&plugin, false) {
+                log::warn!("[builtin-plugins] could not switch {id} off: {}", error.message);
+                continue;
+            }
+        }
+        let written = std::fs::create_dir_all(&markers).and_then(|()| std::fs::write(&marker, b""));
+        if let Err(error) = written {
+            log::warn!("[builtin-plugins] could not record that {id} is off by default: {error}");
+        }
+    }
+}
+
 /// How long the host gets to load the plugins it already has before the missing ones are counted.
 const LOAD_GRACE: Duration = Duration::from_secs(4);
 
@@ -91,6 +120,7 @@ pub(crate) fn install_missing(app: &AppHandle<Wry>) {
         std::thread::sleep(LOAD_GRACE);
         let Some(state) = app.try_state::<AppState>() else { return };
         let installed: Vec<String> = state.plugins.list(None).plugins.into_iter().map(|plugin| plugin.id).collect();
+        apply_default_off(&app, &state, &installed);
         let builtin = BUILTIN_PLUGINS.iter().map(|id| (*id, true));
         for (id, always) in builtin.chain(OPTIONAL_PLUGINS.iter().map(|id| (*id, false))) {
             let Some(dir) = find_package(&roots, id) else {

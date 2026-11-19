@@ -13,11 +13,15 @@ import { tx } from "@/platform/i18n";
 export const TOOLTIP_DELAY = 600;
 const WARM_MS = 400;
 
-/** `verbatim`: `text` is shown as written (already translated, or a plugin's own text). */
-export function tooltipAttrs(text: string | undefined, shortcut?: string, verbatim?: boolean): Record<string, string> {
-  if (!text) return {};
+/**
+ * `verbatim`: `text` is shown as written (already translated, or a plugin's own text).
+ * Only text becomes an attribute: a plugin or IPC value that is not a string (`true`, an object)
+ * would otherwise reach the DOM as `data-tooltip` and React rejects it at render.
+ */
+export function tooltipAttrs(text: unknown, shortcut?: unknown, verbatim?: boolean): Record<string, string> {
+  if (typeof text !== "string" || !text) return {};
   const attrs: Record<string, string> = { "data-tooltip": text };
-  if (shortcut) attrs["data-tooltip-shortcut"] = shortcut;
+  if (typeof shortcut === "string" && shortcut) attrs["data-tooltip-shortcut"] = shortcut;
   if (verbatim) attrs["data-tooltip-verbatim"] = "";
   return attrs;
 }
