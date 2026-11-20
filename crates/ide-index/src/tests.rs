@@ -405,12 +405,13 @@ fn go_to_file_finds_ignored_files_but_not_their_symbols() {
 }
 
 #[test]
-fn second_window_on_same_project_works_in_memory() {
+fn second_window_on_same_project_shares_its_store() {
     let fx = sample();
     let a = fx.open();
     let b = fx.open();
     assert_eq!(a.status().files, b.status().files);
     assert_eq!(symbols(&b, "Order", SymbolFilter::Types)[0], "Order");
+    assert_eq!(b.shared.parsed.load(Ordering::SeqCst), 0, "the open store is shared, not re-parsed in memory");
 }
 
 /// Synthetic 100k-file project. Run with:
@@ -1032,4 +1033,137 @@ fn a_container_reuses_its_projects_symbols_on_reopen() {
     assert_eq!(symbols(&idx, "beta", SymbolFilter::All), ["beta"]);
     assert_eq!(files(&idx, "main.rs"), ["project/src/main.rs"]);
     assert_eq!(idx.recent_files(), vec![project.join("src/lib.rs")]);
+}
+
+/// Opens `root` as the IDE does: its own store named by [`folder_key`] under `index_dir`, and a
+/// store per folder of `roots` outside it, in the same directory.
+fn open_shared(index_dir: &Path, root: &Path, roots: IndexRoots) -> Arc<ProjectIndex> {
+    let idx = ProjectIndex::open_with(
+        root,
+        &index_dir.join(folder_key(root)),
+        roots,
+        Vec::new(),
+        Arc::new(LanguageRegistry::load(None).unwrap()),
+        Arc::new(Syntax::new()),
+        Arc::new(NullSink),
+        IndexOptions { folder_stores: Some(index_dir.to_owned()), ..Default::default() },
+    )
+    .unwrap();
+    assert!(idx.wait_idle(WAIT), "indexing did not finish");
+    idx
+}
+
+fn parsed(idx: &ProjectIndex) -> usize {
+    idx.shared.parsed.load(Ordering::SeqCst)
+}
+
+fn members(folders: &[&PathBuf]) -> IndexRoots {
+    IndexRoots { include_root: false, folders: folders.iter().map(|f| (*f).clone()).collect() }
+}
+
+/// Folders `x`, `y` and `z` under a temporary base, each with `src/lib.rs` defining `alpha`,
+/// `beta` and `gamma`, and the workspace containers `a` and `b`.
+struct Shared3 {
+    _dir: tempfile::TempDir,
+    index: PathBuf,
+    x: PathBuf,
+    y: PathBuf,
+    z: PathBuf,
+    a: PathBuf,
+    b: PathBuf,
+}
+
+fn shared3() -> Shared3 {
+    let dir = tempfile::tempdir().unwrap();
+    let base = dunce::canonicalize(dir.path()).unwrap();
+    let (x, y, z) = (base.join("x"), base.join("y"), base.join("z"));
+    for (folder, name) in [(&x, "alpha"), (&y, "beta"), (&z, "gamma")] {
+        std::fs::create_dir_all(folder.join("src")).unwrap();
+        std::fs::write(folder.join("src/lib.rs"), format!("fn {name}() {{}}\n")).unwrap();
+    }
+    let (a, b) = (base.join("workspaces/a"), base.join("workspaces/b"));
+    std::fs::create_dir_all(&a).unwrap();
+    std::fs::create_dir_all(&b).unwrap();
+    Shared3 { index: base.join("index"), _dir: dir, x, y, z, a, b }
+}
+
+#[test]
+fn workspaces_sharing_a_folder_share_its_index() {
+    let s = shared3();
+    {
+        let alone = open_shared(&s.index, &s.x, Vec::new().into());
+        assert_eq!(parsed(&alone), 1);
+    }
+    {
+        let a = open_shared(&s.index, &s.a, members(&[&s.x, &s.y]));
+        assert_eq!(parsed(&a), 1, "x comes from its index as a folder opened alone; only y is parsed");
+        assert_eq!(symbols(&a, "alpha", SymbolFilter::All), ["alpha"]);
+        assert_eq!(files(&a, "lib.rs").len(), 2);
+    }
+    let b = open_shared(&s.index, &s.b, members(&[&s.x, &s.z]));
+    assert_eq!(parsed(&b), 1, "x comes from workspace a's index; only z is parsed");
+    // Open at the same time (two windows): the stores are shared, not left to memory only.
+    let a = open_shared(&s.index, &s.a, members(&[&s.x, &s.y]));
+    assert_eq!(parsed(&a), 0);
+    std::fs::write(s.x.join("src/lib.rs"), "fn alpha_two() {}\n").unwrap();
+    b.update(&[s.x.join("src/lib.rs")], &[]);
+    assert!(b.wait_idle(WAIT));
+    drop((a, b));
+    let alone = open_shared(&s.index, &s.x, Vec::new().into());
+    assert_eq!(parsed(&alone), 0, "the change indexed in workspace b reached the folder's own index");
+    assert_eq!(symbols(&alone, "alpha_two", SymbolFilter::All), ["alpha_two"]);
+}
+
+#[test]
+fn a_folder_joining_a_workspace_brings_its_index() {
+    let s = shared3();
+    drop(open_shared(&s.index, &s.x, Vec::new().into()));
+    let a = open_shared(&s.index, &s.a, members(&[&s.y]));
+    assert_eq!(parsed(&a), 1);
+    assert!(symbols(&a, "alpha", SymbolFilter::All).is_empty());
+    assert!(a.set_scope(members(&[&s.y, &s.x]), Vec::new()));
+    assert!(a.wait_idle(WAIT));
+    assert_eq!(parsed(&a), 1, "x's records come from its store");
+    assert_eq!(symbols(&a, "alpha", SymbolFilter::All), ["alpha"]);
+    // Leaving and coming back reads its store again: its files left memory meanwhile.
+    a.set_scope(members(&[&s.y]), Vec::new());
+    assert!(a.wait_idle(WAIT));
+    assert!(symbols(&a, "alpha", SymbolFilter::All).is_empty());
+    a.set_scope(members(&[&s.y, &s.x]), Vec::new());
+    assert!(a.wait_idle(WAIT));
+    assert_eq!(parsed(&a), 1);
+    assert_eq!(symbols(&a, "alpha", SymbolFilter::All), ["alpha"]);
+}
+
+/// Upgrade: a container's own store held its members' files by absolute path. They move to the
+/// members' stores without being parsed again; Recent Files stays with the container.
+#[test]
+fn an_upgraded_container_moves_its_members_records_to_their_own_stores() {
+    let s = shared3();
+    {
+        let old = ProjectIndex::open(
+            &s.a,
+            &s.index.join(folder_key(&s.a)),
+            members(&[&s.x]),
+            Vec::new(),
+            Arc::new(LanguageRegistry::load(None).unwrap()),
+            Arc::new(Syntax::new()),
+            Arc::new(NullSink),
+        )
+        .unwrap();
+        assert!(old.wait_idle(WAIT));
+        assert_eq!(parsed(&old), 1);
+        old.mark_recent(&s.x.join("src/lib.rs"));
+        assert!(old.wait_idle(WAIT));
+    }
+    {
+        let a = open_shared(&s.index, &s.a, members(&[&s.x]));
+        assert_eq!(parsed(&a), 0, "the upgrade parses nothing again");
+        assert_eq!(a.recent_files(), [s.x.join("src/lib.rs")]);
+    }
+    let alone = open_shared(&s.index, &s.x, Vec::new().into());
+    assert_eq!(parsed(&alone), 0, "the member's records moved to its own store");
+    assert_eq!(symbols(&alone, "alpha", SymbolFilter::All), ["alpha"]);
+    let a = open_shared(&s.index, &s.a, members(&[&s.x]));
+    assert_eq!(parsed(&a), 0);
 }

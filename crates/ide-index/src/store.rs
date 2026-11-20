@@ -1,14 +1,21 @@
 //! Persistence of file records in redb, so a restart only re-parses changed files.
 
 use crate::data::FileRecord;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use redb::{Database, Durability, ReadableDatabase, ReadableTable, TableDefinition, TableError};
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock, Weak};
 
 const FILES: TableDefinition<&str, &[u8]> = TableDefinition::new("files");
 const META: TableDefinition<&str, &[u8]> = TableDefinition::new("meta");
 /// Bump when [`FileRecord`] or its encoding changes.
 const SCHEMA: &str = "omniterm-index-3";
+
+/// The stores open in this process, by database file. redb lets a file be opened once, so the
+/// windows whose projects share a folder (a folder open alone and as a workspace member) share
+/// its store instead of the second one indexing in memory only.
+static OPEN: LazyLock<Mutex<HashMap<PathBuf, Weak<Store>>>> = LazyLock::new(Mutex::default);
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -19,20 +26,40 @@ fn err(e: impl std::fmt::Display) -> String {
 pub(crate) struct Store {
     /// Write-locked only for [`Store::compact`].
     db: RwLock<Database>,
+    /// Schema, fingerprint and root the records were written for.
+    stamp: String,
 }
 
 impl Store {
-    /// Opens (or creates) `cache_dir/index.redb`. Records written by another
-    /// schema / extractor version or for another root are discarded. Returns
-    /// `None` when the database cannot be used (e.g. locked by another window);
-    /// the index then runs in memory only.
-    pub(crate) fn open(cache_dir: &Path, root: &Path, fingerprint: &str) -> Option<Self> {
+    /// Opens (or creates) `cache_dir/index.redb`, or shares the handle another index of this
+    /// process has open. Records written by another schema / extractor version or for another
+    /// root are discarded. Returns `None` when the database cannot be used (locked by another
+    /// process, or open here for other settings, whose records must not be discarded under it);
+    /// the index then keeps those files in memory only.
+    pub(crate) fn open(cache_dir: &Path, root: &Path, fingerprint: &str) -> Option<Arc<Self>> {
+        let file = cache_dir.join("index.redb");
+        let stamp = format!("{SCHEMA}\n{fingerprint}\n{}", root.display());
+        // Held while opening, so two windows opening the same folder at once share one handle.
+        let mut open = OPEN.lock();
+        open.retain(|_, store| store.strong_count() > 0);
+        if let Some(store) = open.get(&file).and_then(Weak::upgrade) {
+            if store.stamp == stamp {
+                return Some(store);
+            }
+            tracing::warn!("index cache {} is in use with other index settings; indexing in memory only", file.display());
+            return None;
+        }
+        let store = Arc::new(Self::create(cache_dir, &file, stamp)?);
+        open.insert(file, Arc::downgrade(&store));
+        Some(store)
+    }
+
+    fn create(cache_dir: &Path, file: &Path, stamp: String) -> Option<Self> {
         if let Err(e) = std::fs::create_dir_all(cache_dir) {
             tracing::warn!("index cache {}: {e}", cache_dir.display());
             return None;
         }
-        let file = cache_dir.join("index.redb");
-        let db = match Database::create(&file) {
+        let db = match Database::create(file) {
             Ok(db) => db,
             Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
                 tracing::warn!("index cache {} is in use; indexing in memory only", file.display());
@@ -40,16 +67,15 @@ impl Store {
             }
             Err(e) => {
                 tracing::warn!("index cache {} unreadable ({e}); rebuilding", file.display());
-                let _ = std::fs::remove_file(&file);
-                Database::create(&file).map_err(|e| tracing::warn!("index cache: {e}")).ok()?
+                let _ = std::fs::remove_file(file);
+                Database::create(file).map_err(|e| tracing::warn!("index cache: {e}")).ok()?
             }
         };
-        let store = Self { db: RwLock::new(db) };
-        let stamp = format!("{SCHEMA}\n{fingerprint}\n{}", root.display());
+        let store = Self { db: RwLock::new(db), stamp };
         match store.meta("stamp") {
-            Ok(Some(v)) if v == stamp.as_bytes() => {}
+            Ok(Some(v)) if v == store.stamp.as_bytes() => {}
             _ => {
-                if let Err(e) = store.reset(&stamp) {
+                if let Err(e) = store.reset(&store.stamp) {
                     tracing::warn!("index cache reset failed: {e}");
                     return None;
                 }
@@ -174,6 +200,24 @@ mod tests {
         s.apply(&[], &dels, true).unwrap();
         s.compact().unwrap();
         assert!(s.load().unwrap().is_empty());
+    }
+
+    #[test]
+    fn indexes_of_one_process_share_an_open_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Path::new("/proj");
+        let first = Store::open(dir.path(), root, "fp").expect("a new store opens");
+        let second = Store::open(dir.path(), root, "fp").expect("the open store is shared, not reported in use");
+        assert!(Arc::ptr_eq(&first, &second));
+        first.apply(&[("a.rs".into(), FileRecord::default())], &[], true).unwrap();
+        assert_eq!(second.load().unwrap().len(), 1);
+        // Other settings would discard the records the open index relies on.
+        assert!(Store::open(dir.path(), root, "other").is_none());
+        assert!(Store::open(dir.path(), Path::new("/elsewhere"), "fp").is_none());
+        assert_eq!(first.load().unwrap().len(), 1, "nothing was reset under the open index");
+        drop((first, second));
+        let reopened = Store::open(dir.path(), root, "other").expect("a closed store reopens for other settings");
+        assert!(reopened.load().unwrap().is_empty());
     }
 
     #[test]

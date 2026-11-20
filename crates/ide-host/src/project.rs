@@ -128,21 +128,27 @@ impl Host {
         let index_settings = effective.index;
         let language_settings = effective.languages;
         let index = if index_settings.enabled {
+            let index_dir = self.local_data_dir.join("index");
             ProjectIndex::open_with(
                 &root,
-                &self.local_data_dir.join("index").join(&project_key),
+                &index_dir.join(&project_key),
                 index_roots(&root, extra_roots.clone()),
                 excludes.clone(),
                 languages.clone(),
                 self.syntax(),
                 sink.clone(),
-                // A project in Restricted Mode isn't read or parsed until the user trusts it, nor
-                // one the user has not chosen to index yet.
-                index_options(
-                    &index_settings,
-                    &language_settings,
-                    !trusted.load(Ordering::Acquire) || !self.index_gates.allows(&root),
-                ),
+                ide_index::IndexOptions {
+                    // Each folder outside the project (a workspace member) keeps its own store,
+                    // shared with every workspace that indexes it and with the folder opened alone.
+                    folder_stores: Some(index_dir),
+                    // A project in Restricted Mode isn't read or parsed until the user trusts it,
+                    // nor one the user has not chosen to index yet.
+                    ..index_options(
+                        &index_settings,
+                        &language_settings,
+                        !trusted.load(Ordering::Acquire) || !self.index_gates.allows(&root),
+                    )
+                },
             )?
         } else {
             ProjectIndex::unindexed(&root, languages.clone(), self.syntax(), sink.clone())?
@@ -1221,6 +1227,7 @@ fn index_options(
         scan_delay: Duration::from_millis(u64::from(index.scan_delay_ms)),
         threads: ide_index::IndexOptions::half_the_cores(),
         held,
+        folder_stores: None,
     }
 }
 
@@ -1553,15 +1560,10 @@ fn exclude_globs(root: &Path, settings: &ide_core::settings::Settings, detected:
     globs
 }
 
+/// Stable directory name per project for caches. The index names a workspace member's own store
+/// the same way, which is what lets a folder opened alone and as a member share its index.
 pub(crate) fn project_key(root: &Path) -> String {
-    // Stable FNV-1a directory name per project for caches.
-    let s = root.to_string_lossy();
-    let mut h: u64 = 0xcbf29ce484222325;
-    for b in s.as_bytes() {
-        h ^= *b as u64;
-        h = h.wrapping_mul(0x100000001b3);
-    }
-    format!("{h:016x}")
+    ide_index::folder_key(root)
 }
 
 struct LspObserver(Arc<LspManager>);

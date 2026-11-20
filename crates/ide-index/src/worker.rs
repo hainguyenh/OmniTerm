@@ -4,7 +4,7 @@
 use crate::IndexOptions;
 use crate::data::{FileEntry, FileRecord, IndexData, StoredSymbol};
 use crate::filter::{Found, PathFilter};
-use crate::store::Store;
+use crate::stores::{Records, Stores};
 use ide_core::{IdeEvent, LanguageId, SharedSink, TaskId};
 use ide_language::{LanguageRegistry, Syntax};
 use parking_lot::{Condvar, Mutex, RwLock};
@@ -48,7 +48,7 @@ pub(crate) struct Shared {
     pub data: RwLock<IndexData>,
     /// Most recent first.
     pub recent: Mutex<Vec<PathBuf>>,
-    pub store: Option<Store>,
+    pub(crate) stores: Stores,
     pub indexing: AtomicBool,
     pub cancelled: AtomicBool,
     /// Stops the scan in progress: the user cancelled it, or the project closed. Unlike
@@ -74,7 +74,7 @@ impl Shared {
         languages: std::sync::Arc<LanguageRegistry>,
         syntax: std::sync::Arc<Syntax>,
         sink: SharedSink,
-        store: Option<Store>,
+        stores: Stores,
         options: IndexOptions,
     ) -> Self {
         let pool = if options.threads == 0 {
@@ -97,7 +97,7 @@ impl Shared {
             sink,
             data: RwLock::default(),
             recent: Mutex::default(),
-            store,
+            stores,
             indexing: AtomicBool::new(!options.held),
             cancelled: AtomicBool::new(false),
             scan_stop: std::sync::Arc::default(),
@@ -277,28 +277,22 @@ impl Shared {
     }
 
     fn load_persisted(&self) {
-        let Some(store) = &self.store else { return };
         let filter = self.filter();
-        match store.load() {
-            Ok(records) => {
-                // A record of a content root no longer indexed stays for when it is again.
-                let entries: Vec<FileEntry> = records
-                    .into_par_iter()
-                    .filter_map(|(key, rec)| {
-                        let path = filter.path_of_key(&key);
-                        let rel = filter.rel(&path)?;
-                        let live = !filter.is_excluded(&path, false)
-                            && dunce::canonicalize(&path).is_ok_and(|real| real == path);
-                        live.then(|| FileEntry::new(path, rel, rec))
-                    })
-                    .collect();
-                let mut d = self.data.write();
-                for e in entries {
-                    d.insert(e);
-                }
-            }
-            Err(e) => tracing::warn!("index cache load failed: {e}"),
+        let (own, moved) = self.stores.load_home(&filter);
+        let mut records = self.stores.load_folders(&filter);
+        records.extend(own);
+        self.insert_loaded(&filter, records);
+        // What an earlier version kept of the content roots in the project's store moves to their
+        // own stores, so the upgrade parses nothing again.
+        let moved = self.insert_loaded(&filter, moved);
+        if !moved.is_empty() {
+            let puts: Records = {
+                let d = self.data.read();
+                moved.into_iter().filter_map(|path| Some((path.clone(), d.get(&path)?.record()))).collect()
+            };
+            self.persist(&filter, puts, &[], true);
         }
+        let Some(store) = self.stores.home() else { return };
         let recent: Vec<PathBuf> = store.load_recent().into_iter().map(|key| filter.path_of_key(&key)).collect();
         let mut r = self.recent.lock();
         for p in recent {
@@ -309,11 +303,35 @@ impl Shared {
         r.truncate(MAX_RECENT);
     }
 
+    /// Adds the persisted records of files still in scope to memory, except files already there;
+    /// returns the paths added. A record of a content root no longer indexed stays on disk for
+    /// when it is again.
+    fn insert_loaded(&self, filter: &PathFilter, records: Records) -> Vec<PathBuf> {
+        let entries: Vec<FileEntry> = records
+            .into_par_iter()
+            .filter_map(|(path, rec)| {
+                let rel = filter.rel(&path)?;
+                let live =
+                    !filter.is_excluded(&path, false) && dunce::canonicalize(&path).is_ok_and(|real| real == path);
+                live.then(|| FileEntry::new(path, rel, rec))
+            })
+            .collect();
+        let mut added = Vec::new();
+        let mut d = self.data.write();
+        for e in entries {
+            if d.get(&e.path).is_none() {
+                added.push(e.path.clone());
+                d.insert(e);
+            }
+        }
+        added
+    }
+
     /// A cancelled scan (project closed) still ends its progress task and the indexing state.
     fn end_scan(&self, task: TaskId) {
         if !self.is_cancelled() {
             // Stopped by the user: keep what was indexed for the next start.
-            self.persist(&[], &[], true);
+            self.flush();
         }
         self.indexing.store(false, Ordering::SeqCst);
         self.sink.emit(IdeEvent::Task {
@@ -383,8 +401,7 @@ impl Shared {
                 d.remove(path);
             }
         }
-        let stale: Vec<String> = stale.iter().filter_map(|p| filter.store_key(p)).collect();
-        self.persist(&[], &stale, false);
+        self.persist(&filter, Vec::new(), &stale, false);
 
         let total = todo.len();
         let mut done = 0usize;
@@ -407,7 +424,7 @@ impl Shared {
                 });
             }
         }
-        self.persist(&[], &[], true);
+        self.flush();
         self.indexing.store(false, Ordering::SeqCst);
         self.sink.emit(IdeEvent::Task {
             id: task,
@@ -462,8 +479,7 @@ impl Shared {
         if extracted.is_empty() {
             return;
         }
-        let puts: Vec<(String, FileRecord)> =
-            extracted.iter().filter_map(|(_, rec, path)| Some((filter.store_key(path)?, rec.clone()))).collect();
+        let puts: Records = extracted.iter().map(|(_, rec, path)| (path.clone(), rec.clone())).collect();
         {
             let entries: Vec<FileEntry> =
                 extracted.into_iter().map(|(rel, rec, path)| FileEntry::new(path, rel, rec)).collect();
@@ -472,15 +488,18 @@ impl Shared {
                 d.insert(e);
             }
         }
-        self.persist(&puts, &[], false);
+        self.persist(&filter, puts, &[], false);
     }
 
-    fn persist(&self, puts: &[(String, FileRecord)], deletes: &[String], durable: bool) {
-        if let Some(store) = &self.store
-            && let Err(e) = store.apply(puts, deletes, durable)
-        {
-            tracing::warn!("index cache write failed: {e}");
-        }
+    /// Writes records and deletions, each to the store of its file under `filter` (cheap,
+    /// non-durable writes until the next [`Self::flush`]).
+    fn persist(&self, filter: &PathFilter, puts: Records, deletes: &[PathBuf], durable: bool) {
+        self.stores.apply(filter, puts, deletes, durable);
+    }
+
+    /// Makes every write so far durable.
+    fn flush(&self) {
+        self.stores.apply(&self.filter(), Vec::new(), &[], true);
     }
 
     fn extract(&self, f: &Found, prev_hash: Option<[u8; 32]>) -> Extracted {
@@ -554,6 +573,11 @@ impl Shared {
             }
         }
         if rescan {
+            // A content root that entered the scope starts from what its store already holds,
+            // indexed by this or any other project.
+            let filter = self.filter();
+            let records = self.stores.load_folders(&filter);
+            self.insert_loaded(&filter, records);
             // The scan also picks up whatever `changed` / `removed` reported.
             self.full_scan();
             changed.clear();
@@ -574,11 +598,11 @@ impl Shared {
                 Some(_) => vec![path],
                 None => d.remove_tree(&path),
             };
-            deletes.extend(gone.iter().filter_map(|p| filter.store_key(p)));
+            deletes.extend(gone);
         }
         if !deletes.is_empty() {
             touched = true;
-            self.persist(&[], &deletes, false);
+            self.persist(&filter, Vec::new(), &deletes, false);
         }
 
         let mut files: Vec<Found> = Vec::new();
@@ -641,14 +665,14 @@ impl Shared {
                 }
             }
         }
-        if save_recent && let Some(store) = &self.store {
+        if save_recent && let Some(store) = self.stores.home() {
             let rels: Vec<String> = self.recent.lock().iter().filter_map(|p| filter.store_key(p)).collect();
             if let Err(e) = store.save_recent(&rels) {
                 tracing::warn!("index cache: saving recent files failed: {e}");
             }
         }
         if touched {
-            self.persist(&[], &[], true);
+            self.flush();
             self.emit_state();
         }
     }

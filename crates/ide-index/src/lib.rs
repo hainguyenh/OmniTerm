@@ -19,6 +19,7 @@ mod data;
 mod filter;
 mod matching;
 mod store;
+mod stores;
 mod worker;
 
 pub use worker::MAX_SYMBOL_FILE;
@@ -108,6 +109,23 @@ pub struct IndexOptions {
     /// Nothing is loaded or scanned until [`ProjectIndex::release`]: a project the user
     /// hasn't trusted yet costs no disk reads or parsing. Queries answer empty meanwhile.
     pub held: bool,
+    /// The directory holding one store per content root outside the project folder, each in
+    /// the subdirectory [`folder_key`] names, so every project indexing a folder (a workspace
+    /// member, the folder opened alone) shares its records. Name the project's own cache
+    /// directory the same way (`<folder_stores>/<folder_key(root)>`) for a folder opened alone to
+    /// share its store too. `None` keeps the content roots' records in the project's store.
+    pub folder_stores: Option<PathBuf>,
+}
+
+/// The name of `folder`'s cache directory: a stable FNV-1a hash of its path. Projects name their
+/// caches with it, and [`IndexOptions::folder_stores`] names a content root's store with it.
+pub fn folder_key(folder: &Path) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in folder.to_string_lossy().as_bytes() {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
 }
 
 impl IndexOptions {
@@ -162,9 +180,11 @@ impl ProjectIndex {
         if !root.is_dir() {
             return Err(ide_core::IdeError::not_found(format!("{} is not a directory", root.display())));
         }
-        let store = store::Store::open(cache_dir, &root, &options.fingerprint(&syntax));
+        let fingerprint = options.fingerprint(&syntax);
+        let home = store::Store::open(cache_dir, &root, &fingerprint);
+        let stores = stores::Stores::new(home, options.folder_stores.clone(), fingerprint);
         let filter = filter::PathFilter::new(&root, &content_roots.into(), &excludes);
-        let shared = Arc::new(Shared::new(filter, languages, syntax, sink, store, options));
+        let shared = Arc::new(Shared::new(filter, languages, syntax, sink, stores, options));
         Self::start(shared, root, true)
     }
 
@@ -178,7 +198,8 @@ impl ProjectIndex {
     ) -> IdeResult<Arc<Self>> {
         let root = dunce::canonicalize(root).unwrap_or_else(|_| root.to_owned());
         let filter = filter::PathFilter::new(&root, &Vec::new().into(), &[]);
-        let shared = Arc::new(Shared::new(filter, languages, syntax, sink, None, IndexOptions::default()));
+        let shared =
+            Arc::new(Shared::new(filter, languages, syntax, sink, stores::Stores::none(), IndexOptions::default()));
         Self::start(shared, root, false)
     }
 
@@ -512,11 +533,7 @@ impl ProjectIndex {
     /// Blocking; call off the UI thread.
     pub fn compact(&self) {
         self.shared.data.write().shrink();
-        if let Some(store) = &self.shared.store
-            && let Err(e) = store.compact()
-        {
-            tracing::debug!("index compact: {e}");
-        }
+        self.shared.stores.compact();
     }
 
     pub fn root(&self) -> &Path {

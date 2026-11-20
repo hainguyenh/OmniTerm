@@ -195,6 +195,23 @@ impl PathFilter {
         (path != root.path).then(|| format!("{ABSOLUTE_KEY}{}", path.to_string_lossy()))
     }
 
+    /// The content roots outside the project folder.
+    pub(crate) fn extra_roots(&self) -> impl Iterator<Item = &Path> {
+        self.extra.iter().map(|e| e.path.as_path())
+    }
+
+    /// For a file of a content root outside the project folder: that root and the file's
+    /// `/`-separated path relative to it, its key in the root's own store. `None` for the project
+    /// folder's files and for paths outside every root.
+    pub(crate) fn folder_key(&self, path: &Path) -> Option<(&Path, String)> {
+        if self.include_root && path.starts_with(&self.root) {
+            return None;
+        }
+        let root = self.extra.iter().find(|e| path.starts_with(&e.path))?;
+        let rel = rel_string(path.strip_prefix(&root.path).ok()?);
+        (!rel.is_empty()).then_some((root.path.as_path(), rel))
+    }
+
     /// The file a persisted key ([`Self::store_key`]) names.
     pub(crate) fn path_of_key(&self, key: &str) -> PathBuf {
         match key.strip_prefix(ABSOLUTE_KEY) {
@@ -502,6 +519,12 @@ src/local/
         assert_eq!(filter.store_key(&base.join("elsewhere.rs")), None);
         assert_eq!(filter.store_key(&root.join("src/a.rs")).as_deref(), Some("src/a.rs"));
         assert_eq!(filter.path_of_key("src/a.rs"), root.join("src/a.rs"));
+        // With a store per content root, its files are keyed relative to it.
+        assert_eq!(filter.extra_roots().collect::<Vec<_>>(), [shared.as_path()]);
+        assert_eq!(filter.folder_key(&shared.join("src/b.rs")), Some((shared.as_path(), "src/b.rs".to_owned())));
+        assert_eq!(filter.folder_key(&shared), None);
+        assert_eq!(filter.folder_key(&root.join("src/a.rs")), None, "the project folder's files stay in its store");
+        assert_eq!(filter.folder_key(&base.join("elsewhere.rs")), None);
         assert!(!filter.is_excluded(&shared.join("src/new.rs"), false));
         assert!(filter.is_excluded(&shared.join("target/y.rs"), false));
         assert!(filter.is_excluded(&shared.join("out/y.rs"), false));
