@@ -66,7 +66,7 @@ export function handleFileDrop(
 
 /** WebView2's channel to the host, which turns a dropped `File` into its path (Windows). */
 export interface WebviewFileBridge {
-  postMessageWithAdditionalObjects(message: unknown, objects: readonly File[]): void;
+  postMessageWithAdditionalObjects(message: string, objects: readonly File[]): void;
 }
 
 export interface DroppedPaths {
@@ -156,12 +156,30 @@ function createOpenHint(): { show(x: number, y: number): void; hide(): void } {
   };
 }
 
+/** Hands the files of an OS drop to the host; set while the page receives OS drops itself. */
+let sendPageDrop: ((e: DragEvent) => boolean) | null = null;
+
+/**
+ * Opens the files of an OS drop the page received like a drop anywhere else in the window: in the
+ * editor, or whatever a registered handler does with them. For a region whose own drop handling
+ * would consume the files (the text editor reads a dropped file into the document). False when the
+ * page does not receive OS drops itself, the drag carries no files, or a region owning OS drops
+ * holds the target; the caller then handles the drop as before.
+ */
+export function takePageFileDrop(e: DragEvent): boolean {
+  return sendPageDrop?.(e) ?? false;
+}
+
 /**
  * OS drops the page receives itself. A window that turns the webview's drop handler off (OmniTerm's
  * main window, so pane headers can be dragged) gets dropped files as HTML5 `File`s without paths
  * and never the Tauri drag-drop event above. The files go to the host through WebView2, which
  * answers with their paths; the drop then opens them like any other. A region that took the drop
  * (a terminal attaching the file) or owns OS drops is left alone.
+ *
+ * The listeners sit on `document`, which a bubbling event reaches before `window`: the browser
+ * guards cancel every drag on `window` (no navigation to the file), and a cancelled drop reads as
+ * one a region already took.
  */
 export function installPageFileDrop(
   bridge: WebviewFileBridge | null = webviewFileBridge(),
@@ -174,6 +192,24 @@ export function installPageFileDrop(
   const owned = (e: DragEvent) => e.target instanceof Element && !!e.target.closest(`[${OWNER_ATTR}]`);
   const accepts = (e: DragEvent) => carriesFiles(e) && !e.defaultPrevented && !owned(e);
   const hint = createOpenHint();
+  const send = (e: DragEvent): boolean => {
+    hint.hide();
+    if (!carriesFiles(e) || owned(e)) return false;
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    if (!files.length) return false;
+    const token = ++next;
+    pending.set(token, { x: e.clientX, y: e.clientY });
+    try {
+      // A string, never an object: see `src-tauri/src/native_file_drop.rs`.
+      bridge.postMessageWithAdditionalObjects(JSON.stringify({ omnitermFileDrop: token }), files);
+      return true;
+    } catch (error) {
+      // WebView2 refuses files that are not on disk (dragged out of another app's memory).
+      pending.delete(token);
+      console.warn("could not open the dropped files", error);
+      return false;
+    }
+  };
   const onDragOver = (e: DragEvent) => {
     if (!accepts(e)) {
       hint.hide();
@@ -185,19 +221,7 @@ export function installPageFileDrop(
   };
   const onDrop = (e: DragEvent) => {
     hint.hide();
-    if (!accepts(e)) return;
-    const files = Array.from(e.dataTransfer?.files ?? []);
-    if (!files.length) return;
-    e.preventDefault();
-    const token = ++next;
-    pending.set(token, { x: e.clientX, y: e.clientY });
-    try {
-      bridge.postMessageWithAdditionalObjects({ omnitermFileDrop: token }, files);
-    } catch (error) {
-      // WebView2 refuses files that are not on disk (dragged out of another app's memory).
-      pending.delete(token);
-      console.warn("could not open the dropped files", error);
-    }
+    if (!e.defaultPrevented && send(e)) e.preventDefault();
   };
   const unlisten = subscribe(({ token, paths }) => {
     const at = pending.get(token);
@@ -205,11 +229,13 @@ export function installPageFileDrop(
     pending.delete(token);
     onPaths(paths, at.x, at.y);
   });
-  window.addEventListener("dragover", onDragOver);
-  window.addEventListener("drop", onDrop);
+  sendPageDrop = send;
+  document.addEventListener("dragover", onDragOver);
+  document.addEventListener("drop", onDrop);
   return () => {
-    window.removeEventListener("dragover", onDragOver);
-    window.removeEventListener("drop", onDrop);
+    if (sendPageDrop === send) sendPageDrop = null;
+    document.removeEventListener("dragover", onDragOver);
+    document.removeEventListener("drop", onDrop);
     hint.hide();
     unlisten();
   };

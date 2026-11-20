@@ -32,7 +32,6 @@ import { inProgress, operationTitle, type InProgress } from "./operations";
 import {
   buildMultiRepoRows,
   currentRepoFor,
-  repoHeadLabel,
   widgetShowsRepo,
   type RepoEntry,
   type RepoRow,
@@ -193,12 +192,6 @@ const POPUP_ACTIONS: PopupAction[] = [
   { id: "vcs.checkoutRevision", label: "Checkout Tag or Revision…", icon: "branch", group: "branch" },
 ];
 
-/** A single repository's own entries (its submenu in the popup with several repositories). */
-const REPO_ACTIONS: PopupAction[] = [
-  { id: "vcs.newBranch", label: "New Branch…", icon: "plus", group: "branch" },
-  { id: "vcs.checkoutRevision", label: "Checkout Tag or Revision…", icon: "branch", group: "branch" },
-];
-
 const OPTIONS_KEY = "omniterm.vcs.branchesPopup.options";
 
 interface PopupOptions {
@@ -314,7 +307,6 @@ export function operationActions(op: InProgress | null, conflicts: number): Popu
   return out;
 }
 
-const NO_BRANCHES: readonly Branch[] = [];
 const INDENT = 16;
 const ROW_HEIGHT = 24;
 const SEPARATOR_HEIGHT = 9;
@@ -375,28 +367,12 @@ function BranchesPopup({
   );
 }
 
-interface BranchesPanelProps {
-  onClose: () => void;
-  actions: readonly PopupAction[];
-  /** A repository other than the selected one (the submenu of a repository): it is selected before acting. */
-  root?: string;
-  /** Its branches until the selected repository's are loaded. */
-  fallback?: readonly Branch[];
-  /** ← at the start of the search field (back to the repositories). */
-  onBack?: () => void;
-}
-
-/** Search, actions and the branches of one repository (the selected one, or `root`). */
-function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }: BranchesPanelProps) {
+/** Search, actions and the branches of the selected repository. */
+function BranchesPanel({ onClose, actions: baseActions }: { onClose: () => void; actions: readonly PopupAction[] }) {
   const selected = useVcs((s) => s.repo);
-  const live = root === undefined || selected === root;
-  const storeBranches = useVcs((s) => s.branches);
-  const storeLoaded = useVcs((s) => s.branchesLoaded);
-  const branches = live && (storeLoaded || !fallback) ? storeBranches : (fallback ?? NO_BRANCHES);
-  const loaded = (live && storeLoaded) || !!fallback;
-  const current = useVcs((s) =>
-    live ? (s.branch?.head ?? null) : root ? (s.heads[root]?.head ?? null) : (s.branch?.head ?? null),
-  );
+  const branches = useVcs((s) => s.branches);
+  const loaded = useVcs((s) => s.branchesLoaded);
+  const current = useVcs((s) => s.branch?.head ?? null);
   const [query, setQuery] = useState("");
   const [recent] = useState(recentBranches);
   const [active, setActive] = useState(0);
@@ -405,21 +381,21 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
   const favorites = useFavoriteBranches((s) => s.names);
   const [tags, setTags] = useState<string[]>([]);
   useEffect(() => {
-    if (root === undefined) void loadBranches().catch(() => undefined);
+    void loadBranches().catch(() => undefined);
     loadFavoriteBranches();
-  }, [root]);
+  }, []);
   useEffect(() => {
     let live = true;
-    call(commands.vcsTags(root ?? currentRepo())).then(
+    call(commands.vcsTags(currentRepo())).then(
       (t) => live && setTags(t),
       () => live && setTags([]),
     );
     return () => {
       live = false;
     };
-  }, [root, selected, branches]);
+  }, [selected, branches]);
 
-  const op = useVcs((s) => inProgress(root ? s.operations[root] : s.branch?.operation));
+  const op = useVcs((s) => inProgress(s.branch?.operation));
   const conflicts = useVcs((s) => s.status.filter((f) => f.unstaged === "conflicted").length);
   const actions = useMemo(() => [...operationActions(op, conflicts), ...baseActions], [op, conflicts, baseActions]);
   const options = usePopupOptions();
@@ -430,8 +406,6 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
   );
   const isSection = (r: BranchRow) => r.type === "section";
   const activeIndex = rows[active] && !isSection(rows[active]!) ? active : firstSelectable(rows, isSection);
-  const scoped = (items: MenuItem[]) => (root ? inRepo(root, items) : items);
-
   const closeAll = () => {
     setMenuFor(null);
     onClose();
@@ -443,14 +417,14 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
     if (!el) return;
     setMenuFor(
       row.type === "branch"
-        ? { items: scoped(branchMenu(row.branch, current, closeAll)), label: tx`Branch ${row.branch.name}`, el }
-        : { items: scoped(tagMenu(row.tag, closeAll)), label: tx`Tag ${row.tag}`, el },
+        ? { items: branchMenu(row.branch, current, closeAll), label: tx`Branch ${row.branch.name}`, el }
+        : { items: tagMenu(row.tag, closeAll), label: tx`Tag ${row.tag}`, el },
     );
   };
 
   const run = (id: string, arg?: unknown) => {
     onClose();
-    void (root ? focusRepo(root) : Promise.resolve()).then(() => executeAction(id, arg));
+    void executeAction(id, arg);
   };
   const activate = (i: number) => {
     const row = rows[i];
@@ -489,11 +463,6 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
       setOpen(row.key, false);
       return;
     }
-    if (e.key === "ArrowLeft" && onBack && caretAt(e, "start")) {
-      e.preventDefault();
-      onBack();
-      return;
-    }
     const next = listNavigate(e.key, { items: rows, active: activeIndex, isSection, wrap: true });
     if (next !== null) {
       e.preventDefault();
@@ -501,12 +470,11 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
     }
   };
 
-  const label = root ? `Search branches of ${repoName(root)}` : "Search branches and actions";
+  const label = "Search branches and actions";
   return (
     <>
       <div className={styles.search}>
         <SearchField
-          className={root ? styles.searchGrow : undefined}
           data-autofocus
           value={query}
           onChange={(v) => {
@@ -518,8 +486,8 @@ function BranchesPanel({ onClose, actions: baseActions, root, fallback, onBack }
           variant="bare"
           onKeyDown={onKeyDown}
         />
-        {!root && <IconButton icon="git-fetch" title="Fetch" size="small" action="vcs.fetch" />}
-        {!root && <OptionsButton hasTags={tags.length > 0} />}
+        <IconButton icon="git-fetch" title="Fetch" size="small" action="vcs.fetch" />
+        <OptionsButton hasTags={tags.length > 0} />
       </div>
       <div ref={listRef} style={{ height: listHeight(rows) }} className={styles.listWrap}>
         <List
@@ -579,14 +547,13 @@ function SubMenu({
 }
 
 /**
- * Branches popup of a project with several repositories: actions; the repositories,
- * each opening its own branches (on hover or →); then the branches they all have
- * (acting on all of them) or, when their branches differ, the current repository's.
+ * Branches popup of a project with several repositories: actions, the project list choosing the
+ * repository shown, then the branches they all have (acting on all of them) or, when their
+ * branches differ, the current repository's. A search also lists the other repositories' branches.
  */
 function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => void; actions: readonly PopupAction[] }) {
   const roots = useVcs((s) => s.roots);
   const heads = useVcs((s) => s.heads);
-  const operations = useVcs((s) => s.operations);
   const version = useVcs((s) => s.version);
   const favorites = useFavoriteBranches((s) => s.names);
   const { current } = useCurrentRepo();
@@ -604,14 +571,7 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
   const options = usePopupOptions();
   const [all, setAll] = useState<Record<string, Branch[]>>({});
   const [menuFor, setMenuFor] = useState<{ items: MenuItem[]; label: string; el: HTMLElement } | null>(null);
-  const [repoMenu, setRepoMenu] = useState<{ root: string; el: HTMLElement; focus: boolean } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
-  /** Back from a repository's submenu to the search field. */
-  const closeRepoMenu = () => {
-    setRepoMenu(null);
-    searchRef.current?.focus();
-  };
 
   useEffect(() => loadFavoriteBranches(), []);
   // Every repository's branches (common ones, submenus, search); refreshed after operations.
@@ -676,25 +636,14 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
 
   const closeAll = () => {
     setMenuFor(null);
-    setRepoMenu(null);
     onClose();
   };
-  /** Opens the submenu of row `i`; `focus` moves the keyboard into a repository's submenu. */
-  const openSub = (i: number, focus: boolean) => {
+  /** Opens the menu of row `i`. */
+  const openSub = (i: number) => {
     const row = rows[i];
     if (!row) return;
     const el = rowElement(listRef.current, row.key);
     if (!el) return;
-    if (row.type === "repo") {
-      setMenuFor(null);
-      setRepoMenu((prev) =>
-        prev?.root === row.repo.root && prev.el === el && prev.focus === focus
-          ? prev
-          : { root: row.repo.root, el, focus },
-      );
-      return;
-    }
-    setRepoMenu(null);
     if (row.type === "common") {
       setMenuFor({ items: commonBranchMenu(row.branch, roots, closeAll), label: tx`Branch ${row.branch.name}`, el });
     } else if (row.type === "branch") {
@@ -713,14 +662,8 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
     } else if (row.type === "group") {
       if (!query.trim()) setOpen(row.key, !row.expanded);
     } else {
-      openSub(i, true);
+      openSub(i);
     }
-  };
-  // The pointer on a repository opens its branches right away; elsewhere it closes them.
-  const hover = (i: number) => {
-    setActive(i);
-    if (rows[i]?.type === "repo") openSub(i, false);
-    else setRepoMenu(null);
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -741,7 +684,7 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
       e.preventDefault();
       if (row.type === "group") {
         if (!query.trim()) setOpen(row.key, true);
-      } else openSub(activeIndex, true);
+      } else openSub(activeIndex);
       return;
     }
     if (e.key === "ArrowLeft" && row?.type === "group" && row.expanded) {
@@ -761,7 +704,6 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
     <>
       <div className={styles.search}>
         <SearchField
-          ref={searchRef}
           className={styles.searchGrow}
           data-autofocus
           value={query}
@@ -769,8 +711,8 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
             setQuery(v);
             setActive(0);
           }}
-          placeholder="Search for branches, actions, repositories"
-          aria-label="Search for branches, actions, repositories"
+          placeholder="Search branches and actions"
+          aria-label="Search branches and actions"
           variant="bare"
           onKeyDown={onKeyDown}
         />
@@ -806,69 +748,32 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
             )
           }
           activeIndex={activeIndex}
-          onActiveChange={hover}
+          onActiveChange={setActive}
           onActivate={(_r, i) => activate(i)}
           focusable={false}
           hoverSelects
           rowHeight={ROW_HEIGHT}
-          aria-label="Repositories and branches"
+          aria-label="Branches"
           className={styles.list}
           empty={
             <span className={styles.empty}>
-              <T>No matching repositories or branches</T>
+              <T>No matching branches</T>
             </span>
           }
-          renderItem={(r) => (
-            <RepoRowView row={r} operation={r.type === "repo" ? operations[r.repo.root] : undefined} />
-          )}
+          renderItem={(r) => <RepoRowView row={r} />}
         />
       </div>
       {menuFor && <SubMenu {...menuFor} onClose={() => setMenuFor(null)} />}
-      {repoMenu && (
-        <Popup
-          open
-          anchor={repoMenu.el}
-          placement="right-start"
-          offset={2}
-          autoFocus={repoMenu.focus}
-          aria-label={tx`Branches of ${repoName(repoMenu.root)}`}
-          onClose={closeRepoMenu}
-          className={styles.popup}
-        >
-          <BranchesPanel
-            key={repoMenu.root}
-            root={repoMenu.root}
-            fallback={all[repoMenu.root]}
-            actions={REPO_ACTIONS}
-            onClose={closeAll}
-            onBack={closeRepoMenu}
-          />
-        </Popup>
-      )}
     </>
   );
 }
 
-function RepoRowView({ row, operation }: { row: RepoRow; operation?: string }) {
+function RepoRowView({ row }: { row: RepoRow }) {
   switch (row.type) {
     case "action":
     case "branch":
     case "tag":
       return <BranchRowView row={row} />;
-    case "repo":
-      return (
-        <span className={styles.row} data-row-key={row.key}>
-          <span
-            className={styles.repoColor}
-            style={{ background: `var(--project-color-${row.color})` }}
-            aria-hidden="true"
-          />
-          <HighlightedText className={styles.label} text={row.repo.name} indices={row.matches} tone="accent" />
-          {operation && <span className={styles.operation}>{operation}</span>}
-          <span className={styles.repoHead}>{repoHeadLabel(row.repo)}</span>
-          <Icon name="chevron-right" size={10} className={styles.subChevron} />
-        </span>
-      );
     case "group":
       return <GroupRowView row={row} />;
     case "common":

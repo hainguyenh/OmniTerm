@@ -25,20 +25,6 @@ export interface RepoEntry {
   headCommit: string | null;
 }
 
-/** Number of `--project-color-N` tokens repositories are coloured with. */
-export const REPO_COLORS = 9;
-
-/** Colour slot (1-based) of the repository at `index`: distinct for up to `REPO_COLORS` repositories. */
-export function repoColorIndex(index: number): number {
-  return (index % REPO_COLORS) + 1;
-}
-
-/** Display name of a repository's HEAD: its branch, else the short commit. */
-export function repoHeadLabel(r: Pick<RepoEntry, "head" | "headCommit">): string {
-  if (r.head) return r.head;
-  return r.headCommit ? r.headCommit.slice(0, 8) : tx("No commits");
-}
-
 /**
  * The current repository, shown by the branch widget and the lower part of the Branches
  * popup: the one holding the active editor's file, else the selected one, else the first.
@@ -106,7 +92,6 @@ export type RepoRow =
   /** Section header; an empty label draws a separator. */
   | { type: "section"; key: string; label: string }
   | { type: "action"; key: string; action: PopupAction; matches: number[] | null }
-  | { type: "repo"; key: string; repo: RepoEntry; color: number; matches: number[] | null }
   /** Collapsible group (common branches, or one of the current repository's lists) or prefix / remote folder. */
   | { type: "group"; key: string; label: string; expanded: boolean; depth: number }
   | {
@@ -150,13 +135,12 @@ export interface MultiRepoInput extends Omit<BranchTreeOptions, "expanded"> {
 }
 
 /**
- * Rows of the Branches popup with several repositories: actions; the repositories,
- * each with its current branch and opening its own branches; then, when they are all
- * on the same branch, the branches common to all of them (acting on all of them),
- * otherwise the current repository's recent, local and remote branches and tags, in
- * collapsible groups (Recent open, Local open only without Recent). A query filters
- * actions, repositories (by name) and branches, expands every group, and adds the
- * other repositories' matching branches.
+ * Rows of the Branches popup with several repositories (the popup's project list chooses the
+ * current one): actions; then, when they are all on the same branch, the branches common to all
+ * of them (acting on all of them), otherwise the current repository's recent, local and remote
+ * branches and tags, in collapsible groups (Recent open, Local open only without Recent). A query
+ * filters actions and branches, expands every group, and adds the other repositories' matching
+ * branches.
  */
 export function buildMultiRepoRows({
   repos,
@@ -178,14 +162,6 @@ export function buildMultiRepoRows({
   const blocks: RepoRow[][] = [];
 
   blocks.push(actionRows(actions, match, !q));
-
-  const repoRows: RepoRow[] = [];
-  repos.forEach((repo, i) => {
-    const m = match(repo.name);
-    if (m !== false)
-      repoRows.push({ type: "repo", key: `repo:${repo.root}`, repo, color: repoColorIndex(i), matches: m });
-  });
-  blocks.push(repoRows);
 
   /** A group row followed (when expanded) by its children; nothing when it has none. */
   const group = (out: RepoRow[], key: string, label: string, children: RepoRow[], byDefault: boolean) => {

@@ -176,27 +176,6 @@
   margin: 0 4px;
   background: var(--border-popup);
 }
-.repoColor {
-  flex: none;
-  width: 10px;
-  height: 10px;
-  margin: 0 2px;
-  border-radius: 2px;
-}
-.repoHead {
-  flex: 0 4 auto;
-  margin-left: auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--fs-small);
-}
-.subChevron {
-  flex: none;
-  color: var(--fg-faint);
-}
 .groupRow {
   color: var(--fg-secondary);
 }

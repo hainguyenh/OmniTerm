@@ -13,7 +13,7 @@ import { selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceSto
  */
 export async function indexWorkspaceProject(workspace: Workspace, path: string): Promise<boolean> {
   if (!markIndexed(workspace, path)) return false
-  if (selectedWorkspaceId(useWorkspaceStore.getState().selection) === workspace.id) await syncProject(workspace.id)
+  if (selectedWorkspaceId(useWorkspaceStore.getState().selection) === workspace.id) await syncProject(workspace.id, { quiet: true })
   return true
 }
 

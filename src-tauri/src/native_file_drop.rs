@@ -6,8 +6,12 @@
 //! hands them back with `chrome.webview.postMessageWithAdditionalObjects`, WebView2's way to give
 //! the host a dropped file's path, and this module answers with the paths as a window event.
 //!
-//! The page posts an object (`{"omnitermFileDrop": <token>}`), never a string: wry forwards only
-//! string messages to Tauri's IPC, which would log every non-command message as an error.
+//! The page posts a string (`{"omnitermFileDrop":<token>}` as JSON text), never an object. WebView2
+//! calls the message handlers in the order they were added and stops at the first one that fails;
+//! wry's handler, added with the webview, fails on any message that is not a string, so an object
+//! never reached this module's handler and a dropped file never opened. A string passes wry, which
+//! hands it to Tauri's IPC; Tauri cannot read it as a command and logs one `console.error` in the
+//! page, which is harmless.
 
 use serde::Serialize;
 
@@ -21,9 +25,9 @@ pub(crate) struct DroppedPaths {
     pub paths: Vec<String>,
 }
 
-/// The drop token of a page message in JSON, or `None` for any other message.
-pub(crate) fn drop_token(json: &str) -> Option<u64> {
-    serde_json::from_str::<serde_json::Value>(json)
+/// The drop token of a page message (its string, holding JSON), or `None` for any other message.
+pub(crate) fn drop_token(message: &str) -> Option<u64> {
+    serde_json::from_str::<serde_json::Value>(message)
         .ok()?
         .get("omnitermFileDrop")?
         .as_u64()
@@ -68,11 +72,18 @@ mod webview2 {
         let label = window.label().to_owned();
         let handler = WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else { return Ok(()) };
-            if let Some(dropped) = dropped_paths(&args)? {
-                let target = EventTarget::webview_window(label.as_str());
-                if let Err(error) = window.emit_to(target, EVENT, dropped) {
-                    log::warn!("[file-drop] cannot pass dropped file paths to the page: {error}");
+            // Never fail: a failing handler stops WebView2 from calling the ones added after it.
+            match dropped_paths(&args) {
+                Ok(Some(dropped)) => {
+                    let target = EventTarget::webview_window(label.as_str());
+                    if let Err(error) = window.emit_to(target, EVENT, dropped) {
+                        log::warn!(
+                            "[file-drop] cannot pass dropped file paths to the page: {error}"
+                        );
+                    }
                 }
+                Ok(None) => {}
+                Err(error) => log::warn!("[file-drop] cannot read the dropped files: {error}"),
             }
             Ok(())
         }));
@@ -85,10 +96,13 @@ mod webview2 {
     fn dropped_paths(
         args: &ICoreWebView2WebMessageReceivedEventArgs,
     ) -> windows_core::Result<Option<DroppedPaths>> {
-        let mut json = PWSTR::null();
-        // SAFETY: `json` receives a CoTaskMem string that `take_pwstr` frees.
-        unsafe { args.WebMessageAsJson(&mut json)? };
-        let Some(token) = drop_token(&take_pwstr(json)) else {
+        let mut message = PWSTR::null();
+        // SAFETY: `message` receives a CoTaskMem string that `take_pwstr` frees. A message that is
+        // not a string (fails here) is not a drop.
+        if unsafe { args.TryGetWebMessageAsString(&mut message) }.is_err() {
+            return Ok(None);
+        }
+        let Some(token) = drop_token(&take_pwstr(message)) else {
             return Ok(None);
         };
         // SAFETY: plain COM calls on interfaces WebView2 handed to this callback.

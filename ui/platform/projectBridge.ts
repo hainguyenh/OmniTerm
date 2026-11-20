@@ -65,13 +65,21 @@ async function confirmWorkspaceTrust(workspaceId: string | null): Promise<void> 
  * A newer call wins: a slow answer for a workspace the user already left is dropped. While the
  * backend opens the project, `useProject` carries the same `opening` / `openingPath` state as a
  * regular project open, so the workbench shows its opening view (after a short delay).
+ *
+ * `quiet` re-syncs the workspace already open (a project joined the index): the backend keeps the
+ * open project, so there is nothing to show an opening view for. That view covers the workbench
+ * and hides it from assistive technology while the user is still working in it, which looked like
+ * the app reloading.
  */
-export async function syncProject(workspaceId: string | null): Promise<ProjectInfo | null> {
+export async function syncProject(
+  workspaceId: string | null,
+  { quiet = false }: { quiet?: boolean } = {},
+): Promise<ProjectInfo | null> {
   const mine = ++generation
   if (!(await probeIdeBackend())) return null
   await confirmWorkspaceTrust(workspaceId)
   if (mine !== generation) return null
-  const target = openingTarget(workspaceId)
+  const target = quiet ? null : openingTarget(workspaceId)
   const timer = target
     ? setTimeout(() => {
         if (mine === generation) useProject.setState({ opening: true, openingPath: target })

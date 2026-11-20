@@ -53,6 +53,7 @@ import { occurrenceSearch } from "./editing";
 import { gutterLineDrag } from "./gutterDrag";
 import { overwriteField } from "./overwrite";
 import { clipboardDocumentPath, clipboardFilesExtension } from "./clipboard";
+import { osFileDrop } from "./osFileDrop";
 import { clipboardHistoryExtension } from "../clipboardHistory";
 import type { LanguageInfo } from "../backend";
 import { tx } from "@/platform/i18n";
@@ -363,6 +364,7 @@ export function baseExtensions(o: SetupOptions): Extension {
     history(),
     compartments.caret.of(caretFor(o.settings)),
     dropCursor(),
+    osFileDrop,
     EditorState.allowMultipleSelections.of(true),
     multiCaretMouse,
     columnModeExtension,

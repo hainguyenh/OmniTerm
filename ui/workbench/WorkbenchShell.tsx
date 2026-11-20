@@ -62,7 +62,7 @@ export function WorkbenchShell() {
   const navBarPosition = useNavigationBarPosition()
   return (
     <div className={`${styles.workbench} ${styles.framed}`} data-workbench>
-      <div className={styles.content} inert={openingPath !== null} aria-hidden={openingPath ? true : undefined}>
+      <div className={styles.content} inert={openingPath !== null}>
         <TitleBar compact={distractionFree || !mainToolbar} />
         {!distractionFree && navBarPosition === 'top' && <Breadcrumbs className={styles.navigationBar} />}
         <WorkbenchBanners />

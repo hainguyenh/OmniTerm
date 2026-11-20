@@ -132,6 +132,27 @@ describe('projectBridge', () => {
     }
   })
 
+  // Regression: Index Project re-synced the open workspace and a slow answer covered the workbench
+  // with the opening view, which looked like the app reloading.
+  it('never shows the opening state for a quiet re-sync, however slow', async () => {
+    vi.useFakeTimers()
+    try {
+      let release: (value: unknown) => void = () => {}
+      invokeMock.mockReturnValueOnce(new Promise((resolve) => { release = resolve }))
+      const { syncProject, useProject, OPENING_DELAY_MS } = await load()
+      const { useWorkspaceStore } = await import('../workspaceStore')
+      useWorkspaceStore.setState({ workspaces: [{ id: 'ws-1', name: 'One', order: 0, pins: [], folders: [{ id: 'f', path: 'C:/work/a' }] }] as never })
+      const pending = syncProject('ws-1', { quiet: true })
+      await vi.advanceTimersByTimeAsync(OPENING_DELAY_MS * 10)
+      expect(useProject.getState()).toMatchObject({ opening: false, openingPath: null })
+      release(projectInfo('C:/work/a'))
+      await pending
+      expect(useProject.getState().project?.root).toBe('C:/work/a')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('never shows the opening state for a fast answer and clears it when the call fails', async () => {
     const { syncProject, useProject } = await load()
     invokeMock.mockResolvedValueOnce(projectInfo('C:/work/a'))

@@ -3,7 +3,8 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { installPageFileDrop, openDropEffect, type DroppedPaths } from "../fileDrop";
+import { installBrowserGuards } from "../browserGuards";
+import { installPageFileDrop, openDropEffect, takePageFileDrop, type DroppedPaths } from "../fileDrop";
 
 /** A drag event carrying `files`, as WebView2 delivers an OS drop with the host's handler off. */
 function fileDrag(type: "dragover" | "drop", files: File[], x = 40, y = 60): DragEvent {
@@ -41,13 +42,16 @@ describe("installPageFileDrop", () => {
     const file = new File(["x"], "notes.md");
 
     const over = fileDrag("dragover", [file]);
-    window.dispatchEvent(over);
+    document.body.dispatchEvent(over);
     expect(over.defaultPrevented).toBe(true);
 
     const drop = fileDrag("drop", [file], 120, 80);
-    window.dispatchEvent(drop);
+    document.body.dispatchEvent(drop);
     expect(drop.defaultPrevented).toBe(true);
-    expect(post).toHaveBeenCalledWith({ omnitermFileDrop: 1 }, [file]);
+    // Regression: an object message never reached the host's handler (wry's handler, called
+    // first, fails on anything but a string, and WebView2 then stops), so nothing opened.
+    expect(post).toHaveBeenCalledWith(JSON.stringify({ omnitermFileDrop: 1 }), [file]);
+    expect(typeof post.mock.calls[0]![0]).toBe("string");
 
     answer({ token: 99, paths: ["D:/other.md"] });
     expect(opened).not.toHaveBeenCalled();
@@ -62,14 +66,53 @@ describe("installPageFileDrop", () => {
     const { post } = install();
     const taken = fileDrag("drop", [new File(["x"], "a.txt")]);
     taken.preventDefault();
-    window.dispatchEvent(taken);
+    document.body.dispatchEvent(taken);
 
     const text = new Event("drop", { bubbles: true, cancelable: true }) as DragEvent;
     Object.defineProperty(text, "dataTransfer", { value: { types: ["text/plain"], files: [] } });
-    window.dispatchEvent(text);
+    document.body.dispatchEvent(text);
 
     expect(post).not.toHaveBeenCalled();
     expect(text.defaultPrevented).toBe(false);
+  });
+
+  // Regression: the browser guards, installed first, cancel every drop on `window`; the page drop
+  // listened there too, read the drop as taken by a region and a file dropped on the editor did nothing.
+  it("opens a drop although the browser guards cancel it on the window", () => {
+    const stopGuards = installBrowserGuards();
+    try {
+      const { post } = install();
+      const over = fileDrag("dragover", [new File(["x"], "a.txt")]);
+      document.body.dispatchEvent(over);
+      expect(over.dataTransfer!.dropEffect).toBe("link");
+      document.body.dispatchEvent(fileDrag("drop", [new File(["x"], "a.txt")]));
+      expect(post).toHaveBeenCalledTimes(1);
+    } finally {
+      stopGuards();
+    }
+  });
+
+  // Regression: a file dropped on an open editor was read into its document instead of opening.
+  it("takes a drop for a region that would consume it, unless the region owns OS drops", () => {
+    expect(takePageFileDrop(fileDrag("drop", [new File(["x"], "a.txt")]))).toBe(false);
+    const { post, opened, answer } = install();
+    const file = new File(["x"], "b.ts");
+    expect(takePageFileDrop(fileDrag("drop", [file], 10, 20))).toBe(true);
+    expect(post).toHaveBeenCalledWith(JSON.stringify({ omnitermFileDrop: 1 }), [file]);
+    answer({ token: 1, paths: ["D:/work/b.ts"] });
+    expect(opened).toHaveBeenCalledWith(["D:/work/b.ts"], 10, 20);
+
+    const owner = document.createElement("div");
+    owner.setAttribute("data-owns-file-drop", "");
+    document.body.append(owner);
+    const ownedDrop = fileDrag("drop", [file]);
+    Object.defineProperty(ownedDrop, "target", { value: owner });
+    expect(takePageFileDrop(ownedDrop)).toBe(false);
+    owner.remove();
+
+    dispose?.();
+    dispose = undefined;
+    expect(takePageFileDrop(fileDrag("drop", [file]))).toBe(false);
   });
 
   it("does nothing without WebView2 and stops listening when disposed", () => {
@@ -77,7 +120,7 @@ describe("installPageFileDrop", () => {
     const { post, unlisten } = install();
     dispose?.();
     dispose = undefined;
-    window.dispatchEvent(fileDrag("drop", [new File(["x"], "a.txt")]));
+    document.body.dispatchEvent(fileDrag("drop", [new File(["x"], "a.txt")]));
     expect(post).not.toHaveBeenCalled();
     expect(unlisten).toHaveBeenCalled();
   });
@@ -104,7 +147,7 @@ describe("open drop feedback", () => {
     vi.useFakeTimers();
     dispose = installPageFileDrop({ postMessageWithAdditionalObjects: vi.fn() }, vi.fn(), () => () => {});
     const over = fileDrag("dragover", [], 100, 200);
-    window.dispatchEvent(over);
+    document.body.dispatchEvent(over);
     expect(over.dataTransfer!.dropEffect).toBe("link");
     const hint = document.querySelector<HTMLElement>("[data-file-drop-hint]");
     expect(hint?.textContent).toBe("Open");
@@ -114,8 +157,8 @@ describe("open drop feedback", () => {
     vi.advanceTimersByTime(200);
     expect(document.querySelector("[data-file-drop-hint]")).toBeNull();
 
-    window.dispatchEvent(fileDrag("dragover", []));
-    window.dispatchEvent(fileDrag("drop", [new File(["x"], "a.txt")]));
+    document.body.dispatchEvent(fileDrag("dragover", []));
+    document.body.dispatchEvent(fileDrag("drop", [new File(["x"], "a.txt")]));
     expect(document.querySelector("[data-file-drop-hint]")).toBeNull();
   });
 });

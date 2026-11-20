@@ -44,7 +44,7 @@ describe('projectIndexing', () => {
 
     expect(confirmMock).toHaveBeenCalledWith(expect.objectContaining({ title: 'Index Project?', ok: 'Index' }))
     expect(isIndexed(ws, 'D:/work/b')).toBe(true)
-    expect(syncProjectMock).toHaveBeenCalledWith(ws.id)
+    expect(syncProjectMock).toHaveBeenCalledWith(ws.id, { quiet: true })
   })
 
   it('does not ask again this session after the user declined', async () => {
@@ -77,7 +77,7 @@ describe('projectIndexing', () => {
     expect(shown.actions.map((a) => a.label)).toEqual(['Index', 'Not Now'])
 
     shown.actions[0]!.run()
-    await vi.waitFor(() => expect(syncProjectMock).toHaveBeenCalledWith(ws.id))
+    await vi.waitFor(() => expect(syncProjectMock).toHaveBeenCalledWith(ws.id, { quiet: true }))
     expect(isIndexed(ws, 'D:/work/solo')).toBe(true)
     expect(removeMock).toHaveBeenCalled()
   })
