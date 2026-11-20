@@ -12,6 +12,10 @@ use ignore::{WalkBuilder, WalkState};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
+
+/// Marks a persisted key holding an absolute path (a file of an extra content root). A path
+/// relative to the project root never starts with it: no file name holds a NUL.
+pub(crate) const ABSOLUTE_KEY: char = '\0';
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::UNIX_EPOCH;
@@ -142,10 +146,6 @@ impl PathFilter {
         Self::new(&self.root, &self.config.0, &self.config.1)
     }
 
-    pub(crate) fn root(&self) -> &Path {
-        &self.root
-    }
-
     /// The project root, then the extra content roots.
     pub(crate) fn roots(&self) -> impl Iterator<Item = &Path> {
         std::iter::once(self.root.as_path())
@@ -183,14 +183,24 @@ impl PathFilter {
         })
     }
 
-    /// Key of `path` in the persistent store: only files below the project root
-    /// are persisted (extra content roots are rescanned when the project opens).
+    /// Key of `path` in the persistent store: its path relative to the project root, or for a file
+    /// of an extra content root its absolute path after [`ABSOLUTE_KEY`]. A workspace container
+    /// has all its files in extra roots; without them persisted, every start parsed them all again.
     pub(crate) fn store_key(&self, path: &Path) -> Option<String> {
-        if !self.include_root {
-            return None;
+        if self.include_root && path.starts_with(&self.root) {
+            let rel = rel_string(path.strip_prefix(&self.root).ok()?);
+            return (!rel.is_empty()).then_some(rel);
         }
-        let rel = rel_string(path.strip_prefix(&self.root).ok()?);
-        (!rel.is_empty()).then_some(rel)
+        let root = self.extra.iter().find(|e| path.starts_with(&e.path))?;
+        (path != root.path).then(|| format!("{ABSOLUTE_KEY}{}", path.to_string_lossy()))
+    }
+
+    /// The file a persisted key ([`Self::store_key`]) names.
+    pub(crate) fn path_of_key(&self, key: &str) -> PathBuf {
+        match key.strip_prefix(ABSOLUTE_KEY) {
+            Some(absolute) => PathBuf::from(absolute),
+            None => self.root.join(key),
+        }
     }
 
     fn excluded_rel(&self, rel: &str) -> bool {
@@ -484,8 +494,14 @@ src/local/
             .collect();
         found.sort();
         assert_eq!(found, ["shared-lib/.gitignore", "shared-lib/src/b.rs", "src/a.rs"]);
-        assert_eq!(filter.store_key(&shared.join("src/b.rs")), None, "extra roots are not persisted");
+        // Extra roots persist by absolute path, so reopening reuses their symbols.
+        let key = filter.store_key(&shared.join("src/b.rs")).expect("an extra root's file is persisted");
+        assert!(key.starts_with(ABSOLUTE_KEY));
+        assert_eq!(filter.path_of_key(&key), shared.join("src/b.rs"));
+        assert_eq!(filter.store_key(&shared), None, "a root itself has no record");
+        assert_eq!(filter.store_key(&base.join("elsewhere.rs")), None);
         assert_eq!(filter.store_key(&root.join("src/a.rs")).as_deref(), Some("src/a.rs"));
+        assert_eq!(filter.path_of_key("src/a.rs"), root.join("src/a.rs"));
         assert!(!filter.is_excluded(&shared.join("src/new.rs"), false));
         assert!(filter.is_excluded(&shared.join("target/y.rs"), false));
         assert!(filter.is_excluded(&shared.join("out/y.rs"), false));

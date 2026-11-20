@@ -52,6 +52,7 @@ pub(crate) fn flush(manager: &SessionManager) -> Result<(), String> {
             &path(&manager.state_dir, entry.key()),
             &bytes,
             "durable terminal scrollback",
+            true,
         )?;
         entry
             .output

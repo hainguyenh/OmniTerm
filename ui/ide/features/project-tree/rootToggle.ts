@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { create } from "zustand";
 
 /** What the shell does with a project root it manages (OmniTerm workspace folders). */
@@ -38,6 +39,25 @@ export function setRootToggles(
   defaultPath: string | null = null,
 ): void {
   useRootToggles.setState({ checked, actions, defaultKey: defaultPath ? rootToggleKey(defaultPath) : null });
+}
+
+/** Room the root checkbox takes before the chevron: its 2px margin, the 14px box and the 4px row gap. */
+export const ROOT_CHECKBOX_INDENT = 20;
+
+/** How far the descendants of the root at `path` move in to clear its checkbox (0 without one). */
+export function rootPrefixIndent(
+  checked: ReadonlyMap<string, boolean>,
+  actions: RootActions | null,
+  path: string,
+): number {
+  return actions && checked.has(rootToggleKey(path)) ? ROOT_CHECKBOX_INDENT : 0;
+}
+
+/** `rootPrefixIndent` for the managed roots of the moment, kept current as they change. */
+export function useRootPrefixIndent(): (path: string) => number {
+  const checked = useRootToggles((s) => s.checked);
+  const actions = useRootToggles((s) => s.actions);
+  return useCallback((path: string) => rootPrefixIndent(checked, actions, path), [checked, actions]);
 }
 
 /** The checkbox state of the project root at `path`: undefined when its row has none. */

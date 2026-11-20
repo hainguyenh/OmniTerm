@@ -43,7 +43,7 @@ describe('projectBridge trust', () => {
     })
     await syncProject('w1')
     expect(asked).toEqual(['local:C:/code/a', 'local:C:/code/b'])
-    expect(invokeMock).toHaveBeenCalledWith('ide_set_project', { workspaceId: 'w1' })
+    expect(invokeMock).toHaveBeenCalledWith('ide_set_project', { workspaceId: 'w1', indexFolders: [] })
   })
 
   it("does not open the workspace when the user chooses Don't Open", async () => {

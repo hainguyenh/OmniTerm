@@ -396,6 +396,8 @@ export const commands = {
 	indexStatus: () => typedError<IndexStatus, IdeError>(__TAURI_INVOKE("index_status")),
 	/**  Indexes the whole project (right-click a project › Index Project). */
 	indexProject: () => typedError<null, IdeError>(__TAURI_INVOKE("index_project")),
+	/**  Stops the index scan in progress (the Indexing task's cancel button). */
+	cancelIndexing: () => typedError<null, IdeError>(__TAURI_INVOKE("cancel_indexing")),
 	indexFileExtensions: () => typedError<ExtensionCount[], IdeError>(__TAURI_INVOKE("index_file_extensions")),
 	/**  Spring Web mapping sources for the request-path index of Search Everywhere. */
 	springRouteSources: () => typedError<RouteSource[], IdeError>(__TAURI_INVOKE("spring_route_sources")),

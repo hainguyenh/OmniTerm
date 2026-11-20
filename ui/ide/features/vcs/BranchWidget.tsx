@@ -42,6 +42,8 @@ import { useWorkspaceStore } from "../../../platform/workspaceStore";
 import { decodeWorkspaceSelection } from "../../../utils/workspaceSelection";
 import { rootContaining } from "../../../workbench/footerGitModel";
 import { BranchSync } from "./BranchSync";
+import { chooseBranchProject, setBranchProjectsCollapsed, useBranchProject, useChosenBranchProject } from "./branchProject";
+import { ProjectRadioList } from "./ProjectRadioList";
 import styles from "./BranchWidget.module.css";
 import { tx } from "@/platform/i18n";
 
@@ -56,35 +58,48 @@ export function headLabel(branch: { head: string | null; headCommit: string | nu
   return branch.headCommit ? branch.headCommit.slice(0, 8) : tx("No commits");
 }
 
-/** The current repository (see `currentRepoFor`): the widget and the popup show the same one. */
-function useCurrentRepo(): string | null {
+/**
+ * The current repository: the project chosen in the Branches popup's project list, else
+ * `currentRepoFor` (the active file's, else the default project's). The widget and the popup show
+ * the same one.
+ */
+function useCurrentRepo(): { current: string | null; chosen: boolean } {
   const path = useEditorRegistry((s) => s.active?.ctx.path ?? null);
-  const defaultRepo = useDefaultProjectRepo();
-  return useVcs((s) => currentRepoFor(path, s.roots, defaultRepo ?? s.repo));
+  const { defaultRepo, chosen } = useShownProjectRepo();
+  const following = useVcs((s) => currentRepoFor(path, s.roots, defaultRepo ?? s.repo));
+  return { current: chosen ?? following, chosen: chosen !== null };
 }
 
-/**
- * The repository of the default (selected) project. Choosing another project selects its
- * repository, so the title and the branch operations follow it instead of staying on the first.
- */
+/** The repository of the default (selected) project. */
 function useDefaultProjectRepo(): string | null {
   const folder = useWorkspaceStore((s) => {
     const selection = decodeWorkspaceSelection(s.selection);
     const folders = s.workspaces.find((w) => w.id === selection?.workspaceId)?.folders?.filter((f) => !f.disabled) ?? [];
     return (folders.find((f) => f.id === selection?.folderId) ?? folders[0])?.path ?? null;
   });
-  const repo = useVcs((s) => (folder ? rootContaining(folder, s.roots) : null));
+  return useVcs((s) => (folder ? rootContaining(folder, s.roots) : null));
+}
+
+/**
+ * The default project's repository and the project chosen in the popup (`null`: none). The shown
+ * one (the chosen, else the default) is selected, so the title and the branch operations follow
+ * it instead of staying on the first repository.
+ */
+function useShownProjectRepo(): { defaultRepo: string | null; chosen: string | null } {
+  const defaultRepo = useDefaultProjectRepo();
+  const chosen = useChosenBranchProject(defaultRepo);
+  const shown = chosen ?? defaultRepo;
   useEffect(() => {
-    if (repo) void selectRepo(repo);
-  }, [repo]);
-  return repo;
+    if (shown) void selectRepo(shown);
+  }, [shown]);
+  return { defaultRepo, chosen };
 }
 
 export function BranchWidget() {
   const available = useVcs((s) => s.available);
   const selected = useVcs((s) => s.branch);
   const count = useVcs((s) => s.roots.length);
-  const current = useCurrentRepo();
+  const { current, chosen } = useCurrentRepo();
   // Several repositories on different branches: the widget names the current one.
   const diverged = useVcs((s) => widgetShowsRepo(s.roots.map((r) => ({ head: s.heads[r]?.head ?? null }))));
   // The current repository is not the selected one: its HEAD from the last scan (no upstream).
@@ -95,7 +110,8 @@ export function BranchWidget() {
   if (!available || !selected) return null;
   // Another feature presents the current branch (the GitHub pull request on it).
   const presented = other ? null : branchPresentation(extensions);
-  const repo = diverged && current ? repoName(current) : null;
+  // A project chosen in the popup is named too, so the widget says which one it shows.
+  const repo = (diverged || (chosen && count > 1)) && current ? repoName(current) : null;
   const branch: BranchInfo = other
     ? { head: other.head, headCommit: other.headCommit, upstream: null, ahead: 0, behind: 0, operation: otherOp }
     : selected;
@@ -573,7 +589,13 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
   const operations = useVcs((s) => s.operations);
   const version = useVcs((s) => s.version);
   const favorites = useFavoriteBranches((s) => s.names);
-  const current = useCurrentRepo();
+  const { current } = useCurrentRepo();
+  const defaultRepo = useDefaultProjectRepo();
+  const projectsCollapsed = useBranchProject((s) => s.collapsed);
+  const showProject = (root: string) => {
+    chooseBranchProject(root, defaultRepo);
+    void focusRepo(root);
+  };
   const [recent] = useState(recentBranches);
   const [tags, setTags] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -755,6 +777,21 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
         <IconButton icon="git-fetch" title="Fetch" size="small" action="vcs.fetch" />
         <OptionsButton hasTags={tags.length > 0} />
       </div>
+      {/* Which project the branch widget shows, chosen like the Commit tab's project. */}
+      {current && (
+        <div className={styles.projects}>
+          <ProjectRadioList
+            repos={roots}
+            target={current}
+            onChoose={showProject}
+            collapsed={projectsCollapsed}
+            onCollapsedChange={setBranchProjectsCollapsed}
+            name="branches-project"
+            label={tx("Project the branch widget shows")}
+            branchTestId="branches-project-branch"
+          />
+        </div>
+      )}
       <div ref={listRef} style={{ height: listHeight(rows) }} className={styles.listWrap}>
         <List
           items={rows}

@@ -82,7 +82,8 @@ export function setIndexing(indexing: boolean, files: number, symbols: number) {
     message: indexing ? tx`${files.toLocaleString()} files · ${symbols.toLocaleString()} symbols` : null,
     fraction: null,
     done: !indexing,
-    uncancellable: tx("Code insight needs the index; it can't be stopped"),
+    // Stops the scan; what it indexed so far stays, and Index Project finishes it later.
+    cancel: () => void commands.cancelIndexing().catch(() => {}),
   });
 }
 

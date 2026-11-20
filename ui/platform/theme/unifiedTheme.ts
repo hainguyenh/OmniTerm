@@ -2,7 +2,15 @@ import { create } from 'zustand'
 
 import { resolveTokenColor, toHex } from '../../ide/platform/cssColor'
 import { useProject } from '../../ide/platform/project'
-import { addContributedTheme, baseTheme, isThemeChoiceId, type ThemeChoiceId } from '../../ide/platform/themes'
+import {
+  addContributedTheme,
+  baseTheme,
+  isBuiltinTheme,
+  isThemeChoiceId,
+  offeredThemeChoice,
+  themeKind,
+  type ThemeChoiceId,
+} from '../../ide/platform/themes'
 import {
   DEFAULT_ACCENT,
   applyThemeAttributes,
@@ -45,8 +53,15 @@ interface UnifiedState {
   appTheme: AppTheme
 }
 
+/**
+ * What a workbench theme (Islands, Solarized, ...) shows as: the pickers offer only OmniTerm's
+ * themes, so a setting naming a workbench theme, or an OmniTerm theme since deleted, paints this
+ * one in the same mode. Bundled with the app, so it is known before the theme list is read.
+ */
+const FALLBACK_THEME = TOKYO_NIGHT
+
 export const useUnifiedTheme = create<UnifiedState>(() => ({
-  choice: 'dark',
+  choice: omniChoiceId(FALLBACK_THEME.id, 'dark'),
   mode: 'dark',
   themeId: TOKYO_NIGHT.id,
   appTheme: TOKYO_NIGHT,
@@ -85,7 +100,7 @@ function currentChoice(): ThemeChoiceId {
   if (appearance) return resolveThemeChoice(appearance, prefersLight())
   // Settings not read yet (or a window without the IDE backend): the cached theme the main window keeps.
   const cachedTheme = fallbackChoice()
-  return isThemeChoiceId(cachedTheme) ? cachedTheme : 'dark'
+  return isThemeChoiceId(cachedTheme) ? offeredThemeChoice(cachedTheme) : 'dark'
 }
 
 const readToken = (name: string): string | null => {
@@ -125,14 +140,30 @@ export function applyUnifiedTheme(): void {
   }
 }
 
+/** The OmniTerm theme `id` names: from the backend's list, else the bundled fallback theme. */
+function omniTheme(id: string): AppTheme | undefined {
+  return omniThemes.find((t) => t.id === id) ?? (id === FALLBACK_THEME.id ? FALLBACK_THEME : undefined)
+}
+
+/** `choice`, or for a workbench theme the fallback OmniTerm theme of its mode. */
+function shownChoice(choice: ThemeChoiceId): ThemeChoiceId {
+  return isBuiltinTheme(choice) ? omniChoiceId(FALLBACK_THEME.id, themeKind(choice)) : choice
+}
+
 function applyUnchecked(): void {
   if (typeof document === 'undefined') return
   const root = document.documentElement
-  const choice = currentChoice()
-  const omni = parseOmniChoice(choice)
-  const selected = omni ? omniThemes.find((t) => t.id === omni.themeId) : undefined
+  let choice = shownChoice(currentChoice())
+  let omni = parseOmniChoice(choice)
+  let selected = omni ? omniTheme(omni.themeId) : undefined
   // The list of themes arrives asynchronously; keep what is shown until the named theme is known.
   if (omni && !selected && !themesLoaded) return
+  if (omni && !selected) {
+    // A theme since deleted: the fallback theme in its mode.
+    choice = omniChoiceId(FALLBACK_THEME.id, omni.mode)
+    omni = { themeId: FALLBACK_THEME.id, mode: omni.mode }
+    selected = omniTheme(FALLBACK_THEME.id)
+  }
 
   if (omni && selected) {
     writePalette(omniPaletteCss(selected, omni.mode))

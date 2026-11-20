@@ -1,18 +1,21 @@
 import type { Workspace } from '../domain'
 
 import { notifications } from '../ide/workbench/contributions'
+import { decodeWorkspaceSelection } from '../utils/workspaceSelection'
 
 const comparable = (path: string): string => path.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase()
 
 /**
  * The id of the selected workspace when `cwd` is one of its folders or inside one; null otherwise
- * (the session is then matched to a workspace by its folder alone).
+ * (the session is then matched to a workspace by its folder alone). `selection` is the raw
+ * selection, which names a folder too (`<workspace>::<folder>`) after the new-terminal menu picked one.
  */
 export function workspaceHolding(
   workspaces: readonly Workspace[],
-  selectedWorkspaceId: string | null | undefined,
+  selection: string | null | undefined,
   cwd: string | null | undefined,
 ): string | null {
+  const selectedWorkspaceId = decodeWorkspaceSelection(selection ?? null)?.workspaceId
   if (!selectedWorkspaceId || !cwd) return null
   const selected = workspaces.find((workspace) => workspace.id === selectedWorkspaceId)
   if (!selected) return null

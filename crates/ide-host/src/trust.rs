@@ -170,7 +170,10 @@ impl crate::Host {
             project.repos();
             if trusted {
                 // Indexing starts with the trust: nothing was read while the project was restricted.
-                project.index.release();
+                // A project the user has not chosen to index keeps waiting for that choice.
+                if self.index_gates.allows(&project.root) {
+                    project.index.release();
+                }
                 if let Some(cmd) = self.environment.project_opened(&project.root, &project.sink) {
                     self.environment.spawn_post_start(cmd, project.root.clone(), project.sink.clone());
                 }

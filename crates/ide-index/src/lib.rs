@@ -228,6 +228,12 @@ impl ProjectIndex {
         }
     }
 
+    /// Stops the scan in progress (the Indexing task's cancel button). What it indexed so far
+    /// stays, and the watcher keeps applying changes; "Index Project" scans the rest later.
+    pub fn cancel_scan(&self) {
+        self.shared.stop_scan();
+    }
+
     /// File types changed (the registry the index shares was updated): re-parses
     /// the files whose language under `before` differs from the current one.
     pub fn languages_changed(&self, before: Arc<LanguageRegistry>) {

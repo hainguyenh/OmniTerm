@@ -10,6 +10,7 @@ mod temp_cleanup;
 pub use app_utils::handle_second_instance;
 mod attachments;
 mod launcher;
+mod native_file_drop;
 mod os_actions;
 mod plugin_commands;
 pub use plugin_commands::*;
@@ -148,6 +149,9 @@ pub fn run() {
             if !smoke_test {
                 window.open_devtools();
             }
+
+            // OS file drops reach the page without paths; WebView2 supplies them (Windows).
+            native_file_drop::install(&window);
 
             let win_clone = window.clone();
             window.on_window_event(move |event| {

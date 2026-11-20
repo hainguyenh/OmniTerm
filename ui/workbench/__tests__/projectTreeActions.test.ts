@@ -19,6 +19,9 @@ vi.mock('../../ide/workbench/contributions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../ide/workbench/contributions')>()),
   notifications: () => ({ notify }),
 }))
+const indexWorkspaceProject = vi.hoisted(() => vi.fn())
+const offerToIndexDefault = vi.hoisted(() => vi.fn())
+vi.mock('../projectIndexing', () => ({ indexWorkspaceProject, offerToIndexDefault }))
 import { menuGroupItems } from '../../ide/workbench/contributions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { useProjectFilterStore } from '../projectFilterStore'
@@ -115,6 +118,41 @@ describe('projectTreeActions', () => {
     await executeAction('omniterm.workspace.setDefaultProject', 'D:\\work\\b')
 
     expect(useProjectFilterStore.getState().defaults).toEqual({ shown: 'D:/work/b' })
+    expect(offerToIndexDefault).toHaveBeenCalledWith(expect.objectContaining({ id: 'shown' }), 'D:/work/b')
+  })
+
+  it('adds the project of a folder to the index before indexing a multi-project workspace', async () => {
+    const folders = [{ id: 'a', name: 'a', path: 'D:/work/a' }, { id: 'b', name: 'b', path: 'D:/work/b' }]
+    useWorkspaceStore.setState({ workspaces: [{ id: 'ws', name: 'ws', order: 0, pins: [], folders }], selection: 'ws' } as never)
+    indexProjectMock.mockReset()
+    indexProjectMock.mockResolvedValue(null)
+
+    // A project that just joined the index is scanned by the scope change alone.
+    indexWorkspaceProject.mockResolvedValueOnce(true)
+    await executeAction('omniterm.project.index', 'D:\\work\\b\\src')
+    expect(indexWorkspaceProject).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'ws' }), 'D:/work/b')
+    expect(indexProjectMock).not.toHaveBeenCalled()
+
+    // An indexed project is rescanned.
+    indexWorkspaceProject.mockResolvedValueOnce(false)
+    await executeAction('omniterm.project.index', 'D:/work/b')
+    expect(indexProjectMock).toHaveBeenCalledTimes(1)
+  })
+
+  // Regression: Index Project in a one-folder workspace (or from Find Action, without a folder)
+  // indexed without recording the choice, so the next project sync held the index again.
+  it('records the project before indexing a one-folder workspace, the default one without a folder', async () => {
+    const folders = [{ id: 'solo', name: 'solo', path: 'D:/work/solo' }]
+    useWorkspaceStore.setState({ workspaces: [{ id: 'one', name: 'one', order: 0, pins: [], folders }], selection: 'one' } as never)
+    indexWorkspaceProject.mockReset()
+    indexWorkspaceProject.mockResolvedValue(true)
+
+    await executeAction('omniterm.project.index', 'D:/work/solo/src')
+    expect(indexWorkspaceProject).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'one' }), 'D:/work/solo')
+
+    await executeAction('omniterm.project.index')
+    expect(indexWorkspaceProject).toHaveBeenCalledTimes(2)
+    expect(indexWorkspaceProject).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'one' }), 'D:/work/solo')
   })
 
   it('disposes all registered actions cleanly', () => {

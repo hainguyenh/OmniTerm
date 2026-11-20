@@ -107,15 +107,42 @@ pub(crate) fn project_folders(workspace: &app_protocol::workspace::Workspace) ->
         .collect()
 }
 
+/// The folders of `projects` named in `index_folders`: what a container indexes.
+pub(crate) fn indexed_folders(projects: &[PathBuf], index_folders: &[String]) -> Vec<PathBuf> {
+    projects
+        .iter()
+        .filter(|project| {
+            index_folders
+                .iter()
+                .any(|folder| same_path(project, Path::new(folder)))
+        })
+        .cloned()
+        .collect()
+}
+
+/// Whether a single-folder workspace's project may be indexed: only when the user chose to index
+/// it. Nothing chosen (or no choice sent) keeps its index waiting.
+pub(crate) fn folder_index_allowed(folder: &Path, index_folders: &[String]) -> bool {
+    index_folders
+        .iter()
+        .any(|path| same_path(folder, Path::new(path)))
+}
+
 /// Marks the workspace the workbench works on (or clears it) and returns its project. Not part of
 /// the `ide_app` command set: the OmniTerm webview calls it whenever its active workspace changes.
+/// `index_folders` are the folders of the workspace the user chose to index; OmniTerm indexes
+/// nothing on its own, so a project none of whose folders is chosen keeps its index waiting. No
+/// list (`None`) is no choice: nothing is indexed, and an earlier run's record is replaced, so a
+/// project indexed once is not indexed again on every start without the user asking for it.
 #[tauri::command]
 pub async fn ide_set_project<R: Runtime>(
     window: WebviewWindow<R>,
     workspace_id: Option<String>,
+    index_folders: Option<Vec<String>>,
 ) -> IdeResult<Option<ProjectInfo>> {
     let app = window.app_handle().clone();
     let label = window.label().to_owned();
+    let index_folders = index_folders.unwrap_or_default();
     let containers = app
         .path()
         .app_local_data_dir()
@@ -143,13 +170,22 @@ pub async fn ide_set_project<R: Runtime>(
                 state.close_project(&label);
                 return Ok(None);
             }
-            ProjectPlan::Folder(root) => root,
+            ProjectPlan::Folder(root) => {
+                let allowed = folder_index_allowed(&root, &index_folders);
+                state.host.index_gates.set(&root, allowed);
+                root
+            }
             ProjectPlan::Container {
                 root,
                 name,
                 projects,
             } => {
                 let members_trusted = all_trusted(&projects, |path| state.host.trust.trusted(path));
+                std::fs::create_dir_all(&root)?;
+                let indexed = indexed_folders(&projects, &index_folders);
+                ide_host::index_scope::save(&root, &indexed)?;
+                // A container indexing none of its folders has nothing to index yet.
+                state.host.index_gates.set(&root, !indexed.is_empty());
                 write_container(&root, &name, projects)?;
                 // The container is OmniTerm's own metadata folder; it is as trustworthy as the
                 // folders it lists. Trusted for this process only, never recorded as a decision.
@@ -162,6 +198,12 @@ pub async fn ide_set_project<R: Runtime>(
         // Re-selecting the open project keeps it, its editors and its language servers.
         if let Ok(current) = state.project(&label) {
             if same_path(&current.root, &root) {
+                // A changed index scope applies without reopening (a no-op when unchanged), and a
+                // project the user just chose to index starts (once it is trusted).
+                current.refresh_index_scope();
+                if state.host.index_gates.allows(&current.root) && current.is_trusted() {
+                    current.index.release();
+                }
                 return Ok(Some(ide_host::ops::project::info(&current)));
             }
         }

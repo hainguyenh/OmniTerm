@@ -100,7 +100,7 @@ import {
   type Editing,
 } from "./store";
 import { RootCheckbox } from "./RootCheckbox";
-import { useManagedRoot, type ManagedRoot } from "./rootToggle";
+import { useManagedRoot, useRootPrefixIndent, type ManagedRoot } from "./rootToggle";
 import styles from "./ProjectView.module.css";
 
 function onClipboard(e: ReactClipboardEvent<HTMLDivElement>, action: string) {
@@ -516,6 +516,7 @@ export function ProjectView() {
   useFileIconRevision();
   const root = useProjectTree((s) => s.root);
   const model = useProjectTree(selectModel);
+  const rootIndent = useRootPrefixIndent();
   const expanded = useProjectTree((s) => s.expanded);
   const selected = useProjectTree((s) => s.selected);
   const editing = useProjectTree((s) => s.editing);
@@ -934,6 +935,7 @@ export function ProjectView() {
         loadChildren={loadChildren}
         renderNode={renderNode}
         renderPrefix={(node) => (node.root && !node.icon ? <RootCheckbox path={node.path} name={node.label} /> : null)}
+        prefixIndent={(node) => (node.root && !node.icon ? rootIndent(node.path) : 0)}
         rowClassName={(n) => (n.excluded ? styles.excludedRow : undefined)}
         expanded={expanded}
         onExpandedChange={onExpandedChange}

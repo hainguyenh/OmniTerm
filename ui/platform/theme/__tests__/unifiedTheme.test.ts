@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useProject } from '../../../ide/platform/project'
-import { useContributedThemes } from '../../../ide/platform/themes'
+import { themeGroups, useContributedThemes } from '../../../ide/platform/themes'
 import { useThemeOverride } from '../../../ide/workbench/theme'
 import { TOKYO_NIGHT, type AppTheme } from '../../../themes'
 import { omniChoiceId } from '../choice'
@@ -51,19 +51,45 @@ describe('applyUnifiedTheme', () => {
     expect(useUnifiedTheme.getState()).toMatchObject({ themeId: 'other', mode: 'light' })
   })
 
-  it('returns to a workbench theme and drops the OmniTerm palette', () => {
+  it('shows a workbench theme as Tokyo Night in its mode', () => {
     select(omniChoiceId('other', 'dark'))
-    select('solarized-dark')
+    select('light')
     const root = document.documentElement
-    expect(document.getElementById('omniterm-theme-palette')).toBeNull()
-    expect(root.dataset.colorTheme).toBe('solarized-dark')
-    expect(useUnifiedTheme.getState().themeId).toBe('workbench')
+    expect(root.dataset.theme).toBe('light')
+    expect(root.dataset.colorTheme).toBe('omniterm')
+    expect(root.style.getPropertyValue('--theme-bg')).toBe(TOKYO_NIGHT.terminal.light.background)
+    expect(useUnifiedTheme.getState()).toMatchObject({
+      choice: omniChoiceId('tokyo-night', 'light'),
+      themeId: 'tokyo-night',
+      mode: 'light',
+    })
   })
 
-  it('shows a deleted theme as its mode instead of failing', () => {
-    select(omniChoiceId('gone', 'dark'))
+  it('offers no workbench theme: only the OmniTerm themes', () => {
+    const offered = themeGroups().flatMap((group) => group.themes.map((t) => t.id))
+    expect(offered).not.toContain('light')
+    expect(offered).not.toContain('dark')
+    expect(offered).not.toContain('solarized-dark')
+    expect(offered).toContain(omniChoiceId('tokyo-night', 'dark'))
+  })
+
+  it('shows a retired workbench theme as Tokyo Night of its kind', () => {
+    select('solarized-dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
-    expect(document.getElementById('omniterm-theme-palette')).toBeNull()
+    expect(useUnifiedTheme.getState().choice).toBe(omniChoiceId('tokyo-night', 'dark'))
+  })
+
+  it('shows a deleted theme as Tokyo Night in its mode instead of failing', () => {
+    select(omniChoiceId('gone', 'light'))
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(useUnifiedTheme.getState()).toMatchObject({ choice: omniChoiceId('tokyo-night', 'light'), themeId: 'tokyo-night' })
+  })
+
+  it('paints Tokyo Night before the theme list is read', () => {
+    off()
+    off = installUnifiedTheme(() => 'dark')
+    select('dark')
+    expect(useUnifiedTheme.getState().themeId).toBe('tokyo-night')
   })
 
   it('follows the copy kept in settings.json until the workbench settings are read', () => {

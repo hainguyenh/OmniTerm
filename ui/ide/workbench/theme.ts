@@ -8,6 +8,7 @@ import {
   baseTheme,
   isBuiltinTheme,
   isThemeChoiceId,
+  offeredThemeChoice,
   parsePluginThemeRef,
   previewPluginTheme,
   themeChoices,
@@ -60,7 +61,7 @@ interface AppearanceLike {
  * for the OS mode. A plugin theme (`plugin:<id>/<theme>`) is returned as is.
  */
 export function resolveThemeChoice(a: AppearanceLike | undefined, systemLight: boolean): ThemeChoiceId {
-  const concrete = (v: string | undefined, d: "dark" | "light") => (isThemeChoiceId(v) ? v : d);
+  const concrete = (v: string | undefined, d: "dark" | "light") => (isThemeChoiceId(v) ? offeredThemeChoice(v) : d);
   if (a?.syncWithOs || a?.theme === "system")
     return systemLight ? concrete(a?.preferredLightTheme, "light") : concrete(a?.preferredDarkTheme, "dark");
   return concrete(a?.theme, "light");

@@ -35,6 +35,19 @@ describe('omnitermKeymapOverrides', () => {
     expect(overrides['omniterm.newFolder']).toBeUndefined()
   })
 
+  // Regression: IDEA's F11 (Toggle Bookmark) and Ctrl+0 (Go to Bookmark 0) run whenever a project
+  // is open, and the workbench dispatcher stops the key, so Full Screen and Reset Zoom never fired.
+  it('takes the app-wide Full Screen and Reset Zoom keys from the workbench without binding them', () => {
+    const overrides = omnitermKeymapOverrides(
+      { toggleAppFullscreen: 'F11', zoomReset: 'Ctrl+0' },
+      { 'navigate.toggleBookmark': ['F11'], 'navigate.gotoBookmark0': ['Ctrl+0'], 'code.fold': ['Ctrl+-'] },
+    )
+    expect(overrides['navigate.toggleBookmark']).toEqual([])
+    expect(overrides['navigate.gotoBookmark0']).toEqual([])
+    expect(overrides['code.fold']).toBeUndefined()
+    expect(Object.keys(overrides).some((id) => id.startsWith('omniterm.'))).toBe(false)
+  })
+
   it('does not rebind an OmniTerm command the user already rebound', () => {
     const overrides = omnitermKeymapOverrides({ newSession: 'Ctrl+N' }, {}, { 'omniterm.newSession': ['F9'] })
     expect(overrides['omniterm.newSession']).toBeUndefined()

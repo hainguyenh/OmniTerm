@@ -1,17 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Palette, Check, Sparkles, Minimize2, BookOpen, Flame, Moon, Triangle, TextCursorInput, Zap } from 'lucide-react'
+import { Palette, Check, Sparkles, Flame, Moon, TextCursorInput } from 'lucide-react'
 import type { AppTheme } from '../themes'
 import { Tooltip } from './Tooltip'
 
 function getThemeIcon(themeId: string) {
   const id = themeId.toLowerCase()
   if (id.includes('claude')) return Sparkles
-  if (id.includes('compact')) return Minimize2
-  if (id.includes('novel')) return BookOpen
   if (id.includes('tokyohot') || id.includes('tokyo-hot') || id.includes('hot')) return Flame
   if (id.includes('tokyonight') || id.includes('tokyo-night') || id.includes('night')) return Moon
-  if (id.includes('vercel')) return Triangle
-  if (id.includes('volt') || id.includes('voltagent') || id.includes('bolt')) return Zap
   return Palette
 }
 

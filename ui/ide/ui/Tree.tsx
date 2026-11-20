@@ -87,6 +87,11 @@ export interface TreeProps<T> {
   renderNode?: (node: T, state: TreeRowState) => ReactNode;
   /** Optional control drawn at the start of the row, before the chevron (e.g. a project's active checkbox). */
   renderPrefix?: (node: T, state: TreeRowState) => ReactNode;
+  /**
+   * Width in px a top-level row's `renderPrefix` takes, row gap included. Its descendants are
+   * indented by it too, so they stay one level inside the root's chevron instead of under it.
+   */
+  prefixIndent?: (root: T) => number;
   getIcon?: (node: T, expanded: boolean) => IconName | (string & {}) | undefined;
   /** Muted trailing detail (e.g. a path next to the project root); may include styled content. */
   getDetail?: (node: T) => ReactNode;
@@ -227,6 +232,8 @@ interface Row<T> {
   node: T;
   key: string;
   depth: number;
+  /** The top-level node this row belongs to (the row's own node at depth 0). */
+  top: T;
   parent: number;
   parentKey: string | null;
   expandable: boolean;
@@ -250,6 +257,7 @@ export function Tree<T>(props: TreeProps<T>) {
     loadChildren,
     renderNode,
     renderPrefix,
+    prefixIndent,
     getIcon,
     getDetail,
     getColor,
@@ -278,21 +286,23 @@ export function Tree<T>(props: TreeProps<T>) {
 
   const allRows = useMemo(() => {
     const rows: Row<T>[] = [];
-    const walk = (nodes: readonly T[], depth: number, parent: number, parentKey: string | null) => {
+    const walk = (nodes: readonly T[], depth: number, parent: number, parentKey: string | null, top: T | null) => {
       for (const node of nodes) {
         const key = getKey(node);
         const expandable = isExpandable(node);
         const isOpen = expandable && expanded.has(key);
         const index = rows.length;
-        rows.push({ node, key, depth, parent, parentKey, expandable, expanded: isOpen });
+        const rowTop = top ?? node;
+        rows.push({ node, key, depth, top: rowTop, parent, parentKey, expandable, expanded: isOpen });
         if (isOpen) {
           const children = getChildren(node);
-          if (children) walk(children, depth + 1, index, key);
+          if (children) walk(children, depth + 1, index, key, rowTop);
           else
             rows.push({
               node,
               key: `${key}\u0000loading`,
               depth: depth + 1,
+              top: rowTop,
               parent: index,
               parentKey: key,
               expandable: false,
@@ -302,7 +312,7 @@ export function Tree<T>(props: TreeProps<T>) {
         }
       }
     };
-    walk(roots, 0, -1, null);
+    walk(roots, 0, -1, null, null);
     return rows;
   }, [roots, expanded, getKey, isExpandable, getChildren]);
 
@@ -675,7 +685,10 @@ export function Tree<T>(props: TreeProps<T>) {
             // Settings › Appearance › "Use smaller indents in trees" sets `--tree-indent`
             // on the root; reading it here applies the setting to every tree at once,
             // instantly, and keeps chevrons and level alignment consistent with it.
-            const pad = (extra = 0) => `calc(${4 + extra}px + ${row.depth} * var(--tree-indent, ${indent}px))`;
+            // Descendants of a root with a prefix move past it as well (`prefixIndent`).
+            const offset = row.depth > 0 ? (prefixIndent?.(row.top) ?? 0) : 0;
+            const pad = (extra = 0) =>
+              `calc(${4 + offset + extra}px + ${row.depth} * var(--tree-indent, ${indent}px))`;
             const style = { transform: `translateY(${v.start}px)`, height: v.size, paddingLeft: pad() };
             if (row.loading) {
               return (

@@ -63,11 +63,24 @@ fn merge_theme_roots(
     themes
 }
 
+/// The ids of the built-in themes the app ships (`src-tauri/builtinThemes/*.json`).
+const BUILTIN_THEME_IDS: [&str; 3] = ["claude", "tokyo-night", "tokyo-hot"];
+
+/// The shipped built-ins among `themes`. A retired theme's file can outlive its release: a dev
+/// build's resource copy and an in-place upgrade both leave old files behind, which would
+/// otherwise keep offering themes the app no longer has.
+fn shipped_builtins(themes: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+    themes
+        .into_iter()
+        .filter(|theme| theme_id(theme).is_some_and(|id| BUILTIN_THEME_IDS.contains(&id)))
+        .collect()
+}
+
 #[tauri::command]
 pub async fn list_themes<R: Runtime>(app: AppHandle<R>) -> Result<Vec<serde_json::Value>, String> {
     // 1. Built-in themes, bundled beside the executable. A build that ships none is not an error.
     let builtin = match app.path().resource_dir() {
-        Ok(resource_dir) => read_theme_dir(&resource_dir.join("builtinThemes")),
+        Ok(resource_dir) => shipped_builtins(read_theme_dir(&resource_dir.join("builtinThemes"))),
         Err(_) => Vec::new(),
     };
 

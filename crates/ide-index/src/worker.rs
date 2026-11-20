@@ -51,6 +51,9 @@ pub(crate) struct Shared {
     pub store: Option<Store>,
     pub indexing: AtomicBool,
     pub cancelled: AtomicBool,
+    /// Stops the scan in progress: the user cancelled it, or the project closed. Unlike
+    /// `cancelled`, a new scan clears it, so a cancelled scan can be started again.
+    scan_stop: std::sync::Arc<AtomicBool>,
     /// Waiting for `release` before the first load and scan ([`IndexOptions::held`]).
     held: AtomicBool,
     /// Files whose content was (re)read and parsed; observability for tests.
@@ -97,6 +100,7 @@ impl Shared {
             store,
             indexing: AtomicBool::new(!options.held),
             cancelled: AtomicBool::new(false),
+            scan_stop: std::sync::Arc::default(),
             held: AtomicBool::new(options.held),
             parsed: Default::default(),
             queue: Mutex::default(),
@@ -149,6 +153,7 @@ impl Shared {
 
     pub(crate) fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
+        self.scan_stop.store(true, Ordering::SeqCst);
         let _q = self.queue.lock();
         self.wake.notify_all();
         self.idle.notify_all();
@@ -156,6 +161,16 @@ impl Shared {
 
     fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Relaxed)
+    }
+
+    /// Stops the scan in progress (the user's "cancel" on the Indexing task). What it indexed
+    /// so far is kept; files it did not reach are picked up by the next scan.
+    pub(crate) fn stop_scan(&self) {
+        self.scan_stop.store(true, Ordering::SeqCst);
+    }
+
+    fn scan_stopped(&self) -> bool {
+        self.scan_stop.load(Ordering::Relaxed)
     }
 
     /// Runs parallel work on the index's own threads when it has them.
@@ -264,16 +279,18 @@ impl Shared {
     fn load_persisted(&self) {
         let Some(store) = &self.store else { return };
         let filter = self.filter();
-        let root = filter.root().to_owned();
         match store.load() {
             Ok(records) => {
+                // A record of a content root no longer indexed stays for when it is again.
                 let entries: Vec<FileEntry> = records
                     .into_par_iter()
-                    .filter(|(rel, _)| {
-                        let path = root.join(rel);
-                        !filter.is_excluded(&path, false) && dunce::canonicalize(&path).is_ok_and(|real| real == path)
+                    .filter_map(|(key, rec)| {
+                        let path = filter.path_of_key(&key);
+                        let rel = filter.rel(&path)?;
+                        let live = !filter.is_excluded(&path, false)
+                            && dunce::canonicalize(&path).is_ok_and(|real| real == path);
+                        live.then(|| FileEntry::new(path, rel, rec))
                     })
-                    .map(|(rel, rec)| FileEntry::new(root.join(&rel), rel, rec))
                     .collect();
                 let mut d = self.data.write();
                 for e in entries {
@@ -282,7 +299,7 @@ impl Shared {
             }
             Err(e) => tracing::warn!("index cache load failed: {e}"),
         }
-        let recent: Vec<PathBuf> = store.load_recent().into_iter().map(|rel| root.join(rel)).collect();
+        let recent: Vec<PathBuf> = store.load_recent().into_iter().map(|key| filter.path_of_key(&key)).collect();
         let mut r = self.recent.lock();
         for p in recent {
             if !r.contains(&p) {
@@ -294,6 +311,10 @@ impl Shared {
 
     /// A cancelled scan (project closed) still ends its progress task and the indexing state.
     fn end_scan(&self, task: TaskId) {
+        if !self.is_cancelled() {
+            // Stopped by the user: keep what was indexed for the next start.
+            self.persist(&[], &[], true);
+        }
         self.indexing.store(false, Ordering::SeqCst);
         self.sink.emit(IdeEvent::Task {
             id: task,
@@ -312,16 +333,24 @@ impl Shared {
 
     fn scan(&self, dirs: Option<&[PathBuf]>) {
         let started = Instant::now();
+        if self.is_cancelled() {
+            return;
+        }
+        self.scan_stop.store(false, Ordering::SeqCst);
         self.indexing.store(true, Ordering::SeqCst);
         self.emit_state();
         let task = TaskId::next();
+        let _cancel = {
+            let stop = self.scan_stop.clone();
+            ide_core::task::on_cancel(task, move || stop.store(true, Ordering::SeqCst))
+        };
         self.sink.emit(IdeEvent::Task {
             id: task,
             title: "Indexing".into(),
             message: Some("Scanning files…".into()),
             fraction: None,
             done: false,
-            cancellable: false,
+            cancellable: true,
         });
 
         let filter = self.filter();
@@ -331,9 +360,9 @@ impl Shared {
             None => filter.roots().collect(),
         };
         for root in roots {
-            found.extend(filter.walk(root, &self.cancelled));
+            found.extend(filter.walk(root, &self.scan_stop));
         }
-        if self.is_cancelled() {
+        if self.scan_stopped() {
             return self.end_scan(task);
         }
         let seen: HashSet<&Path> = found.iter().map(|f| f.path.as_path()).collect();
@@ -361,7 +390,7 @@ impl Shared {
         let mut done = 0usize;
         let mut last_progress = Instant::now();
         for chunk in todo.chunks(CHUNK) {
-            if self.is_cancelled() {
+            if self.scan_stopped() {
                 return self.end_scan(task);
             }
             self.index_files(chunk.iter().copied(), false);
@@ -374,7 +403,7 @@ impl Shared {
                     message: Some(format!("{done} / {total} files")),
                     fraction: Some(done as f32 / total.max(1) as f32),
                     done: false,
-                    cancellable: false,
+                    cancellable: true,
                 });
             }
         }
@@ -408,6 +437,8 @@ impl Shared {
             files
                 .par_iter()
                 .filter_map(|f| {
+                    // Not `scan_stopped`: a scan the user stopped earlier must not drop the
+                    // watcher's updates; a stopped scan ends at its next chunk.
                     if self.is_cancelled() {
                         return None;
                     }

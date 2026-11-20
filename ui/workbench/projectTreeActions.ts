@@ -4,9 +4,11 @@ import { call, commands } from '../ide/platform/ipc'
 import { dirname } from '../ide/platform/project'
 import { isVirtualUri } from '../ide/platform/virtualDocs'
 import { notifications, registerMenuGroup } from '../ide/workbench/contributions'
+import { defaultFolder } from '../platform/indexScope'
 import { selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
 
-import { useProjectFilterStore } from './projectFilterStore'
+import { comparablePath, useProjectFilterStore } from './projectFilterStore'
+import { indexWorkspaceProject, offerToIndexDefault } from './projectIndexing'
 import { removeFolderFromWorkspace, workspaceFolderAt } from './titlebar/workspaceActions'
 
 /**
@@ -15,7 +17,8 @@ import { removeFolderFromWorkspace, workspaceFolderAt } from './titlebar/workspa
  * - `omniterm.workspace.setDefaultProject`: where the workspace's new terminals and agents start
  * - an "Open in Terminal" entry in the editor and editor tab menus
  * - `terminal.openAt`: opens a terminal session in the folder via `omniterm:new-session`
- * - `omniterm.project.index`: indexes the whole project (right-click a folder › Index Project)
+ * - `omniterm.project.index`: indexes the whole project (right-click a folder › Index Project); in a
+ *   multi-project workspace it first adds the folder's project to what the index covers
  * - `p5.tree.toolbar.locate`: alias executing `navigate.selectInProjectView`
  */
 export function registerProjectTreeActions(): () => void {
@@ -41,7 +44,7 @@ export function registerProjectTreeActions(): () => void {
       category: 'Project',
       description: 'Index every file and symbol of the project now, so search finds them',
       icon: 'refresh',
-      run: indexProject,
+      run: ({ arg }) => indexProject(typeof arg === 'string' ? arg : undefined),
     }),
     // Right-click a folder of the project tree: the index covers the whole project, not one folder.
     registerMenuGroup({
@@ -50,7 +53,10 @@ export function registerProjectTreeActions(): () => void {
       order: 330,
       items: (_menu, { paths, dirs }) =>
         paths.length === 1 && dirs?.[0]
-          ? [{ kind: 'action', action: 'omniterm.project.index', label: 'Index Project', icon: 'refresh' }, { kind: 'separator' }]
+          ? [
+              { kind: 'action', action: 'omniterm.project.index', label: 'Index Project', icon: 'refresh', arg: paths[0] },
+              { kind: 'separator' },
+            ]
           : [],
     }),
     registerAction({
@@ -75,7 +81,9 @@ export function registerProjectTreeActions(): () => void {
         if (typeof arg !== 'string') return
         const owner = ownerWorkspaceOf(arg)
         const folder = workspaceFolderAt(owner, arg)
-        if (owner && folder) useProjectFilterStore.getState().setDefaultProject(owner.id, folder.path)
+        if (!owner || !folder) return
+        useProjectFilterStore.getState().setDefaultProject(owner.id, folder.path)
+        void offerToIndexDefault(owner, folder.path)
       },
     }),
     // The editor and its tab: a terminal in the folder of the file.
@@ -120,10 +128,43 @@ function ownerWorkspaceOf(path: string): Workspace | undefined {
   return workspaces.find((workspace) => workspaceFolderAt(workspace, path))
 }
 
-/** Starts indexing the whole project in the background and says so (or why it could not). */
-export async function indexProject(): Promise<void> {
+/** The selected workspace (undefined without one). */
+function selectedWorkspace(): Workspace | undefined {
+  const { selection, workspaces } = useWorkspaceStore.getState()
+  const workspaceId = selectedWorkspaceId(selection)
+  return workspaces.find((item) => item.id === workspaceId)
+}
+
+/**
+ * The workspace project folder holding `path` (itself or a folder inside it), with its workspace;
+ * without a path, the default project of the selected workspace.
+ */
+function projectFolderOf(path: string | undefined): { workspace: Workspace; folder: string } | null {
+  const workspace = selectedWorkspace()
+  if (!workspace) return null
+  if (path === undefined) {
+    const folder = defaultFolder(workspace)
+    return folder ? { workspace, folder } : null
+  }
+  const target = comparablePath(path)
+  const folder = workspace?.folders.find((item) => {
+    const root = comparablePath(item.path)
+    return target === root || target.startsWith(`${root}/`)
+  })
+  return workspace && folder ? { workspace, folder: folder.path } : null
+}
+
+/**
+ * Starts indexing the whole project in the background and says so (or why it could not). Nothing
+ * is indexed until the user chooses a project, so the project holding `path` (without one, the
+ * default project) joins what the index covers first.
+ */
+export async function indexProject(path?: string): Promise<void> {
   try {
-    await call(commands.indexProject())
+    const owner = projectFolderOf(path)
+    const added = owner !== null && (await indexWorkspaceProject(owner.workspace, owner.folder))
+    // A project that just joined the index is scanned by the scope change; otherwise rescan.
+    if (!added) await call(commands.indexProject())
     notifications().notify({ level: 'info', title: 'Indexing the project…', key: 'omniterm.project.index' })
   } catch (error) {
     notifications().notify({

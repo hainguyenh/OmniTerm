@@ -23,6 +23,13 @@ pub fn index_project(window: Window, state: State<'_, AppState>) -> IdeResult<()
     ide_host::ops::nav::index_project(&state.host, window.label())
 }
 
+/// Stops the index scan in progress (the Indexing task's cancel button).
+#[tauri::command]
+#[specta::specta]
+pub fn cancel_indexing(window: Window, state: State<'_, AppState>) -> IdeResult<()> {
+    ide_host::ops::nav::cancel_indexing(&state.host, window.label())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn index_file_extensions(window: Window, state: State<'_, AppState>) -> IdeResult<Vec<ExtensionCount>> {

@@ -92,10 +92,10 @@ fn stable_hash_is_deterministic_and_distinguishes_inputs() {
 fn atomic_write_round_trips_bytes_through_replace() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("manifest.bin");
-    atomic_write(&target, b"payload", "coverage sink").unwrap();
+    atomic_write(&target, b"payload", "coverage sink", true).unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"payload");
-    // Overwriting an existing file must also succeed (MoveFileEx replaces).
-    atomic_write(&target, b"second", "coverage sink").unwrap();
+    // Overwriting an existing file must also succeed (MoveFileEx replaces), durable or not.
+    atomic_write(&target, b"second", "coverage sink", false).unwrap();
     assert_eq!(std::fs::read(&target).unwrap(), b"second");
 }
 
@@ -169,7 +169,7 @@ fn atomic_write_reports_a_commit_failure_when_target_is_a_directory() {
     let dir = tempfile::tempdir().unwrap();
     let target = dir.path().join("target");
     std::fs::create_dir_all(&target).unwrap();
-    let error = atomic_write(&target, b"payload", "session manifest")
+    let error = atomic_write(&target, b"payload", "session manifest", true)
         .expect_err("committing over a directory must fail");
     assert!(error.contains("commit"), "unexpected error: {error}");
 }
@@ -178,7 +178,7 @@ fn atomic_write_reports_a_commit_failure_when_target_is_a_directory() {
 fn atomic_write_reports_a_creation_failure_when_parent_is_missing() {
     let dir = tempfile::tempdir().unwrap();
     let missing_parent = dir.path().join("missing_dir/target");
-    let error = atomic_write(&missing_parent, b"payload", "session manifest")
+    let error = atomic_write(&missing_parent, b"payload", "session manifest", false)
         .expect_err("creating file in missing parent must fail");
     assert!(error.contains("create"), "unexpected error: {error}");
 }

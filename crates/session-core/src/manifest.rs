@@ -95,10 +95,20 @@ pub(crate) fn write(state_dir: &Path, manifest: &SessionManifest) -> Result<(), 
         .map_err(|error| format!("Could not create session manifest directory: {error}"))?;
     let path = manifest_path(state_dir, &manifest.id);
     let data = serde_json::to_vec_pretty(manifest).map_err(|error| error.to_string())?;
-    atomic_write(&path, &data, "session manifest")
+    // Only a session recovered after a reboot needs its manifest to survive a power loss. Forcing
+    // the write to disk costs every new terminal two flushes on its way to its first prompt.
+    let durable = manifest.policy == PersistencePolicy::RecoverAfterReboot;
+    atomic_write(&path, &data, "session manifest", durable)
 }
 
-pub(crate) fn atomic_write(path: &Path, data: &[u8], label: &str) -> Result<(), String> {
+/// Writes `data` to `path` through a temporary file and a rename, so readers never see half of it.
+/// `durable` also flushes the data and the rename to disk before returning.
+pub(crate) fn atomic_write(
+    path: &Path,
+    data: &[u8],
+    label: &str,
+    durable: bool,
+) -> Result<(), String> {
     let temp = path.with_extension(format!(
         "tmp-{}-{}",
         std::process::id(),
@@ -114,19 +124,21 @@ pub(crate) fn atomic_write(path: &Path, data: &[u8], label: &str) -> Result<(), 
     }
     file.write_all(data)
         .map_err(|error| format!("Could not write {label}: {error}"))?;
-    file.sync_all()
-        .map_err(|error| format!("Could not flush {label}: {error}"))?;
+    if durable {
+        file.sync_all()
+            .map_err(|error| format!("Could not flush {label}: {error}"))?;
+    }
     drop(file);
-    replace_file(&temp, path).map_err(|error| format!("Could not commit {label}: {error}"))
+    replace_file(&temp, path, durable).map_err(|error| format!("Could not commit {label}: {error}"))
 }
 
 #[cfg(not(windows))]
-fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+fn replace_file(temp: &Path, path: &Path, _durable: bool) -> std::io::Result<()> {
     fs::rename(temp, path)
 }
 
 #[cfg(windows)]
-fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
+fn replace_file(temp: &Path, path: &Path, durable: bool) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::{
@@ -134,14 +146,13 @@ fn replace_file(temp: &Path, path: &Path) -> std::io::Result<()> {
     };
     let from: Vec<u16> = temp.as_os_str().encode_wide().chain(Some(0)).collect();
     let to: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
-    unsafe {
-        MoveFileExW(
-            PCWSTR(from.as_ptr()),
-            PCWSTR(to.as_ptr()),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-        )
-    }
-    .map_err(std::io::Error::other)
+    let flags = if durable {
+        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+    } else {
+        MOVEFILE_REPLACE_EXISTING
+    };
+    unsafe { MoveFileExW(PCWSTR(from.as_ptr()), PCWSTR(to.as_ptr()), flags) }
+        .map_err(std::io::Error::other)
 }
 
 pub(crate) fn remove(state_dir: &Path, id: &str) {

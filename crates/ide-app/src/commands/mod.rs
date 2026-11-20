@@ -220,6 +220,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         caches::app_restart,
         nav::index_status,
         nav::index_project,
+        nav::cancel_indexing,
         nav::index_file_extensions,
         nav::spring_route_sources,
         nav::find_files,

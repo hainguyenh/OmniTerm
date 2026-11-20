@@ -9,6 +9,17 @@ export const OMNITERM_COMMAND_KEYS = [
 
 export type OmniTermShortcut = (typeof OMNITERM_COMMAND_KEYS)[number]
 
+/**
+ * App-wide shortcuts the window-level handler (`useAppShortcuts`) runs, whose keystrokes no
+ * workbench action may take. The workbench keyboard dispatcher runs first and stops the key, so
+ * without this IDEA's F11 (Toggle Bookmark) and Ctrl+0 (Go to Bookmark 0), both enabled whenever a
+ * project is open, left Full Screen and Reset Zoom unreachable. The zoom in and out keys are not
+ * here: in the editor and the project tree they fold and expand, as in the IDE.
+ */
+const RESERVED_APP_KEYS = ['toggleAppFullscreen', 'zoomReset'] as const satisfies ReadonlyArray<keyof ShortcutBindings>
+
+type ReservedAppShortcut = (typeof RESERVED_APP_KEYS)[number]
+
 interface ActionInfo {
   title: string
   category: string
@@ -58,12 +69,12 @@ export const omnitermActionId = (key: OmniTermShortcut): string => `omniterm.${k
  * Keymap overrides that give OmniTerm's own shortcuts the keystrokes they have always had.
  *
  * Each OmniTerm command is bound to its configured shortcut. Any action of the workbench keymap that
- * used one of those keystrokes loses it, so one key press never means two things; the workbench
+ * used one of those keystrokes, or one of the reserved app-wide shortcuts, loses it, so one key press never means two things; the workbench
  * action stays reachable through its menu and Find Action. Actions the user already rebound are left
  * alone: that choice is theirs.
  */
 export function omnitermKeymapOverrides(
-  shortcuts: Partial<Record<OmniTermShortcut, string>>,
+  shortcuts: Partial<Record<OmniTermShortcut | ReservedAppShortcut, string>>,
   preset: Keymap,
   userOverrides: Keymap = {},
 ): Keymap {
@@ -76,6 +87,10 @@ export function omnitermKeymapOverrides(
     if (id in userOverrides) continue
     result[id] = [binding]
     claimed.add(normalizeBinding(binding))
+  }
+  for (const key of RESERVED_APP_KEYS) {
+    const binding = shortcuts[key]?.trim()
+    if (binding) claimed.add(normalizeBinding(binding))
   }
   for (const [id, bindings] of Object.entries(preset)) {
     if (id in userOverrides || id in result) continue
@@ -90,7 +105,7 @@ export function omnitermKeymapOverrides(
  * Returns a disposer that removes the actions and restores the previous overrides.
  */
 export function installOmniTermActions(
-  shortcuts: Partial<Record<OmniTermShortcut, string>>,
+  shortcuts: Partial<Record<OmniTermShortcut | ReservedAppShortcut, string>>,
   run: (key: OmniTermShortcut) => void = runOmniTermCommand,
 ): () => void {
   const disposers = OMNITERM_COMMAND_KEYS.map(key =>

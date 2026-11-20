@@ -20,6 +20,20 @@ export function themeKind(id: BuiltinThemeId): "light" | "dark" {
   return BUILTIN_THEMES.find((t) => t.id === id)!.kind;
 }
 
+/**
+ * The built-in themes the pickers offer: none. OmniTerm's own themes (Claude, Tokyo Night, Tokyo
+ * Hot) are the choices; the built-ins stay defined because editor color schemes and `.icls` parents
+ * still name them and they are the base the OmniTerm themes paint over. A theme setting naming one
+ * resolves to the base of its kind (see `offeredThemeChoice`), which OmniTerm shows as its default
+ * theme.
+ */
+const OFFERED_THEME_IDS: readonly BuiltinThemeId[] = [];
+
+/** `id`, or for a built-in theme the pickers do not offer, the built-in base of its kind. */
+export function offeredThemeChoice(id: ThemeChoiceId): ThemeChoiceId {
+  return isBuiltinTheme(id) && !OFFERED_THEME_IDS.includes(id) ? themeKind(id) : id;
+}
+
 // --- themes contributed at runtime (plugins) ---------------------------------
 
 /** A plugin theme as a theme setting value: `plugin:<pluginId>/<themeId>`. */
@@ -102,7 +116,8 @@ export function themeGroups(
     (a, b) => name(a).localeCompare(name(b)) || (a.pluginId ?? "").localeCompare(b.pluginId ?? ""),
   );
   for (const group of groups) group.themes.sort((a, b) => a.label.localeCompare(b.label));
-  return [{ themes: [...BUILTIN_THEMES] }, ...groups];
+  const builtin = BUILTIN_THEMES.filter((t) => OFFERED_THEME_IDS.includes(t.id));
+  return builtin.length ? [{ themes: builtin }, ...groups] : groups;
 }
 
 /** Every theme that can be selected, in the order of `themeGroups`. */

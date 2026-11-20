@@ -116,3 +116,7 @@ windows = { version = "0.58", features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
 ] }
+# The paths of files dropped from the OS (native_file_drop.rs). Same versions wry already uses for
+# its WebView2 controller, so the interfaces it hands out are the ones these crates name.
+webview2-com = "0.39"
+windows-core = "0.62"

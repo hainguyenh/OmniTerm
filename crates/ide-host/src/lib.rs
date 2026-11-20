@@ -7,6 +7,7 @@
 pub mod data_dirs;
 pub mod environment;
 mod formatter;
+pub mod index_scope;
 mod java_runtime;
 mod kotlin_bridge;
 pub mod mcp;
@@ -96,6 +97,8 @@ pub struct Host {
     closing: parking_lot::Mutex<Vec<std::thread::JoinHandle<()>>>,
     /// One open at a time per window (see [`Host::opening`]).
     open_locks: parking_lot::Mutex<HashMap<String, Arc<parking_lot::Mutex<()>>>>,
+    /// Projects whose index waits for the user's choice (OmniTerm workspaces).
+    pub index_gates: index_scope::IndexGates,
 }
 
 /// How long exit waits for project shutdown before giving up.
@@ -158,6 +161,7 @@ impl Host {
             project_requests: RwLock::default(),
             closing: Default::default(),
             open_locks: Default::default(),
+            index_gates: Default::default(),
         };
         host.apply_proxy();
         host
@@ -521,6 +525,35 @@ mod tests {
         host.wait_detached_closes();
         assert!(project.upgrade().is_none(), "the closed project is dropped");
         host.open_project("main", &root).unwrap();
+        host.close_project("main");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_project_not_chosen_for_indexing_opens_with_its_index_waiting() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = dunce::canonicalize(temp.path()).unwrap();
+        let root = base.join("project");
+        std::fs::create_dir(&root).unwrap();
+        let host = Host::new(HostConfig {
+            config_dir: base.join("config"),
+            data_dir: base.join("data"),
+            local_data_dir: base.join("local"),
+            languages: Arc::new(ide_language::LanguageRegistry::load(None).unwrap()),
+            syntax: Arc::default(),
+            sink_for: Box::new(|_| Arc::new(|_| {})),
+            owner: |w| w,
+            runtime: tokio::runtime::Handle::current(),
+            project_environment: false,
+        });
+        host.trust.decide(&root, true, true).unwrap();
+        host.index_gates.set(&root, false);
+        let project = host.open_project("main", &root).unwrap();
+        assert!(project.index.is_held(), "nothing is indexed before the user chooses to");
+
+        host.index_gates.set(&root, true);
+        host.close_project("main");
+        let project = host.open_project("main", &root).unwrap();
+        assert!(!project.index.is_held(), "a project the user chose is indexed");
         host.close_project("main");
     }
 }

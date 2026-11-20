@@ -1,29 +1,7 @@
 import { create } from 'zustand'
 
+import { storeDefaults, storedDefaults } from '../platform/indexScope'
 import { selectedWorkspaceId, useWorkspaceStore } from '../platform/workspaceStore'
-
-/** localStorage key of each workspace's default project: `{ [workspaceId]: folderPath }`. */
-const DEFAULTS_KEY = 'omniterm.workspace.defaultProjects'
-
-function storedDefaults(): Record<string, string> {
-  try {
-    const parsed: unknown = JSON.parse(globalThis.localStorage?.getItem(DEFAULTS_KEY) ?? '{}')
-    if (!parsed || typeof parsed !== 'object') return {}
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-    )
-  } catch {
-    return {}
-  }
-}
-
-function storeDefaults(defaults: Readonly<Record<string, string>>): void {
-  try {
-    globalThis.localStorage?.setItem(DEFAULTS_KEY, JSON.stringify(defaults))
-  } catch {
-    // The default then lasts for this window only.
-  }
-}
 
 export interface ProjectFilterState {
   /** 'all' or a specific project root folder path */

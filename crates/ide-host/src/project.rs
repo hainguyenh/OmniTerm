@@ -136,8 +136,13 @@ impl Host {
                 languages.clone(),
                 self.syntax(),
                 sink.clone(),
-                // A project in Restricted Mode isn't read or parsed until the user trusts it.
-                index_options(&index_settings, &language_settings, !trusted.load(Ordering::Acquire)),
+                // A project in Restricted Mode isn't read or parsed until the user trusts it, nor
+                // one the user has not chosen to index yet.
+                index_options(
+                    &index_settings,
+                    &language_settings,
+                    !trusted.load(Ordering::Acquire) || !self.index_gates.allows(&root),
+                ),
             )?
         } else {
             ProjectIndex::unindexed(&root, languages.clone(), self.syntax(), sink.clone())?
@@ -1193,10 +1198,12 @@ pub fn history_retention(settings: &ide_core::settings::Settings) -> ide_workspa
     }
 }
 
-/// Only explicit workspace containers exclude their root from indexed content.
+/// Only explicit workspace containers exclude their root from indexed content; a container
+/// indexes only the projects in its recorded index scope ([`crate::index_scope`]).
 fn index_roots(root: &Path, folders: Vec<PathBuf>) -> ide_index::IndexRoots {
     let container =
         ide_workspace::workspace::Workspace::load(root).ok().flatten().is_some_and(|w| w.is_container(root));
+    let folders = if container { crate::index_scope::retain_indexed(root, folders) } else { folders };
     ide_index::IndexRoots { include_root: !container, folders: folders.into_iter().filter(|p| p != root).collect() }
 }
 

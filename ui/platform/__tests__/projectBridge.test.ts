@@ -65,6 +65,21 @@ describe('projectBridge', () => {
     expect(useProject.getState().lightEdit).toBe(false)
   })
 
+  it('sends the projects a workspace indexes: none at first, then the ones the user chose', async () => {
+    localStorage.clear()
+    invokeMock.mockResolvedValue(projectInfo('C:/work/container'))
+    const { syncProject } = await load()
+    const { useWorkspaceStore } = await import('../workspaceStore')
+    const folders = [{ id: 'a', name: 'a', path: 'C:/work/a' }, { id: 'b', name: 'b', path: 'C:/work/b' }]
+    useWorkspaceStore.setState({ workspaces: [{ id: 'multi', name: 'multi', order: 0, pins: [], folders }] } as never)
+    await syncProject('multi')
+    expect(invokeMock).toHaveBeenCalledWith('ide_set_project', { workspaceId: 'multi', indexFolders: [] })
+    const { markIndexed } = await import('../indexScope')
+    markIndexed({ id: 'multi', name: 'multi', order: 0, pins: [], folders }, 'C:/work/b')
+    await syncProject('multi')
+    expect(invokeMock).toHaveBeenLastCalledWith('ide_set_project', { workspaceId: 'multi', indexFolders: ['C:/work/b'] })
+  })
+
   it('clears the project when no workspace is selected', async () => {
     invokeMock.mockResolvedValueOnce(projectInfo('C:/work/a')).mockResolvedValueOnce(null)
     const { syncProject, useProject } = await load()

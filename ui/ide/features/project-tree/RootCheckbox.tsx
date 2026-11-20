@@ -13,7 +13,9 @@ export function RootCheckbox({ path, name }: { path: string; name: string }) {
   const state = useRootChecked(path);
   if (!state) return null;
   return (
-    <span className={clsx(checkbox.boxWrap, "mx-1")} style={{ width: 14, height: 14 }}>
+    // No right margin: the row gap alone separates it from the chevron. The root's children move
+    // in by the same width (`ROOT_CHECKBOX_INDENT`), so they stay one level inside the chevron.
+    <span className={clsx(checkbox.boxWrap, "ml-0.5")} style={{ width: 14, height: 14 }}>
       <input
         type="checkbox"
         className={checkbox.native}

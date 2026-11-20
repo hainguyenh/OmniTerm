@@ -950,3 +950,86 @@ fn closing_a_held_index_does_not_wait_for_a_release() {
     drop(idx);
     assert!(closing.elapsed() < Duration::from_secs(5), "closing waited for a release");
 }
+
+#[test]
+fn a_cancelled_scan_stops_and_index_project_finishes_it_later() {
+    let fx = sample();
+    let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let sink: SharedSink = {
+        let cancelled = cancelled.clone();
+        // The user presses Cancel on the first scan's task as soon as it shows up.
+        Arc::new(move |e: IdeEvent| {
+            if let IdeEvent::Task { id, cancellable: true, done: false, .. } = e
+                && !cancelled.swap(true, Ordering::SeqCst)
+            {
+                assert!(ide_core::task::cancel(id), "the indexing task is cancellable");
+            }
+        })
+    };
+    let idx = fx.open_with(sink);
+    assert!(cancelled.load(Ordering::SeqCst));
+    assert!(!idx.status().indexing, "a cancelled scan ends the indexing state");
+    assert_eq!(idx.status().files, 0, "the cancelled scan stopped before indexing anything");
+
+    // The watcher's updates still apply after a cancelled scan.
+    let added = fx.write("src/Added.kt", "class AddedLater {}\n");
+    idx.update(&[added], &[]);
+    assert!(idx.wait_idle(WAIT));
+    assert_eq!(symbols(&idx, "AddedLater", SymbolFilter::Types), vec!["AddedLater"]);
+
+    idx.reindex();
+    assert!(idx.wait_idle(WAIT));
+    assert_eq!(idx.status().files, 9, "Index Project scans what the cancelled scan skipped");
+}
+
+#[test]
+fn cancel_scan_while_idle_does_not_block_the_next_scan() {
+    let fx = sample();
+    let idx = fx.open();
+    // Nothing runs: cancelling is a no-op and does not block the next scan.
+    idx.cancel_scan();
+    fx.write("src/Later.kt", "class LaterThing {}\n");
+    idx.reindex();
+    assert!(idx.wait_idle(WAIT));
+    assert_eq!(symbols(&idx, "LaterThing", SymbolFilter::Types), vec!["LaterThing"]);
+}
+
+/// Regression: a workspace container indexes only folders outside its root, and those were never
+/// persisted, so every start parsed every file of the workspace again (45 s at half the cores).
+#[test]
+fn a_container_reuses_its_projects_symbols_on_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = dunce::canonicalize(dir.path()).unwrap();
+    let (container, project, cache) = (base.join("container"), base.join("project"), base.join("cache"));
+    std::fs::create_dir_all(&container).unwrap();
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::write(project.join("src/main.rs"), "fn alpha() {}\n").unwrap();
+    std::fs::write(project.join("src/lib.rs"), "fn beta() {}\n").unwrap();
+    let open = || {
+        let roots = IndexRoots { include_root: false, folders: vec![project.clone()] };
+        let languages = Arc::new(LanguageRegistry::load(None).unwrap());
+        let idx = ProjectIndex::open(
+            &container,
+            &cache,
+            roots,
+            Vec::new(),
+            languages,
+            Arc::new(Syntax::new()),
+            Arc::new(NullSink),
+        )
+        .unwrap();
+        assert!(idx.wait_idle(WAIT), "indexing did not finish");
+        idx
+    };
+    {
+        let idx = open();
+        assert_eq!(idx.shared.parsed.load(Ordering::SeqCst), 2);
+        idx.mark_recent(&project.join("src/lib.rs"));
+        assert!(idx.wait_idle(WAIT));
+    }
+    let idx = open();
+    assert_eq!(idx.shared.parsed.load(Ordering::SeqCst), 0, "the project's files come from the cache");
+    assert_eq!(symbols(&idx, "beta", SymbolFilter::All), ["beta"]);
+    assert_eq!(files(&idx, "main.rs"), ["project/src/main.rs"]);
+    assert_eq!(idx.recent_files(), vec![project.join("src/lib.rs")]);
+}

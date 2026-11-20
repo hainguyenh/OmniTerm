@@ -6,6 +6,7 @@ import { commands, isTauri, type ProjectInfo } from '../ide/platform/ipc'
 import { useProject } from '../ide/platform/project'
 import { confirmProjectTrust } from '../ide/platform/projectTrust'
 
+import { indexedFolders } from './indexScope'
 import { useWorkspaceStore } from './workspaceStore'
 
 /**
@@ -40,6 +41,15 @@ function openingTarget(workspaceId: string | null): string | null {
 }
 
 /**
+ * The projects a workspace indexes (see `indexScope`; none until the user chooses one);
+ * `undefined` for a workspace the catalog does not know.
+ */
+function indexFoldersOf(workspaceId: string | null): string[] | undefined {
+  const workspace = workspaceId ? useWorkspaceStore.getState().workspaces.find((item) => item.id === workspaceId) : undefined
+  return workspace?.folders.length ? indexedFolders(workspace) : undefined
+}
+
+/**
  * Asks, like the IDE's Open Project, whether to trust each folder of the workspace that has no
  * decision yet ("Trust and Open Project?"). A folder already decided is not asked again. Choosing
  * Don't Open rejects with a `cancelled` error, and the workspace's project is not opened.
@@ -68,7 +78,11 @@ export async function syncProject(workspaceId: string | null): Promise<ProjectIn
       }, OPENING_DELAY_MS)
     : undefined
   try {
-    const project = await invoke<ProjectInfo | null>('ide_set_project', { workspaceId })
+    const indexFolders = indexFoldersOf(workspaceId)
+    const project = await invoke<ProjectInfo | null>(
+      'ide_set_project',
+      indexFolders ? { workspaceId, indexFolders } : { workspaceId },
+    )
     if (mine !== generation) return project
     useProject.setState(project
       ? { project, settings: project.settings, lightEdit: false }

@@ -60,6 +60,11 @@
 .searchGrow {
   flex: 1;
 }
+/* The project list above the branches (it scrolls on its own with many projects). */
+.projects {
+  flex: none;
+  padding-top: 4px;
+}
 .listWrap {
   display: flex;
   flex-direction: column;

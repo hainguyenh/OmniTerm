@@ -17,6 +17,13 @@ describe('workspaceHolding', () => {
     expect(workspaceHolding(workspaces, 'w1', 'D:\\Work\\App\\src')).toBe('w1')
   })
 
+  // Regression: after the new-terminal menu picked a folder, the selection reads `w1::f`. Matched
+  // as a workspace id it named none, the session went untagged, and a folder shared with another
+  // workspace opened its terminal there: no tab appeared in the workspace it was started from.
+  it('reads a folder selection as its workspace', () => {
+    expect(workspaceHolding(workspaces, 'w1::f', 'D:/Work/App')).toBe('w1')
+  })
+
   it('is null without a selection or cwd, for an unknown workspace, a sibling folder or another workspace', () => {
     expect(workspaceHolding(workspaces, null, 'D:/Work/App')).toBeNull()
     expect(workspaceHolding(workspaces, 'w1', undefined)).toBeNull()

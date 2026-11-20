@@ -4,7 +4,8 @@ use ide_core::IdeError;
 use ide_workspace::workspace::Workspace;
 
 use super::{
-    all_trusted, container_dir, plan, project_folders, same_path, write_container, ProjectPlan,
+    all_trusted, container_dir, folder_index_allowed, indexed_folders, plan, project_folders,
+    same_path, write_container, ProjectPlan,
 };
 
 #[test]
@@ -156,4 +157,40 @@ fn disabled_folders_stay_in_the_project_so_a_toggle_never_reopens_it() {
         plan(&containers, "w", "W", project_folders(&workspace)),
         ProjectPlan::Close
     );
+}
+
+#[test]
+fn indexed_folders_keeps_the_projects_named_in_any_spelling() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (a, b) = (dir.path().join("a"), dir.path().join("b"));
+    for folder in [&a, &b] {
+        std::fs::create_dir_all(folder).expect("project folder");
+    }
+    let projects = vec![a.clone(), b.clone()];
+    let spelled = format!("{}{}", b.display(), std::path::MAIN_SEPARATOR);
+    assert_eq!(indexed_folders(&projects, &[spelled]), vec![b]);
+    assert!(indexed_folders(&projects, &[]).is_empty());
+    assert!(indexed_folders(&projects, &["/elsewhere".to_owned()]).is_empty());
+}
+
+#[test]
+fn a_single_folder_is_indexed_only_once_the_user_chose_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let folder = dir.path().join("a");
+    std::fs::create_dir_all(dir.path().join("sub")).expect("sub folder");
+    std::fs::create_dir_all(&folder).expect("project folder");
+    let spelled = dir.path().join("sub").join("..").join("a");
+    // Regression: no choice sent indexed the project on its own.
+    assert!(
+        !folder_index_allowed(&folder, &[]),
+        "nothing chosen: the index waits"
+    );
+    assert!(folder_index_allowed(
+        &folder,
+        &[spelled.to_string_lossy().into_owned()]
+    ));
+    assert!(!folder_index_allowed(
+        &folder,
+        &[dir.path().join("b").to_string_lossy().into_owned()]
+    ));
 }

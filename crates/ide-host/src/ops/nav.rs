@@ -38,6 +38,12 @@ pub fn index_project(host: &Host, window: &str) -> IdeResult<()> {
     Ok(())
 }
 
+/// Stops the index scan in progress (the Indexing task's cancel button).
+pub fn cancel_indexing(host: &Host, window: &str) -> IdeResult<()> {
+    host.project(window)?.index.cancel_scan();
+    Ok(())
+}
+
 /// The project's file extensions, most common first.
 pub fn index_file_extensions(host: &Host, window: &str) -> IdeResult<Vec<ExtensionCount>> {
     Ok(host.project(window)?.index.file_extensions())
@@ -239,6 +245,7 @@ pub async fn web_unresolved_references(host: &Host, window: &str, doc: DocId) ->
 pub(crate) fn register(d: &mut Dispatcher) {
     d.add("index_status", |c| async move { index_status(&c.host, &c.window) });
     d.add("index_project", |c| async move { index_project(&c.host, &c.window) });
+    d.add("cancel_indexing", |c| async move { cancel_indexing(&c.host, &c.window) });
     d.add("index_file_extensions", |c| async move { index_file_extensions(&c.host, &c.window) });
     d.add("find_files", |c| async move { find_files(&c.host, &c.window, c.arg("query")?, c.arg("limit")?) });
     d.add("find_files_named", |c| async move { find_files_named(&c.host, &c.window, c.arg("name")?).await });

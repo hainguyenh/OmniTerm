@@ -41,6 +41,38 @@ fn a_theme_root_that_cannot_be_read_yields_nothing() {
     assert!(read_theme_dir(&file).is_empty());
 }
 
+/// Only the themes the app ships are built-ins: a retired theme's leftover file is not offered.
+#[test]
+fn only_shipped_built_in_themes_are_listed() {
+    let found = vec![
+        serde_json::json!({ "id": "claude", "name": "Claude" }),
+        serde_json::json!({ "id": "compact", "name": "Compact" }),
+        serde_json::json!({ "id": "tokyo-night", "name": "Tokyo Night" }),
+        serde_json::json!({ "id": "volt-agent", "name": "VoltAgent" }),
+        serde_json::json!({ "id": "tokyo-hot", "name": "Tokyo Hot" }),
+        serde_json::json!({ "name": "No id" }),
+    ];
+    let ids: Vec<_> = shipped_builtins(found)
+        .iter()
+        .filter_map(|theme| theme_id(theme).map(str::to_owned))
+        .collect();
+    assert_eq!(ids, ["claude", "tokyo-night", "tokyo-hot"]);
+}
+
+/// Every theme file the app ships is one `BUILTIN_THEME_IDS` names, and the other way round.
+#[test]
+fn the_shipped_theme_files_match_the_built_in_ids() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("builtinThemes");
+    let mut ids: Vec<String> = read_theme_dir(&dir)
+        .iter()
+        .filter_map(|theme| theme_id(theme).map(str::to_owned))
+        .collect();
+    ids.sort();
+    let mut expected: Vec<&str> = BUILTIN_THEME_IDS.to_vec();
+    expected.sort_unstable();
+    assert_eq!(ids, expected);
+}
+
 /// A saved edit to a built-in theme lands in the user root under the same id; the user's copy is the
 /// one that must survive the merge, or the edit is invisible to the renderer.
 #[test]

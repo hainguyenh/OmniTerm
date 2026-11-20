@@ -4,7 +4,11 @@ import { rootToggleKey, setRootToggles } from '../ide/features/project-tree/root
 import { useSelectedWorkspace } from '../platform/workspaceStore'
 
 import { comparablePath, useProjectFilterStore } from './projectFilterStore'
+import { offerToIndexDefault, offerToIndexOnOpen } from './projectIndexing'
 import { activeFolders, setFolderDisabled, workspaceFolderAt } from './titlebar/workspaceActions'
+
+/** How long after a workspace opens the "not indexed" notification waits. */
+const INDEX_OFFER_DELAY_MS = 3_000
 
 /**
  * Gives each project root of a multi-project workspace an "active" toggle, a default-project
@@ -16,6 +20,12 @@ import { activeFolders, setFolderDisabled, workspaceFolderAt } from './titlebar/
 export function useProjectActiveToggles(): void {
   const workspace = useSelectedWorkspace()
   const chosenDefault = useProjectFilterStore((s) => (workspace ? s.defaults[workspace.id] : undefined))
+  // Nothing is indexed on its own: once start-up has settled, offer to index the default project.
+  useEffect(() => {
+    if (!workspace) return undefined
+    const timer = setTimeout(() => offerToIndexOnOpen(workspace), INDEX_OFFER_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [workspace])
   useEffect(() => {
     if (!workspace || workspace.folders.length < 2) {
       setRootToggles(new Map(), null)
@@ -39,7 +49,9 @@ export function useProjectActiveToggles(): void {
         },
         setDefault: (path) => {
           const folder = workspaceFolderAt(workspace, path)
-          if (folder) useProjectFilterStore.getState().setDefaultProject(workspace.id, folder.path)
+          if (!folder) return
+          useProjectFilterStore.getState().setDefaultProject(workspace.id, folder.path)
+          void offerToIndexDefault(workspace, folder.path)
         },
         clearDefault: () => useProjectFilterStore.getState().clearDefaultProject(workspace.id),
         openTerminal: (path) => {
