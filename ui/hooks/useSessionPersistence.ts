@@ -1,8 +1,8 @@
 /** Persist renderer layout metadata, each terminal's last working directory, and resumable Claude sessions. */
 import { useEffect, useRef } from 'react'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 import type { LayoutMode } from '../themes'
-import type { ViewGroup } from '../viewGroups'
+import { DEFAULT_VIEW_GROUP_ID, type ViewGroup } from '../viewGroups'
 import {
   SNAPSHOT_VERSION,
   loadSnapshot,
@@ -20,6 +20,7 @@ import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence }
 import { extractAgentWorkItem } from '../utils/agentWorkItem'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { agentBrandFor } from '../utils/agentIdentity'
+import { ownsSessionPersistence } from '../utils/sessionOwnerWindow'
 
 /** How often each open pane's agent is re-detected and its Claude session file re-resolved. */
 const AGENT_POLL_MS = 5_000
@@ -29,8 +30,6 @@ interface PersistenceDeps {
   ephemeralConns?: Connection[]
   resolveConnection?: (id?: string) => Connection | undefined
   viewGroups?: ViewGroup[]
-  tabGroups?: Record<string, string>
-  activeGroupId?: string
   layoutMode?: LayoutMode
   sessionCwds?: Record<string, string>
   pendingSnapshot?: SessionSnapshot | null
@@ -59,6 +58,7 @@ function presenceOf(
   found: { agent: DetectedPaneAgent['agent']; profileName: string; launcher?: string; pid: number; startTime: number },
   sessionId?: string,
   modelInfo?: PanePresence['modelInfo'],
+  launchCwd?: string,
 ): PanePresence {
   return {
     agent: found.agent,
@@ -68,6 +68,7 @@ function presenceOf(
     startTime: found.startTime,
     ...(sessionId ? { claudeSessionId: sessionId, agentSessionId: sessionId } : {}),
     ...(modelInfo ? { modelInfo } : {}),
+    ...(launchCwd ? { launchCwd } : {}),
   }
 }
 
@@ -82,8 +83,6 @@ function buildSnapshot(
   connectionFor: (id: string) => Connection | undefined,
   ephemeralById: Map<string, Connection>,
   viewGroups: ViewGroup[],
-  tabGroups: Record<string, string>,
-  activeGroupId: string,
   layoutMode: LayoutMode,
   sessionCwds: Record<string, string>,
   pendingSnapshot: SessionSnapshot | null,
@@ -150,8 +149,9 @@ function buildSnapshot(
     activeTabs,
     ephemeralConns: ephemeralConnsOut,
     viewGroups: persistedGroups,
-    tabGroups: Object.fromEntries(Object.entries(tabGroups).filter(([tabId]) => ptyTabIds.has(tabId))),
-    activeGroupId,
+    // Desktops are gone; the fields stay in the snapshot so older builds can still read it.
+    tabGroups: {},
+    activeGroupId: DEFAULT_VIEW_GROUP_ID,
     layoutMode,
     revision,
   }, pendingSnapshot)
@@ -162,8 +162,6 @@ export function useSessionPersistence({
   ephemeralConns = [],
   resolveConnection,
   viewGroups = [],
-  tabGroups = {},
-  activeGroupId = 'ungrouped',
   layoutMode = 1,
   sessionCwds = {},
   pendingSnapshot = null,
@@ -173,20 +171,25 @@ export function useSessionPersistence({
   const revisionRef = useRef(0)
   const hadPtyTabsRef = useRef(false)
   const previousTabIdsRef = useRef<Set<string>>(new Set())
+  const ownerRef = useRef<boolean | null>(null)
+  ownerRef.current ??= ownsSessionPersistence()
+  const owner = ownerRef.current
 
   if (!loadedRef.current) {
     loadedRef.current = true
-    initialSnapshotRef.current = loadSnapshot()
+    // A non-owner window starts empty and leaves the shared storage alone: see ownsSessionPersistence.
+    initialSnapshotRef.current = owner ? loadSnapshot() : null
     revisionRef.current = initialSnapshotRef.current?.revision ?? 0
     // Any session still `active` belongs to a tab id from the previous run — whether that run ended
     // cleanly or was killed, this run has no such tab yet, so the session is now resumable.
-    promoteStaleActiveSessions()
+    if (owner) promoteStaleActiveSessions()
     // Merge the crash-safe copy: after a hard kill, localStorage may be missing the last writes.
-    void hydrateAgentSessionStore()
+    if (owner) void hydrateAgentSessionStore()
   }
 
   // Layout/recovery snapshot: unrelated to which agent runs where, so it saves on its own schedule.
   useEffect(() => {
+    if (!owner) return
     const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
     const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
     const ptyTabs = activeTabs.filter(tab => {
@@ -203,8 +206,6 @@ export function useSessionPersistence({
         connectionFor,
         ephemeralById,
         viewGroups,
-        tabGroups,
-        activeGroupId,
         layoutMode,
         sessionCwds,
         pendingSnapshot,
@@ -220,7 +221,7 @@ export function useSessionPersistence({
       window.removeEventListener('pagehide', saveCheckpoint)
       window.removeEventListener('beforeunload', saveCheckpoint)
     }
-  }, [activeTabs, ephemeralConns, resolveConnection, viewGroups, tabGroups, activeGroupId, layoutMode, sessionCwds, pendingSnapshot])
+  }, [owner, activeTabs, ephemeralConns, resolveConnection, viewGroups, layoutMode, sessionCwds, pendingSnapshot])
 
   // A closed tab's resumable-session tracking ends immediately — it does not wait for the next poll,
   // which only ever sees tabs that are still open.
@@ -239,14 +240,22 @@ export function useSessionPersistence({
   const latestTabsRef = useRef(activeTabs)
   latestTabsRef.current = activeTabs
   const tabsKey = activeTabs.map(tab => `${tab.id}:${tab.connId}`).join('|')
+  // These change identity on most renders. If the poll depended on them it would restart (and drop
+  // its half-finished answer) before it could publish, and only the pane that resolves fastest
+  // would ever show its agent — so the poll reads them through a ref instead.
+  const latestRef = useRef({ ephemeralConns, resolveConnection, sessionCwds })
+  latestRef.current = { ephemeralConns, resolveConnection, sessionCwds }
   useEffect(() => {
-    const ephemeralById = new Map(ephemeralConns.map(conn => [conn.id, conn]))
-    const connectionFor = (id: string) => ephemeralById.get(id) ?? resolveConnection?.(id)
+    const connectionFor = (id: string) => {
+      const { ephemeralConns: ephemeral, resolveConnection: resolve } = latestRef.current
+      return ephemeral.find(conn => conn.id === id) ?? resolve?.(id)
+    }
     let cancelled = false
     let inFlight = false
 
     const poll = async () => {
       const activeTabs = latestTabsRef.current
+      const sessionCwds = latestRef.current.sessionCwds
       if (inFlight || activeTabs.length === 0) return
       inFlight = true
       try {
@@ -272,6 +281,7 @@ export function useSessionPersistence({
                   pid: previous?.pid ?? 0,
                   startTime: previous?.startTime ?? 0,
                   agentSessionId,
+                  ...(previous?.launchCwd ? { launchCwd: previous.launchCwd } : {}),
                   ...(brand === 'claude' ? { claudeSessionId: agentSessionId } : {}),
                 }
                 const title = extractAgentWorkItem(tab.name)
@@ -300,12 +310,15 @@ export function useSessionPersistence({
           const sameProcess = previous?.pid === found.pid && previous.startTime === found.startTime
           const priorSessionId = sameProcess ? (previous.agentSessionId ?? previous.claudeSessionId) : undefined
           let modelInfo = sameProcess ? previous?.modelInfo : undefined
-          const cwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+          const liveCwd = sessionCwds[tab.id] ?? connectionFor(tab.connId)?.localCwd
+          // The agent belongs to the folder it started in, not wherever the shell has `cd`-ed since.
+          const launchCwd = (sameProcess ? previous?.launchCwd : undefined) ?? liveCwd
+          const cwd = launchCwd
           if (window.omnitermAPI?.agentSessions?.resolveModel) {
             modelInfo = (await window.omnitermAPI.agentSessions.resolveModel(found.agent, found.profileDir, cwd)) ?? modelInfo
             if (cancelled) return
           }
-          nextPresence[tab.id] = presenceOf(found, priorSessionId, modelInfo)
+          nextPresence[tab.id] = presenceOf(found, priorSessionId, modelInfo, launchCwd)
           let sessionId = priorSessionId
           if (found.agent === 'claude') {
             sessionId = (await resolveClaudeSessionId(found, cwd)) ?? priorSessionId
@@ -314,7 +327,7 @@ export function useSessionPersistence({
             sessionId = 'latest'
           }
           if (!sessionId) continue
-          nextPresence[tab.id] = presenceOf(found, sessionId, modelInfo)
+          nextPresence[tab.id] = presenceOf(found, sessionId, modelInfo, launchCwd)
           const title = extractAgentWorkItem(tab.name)
           bindActiveSession({
             id: `${found.agent}:${sessionId === 'latest' ? `${found.agent}-${tab.id}` : sessionId}`,
@@ -342,7 +355,7 @@ export function useSessionPersistence({
       cancelled = true
       window.clearInterval(interval)
     }
-  }, [tabsKey, ephemeralConns, resolveConnection, sessionCwds])
+  }, [tabsKey])
 
   return { initialSnapshot: initialSnapshotRef.current }
 }

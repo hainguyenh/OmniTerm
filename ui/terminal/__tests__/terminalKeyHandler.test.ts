@@ -2,10 +2,11 @@
  * @vitest-environment jsdom
  */
 import type { Terminal } from '@xterm/xterm'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Connection } from '../../components/MainLayout'
 import type { TerminalClipboard } from '../../utils/terminalClipboard'
+import { setCtrlCSettings } from '../ctrlCSettings'
 import { createTerminalKeyHandler } from '../terminalKeyHandler'
 
 const makeConnection = (type: Connection['type'] = 'LOCAL', shell: Connection['shell'] = 'powershell'): Connection => ({
@@ -40,6 +41,7 @@ describe('createTerminalKeyHandler', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -57,6 +59,7 @@ describe('createTerminalKeyHandler', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -78,6 +81,7 @@ describe('createTerminalKeyHandler', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -99,6 +103,7 @@ describe('createTerminalKeyHandler', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -116,61 +121,11 @@ describe('createTerminalKeyHandler', () => {
     expect(term.input).toHaveBeenCalledWith('\x1b\r')
   })
 
-  it('handles Ctrl+C to interrupt process and clear active selection', () => {
-    const clearSelection = vi.fn()
-    const hasSelection = vi.fn().mockReturnValue(true)
-    const term = { input: vi.fn(), hasSelection, clearSelection } as unknown as Terminal
-    const clipboard = makeClipboard()
-    const onInterrupt = vi.fn()
-    const handler = createTerminalKeyHandler({
-      term,
-      clipboard,
-      connection: makeConnection(),
-      isMac: false,
-      getAgentName: () => null,
-      getShortcuts: () => undefined,
-      getEnterModes: () => undefined,
-      onInterrupt,
-    })
-
-    const event = new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, cancelable: true })
-    const result = handler(event)
-
-    expect(result).toBe(false)
-    expect(event.defaultPrevented).toBe(true)
-    expect(clearSelection).toHaveBeenCalledOnce()
-    expect(onInterrupt).toHaveBeenCalledOnce()
-    expect(clipboard.copySelection).not.toHaveBeenCalled()
-  })
-
-  it('preserves Ctrl+Shift+C for copy without triggering interrupt', () => {
-    const onInterrupt = vi.fn()
-    const term = { input: vi.fn() } as unknown as Terminal
-    const clipboard = makeClipboard()
-    const handler = createTerminalKeyHandler({
-      term,
-      clipboard,
-      connection: makeConnection(),
-      isMac: false,
-      getAgentName: () => null,
-      getShortcuts: () => undefined,
-      getEnterModes: () => undefined,
-      onInterrupt,
-    })
-
-    const event = new KeyboardEvent('keydown', { key: 'C', code: 'KeyC', ctrlKey: true, shiftKey: true, cancelable: true })
-    const result = handler(event)
-
-    expect(result).toBe(false)
-    expect(event.defaultPrevented).toBe(true)
-    expect(clipboard.copySelection).toHaveBeenCalledOnce()
-    expect(onInterrupt).not.toHaveBeenCalled()
-  })
-
   it('bubbles app-level chrome shortcuts to window (e.g. F11 or Ctrl+Shift+N)', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -190,6 +145,7 @@ describe('createTerminalKeyHandler', () => {
     const term = { input: vi.fn() } as unknown as Terminal
     const clipboard = makeClipboard()
     const handler = createTerminalKeyHandler({
+      sessionId: 's1',
       term,
       clipboard,
       connection: makeConnection(),
@@ -201,5 +157,131 @@ describe('createTerminalKeyHandler', () => {
 
     const event = new KeyboardEvent('keydown', { key: 'a', code: 'KeyA' })
     expect(handler(event)).toBe(true)
+  })
+
+  describe('Ctrl+C', () => {
+    const ctrlC = () => new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, cancelable: true })
+    const build = (sessionId: string, term: Partial<Terminal>, extra: Partial<Parameters<typeof createTerminalKeyHandler>[0]> = {}) => {
+      const clipboard = makeClipboard()
+      const handler = createTerminalKeyHandler({
+        sessionId,
+        term: term as Terminal,
+        clipboard,
+        connection: makeConnection(),
+        isMac: false,
+        getAgentName: () => null,
+        getShortcuts: () => undefined,
+        getEnterModes: () => undefined,
+        ...extra,
+      })
+      return { handler, clipboard }
+    }
+
+    it('copies and clears the selection instead of interrupting when text is selected', () => {
+      const clearSelection = vi.fn()
+      const { handler, clipboard } = build('cc-sel', { hasSelection: () => true, clearSelection })
+      expect(handler(ctrlC())).toBe(false)
+      expect(clipboard.copySelection).toHaveBeenCalled()
+      expect(clearSelection).toHaveBeenCalled()
+    })
+
+    it('lets a single press through to the PTY and does not close the session', () => {
+      const listener = vi.fn()
+      window.addEventListener('omniterm:close-tab', listener)
+      const { handler } = build('cc-single', { hasSelection: () => false })
+      expect(handler(ctrlC())).toBe(true)
+      window.removeEventListener('omniterm:close-tab', listener)
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('closes the named session on a quick second press', () => {
+      const listener = vi.fn()
+      window.addEventListener('omniterm:close-tab', listener)
+      const { handler } = build('cc-double', { hasSelection: () => false })
+      handler(ctrlC())
+      expect(handler(ctrlC())).toBe(false)
+      window.removeEventListener('omniterm:close-tab', listener)
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 'cc-double' })
+    })
+
+    it('does not treat a held key (auto-repeat) as a second press', () => {
+      const listener = vi.fn()
+      window.addEventListener('omniterm:close-tab', listener)
+      const { handler } = build('cc-repeat', { hasSelection: () => false })
+      handler(ctrlC())
+      const repeat = new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, repeat: true, cancelable: true })
+      expect(handler(repeat)).toBe(true)
+      window.removeEventListener('omniterm:close-tab', listener)
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('does not close an exited session on an auto-repeated Ctrl+C', () => {
+      const listener = vi.fn()
+      window.addEventListener('omniterm:close-tab', listener)
+      const { handler } = build('cc-repeat-exited', { hasSelection: () => false }, { getExitedActions: () => ({ restart: vi.fn() }) })
+      const repeat = new KeyboardEvent('keydown', { key: 'c', code: 'KeyC', ctrlKey: true, repeat: true, cancelable: true })
+      expect(handler(repeat)).toBe(true)
+      window.removeEventListener('omniterm:close-tab', listener)
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it('hints that a second press closes only when a lone Ctrl+C was sent through', () => {
+      const onInterruptHint = vi.fn()
+      const { handler } = build('cc-hint', { hasSelection: () => false }, { onInterruptHint })
+      handler(ctrlC())
+      expect(onInterruptHint).toHaveBeenCalledTimes(1)
+      handler(ctrlC())
+      expect(onInterruptHint).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not hint when Ctrl+C only copies a selection', () => {
+      const onInterruptHint = vi.fn()
+      const { handler } = build('cc-hint-sel', { hasSelection: () => true, clearSelection: vi.fn() }, { onInterruptHint })
+      handler(ctrlC())
+      expect(onInterruptHint).not.toHaveBeenCalled()
+    })
+
+    it('restarts on Enter and closes on Ctrl+C once the process has exited', () => {
+      const restart = vi.fn()
+      const listener = vi.fn()
+      window.addEventListener('omniterm:close-tab', listener)
+      const { handler } = build('cc-exited', { hasSelection: () => false }, { getExitedActions: () => ({ restart }) })
+      expect(handler(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', cancelable: true }))).toBe(false)
+      expect(restart).toHaveBeenCalled()
+      expect(handler(ctrlC())).toBe(false)
+      window.removeEventListener('omniterm:close-tab', listener)
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    describe('with the Ctrl+C settings', () => {
+      afterEach(() => setCtrlCSettings(undefined))
+
+      it('sends the interrupt despite a selection when set to "always interrupt"', () => {
+        setCtrlCSettings({ withSelection: 'interrupt' })
+        const { handler, clipboard } = build('cc-set-sel', { hasSelection: () => true, clearSelection: vi.fn() })
+        expect(handler(ctrlC())).toBe(true)
+        expect(clipboard.copySelection).not.toHaveBeenCalled()
+      })
+
+      it('never closes on a double press when the double press does nothing', () => {
+        setCtrlCSettings({ doublePress: 'none' })
+        const listener = vi.fn()
+        window.addEventListener('omniterm:close-tab', listener)
+        const { handler } = build('cc-set-none', { hasSelection: () => false })
+        handler(ctrlC())
+        expect(handler(ctrlC())).toBe(true)
+        window.removeEventListener('omniterm:close-tab', listener)
+        expect(listener).not.toHaveBeenCalled()
+      })
+
+      it('does not hint when the hint is switched off', () => {
+        setCtrlCSettings({ showHint: false })
+        const onInterruptHint = vi.fn()
+        const { handler } = build('cc-set-hint', { hasSelection: () => false }, { onInterruptHint })
+        handler(ctrlC())
+        expect(onInterruptHint).not.toHaveBeenCalled()
+      })
+    })
   })
 })

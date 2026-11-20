@@ -1,3 +1,122 @@
 [workspace]
 resolver = "2"
-members = ["crates/app-protocol", "crates/app-core", "crates/session-protocol", "crates/session-core", "src-tauri"]
+members = [
+    "crates/app-protocol", "crates/app-core", "crates/session-protocol", "crates/session-core",
+    "crates/ide-core", "crates/ide-vfs", "crates/ide-text", "crates/ide-vcs", "crates/ide-search",
+    "crates/ide-workspace",
+    "crates/ide-extension", "crates/ide-language", "crates/ide-jsonrpc", "crates/ide-syntax", "crates/ide-index", "crates/ide-terminal", "crates/ide-build", "crates/ide-ssh", "crates/ide-remote", "crates/ide-run", "crates/ide-dap", "crates/ide-lsp", "crates/ide-app", "crates/ide-clipboard", "crates/ide-fonts", "crates/ide-web",
+    "crates/ide-android", "crates/ide-docker", "crates/ide-github", "crates/ide-tools",
+    # Path dependencies of src-tauri, so already members implicitly; listed so `--workspace`
+    # gates visibly cover the plugin host, its runtime and the language SDKs.
+    "crates/ide-host", "crates/ide-plugin", "crates/ide-sdk",
+    "src-tauri",
+]
+
+# Shared by the IDE module crates (crates/ide-*). OmniTerm's own crates keep their own metadata.
+[workspace.package]
+version = "0.1.14"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+ide-core = { path = "crates/ide-core" }
+ide-vfs = { path = "crates/ide-vfs" }
+ide-text = { path = "crates/ide-text" }
+ide-vcs = { path = "crates/ide-vcs" }
+ide-search = { path = "crates/ide-search" }
+ide-workspace = { path = "crates/ide-workspace" }
+ide-terminal = { path = "crates/ide-terminal" }
+ide-dap = { path = "crates/ide-dap" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+specta = { version = "=2.0.0-rc.25", features = ["derive"] }
+specta-typescript = "0.0.12"
+tokio-util = { version = "0.7", features = ["rt"] }
+parking_lot = "0.12"
+thiserror = "2"
+tracing = "0.1"
+encoding_rs = "0.8"
+chardetng = "0.1"
+ignore = "0.4"
+globset = "0.4"
+notify = "8"
+trash = "5"
+blake3 = "1"
+dunce = "1"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
+redb = "4"
+gix = { version = "0.90", default-features = false }
+insta = { version = "1", features = ["yaml"] }
+proptest = "1"
+tempfile = "3"
+toml = "0.9"
+toml_edit = "0.25"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+dirs = "6"
+futures = "0.3"
+ide-extension = { path = "crates/ide-extension" }
+ide-jsonrpc = { path = "crates/ide-jsonrpc" }
+ide-lsp = { path = "crates/ide-lsp" }
+ide-language = { path = "crates/ide-language" }
+ide-remote = { path = "crates/ide-remote" }
+ide-run = { path = "crates/ide-run" }
+ide-ssh = { path = "crates/ide-ssh" }
+ide-syntax = { path = "crates/ide-syntax" }
+ide-index = { path = "crates/ide-index" }
+ide-clipboard = { path = "crates/ide-clipboard" }
+ide-fonts = { path = "crates/ide-fonts" }
+ide-web = { path = "crates/ide-web" }
+ide-app = { path = "crates/ide-app" }
+ide-github = { path = "crates/ide-github" }
+ide-android = { path = "crates/ide-android" }
+ide-docker = { path = "crates/ide-docker" }
+ide-tools = { path = "crates/ide-tools" }
+keyring = "4.2"
+keyring-core = "1"
+lsp-types = "0.97"
+nucleo-matcher = "0.3"
+portable-pty = "0.9"
+rayon = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "process", "io-util", "fs"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tree-sitter = "0.25"
+tauri-plugin-dialog = { version = "2", default-features = false, features = ["xdg-portal"] }
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+
+# Added for IDE crates (crates/ide-*).
+ide-sdk = { path = "crates/ide-sdk" }
+ide-build = { path = "crates/ide-build" }
+ide-analysis = { path = "crates/ide-analysis" }
+ide-coverage = { path = "crates/ide-coverage" }
+ide-profiler = { path = "crates/ide-profiler" }
+ide-http = { path = "crates/ide-http" }
+ide-db = { path = "crates/ide-db" }
+ide-spell = { path = "crates/ide-spell" }
+ide-agent = { path = "crates/ide-agent" }
+ide-host = { path = "crates/ide-host" }
+ide-mcp = { path = "crates/ide-mcp" }
+ide-notebook = { path = "crates/ide-notebook" }
+ide-plugin = { path = "crates/ide-plugin" }
+ide-cli = { path = "crates/ide-cli" }
+dashmap = "6"
+anyhow = "1"
+# text & fs
+ropey = "1.6"
+regex-syntax = "0.8"
+# protocols & integrations
+jupyter-zmq-client = { version = "=2.0.0", default-features = false, features = ["tokio-runtime", "ring"] }
+jupyter-protocol = "=2.0.3"
+zeromq = { version = "0.6", default-features = false, features = ["tokio-runtime", "tcp-transport"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "http2", "charset", "socks", "gzip", "deflate", "brotli"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-platform-verifier = "0.7"
+# Until SQLx releases its libsqlite3-sys 0.39 update (RUSTSEC-2026-0459).
+sqlx = { version = "0.9", git = "https://github.com/transact-rs/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c", default-features = false, features = ["runtime-tokio", "tls-rustls-ring-webpki", "sqlite", "postgres", "mysql"] }
+tiberius = { version = "0.13", default-features = false, features = ["tds73", "rustls", "sql-browser-tokio"] }
+# Pure-Rust thin Oracle driver; pinned to the beta until it stabilizes.
+oracledb = "=26.0.0-beta.5"
+bb8 = "0.9"

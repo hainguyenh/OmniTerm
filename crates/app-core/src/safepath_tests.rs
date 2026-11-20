@@ -121,11 +121,20 @@ fn extension_check_is_case_insensitive() {
 
 // Read and write at the default cap — what every caller but the settings path uses.
 fn read(f: &Fixture, path: &Path) -> Result<String, String> {
-    read_viewable(&root_str(f), &path.to_string_lossy(), DEFAULT_MAX_VIEW_BYTES)
+    read_viewable(
+        &root_str(f),
+        &path.to_string_lossy(),
+        DEFAULT_MAX_VIEW_BYTES,
+    )
 }
 
 fn write(f: &Fixture, path: &Path, content: &str) -> Result<(), String> {
-    write_editable(&root_str(f), &path.to_string_lossy(), content, DEFAULT_MAX_VIEW_BYTES)
+    write_editable(
+        &root_str(f),
+        &path.to_string_lossy(),
+        content,
+        DEFAULT_MAX_VIEW_BYTES,
+    )
 }
 
 #[test]
@@ -196,9 +205,12 @@ fn rejects_subdir_traversal_and_absolute_paths() {
     let f = fixture();
     let absolute = f.outside.to_string_lossy().into_owned();
     for hostile in ["../outside", "sub/../../outside", &absolute] {
-        let err = safe_subdir(&root_str(&f), hostile, false)
-            .expect_err("must reject escaping subPath");
-        assert!(err.contains("outside its workspace"), "{hostile}: got {err}");
+        let err =
+            safe_subdir(&root_str(&f), hostile, false).expect_err("must reject escaping subPath");
+        assert!(
+            err.contains("outside its workspace"),
+            "{hostile}: got {err}"
+        );
     }
 }
 
@@ -227,7 +239,6 @@ fn safe_subdir_with_create_makes_missing_directory() {
     assert!(target.exists());
     assert_eq!(resolved, dunce::canonicalize(&target).unwrap());
 }
-
 
 #[cfg(unix)]
 #[test]
@@ -268,3 +279,62 @@ fn human_bytes_formatting_and_sub_limits() {
     assert!(err.contains("4 bytes"));
 }
 
+#[test]
+fn human_bytes_uses_kilobytes_between_one_kib_and_one_mib() {
+    assert_eq!(human_bytes(512), "512 bytes");
+    assert_eq!(human_bytes(2048), "2 KB");
+    assert_eq!(human_bytes(3 * 1024 * 1024 / 2), "1.5 MB");
+}
+
+#[test]
+fn contained_path_resolves_relative_paths_against_the_root() {
+    let f = fixture();
+    assert_eq!(
+        contained_path(&root_str(&f), "deploy.bat").expect("relative path"),
+        f.root.join("deploy.bat")
+    );
+    assert!(contained_path(&root_str(&f), "missing.bat").is_err());
+}
+
+#[test]
+fn a_missing_workspace_root_is_refused_by_every_gate() {
+    let f = fixture();
+    let missing = f.root.join("gone").to_string_lossy().into_owned();
+    assert!(contained_path(&missing, "deploy.bat").is_err());
+    assert!(safe_subdir(&missing, "sub", false).is_err());
+}
+
+#[test]
+fn reading_a_directory_reports_an_error() {
+    let f = fixture();
+    let error = read(&f, &f.root.join("sub")).expect_err("a directory is not text");
+    assert!(!error.is_empty());
+}
+
+#[test]
+fn writing_over_a_script_named_directory_reports_an_error() {
+    let f = fixture();
+    let folder = f.root.join("folder.bat");
+    fs::create_dir(&folder).expect("create script-named dir");
+    let error = write(&f, &folder, "echo hi").expect_err("a directory cannot be written");
+    assert!(!error.is_empty());
+    assert!(folder.is_dir());
+}
+
+#[cfg(unix)]
+#[test]
+fn safe_subdir_refuses_a_symlink_out_of_the_workspace() {
+    let f = fixture();
+    std::os::unix::fs::symlink(&f.outside, f.root.join("escape")).expect("dir link");
+    assert_eq!(
+        safe_subdir(&root_str(&f), "escape", false).expect_err("linked out"),
+        "directory is outside its workspace"
+    );
+}
+
+#[test]
+fn safe_subdir_with_create_accepts_an_existing_directory() {
+    let f = fixture();
+    let resolved = safe_subdir(&root_str(&f), "sub", true).expect("existing subdir");
+    assert_eq!(resolved, f.root.join("sub"));
+}

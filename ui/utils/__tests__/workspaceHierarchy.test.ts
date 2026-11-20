@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../../domain'
 import { buildWorkspaceForest, orderedWorkspaceRows, siblingPosition, terminalWorkspaceSelection, workspaceDropIndex, workspacePinTarget } from '../workspaceHierarchy'
 
 const ws = (id: string, parentId: string | undefined, order: number): Workspace => ({

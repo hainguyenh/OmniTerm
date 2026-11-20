@@ -1,5 +1,6 @@
 import { TOKYO_NIGHT } from "./themes";
 import { staticShellOptions } from "./shellOptions";
+import type { Connection } from "./domain";
 
 type Api = Window["omnitermAPI"];
 
@@ -79,6 +80,7 @@ const defaults: Api = {
   connections: {
     load: async () => ({ folders: [], connections: [] }),
     save: async () => {},
+    localSshSessions: async () => [],
   },
   customArt: {
     upload: async () => '',
@@ -86,18 +88,12 @@ const defaults: Api = {
     remove: async () => {},
   },
   plugin: {
-    available: async () => false,
     list: async () => [],
+    builtinIds: async () => [],
+    onChanged: () => () => {},
     setEnabled: async () => {
       throw new Error('Unknown plugin')
     },
-    selectConnectionProvider: async () => [],
-    connectionCapabilities: async () => null,
-    invoke: async () => undefined,
-    authGate: async () => true,
-    installPackage: async () => null,
-    remove: async () => true,
-    restartApp: async () => {},
   },
   // Absent plugin by default: `info` answers false, so no quota UI mounts in unrelated tests.
   agentQuota: {
@@ -111,6 +107,7 @@ const defaults: Api = {
     wake: async () => ({ ok: true }),
   },
   alwaysAwake: {
+    info: async () => true,
     getState: async () => ({
       enabled: false,
       mode: 'activeOnly',
@@ -147,13 +144,15 @@ const defaults: Api = {
     addFolder: async () => null,
     removeFolder: async () => ({ id: 'ws#removed-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
     renameFolder: async () => ({ id: 'ws#renamed-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
+    exportFile: async () => null,
+    setFolderDisabled: async () => ({ id: 'ws#toggled-folder', name: 'workspace', folders: [], order: 0, pins: [] }),
     importFile: async () => null,
     remove: async () => {},
     rename: async (id: string, name: string) => ({ id, name, folders: [], order: 0, pins: [] }),
-    setAppearance: async (id: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => ({
+    setAppearance: async (id: string, color?: import('./domain').Workspace['color'], icon?: import('./domain').Workspace['icon']) => ({
       id, name: 'workspace', folders: [], order: 0, pins: [], color, icon,
     }),
-    setFolderColor: async (id: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => ({
+    setFolderColor: async (id: string, folderId: string, color?: import('./domain').WorkspaceFolder['color']) => ({
       id, name: 'workspace', folders: [{ id: folderId, name: 'folder', path: 'C:/workspace', color }], order: 0, pins: [],
     }),
     move: async () => [],
@@ -170,19 +169,12 @@ const defaults: Api = {
     run: async () => true,
     readScript: async () => '',
     writeScript: async () => {},
-    openTextFile: async () => ({
-      content: '', size: 0, mtimeMs: 0, lineCount: 1, maxLineLen: 0, eol: 'lf' as const,
-      mixedEol: false, hasBom: false, readOnly: false,
-    }),
-    saveTextFile: async () => ({ status: 'saved' as const, size: 0, mtimeMs: 0 }),
-    openImageFile: async () => new Uint8Array(),
-    createTextFile: async (_wsId: string, path: string) => path,
     createDirectory: async (_wsId: string, path: string) => path,
     moveFile: async (_wsId: string, _from: string, to: string) => to,
     deleteFile: async () => {},
     loadConnections: async () => [],
-    saveConnections: async () => {},
-    deleteConnection: async () => {},
+    saveConnection: async (_workspaceId: string, connection: Connection) => connection,
+    deleteConnection: async () => true,
   },
   connect: {
     rdp: async () => ({ ok: true }),
@@ -242,6 +234,7 @@ const defaults: Api = {
     importClipboardFiles: async () => [],
     list: async () => ({ dir: "C:/data/attachments", files: [] }),
     clear: async () => ({ removed: 0, bytes: 0, failed: 0 }),
+    move: async () => [],
   },
   sftp: {
     home: async () => "/home",
@@ -260,7 +253,6 @@ const defaults: Api = {
     revealLog: async () => "",
     clearLog: async () => false,
     openInSystem: async () => {},
-    openUrl: async () => {},
     setZoomFactor: () => {},
     getZoomFactor: () => 1,
   },
@@ -288,7 +280,6 @@ const defaults: Api = {
     showSaveDialog: async () => null,
     downloadPortable: async () => {},
     downloadInstaller: async () => {},
-    openReleasePage: async () => {},
     nativeCheck: async () => ({ available: false, reason: 'updater-disabled' }),
     nativeInstall: async () => {},
     onState: noopSub,

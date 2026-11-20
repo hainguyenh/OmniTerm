@@ -1,4 +1,4 @@
-import type { Connection, SessionStatus } from '@omniterm/contract'
+import type { Connection, SessionStatus } from './domain'
 
 /**
  * Which way a detach/attach control points.

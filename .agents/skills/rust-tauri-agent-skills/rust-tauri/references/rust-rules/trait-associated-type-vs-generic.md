@@ -36,7 +36,7 @@ fn run<P: Parser<String>>(p: &P, s: &str) -> Option<String> {
 
 ```rust
 // ----- Associated type: one output per implementor -----
-// Mirrors std::iter::Iterator { type Item; }
+// Corresponds to std::iter::Iterator { type Item; }
 
 trait Parser {
     type Output;
@@ -69,7 +69,7 @@ fn run<P: Parser>(p: &P, s: &str) -> Option<P::Output> {
 }
 
 // ----- Generic parameter: multiple impls on the same type -----
-// Mirrors std::ops::Add<Rhs> and std::convert::From<T>.
+// Parallels std::ops::Add<Rhs> and std::convert::From<T>.
 
 #[derive(Debug, Clone, Copy)]
 struct Vec2 { x: f64, y: f64 }

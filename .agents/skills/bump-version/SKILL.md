@@ -71,7 +71,7 @@ The script writes the version to **all 5 files** (via `sync-tauri-version.mjs wr
 | `crates/app-protocol/Cargo.toml` | `version = "X.Y.Z"` |
 
 > [!NOTE]
-> `contract/package.json` intentionally stays at `0.0.0` (it is a pnpm workspace alias, not versioned independently). Plugin `package.json` files track the host version but are **not** auto-updated by this script — update them manually if a coordinated plugin release is needed.
+> Official plugin versions (`plugins/official/*/plugin.toml` and `Cargo.toml`) are versioned independently and are **not** auto-updated by this script — update them manually and rebuild with `bash plugins/build.sh` on a plugin release.
 
 ---
 
@@ -159,8 +159,7 @@ The following version drifts were found and fixed in the codebase. All 5 version
 | `src-tauri/Cargo.toml` | ✅ Fixed (was `0.1.0`) |
 | `crates/app-core/Cargo.toml` | ✅ Fixed (was `0.1.0`, now added to sync surface) |
 | `crates/app-protocol/Cargo.toml` | ✅ Fixed (was `0.1.0`, now added to sync surface) |
-| `contract/package.json` | ℹ️ Intentionally `0.0.0` (workspace alias) |
-| `plugins/*/package.json` | ℹ️ Plugin-level versioning — update manually on plugin releases |
+| `plugins/official/*/plugin.toml` | ℹ️ Plugin-level versioning — update manually on plugin releases |
 
 Test strings in `scripts/__tests__/*.test.mjs` that reference version numbers (e.g. `0.1.0`) are **fixture values**, not hardcoded release versions — they are correctly used as test data.
 

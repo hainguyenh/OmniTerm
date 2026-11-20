@@ -1,6 +1,6 @@
 [package]
 name = "omniterm"
-version = "0.1.15"
+version = "0.1.14"
 description = "OmniTerm: a multi-window terminal hub"
 authors = ["OmniTerm Contributors"]
 license = "Apache-2.0"
@@ -27,6 +27,31 @@ omniterm-core = { path = "../crates/app-core" }
 omniterm-protocol = { path = "../crates/app-protocol" }
 omniterm-session-core = { path = "../crates/session-core" }
 omniterm-session-protocol = { path = "../crates/session-protocol" }
+# Workbench file access through the IDE module crates (crates/ide-*).
+ide-core.workspace = true
+ide-vfs.workspace = true
+ide-search.workspace = true
+ide-text.workspace = true
+ide-workspace.workspace = true
+ide-language.workspace = true
+ide-syntax.workspace = true
+ide-index.workspace = true
+blake3.workspace = true
+ide-vcs.workspace = true
+ide-terminal.workspace = true
+ide-run.workspace = true
+ide-dap.workspace = true
+ide-lsp.workspace = true
+ide-jsonrpc.workspace = true
+ide-clipboard.workspace = true
+ide-fonts.workspace = true
+ide-web.workspace = true
+ide-host.workspace = true
+ide-tools.workspace = true
+ide-sdk.workspace = true
+ide-app.workspace = true
+tauri-plugin-opener = "2"
+encoding_rs.workspace = true
 
 # Tauri core + plugins
 #
@@ -41,7 +66,7 @@ omniterm-session-protocol = { path = "../crates/session-protocol" }
 # `app.security.assetProtocol.scope` in tauri.conf.json — the feature only makes the handler exist.
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-dialog = "2"
+tauri-plugin-dialog.workspace = true
 tauri-plugin-log = "2"
 tauri-plugin-os = "2"
 tauri-plugin-single-instance = "2"
@@ -64,13 +89,12 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 dunce = "1"
 opener = "0.7"
-rfd = "0.15"
+rfd.workspace = true
 # `release_max_level_off` compiles every `log::*!` call site in this crate (and in the plugins) down to
 # nothing when built without debug assertions. A release or portable build therefore cannot emit a
 # record at all — this is a compile-time guarantee, not a runtime filter that a stray
 # `tauri_plugin_log` registration or an env var could switch back on. See lib.rs's setup hook.
 log = { version = "0.4", features = ["release_max_level_off"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Windows-specific (for future RDP Phase 3, and for pty.rs's job-object cleanup).
 #
@@ -92,3 +116,7 @@ windows = { version = "0.58", features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
 ] }
+# The paths of files dropped from the OS (native_file_drop.rs). Same versions wry already uses for
+# its WebView2 controller, so the interfaces it hands out are the ones these crates name.
+webview2-com = "0.39"
+windows-core = "0.62"

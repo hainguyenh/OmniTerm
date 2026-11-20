@@ -1,4 +1,4 @@
-//! Log helpers, version/platform reporting, and plugin URL validation.
+//! Log helpers and version/platform reporting.
 //!
 //! Ports the implemented `app:*` handlers from electron/main.ts. Unimplemented update and RDP
 //! cleanup placeholders are deliberately not registered as production commands.
@@ -9,46 +9,6 @@ use tauri::{AppHandle, Manager, Runtime};
 #[cfg(test)]
 #[path = "app_utils_tests.rs"]
 mod tests;
-
-/// True if `url` may be handed to the OS on a *plugin's* behalf.
-///
-/// The host cannot know which approved documentation or company vault a deployment uses, so the host is not the allowlist.
-///
-/// What it still refuses is the part that made the unguarded version arbitrary program execution: any
-/// scheme other than https (no `file:`, no custom protocol handler, no bare Windows path), and any
-/// authority carrying credentials or a `@` — `https://github.com@evil.test/…` reads as `github.com`
-/// to a human and resolves to `evil.test`.
-pub fn is_allowed_plugin_url(url: &str) -> bool {
-    let authority = if let Some(rest) = url.strip_prefix("https://") {
-        rest.split(['/', '?', '#']).next().unwrap_or("")
-    } else if let Some(rest) = url.strip_prefix("http://") {
-        let auth = rest.split(['/', '?', '#']).next().unwrap_or("");
-        let host = if auth.starts_with('[') {
-            if let Some(end) = auth.find(']') {
-                &auth[..=end]
-            } else {
-                return false;
-            }
-        } else {
-            auth.split(':').next().unwrap_or("")
-        };
-        if host == "localhost" || host == "127.0.0.1" || host == "[::1]" {
-            auth
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    };
-    if authority.is_empty() || authority.contains('@') {
-        return false;
-    }
-    // A control character or whitespace in the authority means the string was not a URL to begin
-    // with; some openers split on it and act on the remainder.
-    !authority
-        .chars()
-        .any(|c| c.is_whitespace() || c.is_control())
-}
 
 /// Whether this build keeps a log at all — true only with debug assertions on.
 ///
@@ -113,7 +73,7 @@ pub async fn get_version<R: Runtime>(_app: AppHandle<R>) -> Result<String, Strin
 /// URLs are refused absolutely: the renderer's link/path overlay menu (see `createTerminalContextMenu`
 /// / `TerminalViewLinkMenuHost.openUrl`) routes `https://…` through its own path, and `file:///…` /
 /// `mailto:…` / custom schemes would otherwise become arbitrary program execution via the OS's
-/// registered protocol handler (see `is_allowed_plugin_url` for the same risk on the plugin side).
+/// registered protocol handler.
 fn validate_path_for_open(path: &str) -> Result<&str, String> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
@@ -152,40 +112,6 @@ fn validate_path_for_open(path: &str) -> Result<&str, String> {
 pub async fn open_in_system(path: String) -> Result<(), String> {
     let validated = validate_path_for_open(&path)?;
     opener::open(validated).map_err(|e| e.to_string())
-}
-
-fn validate_url_for_open(url: &str) -> Result<String, String> {
-    let trimmed = url.trim();
-    if trimmed.is_empty() {
-        return Err("URL is empty.".to_string());
-    }
-    if trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
-        return Err("URL contains control characters or whitespace.".to_string());
-    }
-    let target = if trimmed.starts_with("http://0.0.0.0:") {
-        trimmed.replacen("http://0.0.0.0:", "http://localhost:", 1)
-    } else {
-        trimmed.to_string()
-    };
-    let rest = if let Some(r) = target.strip_prefix("https://") {
-        r
-    } else if let Some(r) = target.strip_prefix("http://") {
-        r
-    } else {
-        return Err("Only http and https URLs may be opened.".to_string());
-    };
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    if authority.is_empty() || authority.contains('@') {
-        return Err("URL authority is invalid or contains credentials.".to_string());
-    }
-    Ok(target)
-}
-
-/// Open a validated HTTP or HTTPS URL in the user's default browser.
-#[tauri::command]
-pub async fn open_url(url: String) -> Result<(), String> {
-    let validated = validate_url_for_open(&url)?;
-    opener::open(&validated).map_err(|e| e.to_string())
 }
 
 pub fn handle_second_instance<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {

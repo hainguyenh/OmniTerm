@@ -1,5 +1,5 @@
 /**
- * Crash-safe mirror of the renderer's agent-session stores in `app_data_dir/agent-sessions.json`.
+ * Crash-safe durable store of the renderer's agent-session stores in `app_data_dir/agent-sessions.json`.
  *
  * localStorage stays the synchronous source of truth while the app runs, but WebView2 flushes it
  * lazily: a hard kill (Task Manager, `taskkill /F`) can drop the last few seconds of writes — which

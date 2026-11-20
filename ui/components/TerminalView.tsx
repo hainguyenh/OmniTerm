@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import { noteSubmittedInput, onAgentLaunch } from '../utils/agentLaunchSignal'
 import { interceptPaneInput } from '../utils/paneInputHold'
+import { registerPaneConsole } from '../utils/paneConsoles'
 import { registerPaneScreen } from '../utils/paneScreens'
 import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
@@ -18,35 +19,42 @@ import { createNativePasteGate, createTerminalClipboard, writeClipboardText } fr
 import { recordPastedImage, recordSavedAttachments, releaseSessionMedia } from '../utils/sessionAttachmentStore'
 import { attachTerminalStream } from '../utils/terminalStream'
 import { registerPlainUrlLinks } from '../utils/terminalLinks'
+import { openTerminalPath } from '../utils/terminalOpenPath'
 import '@xterm/xterm/css/xterm.css'
 import { TOKYO_NIGHT } from '../themes'
 import { createTerminalContextMenu, type TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
 import { registerCwdReporting } from '../utils/terminalCwdReporting'
 import { createAltClickMoveHandler } from '../terminal/altClickNavigation'
 import { createCtrlWheelFontResizer } from '../terminal/ctrlWheelFontResize'
+import { forgetCtrlC, recentlyInterrupted } from '../terminal/ctrlCGuard'
+import { exitBannerText } from '../terminal/exitBanner'
 import { createTerminalKeyHandler } from '../terminal/terminalKeyHandler'
 import { bufferText, createLastOutputTracker, registerTerminalCopyHandler, viewportText } from '../utils/terminalCopyExtract'
 import { registerTerminalSaveExport } from '../utils/terminalSaveExport'
 import { createFontRemeasurer } from '../utils/terminalFontRemeasure'
 import { observeTerminalResize } from '../utils/terminalResize'
 import { installImeInput } from '../utils/imeInput'
-import { installTerminalInterruptReset, interruptSessionProcess } from '../utils/terminalInterruptReset'
+import { installTerminalInterruptReset } from '../utils/terminalInterruptReset'
 import TerminalViewLinkMenuHost from './TerminalViewLinkMenuHost'
 import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
+import CtrlCHint from './CtrlCHint'
 import type { TerminalViewProps } from './TerminalView.types'
 
 export { DEFAULT_MONO_STACK }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes, blurStrength = 0 }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
-  const [isFocused, setIsFocused] = React.useState(false)
-  const [isHovered, setIsHovered] = React.useState(false)
   const [sessionUnavailable, setSessionUnavailable] = React.useState(false)
+  const [ctrlCHintTick, setCtrlCHintTick] = React.useState(0)
   // The pane owns its right-click link/path menu. Set by the contextmenu handler; cleared by the
   // host (Escape / outside click / item picked).
   const [linkMenu, setLinkMenu] = React.useState<TerminalLinkMenuState | null>(null)
+  // The shell's reported directory, which relative paths in its output are relative to.
+  const cwdRef = useRef<string | null>(null)
+  // The menu's Paste item; set by the main effect, which owns the clipboard.
+  const menuPasteRef = useRef<() => void>(() => {})
   // Set by the main effect; lets the fontSize effect refit without re-running it.
   const safeFitRef = useRef<() => void>(() => {})
   // Was the pane pinned to the live tail when it was last hidden? Re-showing scrolls back down only
@@ -136,13 +144,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     if (!terminalRef.current) return
 
     const isLocal = connection.type === 'LOCAL'
+    cwdRef.current ??= connection.localCwd ?? findSessionByTabId(id)?.cwd ?? null
 
     const term = new Terminal(createTerminalOptions({
       isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
-    // xterm's linkHandler is a no-op — `onLinkClick` owns modifier-click activation; `registerPlainUrlLinks` keeps the hover cue (see terminalLinks.ts).
-    term.options.linkHandler = { activate: () => {} }
-
     termRef.current = term
 
     const api = createSessionChannel(
@@ -170,8 +176,12 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         })
       : { dispose: () => {} }
     const paneDisposables = [
-      ...registerCwdReporting(term, (cwd) => cbs.current.onCwdChange?.(cwd)),
+      ...registerCwdReporting(term, (cwd) => {
+        cwdRef.current = cwd
+        cbs.current.onCwdChange?.(cwd)
+      }),
       registerPaneScreen(id, term),
+      registerPaneConsole(id, term),
       onScrollDisposable,
     ]
     const plainLinkDisposable = registerPlainUrlLinks(term)
@@ -228,20 +238,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const fitCoalescer = createCoalescer(safeFit, 70)
 
     term.onData(data => {
-      if (data === '\x03') {
-        interruptSessionProcess(id, connection.type)
-        return
-      }
       if (interceptPaneInput(id, data)) return // held while an agent probe owns the pane (paneInputHold.ts)
       noteSubmittedInput(id, data, term.buffer) // an agent launch freezes the pane at once (agentLaunchSignal.ts)
       copyTracker.noteInput(data)
       api.input(data)
     })
-    const onFocusIn = () => setIsFocused(true)
-    const onFocusOut = () => setIsFocused(false)
-    terminalRef.current?.addEventListener('focusin', onFocusIn)
-    terminalRef.current?.addEventListener('focusout', onFocusOut)
-
     // Selection auto-copy + paste. The key bindings that reach these live in the handler below.
     // The indirection exists because the highlighter a paste has to quiet lives in the stream below,
     // which cannot be created until this pane's fit/resize plumbing is in place.
@@ -258,13 +259,18 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     )
     let suppressNativePasteUntil = 0
 
-    const { onContextMenu, onLinkClick } = createTerminalContextMenu({
+    // `onLinkClick` owns modifier-clicks on plain-text links, `linkHandler` those on OSC 8 hyperlinks
+    // (an agent's `[a.ts](file:///…)`); `registerPlainUrlLinks` keeps the hover cue.
+    const { onContextMenu, onLinkClick, linkHandler } = createTerminalContextMenu({
       term,
       termElRef: terminalRef,
       clipboard,
       setLinkMenu,
       setSuppressPaste: () => { suppressNativePasteUntil = performance.now() + 250 },
+      openPath: isLocal ? (link) => void openTerminalPath(link, cwdRef.current) : undefined,
     })
+    term.options.linkHandler = linkHandler
+    menuPasteRef.current = () => { term.focus(); void clipboard.paste() }
     const onNativePaste = createNativePasteGate({
       term,
       noteLocalEcho: () => noteLocalEcho(),
@@ -276,7 +282,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     })
     const termEl = terminalRef.current
     termEl.addEventListener('contextmenu', onContextMenu)
-    termEl.addEventListener('mousedown', onLinkClick)
+    termEl.addEventListener('mousedown', onLinkClick, true)
     // Alt+Click moves the cursor by emitting the equivalent arrow-key burst — but only when the
     // program has NOT enabled mouse reporting (plain clicks keep native selection either way).
     // See ui/terminal/altClickNavigation.ts for the translation.
@@ -297,7 +303,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     }
     window.addEventListener('omniterm:focus-terminal', onFocusEvent)
     const interruptReset = installTerminalInterruptReset(term, id)
-    // The pane-header copy menu (TerminalCopyMenu) asks for this pane's text by session id; the
+    // The session tab menu (Copy) asks for this pane's text by session id; the
     // xterm instance lives only here, so the extraction runs at the request site.
     const disposeCopyRequests = registerTerminalCopyHandler({
       sessionId: id,
@@ -335,8 +341,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
 
     const isMac = window.omnitermAPI.app.platform === 'darwin'
 
+    // A single Ctrl+C that ends the process keeps the tab (see sessionExit.ts); until the user restarts
+    // or closes it, Enter and Ctrl+C act on the dead session instead of being sent to the PTY.
+    let exitedAfterInterrupt = false
+
     term.attachCustomKeyEventHandler(
       createTerminalKeyHandler({
+        sessionId: id,
         term,
         clipboard,
         connection,
@@ -344,7 +355,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
         getAgentName: currentAgent,
         getShortcuts: () => shortcutsRef.current,
         getEnterModes: () => enterModesRef.current,
-        onInterrupt: () => interruptSessionProcess(id, connection.type),
+        onInterruptHint: () => setCtrlCHintTick((n) => n + 1),
+        getExitedActions: () => (exitedAfterInterrupt && cbs.current.onRestart ? { restart: () => { exitedAfterInterrupt = false; cbs.current.onRestart?.() } } : null),
       }),
     )
 
@@ -353,7 +365,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term, api, id, isLocal, host: connection.host, mode,
       onStatus: (s) => cbs.current.onStatus?.(s),
       onUnavailable: () => setSessionUnavailable(true),
-      onExit: (code) => cbs.current.onExit?.(code),
+      onExit: (code) => {
+        if (recentlyInterrupted(id, Date.now())) {
+          exitedAfterInterrupt = true
+          term.write(exitBannerText(code))
+        }
+        cbs.current.onExit?.(code)
+      },
       onMetrics: (m) => cbs.current.onMetrics?.(m),
       onActivity: (busy) => cbs.current.onActivity?.(busy),
       smartColors: () => smartColorsRef.current === true,
@@ -377,13 +395,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       remeasureCoalescer.cancel()
       disposeResizeObserver()
       clipboard.dispose()
-      terminalRef.current?.removeEventListener('focusin', onFocusIn)
-      terminalRef.current?.removeEventListener('focusout', onFocusOut)
       plainLinkDisposable.dispose()
       titleDisposable.dispose()
       for (const disposable of paneDisposables) disposable.dispose()
       termEl.removeEventListener('contextmenu', onContextMenu)
-      termEl.removeEventListener('mousedown', onLinkClick)
+      termEl.removeEventListener('mousedown', onLinkClick, true)
       termEl.removeEventListener('mousedown', onAltClickMove)
       termEl.removeEventListener('paste', onNativePaste, true)
       termEl.removeEventListener('mouseup', onMouseUp)
@@ -395,7 +411,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
-      releaseSessionMedia(id)
+      forgetCtrlC(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
       termRef.current = null
@@ -403,6 +419,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       term.dispose()
     }
   }, [id, connection, mode])
+
+  // The pane's attachment list and image previews outlive a terminal rebuild (a connection record
+  // refresh or reconnect re-runs the effect above); they are dropped only when the pane itself goes.
+  useEffect(() => () => releaseSessionMedia(id), [id])
 
   // Visibility edges. Declared after the main effect so `termRef` is already populated on mount.
   //
@@ -442,7 +462,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     // xterm queues writes; wait for the queue before restoring a pane that was at the live tail.
     if ((becameActive || layoutChanged) && wasAtBottomRef.current) {
       term.scrollToBottom?.()
-      term.write('', () => term.scrollToBottom?.())
+      // xterm's write queue is not cancelled by dispose(): the callback still fires from a timer
+      // after the session closes or remounts, when scrolling would read the disposed renderer's
+      // `dimensions`. `termRef` is cleared (or replaced) on dispose, so it tells us the term is live.
+      term.write('', () => { if (termRef.current === term) term.scrollToBottom?.() })
     } else if (wasAtBottomRef.current) {
       term.scrollToBottom?.()
     }
@@ -451,14 +474,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   return (
     <div
       className="terminal-pane relative h-full w-full"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         background: theme?.background ?? '#1a1b26',
         padding: 'var(--theme-padding-sm)',
         '--pane-font-mono': resolveTerminalFontFamily(fontFamilyMono),
-        filter: blurStrength > 0 && !isFocused && !isHovered ? `blur(${blurStrength}px)` : 'none',
-        transition: 'filter 120ms ease-out',
       } as React.CSSProperties}
     >
       <div ref={terminalRef} className="h-full w-full" />
@@ -468,8 +487,11 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       <TerminalViewLinkMenuHost
         menu={linkMenu}
         isLocal={connection.type === 'LOCAL'}
+        onOpenInEditor={(link) => void openTerminalPath(link, cwdRef.current)}
+        onPaste={() => menuPasteRef.current()}
         onClose={() => setLinkMenu(null)}
       />
+      <CtrlCHint trigger={ctrlCHintTick} />
       <PastedImageViewerHost sessionId={id} />
     </div>
   )

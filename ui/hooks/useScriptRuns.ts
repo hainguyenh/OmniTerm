@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react'
-import type { WorkspaceScript } from '@omniterm/contract'
+import type { WorkspaceScript } from '../domain'
 
 /** The editor tab id for a script. One editor per path, so this is also the dedupe key. */
 export function editorTabId(scriptPath: string): string {

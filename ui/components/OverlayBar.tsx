@@ -35,7 +35,7 @@ const OverlayBar: React.FC = () => {
     <div className="group h-screen w-screen flex items-start justify-center bg-transparent overflow-hidden select-none">
       <div className="-translate-y-2 group-hover:translate-y-0 transition-transform duration-150 flex items-center gap-3 px-3 h-10 rounded-b-xl bg-theme-sidebar/95 border border-t-0 border-theme-border shadow-lg shadow-black/40">
         <Monitor className="w-4 h-4 text-theme-accent flex-shrink-0" />
-        <span className="text-sm font-medium text-white truncate max-w-[220px]">{name}</span>
+        <span className="text-sm font-medium text-theme-fg truncate max-w-[220px]">{name}</span>
 
         <button
           onClick={restore} data-tooltip="Restore into tab (exit fullscreen)"
@@ -47,7 +47,7 @@ const OverlayBar: React.FC = () => {
 
         <button
           onClick={disconnect} data-tooltip="Disconnect"
-          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-theme-border text-theme-error hover:border-[#f7768e] hover:bg-theme-error/10 transition-colors"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-theme-border text-theme-error hover:border-theme-error hover:bg-theme-error/10 transition-colors"
         >
           <Unplug className="w-3.5 h-3.5" />
           Disconnect

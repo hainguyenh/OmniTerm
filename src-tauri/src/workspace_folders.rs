@@ -3,7 +3,7 @@
 //! membership and the alias change.
 
 use crate::workspace_persistence::{read_workspaces, write_workspaces};
-use app_core::workspace_model::rename_folder;
+use app_core::workspace_model::{rename_folder, set_folder_disabled};
 pub use app_protocol::workspace::{Workspace, WorkspaceFolder};
 use std::path::Path;
 use tauri::{AppHandle, Runtime};
@@ -32,6 +32,7 @@ pub(crate) fn new_folder(path: String, name: Option<String>) -> WorkspaceFolder 
         name: display,
         path,
         color: None,
+        disabled: false,
     }
 }
 
@@ -92,6 +93,26 @@ pub async fn rename_workspace_folder<R: Runtime>(
         .find(|workspace| workspace.id == workspace_id)
         .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
     rename_folder(workspace, &folder_id, &name)?;
+    let result = workspace.clone();
+    write_workspaces(&app, &list)?;
+    Ok(result)
+}
+
+/// Switches a folder off (or on) without removing it: a disabled folder stays in the workspace but
+/// is not opened as part of the project, so the tree, search, index and scans skip it.
+#[tauri::command]
+pub async fn set_workspace_folder_disabled<R: Runtime>(
+    app: AppHandle<R>,
+    workspace_id: String,
+    folder_id: String,
+    disabled: bool,
+) -> Result<Workspace, String> {
+    let mut list = read_workspaces(&app)?;
+    let workspace = list
+        .iter_mut()
+        .find(|workspace| workspace.id == workspace_id)
+        .ok_or_else(|| format!("Unknown workspace \"{workspace_id}\""))?;
+    set_folder_disabled(workspace, &folder_id, disabled)?;
     let result = workspace.clone();
     write_workspaces(&app, &list)?;
     Ok(result)

@@ -5,6 +5,16 @@ import { KeycapCombo } from './Keycap'
 
 export type TooltipPlacement = 'bottom' | 'top' | 'left' | 'right'
 
+/** The handlers and ref the tooltip wraps on its trigger. React 19 passes `ref` as a normal prop. */
+interface TriggerProps {
+  ref?: React.Ref<HTMLElement>
+  onMouseEnter?: (e: React.MouseEvent) => void
+  onMouseLeave?: (e: React.MouseEvent) => void
+  onFocus?: (e: React.FocusEvent) => void
+  onBlur?: (e: React.FocusEvent) => void
+  onClick?: (e: React.MouseEvent) => void
+}
+
 export interface TooltipProps {
   /** Text or React content to display inside the tooltip. When omitted or empty, tooltip is disabled. */
   content?: React.ReactNode
@@ -17,7 +27,7 @@ export interface TooltipProps {
   /** Additional class names applied to the tooltip popup. */
   className?: string
   /** Trigger element that owns the tooltip. */
-  children: React.ReactElement
+  children: React.ReactElement<TriggerProps>
 }
 
 interface Position {
@@ -180,7 +190,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     'data-tooltip-owned': 'true',
     ref: (node: HTMLElement | null) => {
       triggerRef.current = node
-      const originalRef = (children as unknown as { ref?: React.Ref<HTMLElement> }).ref
+      const originalRef = (children.props as TriggerProps).ref
       if (typeof originalRef === 'function') {
         originalRef(node)
       } else if (originalRef && typeof originalRef === 'object') {
@@ -254,7 +264,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
 /**
  * Delegated fallback tooltip for every app button that does not already own an explicit <Tooltip>.
  * Native button titles are converted to themed tooltip content and removed so Chromium never shows
- * a competing browser tooltip.
+ * a competing browser tooltip. Buttons the IDE already tooltips (`data-tooltip`) are left to its TooltipHost.
  */
 export const GlobalButtonTooltips: React.FC = () => {
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
@@ -267,7 +277,8 @@ export const GlobalButtonTooltips: React.FC = () => {
     const prepare = (button: HTMLButtonElement) => {
       const nativeTitle = button.getAttribute('title')
       if (nativeTitle) {
-        if (!button.dataset.tooltip) button.dataset.tooltip = nativeTitle
+        // A separate attribute: `data-tooltip` belongs to the IDE's TooltipHost, which would show a second tooltip.
+        if (!button.dataset.tooltip && !button.dataset.fallbackTooltip) button.dataset.fallbackTooltip = nativeTitle
         button.removeAttribute('title')
       }
     }
@@ -280,7 +291,9 @@ export const GlobalButtonTooltips: React.FC = () => {
       const button = target.closest('button')
       if (!(button instanceof HTMLButtonElement) || button.dataset.tooltipOwned === 'true') return null
       prepare(button)
-      const label = button.dataset.tooltip
+      // The IDE's TooltipHost already shows this button (or a child of it): never a second tooltip.
+      if (target.closest('[data-tooltip]')) return null
+      const label = button.dataset.fallbackTooltip
         || button.getAttribute('aria-label')
         || button.textContent?.replace(/\s+/g, ' ').trim()
         || ''

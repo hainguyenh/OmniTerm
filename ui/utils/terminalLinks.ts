@@ -48,6 +48,8 @@ export const isTerminalLinkModifierClick = (event: MouseEvent): boolean =>
 const FILE_PATH_RE =
   /(?<![A-Za-z])[A-Za-z]:[\\/][\w.\\/-]+|~\/[\w.\\/-]+|\.\/[\w.\\/-]+|\.\.\/[\w.\\/-]+|(?<!\w)\/[\w.-]+(?:[\\/][\w.-]+)*|(?<!\w)[\w.-]+(?:[\\/][\w.-]+)+/g
 const TRAILING_PATH_PUNCTUATION_RE = /[),.;:!?\]}"'`]+$/
+/** A location printed right after a path: `:12`, `:12:5`, `(12)` or `(12,5)` (1-based). */
+const PATH_LOCATION_RE = /^(?::(\d+)(?::(\d+))?|\((\d+)(?:[,:](\d+))?\))/
 
 /** The link/path classification a modifier click is offering a small overlay menu for. */
 export type TerminalLinkMenuKind = 'url' | 'path'
@@ -59,6 +61,20 @@ export interface DetectedLinkOrPath {
   start: number
   /** 0-based end col (exclusive). */
   end: number
+  /** 1-based line printed after a path (`a.ts:12`); the path text itself never includes it. */
+  line?: number
+  /** 1-based column printed after the line (`a.ts:12:5`). */
+  col?: number
+}
+
+/** The `:line[:col]` that follows a path at `end`, when there is one. */
+const pathLocation = (line: string, end: number): Pick<DetectedLinkOrPath, 'line' | 'col'> => {
+  const match = PATH_LOCATION_RE.exec(line.slice(end))
+  if (!match) return {}
+  const row = Number(match[1] ?? match[3])
+  const col = Number(match[2] ?? match[4])
+  if (!(row > 0)) return {}
+  return col > 0 ? { line: row, col } : { line: row }
 }
 
 /** Map a client cursor position on a line text to whatever link or path sits at `col`, or null. */
@@ -78,7 +94,7 @@ export const findLinkOrPathAt = (line: string, col: number): DetectedLinkOrPath 
     if (!raw) continue
     const start = match.index ?? 0
     const end = start + raw.length
-    if (col >= start && col < end) return { kind: 'path', text: raw, start, end }
+    if (col >= start && col < end) return { kind: 'path', text: raw, start, end, ...pathLocation(line, end) }
   }
 
   return null
@@ -158,4 +174,36 @@ export const registerPlainUrlLinks = (term: Terminal) => {
   }
   if (typeof term.registerLinkProvider !== 'function') return { dispose: () => {} }
   return term.registerLinkProvider(provider)
+}
+
+/**
+ * What an OSC 8 hyperlink points at, in the shape a plain-text detection has: an HTTP(S) URL, or a
+ * local file from a `file://` URI (`file:///D:/w/a.ts`, `file://localhost/home/a.ts:12:5`). Agent
+ * TUIs print these with a label (`a.ts`) that names no path the plain-text detector could find.
+ * Any other scheme, a remote host, or a malformed URI is no link.
+ */
+export const oscLinkTarget = (uri: string): Omit<DetectedLinkOrPath, 'start' | 'end'> | null => {
+  const url = safeHttpUrl(uri)
+  if (url) return { kind: 'url', text: url.href }
+  let parsed: URL
+  try {
+    parsed = new URL(uri)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'file:' || (parsed.host !== '' && parsed.host !== 'localhost')) return null
+  let path: string
+  try {
+    path = decodeURIComponent(parsed.pathname)
+  } catch {
+    return null
+  }
+  // `/D:/w/a.ts` is the Windows path `D:/w/a.ts`.
+  if (/^\/[A-Za-z]:\//.test(path)) path = path.slice(1)
+  if (!path || /[\u0000-\u001f\u007f]/.test(path)) return null
+  const located = /^(.*?)(?::(\d+)(?::(\d+))?)$/.exec(path)
+  const row = Number(located?.[2])
+  if (!located || !(row > 0)) return { kind: 'path', text: path }
+  const col = Number(located[3])
+  return { kind: 'path', text: located[1], line: row, ...(col > 0 ? { col } : {}) }
 }

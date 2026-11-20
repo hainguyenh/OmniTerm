@@ -44,6 +44,7 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({ open: (...args: unknown[]) => open
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ label: '' }) }))
 vi.mock('@tauri-apps/api/path', () => ({ homeDir: (...args: unknown[]) => homeDirMock(...args) }))
 
+const { diag } = await import('../diag')
 const { __createTauriAPIForTests, initTauriBridge } = await import('../omnitermAPI')
 const { __resetSessionsForTests } = await import('../tauriSessions')
 
@@ -99,6 +100,7 @@ describe('bridge surface', () => {
   })
 
   it('only installs itself when running under Tauri', () => {
+    const log = vi.spyOn(diag, 'log').mockImplementation(() => {})
     delete (window as any).omnitermAPI
     delete (window as any).__TAURI_INTERNALS__
     initTauriBridge()
@@ -107,6 +109,8 @@ describe('bridge surface', () => {
     ;(window as any).__TAURI_INTERNALS__ = {}
     initTauriBridge()
     expect((window as any).omnitermAPI).toBeDefined()
+    expect(log).toHaveBeenCalledWith('[omnitermAPI] Bridge initialized — running in Tauri')
+    log.mockRestore()
     delete (window as any).__TAURI_INTERNALS__
     delete (window as any).omnitermAPI
   })
@@ -169,11 +173,14 @@ describe('connect.local', () => {
 
   it('reports a failed start on the session error handler', async () => {
     invokeMock.mockRejectedValueOnce('Unsupported shell "calc.exe".')
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => {})
     const errors: string[] = []
     api.connect.onLocalError('sess-1', (e: string) => errors.push(e))
     await api.connect.local('sess-1', 'conn-1')
     expect(errors).toHaveLength(1)
     expect(errors[0]).toContain('Unsupported shell')
+    expect(report).toHaveBeenCalledWith('[omnitermAPI] sess-1: Unsupported shell "calc.exe".')
+    report.mockRestore()
   })
 
   it('forwards input, resize and disconnect with the expected argument names', async () => {

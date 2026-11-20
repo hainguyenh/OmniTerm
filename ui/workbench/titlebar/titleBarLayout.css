@@ -1,0 +1,28 @@
+/*
+ * Narrow windows: the title bar is a container ("titlebar"). The caption buttons never collapse; these rules drop the lowest
+ * priority items first as the window gets narrower, so the controls are never covered.
+ */
+@container titlebar (max-width: 980px) {
+  [data-title-item='omniterm.projectFilter'] [data-title-count] {
+    display: none;
+  }
+}
+
+@container titlebar (max-width: 860px) {
+  [data-title-item='run.widget'] {
+    display: none;
+  }
+}
+
+@container titlebar (max-width: 700px) {
+  [data-title-item='omniterm.projectFilter'] {
+    display: none;
+  }
+}
+
+@container titlebar (max-width: 520px) {
+  [data-title-item='vcs.branch'],
+  [data-title-item='vcs.mergeRebase'] {
+    display: none;
+  }
+}

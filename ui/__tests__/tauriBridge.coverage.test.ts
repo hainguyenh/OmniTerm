@@ -105,27 +105,9 @@ describe('complete Tauri bridge behavior', () => {
     })
 
     state.invoke.mockRejectedValueOnce(new Error('offline'))
-    await expect(api.plugin.available()).resolves.toBe(false)
-    state.invoke.mockRejectedValueOnce(new Error('offline'))
     await expect(api.plugin.list()).resolves.toEqual([])
     state.invoke.mockRejectedValueOnce(new Error('offline'))
     await expect(api.plugin.setEnabled('p1', true)).resolves.toBeNull()
-    await api.plugin.selectConnectionProvider(null)
-    state.invoke.mockRejectedValueOnce(new Error('offline'))
-    await expect(api.plugin.connectionCapabilities()).resolves.toBeNull()
-    state.invoke.mockRejectedValueOnce(new Error('offline'))
-    await expect(api.plugin.invoke('method', 1, 'two')).resolves.toBeNull()
-    state.invoke.mockRejectedValueOnce(new Error('offline'))
-    await expect(api.plugin.authGate()).resolves.toBe(true)
-    await api.plugin.installPackage()
-    await api.plugin.remove('p1')
-    await api.plugin.restartApp()
-    expect(state.invoke).toHaveBeenCalledWith('plugin_select_connection_provider', { id: null })
-    expect(state.invoke).toHaveBeenCalledWith('plugin_invoke', {
-      method: 'method',
-      args: [1, 'two'],
-    })
-    expect(state.invoke).toHaveBeenCalledWith('remove_plugin', { id: 'p1' })
   })
 
   it('covers SSH handlers, metrics, RDP lifecycle and compatibility no-ops', async () => {
@@ -267,8 +249,6 @@ describe('complete Tauri bridge behavior', () => {
     await api.workspace.writeScript('w1', 'run.sh', 'echo hi')
     state.invoke.mockRejectedValueOnce(new Error('missing'))
     await expect(api.workspace.loadConnections('w1')).resolves.toEqual([])
-    await api.workspace.saveConnections('w1', [{ id: 'c1' }])
-    await api.workspace.deleteConnection('w1', 'c1')
 
     state.invoke.mockImplementation((command: string) =>
       command === 'get_version' ? Promise.resolve('0.1.2') : Promise.resolve(undefined))
@@ -283,8 +263,8 @@ describe('complete Tauri bridge behavior', () => {
     vi.unstubAllGlobals()
     await api.updates.getVersion()
     await expect(api.updates.showSaveDialog('x')).resolves.toBeNull()
-    await expect(api.updates.downloadPortable()).rejects.toThrow('No portable download')
-    await expect(api.updates.downloadInstaller(true)).rejects.toThrow('No Windows installer')
+    await expect(api.updates.downloadPortable('/x')).resolves.toBeUndefined()
+    await expect(api.updates.downloadInstaller(true)).resolves.toBeUndefined()
     expect(api.updates.onState(vi.fn())()).toBeUndefined()
 
     await api.themes.list()

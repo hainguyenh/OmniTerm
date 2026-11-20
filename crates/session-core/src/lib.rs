@@ -12,7 +12,10 @@ mod activity;
 mod agent_activity;
 mod client;
 mod exit_watcher;
+mod forward;
 mod freeze;
+#[cfg(test)]
+mod io_failure_tests;
 mod manager;
 mod manifest;
 mod output;
@@ -21,6 +24,7 @@ mod server;
 mod summary;
 #[cfg(unix)]
 mod suspend;
+mod terminal_modes;
 mod transport;
 
 pub use client::{SessionDaemonClient, SessionSubscription};

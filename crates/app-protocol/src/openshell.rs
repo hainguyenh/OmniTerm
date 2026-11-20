@@ -184,7 +184,11 @@ mod tests {
 
     #[test]
     fn refuses_a_shell_that_cannot_exist_on_this_platform() {
-        let foreign = if cfg!(target_os = "windows") { "bash" } else { "cmd" };
+        let foreign = if cfg!(target_os = "windows") {
+            "bash"
+        } else {
+            "cmd"
+        };
         assert!(parse_open_shell_args(&argv(&["OmniTerm.exe", "--open-shell", foreign])).is_none());
     }
 
@@ -199,7 +203,11 @@ mod tests {
     fn keep_open_defaults_to_true_and_only_0_or_false_disable_it() {
         let (name, _) = native_shell();
         let parse_keep = |v: Option<&str>| {
-            let mut a = vec!["x".to_string(), "--open-shell".to_string(), name.to_string()];
+            let mut a = vec![
+                "x".to_string(),
+                "--open-shell".to_string(),
+                name.to_string(),
+            ];
             if let Some(v) = v {
                 a.push("--keep-open".to_string());
                 a.push(v.to_string());
@@ -216,9 +224,15 @@ mod tests {
     #[test]
     fn treats_a_following_flag_as_an_absent_value() {
         let (name, _) = native_shell();
-        let req =
-            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", "--name", "Tab"]))
-                .unwrap();
+        let req = parse_open_shell_args(&argv(&[
+            "x",
+            "--open-shell",
+            name,
+            "--cwd",
+            "--name",
+            "Tab",
+        ]))
+        .unwrap();
         assert_eq!(req.cwd, None);
         assert_eq!(req.name, "Tab");
     }
@@ -255,9 +269,8 @@ mod tests {
     fn caps_multibyte_names_without_panicking() {
         let (name, _) = native_shell();
         let emoji_name = "🚀".repeat(MAX_NAME + 10);
-        let req =
-            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--name", &emoji_name]))
-                .unwrap();
+        let req = parse_open_shell_args(&argv(&["x", "--open-shell", name, "--name", &emoji_name]))
+            .unwrap();
         assert_eq!(req.name.chars().count(), MAX_NAME);
     }
 
@@ -284,7 +297,11 @@ mod tests {
     #[test]
     fn a_repeated_flag_takes_the_first_occurrence() {
         let (name, expected) = native_shell();
-        let foreign = if cfg!(target_os = "windows") { "bash" } else { "cmd" };
+        let foreign = if cfg!(target_os = "windows") {
+            "bash"
+        } else {
+            "cmd"
+        };
 
         let req = parse_open_shell_args(&argv(&[
             "x",
@@ -322,9 +339,8 @@ mod tests {
 
         let exact =
             parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", &at_limit])).unwrap();
-        let over =
-            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", &over_limit]))
-                .unwrap();
+        let over = parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", &over_limit]))
+            .unwrap();
 
         assert_eq!(exact.cwd, Some(at_limit));
         assert_eq!(over.cwd.unwrap().len(), MAX_CWD);
@@ -333,10 +349,34 @@ mod tests {
     #[test]
     fn empty_flag_values_are_absent() {
         let (name, expected) = native_shell();
-        let req =
-            parse_open_shell_args(&argv(&["x", "--open-shell", name, "--cwd", "", "--name", ""]))
-                .unwrap();
+        let req = parse_open_shell_args(&argv(&[
+            "x",
+            "--open-shell",
+            name,
+            "--cwd",
+            "",
+            "--name",
+            "",
+        ]))
+        .unwrap();
         assert_eq!(req.cwd, None);
         assert_eq!(req.name, expected.default_name());
+    }
+
+    /// The renderer's quick-shell overrides get the same caps as the launcher argv.
+    #[test]
+    fn renderer_overrides_are_capped_like_launcher_flags() {
+        assert_eq!(cap_cwd(None), None);
+        assert_eq!(cap_cwd(Some("")), None);
+        assert_eq!(cap_cwd(Some("/srv/app")), Some("/srv/app".to_string()));
+        assert_eq!(
+            cap_cwd(Some(&"d".repeat(MAX_CWD + 5))).map(|cwd| cwd.len()),
+            Some(MAX_CWD)
+        );
+        assert_eq!(cap_command(Some("ls -la")), Some("ls -la".to_string()));
+        assert_eq!(
+            cap_command(Some(&"c".repeat(MAX_COMMAND + 1))).map(|command| command.len()),
+            Some(MAX_COMMAND)
+        );
     }
 }

@@ -86,7 +86,10 @@ fn a_password_key_does_not_fail_validation() {
 fn rejects_non_boolean_flags() {
     for field in ["localKeepOpen", "redirectDrives"] {
         let c = json!([{"id": "c1", "name": "n", "type": "LOCAL", field: "yes"}]);
-        assert!(validate_tree(&json!([]), &c).is_err(), "{field} not checked");
+        assert!(
+            validate_tree(&json!([]), &c).is_err(),
+            "{field} not checked"
+        );
     }
 }
 
@@ -120,10 +123,12 @@ fn rejects_invalid_folder_records() {
         json!([{"id": "f1", "name": "Valid", "parentId": 123}]),
     ];
     for f in cases {
-        assert!(validate_tree(&f, &json!([])).is_err(), "should reject folder case {f}");
+        assert!(
+            validate_tree(&f, &json!([])).is_err(),
+            "should reject folder case {f}"
+        );
     }
 }
-
 
 #[test]
 fn accepts_exact_boundaries_parent_links_and_boolean_flags() {
@@ -163,4 +168,15 @@ fn rejects_wrong_optional_string_types_and_too_many_connections() {
         .map(|index| json!({"id": format!("c{index}"), "name": "n", "type": "SSH"}))
         .collect();
     assert!(validate_tree(&json!([]), &json!(many)).is_err());
+}
+
+#[test]
+fn rejects_an_oversized_folder_id() {
+    let folders = json!([{ "id": "f".repeat(MAX_ID_LENGTH + 1), "name": "Folder" }]);
+    assert_eq!(
+        validate_tree(&folders, &json!([])),
+        Err("Rejected: invalid folder id.".to_string())
+    );
+    let at_limit = json!([{ "id": "f".repeat(MAX_ID_LENGTH), "name": "Folder" }]);
+    assert_eq!(validate_tree(&at_limit, &json!([])), Ok(()));
 }

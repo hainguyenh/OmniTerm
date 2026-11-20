@@ -207,9 +207,12 @@ describe('initTauriBridge', () => {
   })
 
   it('installs the bridge inside Tauri', () => {
-    (window as any)[internals] = {}
+    const log = vi.spyOn(diag, 'log').mockImplementation(() => {})
+    ;(window as any)[internals] = {}
     initTauriBridge()
     expect((window as any).omnitermAPI).toBeDefined()
+    expect(log).toHaveBeenCalledWith('[omnitermAPI] Bridge initialized — running in Tauri')
+    log.mockRestore()
   })
 
   it('reports a construction failure instead of throwing at startup', () => {

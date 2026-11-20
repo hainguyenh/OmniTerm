@@ -3,10 +3,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import type { Connection } from '@omniterm/contract'
+import { diag } from '../../diag'
+import type { Connection } from '../../domain'
 import { useSessionRestore } from '../useSessionRestore'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
-import { clearStoredSessions, loadStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
+import { clearStoredSessions, upsertSession, type StoredAgentSession } from '../../utils/agentSessionStorage'
 
 const registeredConn = (over: Partial<Connection> = {}): Connection => ({
   id: 'adhoc-fresh-99',
@@ -54,10 +55,8 @@ function snapshot(): SessionSnapshot {
 const setters = () => ({
   setActiveTabs: vi.fn(),
   setEphemeralConns: vi.fn(),
-  setTabGroups: vi.fn(),
   setResumeMode: vi.fn(),
   setRestoreOutcomes: vi.fn(),
-  restoreGroups: vi.fn(),
   setPanes: vi.fn(),
   setLayoutMode: vi.fn(),
   setFocusedPane: vi.fn(),
@@ -70,8 +69,13 @@ describe('useSessionRestore', () => {
   const mockOpen = vi.fn()
   const mockRelease = vi.fn()
   const localDisconnect = vi.fn()
+  let restoreLog: ReturnType<typeof vi.spyOn>
+  let restoreWarn: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    // Every restore reports how many panes it recreated; the failure test asserts its own warning.
+    restoreLog = vi.spyOn(diag, 'log').mockImplementation(() => {})
+    restoreWarn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     clearStoredSessions()
     mockOpen.mockReset()
     mockRelease.mockReset()
@@ -110,6 +114,7 @@ describe('useSessionRestore', () => {
     renderHook(() => useSessionRestore({ initialSnapshot: snapshot(), ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
+    expect(restoreLog).toHaveBeenCalledWith('[useSessionRestore] recreated', 1, 'terminal pane(s)')
     expect(localDisconnect).toHaveBeenCalledWith('old-tab-1')
     expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
     expect(applied(s.setActiveTabs, [])).toEqual([
@@ -117,9 +122,9 @@ describe('useSessionRestore', () => {
     ])
     expect(applied<Record<string, boolean>>(s.setResumeMode, {})).toEqual({ 'old-tab-1': false })
 
-    const groups = s.restoreGroups.mock.calls[0][0] as Array<{ panes: (string | null)[] }>
-    expect(groups[0].panes[0]).toBe('old-tab-1')
-    expect(groups[0].panes[7]).toBeNull()
+    const restoredPanes = s.setPanes.mock.calls[0][0] as (string | null)[]
+    expect(restoredPanes[0]).toBe('old-tab-1')
+    expect(restoredPanes[7]).toBeNull()
     expect(s.setLayoutMode).toHaveBeenCalledWith(2)
     expect(s.setFocusedPane).toHaveBeenCalledWith(1)
     expect(s.setRestoreOutcomes.mock.calls.at(-1)?.[0]?.['old-tab-1']).toMatchObject({
@@ -128,7 +133,7 @@ describe('useSessionRestore', () => {
     })
   })
 
-  it('restores a previously agent-titled pane as a fresh shell without running the TUI', async () => {
+  it('relaunches a known agent instead of leaving only a fresh shell', async () => {
     mockOpen.mockResolvedValue(registeredConn({ name: 'Claude Code', shell: 'powershell' }))
     const s = setters()
     const saved = snapshot()
@@ -140,11 +145,10 @@ describe('useSessionRestore', () => {
     renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
-    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
-    expect(applied<Array<{ id: string; connId: string; name: string }>>(s.setActiveTabs, [])[0].name).toBe('Claude Code')
+    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', 'claude --continue')
   })
 
-  it('preserves an interrupted agent session for manual resume without running it on startup', async () => {
+  it('resumes the exact interrupted agent session even when the saved title is only a shell title', async () => {
     mockOpen.mockResolvedValue(registeredConn())
     upsertSession({
       id: 'claude:11111111-1111-4111-8111-111111111111',
@@ -164,72 +168,41 @@ describe('useSessionRestore', () => {
     renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
 
-    expect(mockOpen).toHaveBeenCalledWith('powershell', null, undefined, 'F:/repo', null)
-    expect(loadStoredSessions().find(item => item.tabId === 'old-tab-1')).toMatchObject({
-      sessionId: '11111111-1111-4111-8111-111111111111',
-      state: 'interrupted',
-    })
+    expect(mockOpen).toHaveBeenCalledWith(
+      'powershell', null, undefined, 'F:/repo',
+      'claude-th --resume 11111111-1111-4111-8111-111111111111',
+    )
   })
 
-  it('keeps a plain pane in folder X a shell when a separate agent pane shares folder X', async () => {
-    const agentTab = {
-      ...snapshot().activeTabs[0],
-      id: 'agent-tab',
-      connId: 'agent-conn',
-      name: 'Claude Code - project X',
-      recovery: { cwd: 'F:/project-X', cwdSource: 'reported' as const, shell: 'powershell' },
-    }
-    const shellTab = {
-      ...snapshot().activeTabs[0],
-      id: 'shell-tab',
-      connId: 'shell-conn',
-      name: 'project X',
-      recovery: { cwd: 'F:/project-X', cwdSource: 'reported' as const, shell: 'powershell' },
-    }
-    const saved = snapshot()
-    saved.activeTabs = [agentTab, shellTab]
-    saved.ephemeralConns = [
-      { id: 'agent-conn', name: 'PowerShell', type: 'LOCAL', ephemeral: true, shell: 'powershell', localCwd: 'F:/project-X' },
-      { id: 'shell-conn', name: 'PowerShell', type: 'LOCAL', ephemeral: true, shell: 'powershell', localCwd: 'F:/project-X' },
-    ]
-    saved.viewGroups[0].panes = ['agent-tab', 'shell-tab']
-    upsertSession({
-      id: 'claude:11111111-1111-4111-8111-111111111111',
-      tabId: 'agent-tab',
+  it('resumes each remembered session in one pane only when several panes share a project folder', async () => {
+    mockOpen.mockResolvedValue(registeredConn())
+    const session = (id: string, tabId?: string): StoredAgentSession => ({
+      id: `claude:${id}`,
+      ...(tabId ? { tabId } : {}),
       agent: 'claude',
-      profileName: 'work',
-      sessionId: '11111111-1111-4111-8111-111111111111',
-      cwd: 'F:/project-X',
-      state: 'interrupted',
+      profileName: 'claude',
+      sessionId: id,
+      cwd: 'F:/repo',
+      state: 'interrupted' as const,
       updatedAt: Date.now(),
     })
-    mockOpen.mockImplementation(async (_shell, _workspace, _folder, cwd) => registeredConn({ id: `opened-${mockOpen.mock.calls.length}`, localCwd: cwd }))
-    const s = setters()
-
-    renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
-    await vi.waitFor(() => expect(mockOpen).toHaveBeenCalledTimes(2))
-
-    expect(mockOpen.mock.calls.map(call => call[4])).toEqual([null, null])
-    expect(loadStoredSessions().find(item => item.tabId === 'agent-tab')?.state).toBe('interrupted')
-    expect(mockOpen.mock.calls[0][3]).toBe('F:/project-X')
-    expect(mockOpen.mock.calls[1][3]).toBe('F:/project-X')
-  })
-
-  it('restores both agent and plain panes in the same directory as shells', async () => {
-    mockOpen.mockResolvedValueOnce(registeredConn({ id: 'fresh-X' }))
-      .mockResolvedValueOnce(registeredConn({ id: 'fresh-Y', name: 'PowerShell' }))
+    // One session lost its pane binding; the other is bound to the second pane of the snapshot.
+    upsertSession(session('11111111-1111-4111-8111-111111111111'))
+    upsertSession(session('22222222-2222-4222-8222-222222222222', 'old-tab-2'))
     const saved = snapshot()
-    saved.activeTabs = [
-      { ...saved.activeTabs[0], name: 'Claude Code - repo', recovery: { ...saved.activeTabs[0].recovery, agent: 'claude' } },
-      { id: 'other-tab', connId: 'old-adhoc-1', name: 'PowerShell', recovery: { cwd: 'F:/repo', cwdSource: 'reported', shell: 'powershell' } },
-    ]
+    const pane = (id: string) => ({ ...saved.activeTabs[0]!, id, name: 'PowerShell' })
+    saved.activeTabs = [pane('old-tab-0'), pane('old-tab-1'), pane('old-tab-2')]
     const s = setters()
+
     renderHook(() => useSessionRestore({ initialSnapshot: saved, ...s }))
     await vi.waitFor(() => expect(s.setActiveTabs).toHaveBeenCalled())
-    expect(mockOpen).toHaveBeenCalledTimes(2)
-    expect(mockOpen).toHaveBeenNthCalledWith(1, 'powershell', null, undefined, 'F:/repo', null)
-    expect(mockOpen).toHaveBeenNthCalledWith(2, 'powershell', null, undefined, 'F:/repo', null)
-    expect(applied<Array<{ id: string; connId: string; name: string }>>(s.setActiveTabs, []).map(tab => tab.name)).toEqual(['PowerShell', 'PowerShell'])
+
+    const commands = mockOpen.mock.calls.map(call => call[4])
+    expect(commands).toEqual([
+      'claude --resume 11111111-1111-4111-8111-111111111111',
+      null,
+      'claude --resume 22222222-2222-4222-8222-222222222222',
+    ])
   })
 
   it('does not repeat restore when ordinary connection callbacks change', async () => {
@@ -288,6 +261,7 @@ describe('useSessionRestore', () => {
       retryable: true,
       action: 'retry-session',
     })
+    expect(restoreWarn).toHaveBeenCalledWith('[useSessionRestore] fresh shell registration failed', expect.objectContaining({ message: 'backend unavailable' }))
   })
 
   it('releases a registration that resolves after its pane was explicitly closed', async () => {

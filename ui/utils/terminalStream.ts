@@ -3,6 +3,7 @@ import type { SessionChannel } from './sessionChannel'
 import { chunkForWrite } from './writeChunks'
 import { OutputHighlighter } from '../highlighter'
 import { MAX_SCROLLBACK_BYTES, loadScrollback, saveScrollback } from './scrollbackStore'
+import { OutputRate, ScrollbackBuffer } from './scrollbackBuffer'
 import type { SessionStatus } from '../components/MainLayout'
 
 /**
@@ -87,6 +88,7 @@ export const attachTerminalStream = ({
   // escape-sequence state stays in sync even while the toggle is off.
   const decoder = new TextDecoder('utf-8')
   const highlighter = new OutputHighlighter()
+  const outputRate = new OutputRate()
 
   /**
    * True from just before `resume()` until it settles. The backend pushes a session's whole buffered
@@ -110,17 +112,14 @@ export const attachTerminalStream = ({
   // a debounce, so a restart can repaint what this pane had on screen. On a fresh connect the
   // saved text is loaded FIRST: until that read settles, incoming text is parked in `gated` so
   // restored history always lands above live output.
-  let scrollBuffer = ''
+  const scrollBuffer = new ScrollbackBuffer(MAX_SCROLLBACK_BYTES)
   let scrollDirty = false
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
   const SCROLLBACK_SAVE_MS = 3_000
 
   const appendScrollback = (text: string) => {
     if (!scrollbackKey) return
-    scrollBuffer += text
-    if (scrollBuffer.length > MAX_SCROLLBACK_BYTES) {
-      scrollBuffer = scrollBuffer.slice(-MAX_SCROLLBACK_BYTES)
-    }
+    scrollBuffer.append(text)
     scrollDirty = true
   }
 
@@ -130,7 +129,7 @@ export const attachTerminalStream = ({
       scrollTimer = null
       if (scrollDirty) {
         scrollDirty = false
-        void saveScrollback(scrollbackKey, scrollBuffer)
+        void saveScrollback(scrollbackKey, scrollBuffer.text())
       }
     }, SCROLLBACK_SAVE_MS)
   }
@@ -149,15 +148,17 @@ export const attachTerminalStream = ({
       return
     }
     // Chunked as well: one huge message (a `cat` of a big file, a build log dumping at once) blocks a
-    // frame no matter where it came from. Text at or below the chunk size passes through as-is.
-    writeChunked(term, highlighter.transform(text, smartColors()))
+    // frame no matter where it came from. Text at or below the chunk size passes through as-is. A
+    // flood skips smart colouring (its escape state still advances) so the regex never falls behind.
+    const colour = smartColors() && !outputRate.flooding(text.length, Date.now())
+    writeChunked(term, highlighter.transform(text, colour))
   }
 
   const releaseHistory = () => {
     if (gated === null || !historyDecisionKnown) return
     if (historyState === 'indexeddb' && !historyLoaded) return
     if (historyState === 'indexeddb' && savedHistory) {
-      scrollBuffer = savedHistory
+      scrollBuffer.replace(savedHistory)
       highlighter.transform(savedHistory, false)
       writeChunked(term, savedHistory)
     }
@@ -231,7 +232,7 @@ export const attachTerminalStream = ({
     ? () => {}
     : window.omnitermAPI.connect.onSessionMetrics(id, onMetrics)
 
-  // Busy/idle is the mirror image: local-only, since it is the host's process tree being watched.
+  // Busy/idle is the inverse: local-only, since it is the host's process tree being watched.
   // Output bytes no longer drive the dot — only the backend's process-tree probe does, so the dot
   // reflects a real running child (vim, ssh, a build tool, an agent CLI) and not the shell's own
   // echo of the user's typing.
@@ -310,7 +311,7 @@ export const attachTerminalStream = ({
       scrollTimer = null
       if (scrollbackKey && scrollDirty) {
         scrollDirty = false
-        void saveScrollback(scrollbackKey, scrollBuffer)
+        void saveScrollback(scrollbackKey, scrollBuffer.text())
       }
     },
     noteLocalEcho: () => highlighter.noteLocalEcho(),

@@ -7,6 +7,7 @@ import {
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
+  oscLinkTarget,
   registerPlainUrlLinks,
   safeHttpUrl,
 } from '../terminalLinks'
@@ -97,6 +98,15 @@ describe('findLinkOrPathAt', () => {
     const match = findLinkOrPathAt(DRIVE_LINE, 19) // col 19 is inside "log.txt"
     expect(match?.kind).toBe('path')
     expect(match?.text).toBe('C:\\projects\\app\\log.txt')
+  })
+
+  it('reads the line and column printed after a path, keeping them out of the path text', () => {
+    expect(findLinkOrPathAt('see src/a.ts:12:5 now', 6)).toMatchObject({ text: 'src/a.ts', line: 12, col: 5 })
+    expect(findLinkOrPathAt('at src/a.ts(7,2)', 4)).toMatchObject({ text: 'src/a.ts', line: 7, col: 2 })
+    expect(findLinkOrPathAt('see src/a.ts:12.', 6)).toMatchObject({ text: 'src/a.ts', line: 12 })
+    const plain = findLinkOrPathAt('wrote .bizreq/outbox/56069-decision-task.md', 8)
+    expect(plain?.text).toBe('.bizreq/outbox/56069-decision-task.md')
+    expect(plain?.line).toBeUndefined()
   })
 
   it('does NOT match a bare filename with no path separator', () => {
@@ -202,5 +212,20 @@ describe('findLinkOrPathInTerminal', () => {
 
     expect(findLinkOrPathInTerminal(terminal, termEl, 50, 100)).toBeNull() // left of rect
     expect(findLinkOrPathInTerminal(terminal, termEl, 100, 50)).toBeNull() // above rect
+  })
+})
+
+describe('oscLinkTarget', () => {
+  it('reads local file URIs as paths, with a trailing line and column', () => {
+    expect(oscLinkTarget('file:///D:/work/a.ts')).toEqual({ kind: 'path', text: 'D:/work/a.ts' })
+    expect(oscLinkTarget('file://localhost/home/me/a.ts:3')).toEqual({ kind: 'path', text: '/home/me/a.ts', line: 3 })
+    expect(oscLinkTarget('file:///C:/My%20Docs/x.md:4:2')).toEqual({ kind: 'path', text: 'C:/My Docs/x.md', line: 4, col: 2 })
+  })
+
+  it('keeps HTTP(S) links and drops every other target', () => {
+    expect(oscLinkTarget('https://example.test/a?b=1')).toEqual({ kind: 'url', text: 'https://example.test/a?b=1' })
+    for (const uri of ['javascript:alert(1)', 'file://evil.host/share/a', 'not a uri', 'https://u:p@example.test/', 'file:///a%0Ab', 'file:///%E0%A4%A']) {
+      expect(oscLinkTarget(uri), uri).toBeNull()
+    }
   })
 })

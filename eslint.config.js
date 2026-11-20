@@ -5,6 +5,8 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import globals from 'globals'
 
+import { IDE_MODULE_ROOTS } from './scripts/ide-modules.mjs'
+
 export default [
   {
     ignores: [
@@ -20,11 +22,14 @@ export default [
       '**/coverage-rust/**',
       'target',
       '**/target/**',
+      // Agent worktrees: full checkouts of other branches, linted in their own runs.
+      '.claude/worktrees/**',
       'node_modules',
       '**/node_modules/**',
       '.pnpm-store',
       '**/.pnpm-store/**',
-      'plugins/markdown-explorer',
+      // IDE modules with their own code style; see scripts/ide-modules.mjs.
+      ...IDE_MODULE_ROOTS.flatMap(root => [root, `${root}/**`]),
     ],
   },
   { ...js.configs.recommended, files: ['**/*.{ts,tsx}'] },

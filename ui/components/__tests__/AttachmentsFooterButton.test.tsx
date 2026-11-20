@@ -111,4 +111,14 @@ describe('AttachmentsFooterButton', () => {
       expect(localInput).toHaveBeenCalledWith('s1', 'C:/data/attachments/document.pdf')
     })
   })
+
+  it('merges the pane folder into the session folder once the agent session id appears', async () => {
+    const move = vi.fn(async () => [])
+    mockOmnitermAPI({ app: { openInSystem }, attachments: { move } })
+    act(() => setPanePresence({ s1: { agent: 'claude', profileName: 'claude-work', pid: 1, startTime: 1 } }))
+    render(<AttachmentsFooterButton sessionId="s1" />)
+    expect(move).not.toHaveBeenCalled()
+    act(() => setPanePresence({ s1: { agent: 'claude', profileName: 'claude-work', pid: 1, startTime: 1, agentSessionId: 'sess-9' } }))
+    await waitFor(() => expect(move).toHaveBeenCalledWith('s1', 'sess-9'))
+  })
 })

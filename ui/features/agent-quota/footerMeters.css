@@ -1,0 +1,68 @@
+/*
+ * The bars in an agent pane's footer (FooterMeters.tsx): 5-hour quota, weekly quota and context,
+ * each a short track filled in its zone colour (the `.aq-zone-*` classes in agentQuota.css) with its
+ * number beside it. Sized for the 26px footer row and its 11px text.
+ */
+
+.aq-meters {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.aq-meter {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.aq-meter-label {
+  flex: none;
+}
+
+.aq-meter-track {
+  position: relative;
+  flex: 0 1 72px;
+  width: 72px;
+  min-width: 24px;
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--theme-border) 70%, var(--aq-track-bg));
+  border-radius: 3px;
+  background: var(--aq-track-bg);
+}
+
+.aq-meter-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--aq-zone, var(--aq-calm));
+  transition: width 0.3s ease;
+}
+
+.aq-meter-value {
+  flex: none;
+  min-width: 3ch;
+  color: color-mix(in srgb, var(--aq-zone, var(--aq-calm)) 55%, var(--theme-fg));
+}
+
+/* Sessions outside this pane spend the same quota (footerRisk in footerMeterModel.ts). */
+.aq-risk {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--aq-zone, var(--aq-calm));
+  border-radius: 3px;
+  color: color-mix(in srgb, var(--aq-zone, var(--aq-calm)) 70%, var(--theme-fg));
+  font-variant-numeric: tabular-nums;
+  line-height: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aq-meter-fill {
+    transition: none;
+  }
+}

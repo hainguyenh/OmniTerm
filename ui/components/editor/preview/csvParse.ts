@@ -1,4 +1,3 @@
-import { extensionOf } from '../editorFileKinds'
 import type { HandlerResult } from './workerProtocol'
 
 /**
@@ -33,7 +32,7 @@ const CANDIDATES = [',', ';', '\t', '|']
 
 /** Pick the delimiter that splits the first lines most consistently. `.tsv` is always tab. */
 export function sniffDelimiter(text: string, fileName: string): string {
-  if (extensionOf(fileName) === 'tsv') return '\t'
+  if (fileName.toLowerCase().endsWith('.tsv')) return '\t'
   const lines = text.slice(0, 64 * 1024).split(/\r?\n/).filter((line) => line.length > 0).slice(0, 10)
   let best = ','
   let bestScore = 0

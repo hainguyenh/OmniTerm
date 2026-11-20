@@ -29,4 +29,9 @@ describe('closesOnExit', () => {
     expect(closesOnExit(undefined, 0)).toBe(false)
     expect(closesOnExit(null, 0)).toBe(false)
   })
+
+  it('keeps even an interactive shell open when it exited right after a single Ctrl+C', () => {
+    expect(closesOnExit({ type: 'LOCAL' }, 130, true)).toBe(false)
+    expect(closesOnExit({ type: 'LOCAL', localCommand: 'build', localKeepOpen: false }, 0, true)).toBe(false)
+  })
 })

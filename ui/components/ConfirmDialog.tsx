@@ -59,7 +59,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         aria-labelledby="confirm-dialog-title"
       >
         <div className="p-5 space-y-2">
-          <h3 id="confirm-dialog-title" className="text-white font-bold flex items-center gap-2">
+          <h3 id="confirm-dialog-title" className="text-theme-fg font-bold flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-theme-warning" />
             {title}
           </h3>
@@ -70,14 +70,14 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             type="button"
             ref={cancelRef}
             onClick={onCancel}
-            className="flex-1 py-2 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-white transition-colors text-sm font-semibold"
+            className="flex-1 py-2 rounded-xl border border-theme-border text-theme-fg hover:border-theme-accent hover:text-theme-accent transition-colors text-sm font-semibold"
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 py-2 rounded-xl bg-theme-error hover:bg-[#ff8da3] text-theme-accent-fg transition-colors text-sm font-bold"
+            className="flex-1 py-2 rounded-xl bg-theme-error hover:brightness-110 text-theme-accent-fg transition-colors text-sm font-bold"
           >
             {confirmLabel}
           </button>

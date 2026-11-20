@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "skipLibCheck": true,
 
@@ -18,8 +18,16 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* The IDE modules under ui/ide import each other through "@/" */
+    "paths": { "@/*": ["./ui/ide/*"] },
+    /* TypeScript 6 no longer loads every @types package; tests and the plugin probes use Node globals. */
+    "types": ["node", "vite/client"]
   },
-  "include": ["ui", "plugins/always-awake/app", "plugins/agent-quota/app", "plugins/vscode-launch/app"],
+  "include": ["ui"],
+  /* Ambient module declarations of the IDE modules, which `exclude` would otherwise drop. */
+  "files": ["ui/ide/emmet.d.ts"],
+  "exclude": ["ui/ide"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

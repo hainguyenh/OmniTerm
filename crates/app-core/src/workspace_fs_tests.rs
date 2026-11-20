@@ -282,3 +282,41 @@ fn missing_or_formats_unexpected_io_errors() {
     let msg = missing_or(err, "Could not delete");
     assert!(msg.starts_with("Could not delete:"));
 }
+
+#[test]
+fn a_missing_workspace_root_is_reported_before_anything_is_created() {
+    let fx = fixture();
+    let missing = fx.root.join("not-there").to_string_lossy().into_owned();
+    assert!(create_directory(&missing, "new").is_err());
+    assert!(!fx.root.join("not-there").exists());
+}
+
+#[test]
+fn create_directory_reports_a_parent_that_is_a_file() {
+    let fx = fixture();
+    let error = create_directory(&fx.root(), "notes.txt/inner").expect_err("file parent");
+    assert!(error.starts_with("Could not create the folder"), "{error}");
+    assert_eq!(text(fx.root.join("notes.txt")), "notes");
+}
+
+#[cfg(unix)]
+#[test]
+fn names_that_are_not_unicode_are_refused() {
+    use std::os::unix::ffi::OsStrExt;
+    assert_eq!(
+        validate_new_name(OsStr::from_bytes(b"bad\xffname")),
+        Err("Names must be valid Unicode text.".to_string())
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_hard_link_to_the_same_file_is_not_a_clash() {
+    let fx = fixture();
+    fs::hard_link(fx.root.join("notes.txt"), fx.root.join("alias.txt")).expect("hard link");
+    assert_eq!(
+        move_file(&fx.root(), "notes.txt", &fx.root(), "alias.txt"),
+        Ok("alias.txt".to_string())
+    );
+    assert_eq!(text(fx.root.join("alias.txt")), "notes");
+}

@@ -2,21 +2,15 @@
 //!
 //! # Ownership
 //!
-//! RDP belongs to a plugin, not to the host. A plugin that registers a `ConnectionProvider` runs in the
-//! sidecar and can spawn whatever client it likes (`mstsc`, `freerdp`, `vncviewer`), with whatever
-//! credential policy that deployment wants. What remains here is the no-plugin fallback: the
-//! pre-existing, credential-free `mstsc` launch, so RDP still works on a stock install.
+//! The host launches a credential-free `mstsc` for a saved RDP connection.
 //!
 //! This module deliberately does **not** embed the client window into a pane. It used to advertise that
 //! it did — `rdp_set_bounds` and `rdp_set_visible` were registered commands whose bodies were empty, so
 //! the renderer positioned a window that was never reparented and got no error telling it so. They are
 //! gone; a command that silently succeeds while doing nothing is worse than one that is absent.
 //!
-//! If docking is built later, it should stay plugin-owned: the host would expose a *generic* reverse RPC
-//! (`host.embedWindow({ paneId, pid })` / `host.setEmbedBounds` / `host.releaseWindow`) that reparents
-//! any external process's top-level window into a pane rect. The plugin spawns the client and hands over
-//! a pid; the host learns nothing about RDP and touches no credential. Do not re-add RDP-specific
-//! commands to the host to get there.
+//! If docking is built later, expose a *generic* "embed this process's top-level window into a pane
+//! rect" capability rather than RDP-specific commands, so the host touches no credential.
 //!
 //! # Credentials
 //!
@@ -180,36 +174,10 @@ pub async fn connect_rdp<R: Runtime>(
     app: AppHandle<R>,
     id: String,
 ) -> Result<serde_json::Value, String> {
-    // Resolves through the ad-hoc registry, the global tree, workspace profiles, then a plugin's
-    // `ConnectionProvider`. A plugin owning the tree therefore also owns what gets launched from it.
+    // Resolves through the ad-hoc registry, the global tree, then workspace profiles.
     let conn = crate::pty_resolve::resolve_connection_by_id(&app, &id).await?;
     if conn.conn_type != "RDP" {
         return Err("Not an RDP connection.".to_string());
-    }
-
-    if let Some(batch) = crate::pty_resolve::native_batch_launch(&app, &id, "detached").await? {
-        crate::pty_resolve::require_windows_client(
-            "mstsc.exe",
-            "Remote Desktop Connection is not installed. Contact your administrator or enable it in Windows optional features.",
-        )?;
-        let mut launcher = std::process::Command::new("cmd.exe");
-        launcher.args(["/d", "/c", "call", &batch]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            launcher.creation_flags(0x0800_0000); // CREATE_NO_WINDOW; mstsc owns the visible window.
-        }
-        let mut child = launcher
-            .spawn()
-            .map_err(|error| format!("Failed to launch the generated RDP launcher: {error}"))?;
-        let _ = app.emit(&format!("rdp-ready-{id}"), ());
-        let watcher = app.clone();
-        let watch_id = id.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let _ = child.wait();
-            let _ = watcher.emit(&format!("rdp-closed-{watch_id}"), ());
-        });
-        return Ok(serde_json::json!({ "ok": true }));
     }
 
     let seq = app

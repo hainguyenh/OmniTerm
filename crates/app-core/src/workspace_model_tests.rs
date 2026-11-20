@@ -1,10 +1,19 @@
 use super::*;
-use std::fs;
 use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
+use std::fs;
 use tempfile::TempDir;
 
+#[path = "workspace_model_edge_tests.rs"]
+mod edge_tests;
+
 fn folder(id: &str, path: &str) -> WorkspaceFolder {
-    WorkspaceFolder { id: id.to_string(), name: id.to_string(), path: path.to_string(), color: None }
+    WorkspaceFolder {
+        id: id.to_string(),
+        name: id.to_string(),
+        path: path.to_string(),
+        color: None,
+        disabled: false,
+    }
 }
 
 fn workspace(id: &str, parent_id: Option<&str>, order: usize) -> Workspace {
@@ -60,61 +69,87 @@ fn current_workspace_records_do_not_report_a_migration() {
 fn validate_workspace_list_catches_invalid_ids_folders_and_parents() {
     let mut empty_id = workspace("   ", None, 0);
     empty_id.id = "".to_string();
-    assert!(validate_workspace_list(&[empty_id]).unwrap_err().contains("unique"));
+    assert!(validate_workspace_list(&[empty_id])
+        .unwrap_err()
+        .contains("unique"));
 
     let dup = vec![workspace("dup", None, 0), workspace("dup", None, 1)];
-    assert!(validate_workspace_list(&dup).unwrap_err().contains("unique"));
+    assert!(validate_workspace_list(&dup)
+        .unwrap_err()
+        .contains("unique"));
 
     let mut bad_folder_id = workspace("a", None, 0);
     bad_folder_id.folders[0].id = "".to_string();
-    assert!(validate_workspace_list(&[bad_folder_id]).unwrap_err().contains("invalid folder"));
+    assert!(validate_workspace_list(&[bad_folder_id])
+        .unwrap_err()
+        .contains("invalid folder"));
 
     let mut bad_folder_path = workspace("a", None, 0);
     bad_folder_path.folders[0].path = "".to_string();
-    assert!(validate_workspace_list(&[bad_folder_path]).unwrap_err().contains("invalid folder"));
+    assert!(validate_workspace_list(&[bad_folder_path])
+        .unwrap_err()
+        .contains("invalid folder"));
 
     let mut dup_folder = workspace("a", None, 0);
     dup_folder.folders = vec![folder("f1", "/tmp"), folder("f1", "/tmp2")];
-    assert!(validate_workspace_list(&[dup_folder]).unwrap_err().contains("duplicate"));
+    assert!(validate_workspace_list(&[dup_folder])
+        .unwrap_err()
+        .contains("duplicate"));
 
     let mut slash_folder = workspace("a", None, 0);
     slash_folder.folders = vec![folder("f/1", "/tmp")];
-    assert!(validate_workspace_list(&[slash_folder]).unwrap_err().contains("invalid folder ids"));
+    assert!(validate_workspace_list(&[slash_folder])
+        .unwrap_err()
+        .contains("invalid folder ids"));
 
     let mut backslash_folder = workspace("a", None, 0);
     backslash_folder.folders = vec![folder("f\\1", "/tmp")];
-    assert!(validate_workspace_list(&[backslash_folder]).unwrap_err().contains("invalid folder ids"));
+    assert!(validate_workspace_list(&[backslash_folder])
+        .unwrap_err()
+        .contains("invalid folder ids"));
 
     let mut unknown_pin = workspace("a", None, 0);
-    unknown_pin.pins = vec![WorkspacePin { folder_id: "ghost".into(), path: "x".into() }];
-    assert!(validate_workspace_list(&[unknown_pin]).unwrap_err().contains("unknown folder"));
+    unknown_pin.pins = vec![WorkspacePin {
+        folder_id: "ghost".into(),
+        path: "x".into(),
+    }];
+    assert!(validate_workspace_list(&[unknown_pin])
+        .unwrap_err()
+        .contains("unknown folder"));
 
     let mut missing_parent = workspace("a", None, 0);
     missing_parent.parent_id = Some("ghost".into());
-    assert!(validate_workspace_list(&[missing_parent]).unwrap_err().contains("invalid parent"));
+    assert!(validate_workspace_list(&[missing_parent])
+        .unwrap_err()
+        .contains("invalid parent"));
 
-    let cycle_self = vec![
-        workspace("a", Some("b"), 0),
-        workspace("b", Some("a"), 0),
-    ];
-    assert!(validate_workspace_list(&cycle_self).unwrap_err().contains("descendants"));
+    let cycle_self = vec![workspace("a", Some("b"), 0), workspace("b", Some("a"), 0)];
+    assert!(validate_workspace_list(&cycle_self)
+        .unwrap_err()
+        .contains("descendants"));
 
     let cycle_external = vec![
         workspace("d", Some("a"), 0),
         workspace("a", Some("b"), 0),
         workspace("b", Some("a"), 0),
     ];
-    assert!(validate_workspace_list(&cycle_external).unwrap_err().contains("cycle"));
+    assert!(validate_workspace_list(&cycle_external)
+        .unwrap_err()
+        .contains("cycle"));
 }
 
 #[test]
 fn parse_workspace_import_validates_extensions_and_skips_invalid_paths() {
     let temp = TempDir::new().expect("temp dir");
     let txt_file = temp.path().join("invalid.txt");
-    assert!(parse_workspace_import(&txt_file, "{}").unwrap_err().contains(".code-workspace"));
+    assert!(parse_workspace_import(&txt_file, "{}")
+        .unwrap_err()
+        .contains(".code-workspace"));
 
     let bad_json_file = temp.path().join("bad.workspace");
-    assert!(parse_workspace_import(&bad_json_file, "{not json").unwrap_err().contains("invalid JSON"));
+    assert!(parse_workspace_import(&bad_json_file, "{not json")
+        .unwrap_err()
+        .contains("invalid JSON"));
 
     let not_a_dir = temp.path().join("file.txt");
     fs::write(&not_a_dir, b"plain file").expect("write file");
@@ -159,7 +194,10 @@ fn vscode_workspace_import_resolves_relative_paths_and_deduplicates_roots() {
     assert_eq!(imported.name, "team");
     assert_eq!(imported.folders.len(), 1);
     assert_eq!(imported.folders[0].name, "Project");
-    assert_eq!(imported.folders[0].path, dunce::canonicalize(project).unwrap().to_string_lossy());
+    assert_eq!(
+        imported.folders[0].path,
+        dunce::canonicalize(project).unwrap().to_string_lossy()
+    );
 }
 
 #[test]
@@ -169,13 +207,28 @@ fn move_workspace_validates_targets_and_reparents_siblings() {
         workspace("b", Some("a"), 0),
         workspace("c", None, 1),
     ];
-    assert!(move_workspace(&mut list, "ghost", None, 0).unwrap_err().contains("Unknown workspace"));
-    assert!(move_workspace(&mut list, "c", Some("ghost"), 0).unwrap_err().contains("Unknown parent"));
-    assert!(move_workspace(&mut list, "a", Some("a"), 0).unwrap_err().contains("cannot contain itself"));
-    assert!(move_workspace(&mut list, "a", Some("b"), 0).unwrap_err().contains("descendants"));
+    assert!(move_workspace(&mut list, "ghost", None, 0)
+        .unwrap_err()
+        .contains("Unknown workspace"));
+    assert!(move_workspace(&mut list, "c", Some("ghost"), 0)
+        .unwrap_err()
+        .contains("Unknown parent"));
+    assert!(move_workspace(&mut list, "a", Some("a"), 0)
+        .unwrap_err()
+        .contains("cannot contain itself"));
+    assert!(move_workspace(&mut list, "a", Some("b"), 0)
+        .unwrap_err()
+        .contains("descendants"));
 
     move_workspace(&mut list, "c", Some("a"), 0).expect("move c under a");
-    assert_eq!(list.iter().find(|w| w.id == "c").unwrap().parent_id.as_deref(), Some("a"));
+    assert_eq!(
+        list.iter()
+            .find(|w| w.id == "c")
+            .unwrap()
+            .parent_id
+            .as_deref(),
+        Some("a")
+    );
     assert_eq!(list.iter().find(|w| w.id == "c").unwrap().order, 0);
     assert_eq!(list.iter().find(|w| w.id == "b").unwrap().order, 1);
 
@@ -207,14 +260,26 @@ fn pin_management_and_logical_targets_resolve_and_format_paths() {
 
     assert!(set_entry_pinned(&mut ws, "missing", "src/lib.rs", true).is_err());
     set_entry_pinned(&mut ws, "root", "/src/lib.rs/", true).expect("pin");
-    assert_eq!(ws.pins, vec![WorkspacePin { folder_id: "root".into(), path: "src/lib.rs".into() }]);
+    assert_eq!(
+        ws.pins,
+        vec![WorkspacePin {
+            folder_id: "root".into(),
+            path: "src/lib.rs".into()
+        }]
+    );
     set_entry_pinned(&mut ws, "root", "src/keep.rs", true).expect("pin sibling");
     assert!(is_entry_pinned(&ws, "root", "src/lib.rs"));
     assert!(!is_entry_pinned(&ws, "root", "other.rs"));
     assert!(!is_entry_pinned(&ws, "other", "src/lib.rs"));
 
     set_entry_pinned(&mut ws, "root", "src/lib.rs", false).expect("unpin");
-    assert_eq!(ws.pins, vec![WorkspacePin { folder_id: "root".into(), path: "src/keep.rs".into() }]);
+    assert_eq!(
+        ws.pins,
+        vec![WorkspacePin {
+            folder_id: "root".into(),
+            path: "src/keep.rs".into()
+        }]
+    );
     assert!(!is_entry_pinned(&ws, "root", "src/lib.rs"));
     assert!(is_entry_pinned(&ws, "root", "src/keep.rs"));
 
@@ -281,7 +346,8 @@ fn rename_folder_sets_alias_and_rejects_blank_or_unknown_ids() {
     let err = rename_folder(&mut ws, "folder-ws", "   ").expect_err("blank alias is rejected");
     assert!(err.contains("cannot be empty"));
 
-    let err = rename_folder(&mut ws, "folder-missing", "X").expect_err("unknown folder is rejected");
+    let err =
+        rename_folder(&mut ws, "folder-missing", "X").expect_err("unknown folder is rejected");
     assert!(err.contains("Unknown workspace folder"));
 }
 

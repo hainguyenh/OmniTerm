@@ -17,7 +17,6 @@ fn defaults_expose_every_field_the_renderer_reads() {
     assert_eq!(d["skippedVersion"], json!(null));
     assert_eq!(d["workspaces"], json!([]));
     assert_eq!(d["gitUtilEnabled"], json!(true));
-    assert_eq!(d["gitGraphEnabled"], json!(true));
     assert!(d["shortcuts"].is_object());
 }
 
@@ -255,4 +254,41 @@ fn read_settings_layers_a_valid_partial_file_over_new_defaults() {
     assert_eq!(read["smartColors"], json!(false));
     assert!(read["shortcuts"].is_object());
     let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn a_renderer_save_never_overwrites_the_built_in_feature_state() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let off = json!({ "disabledBuiltinFeatures": ["omniterm.always-awake"] });
+    write_settings_raw(app.handle(), merge_shallow(&defaults(), &off)).expect("seed the settings");
+    // A window that read its copy before the toggle saves the whole object back.
+    let stale = json!({ "fontSize": 19, "disabledBuiltinFeatures": [] });
+    tauri::async_runtime::block_on(save_settings(app.handle().clone(), stale)).expect("save");
+    let stored = read_settings(app.handle());
+    assert_eq!(stored["fontSize"], json!(19));
+    assert_eq!(
+        stored["disabledBuiltinFeatures"],
+        json!(["omniterm.always-awake"])
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn writing_over_a_settings_path_that_is_a_directory_reports_the_failure() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = settings_path(app.handle()).unwrap();
+    let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).unwrap();
+
+    let result = write_settings_raw(app.handle(), defaults());
+    std::fs::remove_dir(&path).unwrap();
+
+    assert!(result
+        .expect_err("a directory cannot be overwritten")
+        .starts_with("Failed to write settings file"));
 }

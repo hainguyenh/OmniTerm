@@ -40,3 +40,7 @@ pub(crate) fn spawn(
         }
     });
 }
+
+#[cfg(test)]
+#[path = "exit_watcher_tests.rs"]
+mod tests;

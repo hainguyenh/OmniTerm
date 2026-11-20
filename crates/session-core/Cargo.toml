@@ -13,6 +13,7 @@ crate-type = ["lib"]
 
 [dependencies]
 omniterm-core = { path = "../app-core" }
+ide-core = { path = "../ide-core" }
 omniterm-session-protocol = { path = "../session-protocol" }
 portable-pty = "0.8"
 dashmap = "6"

@@ -8,7 +8,7 @@
 import { useSyncExternalStore } from 'react'
 import { isValidLauncher } from './agentSessionDetector'
 import { registerDurableSlice, scheduleDurableSave } from './agentSessionDurable'
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot', 'gemini'])
 

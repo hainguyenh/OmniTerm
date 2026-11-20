@@ -19,6 +19,10 @@ use std::sync::OnceLock;
 #[path = "shell_spec_tests.rs"]
 mod tests;
 
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "shell_spec_posix_tests.rs"]
+mod posix_tests;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LocalShell {

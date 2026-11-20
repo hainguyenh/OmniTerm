@@ -40,11 +40,21 @@ test('Rust coverage excludes only explicit adapter paths', () => {
 test('Rust coverage removes test and dependency records before writing the gate summary', () => {
   assert.ok(coverageScript.includes('_tests?\\\\.rs'))
   assert.match(coverageScript, /cargo.*registry/)
-  assert.match(coverageScript, /report\.data\?\.\[0\]/)
+  assert.match(coverageScript, /splitCoverageReport\(report, root, COVERAGE_FILENAME_REGEX\)/)
+  assert.match(coverageScript, /coverage-ide-summary\.json/)
 })
 
 test('Rust binary coverage smoke runs with a virtual X display in CI', () => {
   const rustCoverageJob = workflow.slice(workflow.indexOf('  rust-coverage:'), workflow.indexOf('  coverage-gate:'))
   assert.match(rustCoverageJob, /\bxvfb\b/)
   assert.match(rustCoverageJob, /xvfb-run\s+-a\s+node scripts\/run-rust-coverage\.mjs/)
+})
+
+test('Rust coverage fails on the gate summary but not on the optional lcov export', () => {
+  const summary = coverageScript.indexOf("'--json', '--summary-only'")
+  const lcov = coverageScript.indexOf("'--lcov'")
+  assert.ok(summary > 0 && lcov > summary, 'the JSON summary is written before the lcov export')
+  const beforeLcov = coverageScript.slice(0, lcov)
+  assert.ok(beforeLcov.lastIndexOf('try {') > summary, 'only the lcov export is wrapped in its own try')
+  assert.match(coverageScript.slice(lcov), /catch \(error\) \{\s*console\.warn\(`lcov export skipped/)
 })

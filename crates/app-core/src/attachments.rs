@@ -58,7 +58,7 @@ pub struct ClearReport {
 }
 
 /// Split a sanitized name into its stem and a lowercase alphanumeric extension (possibly empty).
-fn split_extension(name: &str) -> (&str, String) {
+pub(crate) fn split_extension(name: &str) -> (&str, String) {
     match name.rsplit_once('.') {
         Some((stem, ext))
             if !stem.is_empty()

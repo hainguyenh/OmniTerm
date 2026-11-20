@@ -7,6 +7,7 @@ import { PreviewMessage } from './PreviewMessage'
 import { useScrollViewport } from './useScrollViewport'
 import { useWorkerTask } from './useWorkerTask'
 import { colRange, prefixSums, rowRange } from './virtualWindow'
+import './preview.css'
 
 const ROW_HEIGHT = 24
 const CELL_CHARS = 500

@@ -61,5 +61,4 @@ export interface TerminalViewProps {
    * tell them from a plain Enter without the app injecting a sequence — see utils/enterKeys.ts.
    */
   enterModes?: EnterModes
-  blurStrength?: number
 }

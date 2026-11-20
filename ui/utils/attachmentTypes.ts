@@ -36,6 +36,11 @@ export interface ClipboardAPI {
   saveImageTemp: (bytes: Uint8Array, sessionId?: string) => Promise<string>
 }
 
+export interface MovedAttachment {
+  from: string
+  to: string
+}
+
 export interface AttachmentsAPI {
   /** Store one dropped or pasted file; `name` is only a hint the backend sanitizes. */
   save: (name: string, bytes: Uint8Array, sessionId?: string) => Promise<AttachmentInfo | null>
@@ -43,6 +48,8 @@ export interface AttachmentsAPI {
   importClipboardFiles: (sessionId?: string) => Promise<AttachmentInfo[]>
   list: (sessionId?: string) => Promise<AttachmentListing>
   clear: (sessionId?: string) => Promise<AttachmentClearReport>
+  /** Merge a pane's temporary folder into its agent session's; reports where each file went. */
+  move: (fromSessionId: string, toSessionId: string) => Promise<MovedAttachment[]>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -72,6 +79,14 @@ export const parseClearReport = (value: unknown): AttachmentClearReport => {
   const count = (field: unknown) => (isCount(field) ? field : 0)
   return { removed: count(record.removed), bytes: count(record.bytes), failed: count(record.failed) }
 }
+
+export const parseMovedAttachments = (value: unknown): MovedAttachment[] =>
+  Array.isArray(value)
+    ? value.flatMap((item) =>
+      isRecord(item) && typeof item.from === 'string' && typeof item.to === 'string'
+        ? [{ from: item.from, to: item.to }]
+        : [])
+    : []
 
 /** `2.4 MB`, `812 KB`, `90 B` — for attachment rows and the settings summary. */
 export const formatBytes = (bytes: number): string => {

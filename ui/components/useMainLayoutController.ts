@@ -19,12 +19,7 @@ export function useMainLayoutController(props: MainLayoutProps) {
     activeTabId: base.activeTabId,
     onError: (message) => { void base.showAlert(message, { title: 'Renew session', tone: 'error' }) },
   })
-  const tempNotes = useTempNotes({
-    activeTabs: base.activeTabs,
-    setActiveTabs: base.setActiveTabs,
-    setEditorTabs: base.setEditorTabs,
-    showTab: sessions.showTab,
-  })
+  const tempNotes = useTempNotes()
   return { ...base, ...sessions, ...renew, ...tempNotes }
 }
 

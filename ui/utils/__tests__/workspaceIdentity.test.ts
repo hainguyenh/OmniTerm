@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Connection, Workspace } from '@omniterm/contract'
+import type { Connection, Workspace } from '../../domain'
 import { workspaceForConnection } from '../workspaceIdentity'
 
 const workspace = (id: string, paths: string[]): Workspace => ({

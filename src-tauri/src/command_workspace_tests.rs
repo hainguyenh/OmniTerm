@@ -134,7 +134,7 @@ fn workspace_commands_persist_scan_page_edit_and_remove_real_files() {
 }
 
 #[test]
-fn workspace_connection_commands_use_disk_fallback_without_a_plugin_provider() {
+fn workspace_connections_are_read_from_disk() {
     let fixture = MockApp::new();
     let app = fixture.handle();
     let root = TempDir::new().unwrap();
@@ -144,24 +144,21 @@ fn workspace_connection_commands_use_disk_fallback_without_a_plugin_provider() {
     ))
     .unwrap();
 
-    let host = fixture.app.state::<PluginHost>();
     assert!(block_on(workspace_connections::load_workspace_connections(
         app.clone(),
-        host.clone(),
         workspace.id.clone(),
     ))
     .unwrap()
     .is_empty());
-    block_on(workspace_connections::save_workspace_connections(
-        app.clone(),
-        host.clone(),
-        workspace.id.clone(),
-        vec![connection("ssh-1"), connection("ssh-2")],
-    ))
-    .unwrap();
+    write_file(
+        root.path().join(".omniterm/connections.json"),
+        serde_json::to_string(&workspace_connections::WorkspaceConnectionsFile {
+            connections: vec![connection("ssh-1"), connection("ssh-2")],
+        })
+        .unwrap(),
+    );
     let loaded = block_on(workspace_connections::load_workspace_connections(
         app.clone(),
-        host.clone(),
         workspace.id.clone(),
     ))
     .unwrap();
@@ -172,20 +169,8 @@ fn workspace_connection_commands_use_disk_fallback_without_a_plugin_provider() {
             .id,
         "ssh-2"
     );
-
-    block_on(workspace_connections::delete_workspace_connection(
-        app.clone(),
-        host,
-        workspace.id.clone(),
-        "ssh-1".to_string(),
-    ))
-    .unwrap();
-    let remaining = workspace_connections::read_at(root.path().to_str().unwrap()).unwrap();
-    assert_eq!(remaining.len(), 1);
-    assert_eq!(remaining[0].id, "ssh-2");
     assert!(block_on(workspace_connections::load_workspace_connections(
         app,
-        fixture.app.state::<PluginHost>(),
         "unknown".to_string(),
     ))
     .is_err());

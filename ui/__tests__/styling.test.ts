@@ -33,6 +33,35 @@ describe("styling regression check", () => {
   // 0 and xterm maps that back onto the buffer, so a background pane receiving output was dragged
   // to the top of its scrollback. It also zeroed clientWidth/Height, forcing a re-fit on every tab
   // switch. Hiding a pane must therefore keep its layout box.
+  // Regression: IDE dialogs and popups are portaled to <body>, outside [data-workbench]. The legacy
+  // `input { background-color: var(--theme-bg) !important }` rule then took the terminal theme's
+  // background and covered the field's inset-shadow frame, so search boxes lost their border and
+  // showed the wrong colour in light/dark mode.
+  it("keeps the legacy input colours off the IDE's portaled dialogs and popups", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "index.css"), "utf8");
+    const rule = content.match(/(:is\(input[^{]*select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
+    expect(rule?.[1]).toContain("[data-workbench] *");
+    expect(rule?.[1]).toContain("[data-ide-surface] *");
+    const font = content.match(/(:is\(html, body[^{]*)\{\s*font-family: var\(--theme-font-family/);
+    expect(font?.[1]).toContain("[data-ide-surface] *");
+  });
+
+  // Regression: the legacy input colours covered a checked radio's accent fill with the page
+  // background, so a selected radio in a light-theme plugin dialog drew a white dot on white.
+  it("leaves radios, checkboxes, ranges and colour inputs out of the legacy input colours", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "index.css"), "utf8");
+    const rule = content.match(/(:is\(input[^{]*select, textarea\)[^{]*)\{[^}]*background-color: var\(--theme-bg\) !important/);
+    expect(rule?.[1]).toContain('input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"])');
+  });
+
+  // Regression: `button { border: 0 }` reset the border style to none, so the `border` utility on
+  // OmniTerm's tab and segmented buttons drew nothing.
+  it("resets button borders by width only, keeping a solid style for border utilities", () => {
+    const content = fs.readFileSync(path.join(ROOT, "ui", "ide", "styles", "global.css"), "utf8");
+    const button = content.match(/^button \{([^}]*)\}/m);
+    expect(button?.[1]).toContain("border: 0 solid;");
+  });
+
   it("hides off-screen panes without collapsing their layout box", () => {
     const cssPath = path.join(ROOT, "ui", "index.css");
     const content = fs.readFileSync(cssPath, "utf8");
@@ -43,25 +72,19 @@ describe("styling regression check", () => {
   });
 
   // A renderer component that Tailwind does not scan still renders — with none of its classes defined.
-  // Nothing else catches that: unit tests assert markup, not the generated stylesheet, so a plugin
+  // Nothing else catches that: unit tests assert markup, not the generated stylesheet, so a feature
   // modal styled as `max-w-md` came out full-width in the real app and every test stayed green. The
   // config is therefore expanded against the filesystem here rather than string-matched.
-  it("scans every plugin renderer component, not just ui/", () => {
+  it("scans every built-in feature component", () => {
     const config = fs.readFileSync(path.join(ROOT, "tailwind.config.js"), "utf8");
     const contentGlobs = [...config.matchAll(/"\.\/([^"]+)"/g)].map((match) => match[1]);
     const scanned = new Set(contentGlobs.flatMap((glob) => globSync(glob, { cwd: ROOT })));
 
-    const pluginRoot = path.join(ROOT, "plugins");
-    const pluginComponents = fs
-      .readdirSync(pluginRoot, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && fs.existsSync(path.join(pluginRoot, entry.name, "app")))
-      .flatMap((entry) =>
-        globSync(`plugins/${entry.name}/app/**/*.{ts,tsx}`, { cwd: ROOT }),
-      );
+    const featureComponents = globSync("ui/features/*/**/*.tsx", { cwd: ROOT })
 
-    // The suite is worthless if it silently stops finding plugin components.
-    expect(pluginComponents.length).toBeGreaterThan(0);
-    for (const component of pluginComponents) {
+    // The suite is worthless if it silently stops finding feature components.
+    expect(featureComponents.length).toBeGreaterThan(0);
+    for (const component of featureComponents) {
       expect(scanned, `${component} is not covered by a Tailwind content glob`).toContain(component);
     }
   });

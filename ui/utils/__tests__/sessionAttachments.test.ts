@@ -63,7 +63,7 @@ describe('attachment input', () => {
       if (name === 'refused.txt') throw new Error('disk full')
       return { name, path: `C:/a/${name}`, size: 1, modifiedMs: 1, kind: 'file' as const }
     })
-    window.omnitermAPI = { ...window.omnitermAPI, attachments: { save, importClipboardFiles: vi.fn(), list: vi.fn(), clear: vi.fn() } }
+    window.omnitermAPI = { ...window.omnitermAPI, attachments: { save, importClipboardFiles: vi.fn(), list: vi.fn(), clear: vi.fn(), move: vi.fn() } }
     const huge = new File(['x'], 'huge.bin')
     Object.defineProperty(huge, 'size', { value: MAX_ATTACHMENT_BYTES + 1 })
     const saved = await saveAttachmentFiles([new File(['ok'], 'ok.txt'), new File([], 'empty.txt'), huge, new File(['r'], 'refused.txt')])

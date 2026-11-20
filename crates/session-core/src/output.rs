@@ -6,6 +6,7 @@ use session_protocol::{AttachSnapshot, DaemonStatus, ServerMessage, SessionLifec
 use tokio::sync::broadcast;
 
 use crate::agent_activity::{AgentActivitySample, AgentActivityTracker};
+use crate::terminal_modes::TerminalModes;
 
 const BUFFER_CAP: usize = 256 * 1024;
 const LINE_SCAN_LIMIT: usize = 8 * 1024;
@@ -33,6 +34,8 @@ pub(crate) struct Output {
     busy: bool,
     stream: broadcast::Sender<ServerMessage>,
     agent_activity: AgentActivityTracker,
+    /// Input modes the live program switched on; re-sent after the replay so they survive a trim.
+    modes: TerminalModes,
     /// Monotonic buffer-change counter; the durable flusher compares it
     /// against its last-written value to skip idle sessions entirely.
     revision: u64,
@@ -50,6 +53,7 @@ impl Output {
             busy,
             stream,
             agent_activity: AgentActivityTracker::default(),
+            modes: TerminalModes::default(),
             revision: 0,
             flushed_revision: None,
             historical_replay_available: false,
@@ -93,6 +97,7 @@ impl Output {
 
     pub(crate) fn push(&mut self, bytes: &[u8]) {
         self.agent_activity.observe_output(bytes);
+        self.modes.observe(bytes);
         self.buffer.extend(bytes);
         self.trim();
         self.revision += 1;
@@ -150,7 +155,12 @@ impl Output {
         generation: u64,
     ) -> (AttachSnapshot, Vec<u8>, broadcast::Receiver<ServerMessage>) {
         let receiver = self.stream.subscribe();
-        let replay = self.buffer.make_contiguous().to_vec();
+        let mut replay = self.buffer.make_contiguous().to_vec();
+        // Seeded history belongs to a program that is gone; only live output switches modes, and a
+        // closed session has no program left to want them.
+        if !matches!(self.lifecycle, Lifecycle::Closed) {
+            replay.extend(self.modes.restore_sequence());
+        }
         let mut snapshot = self.snapshot(generation);
         snapshot.replay_available = Some(self.historical_replay_available);
         snapshot.replay_bytes = Some(self.historical_replay_bytes);

@@ -2,10 +2,17 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { mockOmnitermAPI } from "../../testUtils";
 import App from "../../App";
 import { TOKYO_NIGHT } from "../../themes";
+
+// The deferred workbench features import their modules after the first paint; this test ends
+// before they finish, so those imports would land after the environment is torn down.
+vi.mock("../../workbench/activateWorkbenchFeatures", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../workbench/activateWorkbenchFeatures")>()),
+  DEFERRED_WORKBENCH_STEPS: [],
+}));
 
 describe("App", () => {
   beforeEach(() => {
@@ -23,14 +30,6 @@ describe("App", () => {
       disconnect = vi.fn();
       unobserve = vi.fn();
     } as unknown as typeof ResizeObserver;
-  });
-
-  it("opens directly into the terminal workspace with no login", async () => {
-    render(<App />);
-    // The workspace (MainLayout) renders straight away — no master-password gate.
-    await waitFor(() => expect(screen.getByText(/Open a terminal/i)).toBeInTheDocument());
-    expect(screen.queryByPlaceholderText("Master password")).not.toBeInTheDocument();
-    expect(screen.queryByText("Local Vaults")).not.toBeInTheDocument();
   });
 
   it("loads stored settings and themes on mount", async () => {

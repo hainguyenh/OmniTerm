@@ -4,7 +4,7 @@ import { Terminal } from '@xterm/xterm'
  * A local terminal no one sees: a real shell session with no pane, whose screen is kept by an
  * xterm that is never attached to the page. The Agent Quota plugin uses one to start a profile's
  * agent in a scratch folder and read `/usage` from it when that profile has no open pane
- * (plugins/agent-quota/app/hiddenProfileProbe.ts).
+ * (ui/features/agent-quota/hiddenProfileProbe.ts).
  *
  * It never joins the window's tabs, so nothing else — session restore, persistence, agent presence,
  * the quota engine — sees it, and it is disconnected and forgotten on `close`.

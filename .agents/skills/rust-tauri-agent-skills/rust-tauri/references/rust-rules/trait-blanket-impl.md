@@ -38,7 +38,7 @@ trait Describe {
     fn describe(&self) -> String;
 }
 
-// One blanket impl covers every T: Display — mirrors how std blanket-impls ToString.
+// One blanket impl covers every T: Display — parallels how std blanket-impls ToString.
 impl<T: fmt::Display> Describe for T {
     fn describe(&self) -> String {
         format!("{} ({})", self, std::any::type_name::<T>())

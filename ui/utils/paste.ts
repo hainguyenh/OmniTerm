@@ -45,6 +45,7 @@ export const clipboardActionFor = (
   isMac: boolean,
   altVPassthrough = false,
   isScriptPaste = false,
+  hasSelection = false,
 ): ClipboardAction => {
   // Explicit script paste: triggered when matching the paste-script shortcut
   if (isScriptPaste) {
@@ -67,8 +68,9 @@ export const clipboardActionFor = (
   }
 
   if (e.code === 'KeyC') {
-    // Only the Shift variant — plain Ctrl+C must stay SIGINT.
     if (e.ctrlKey && e.shiftKey && !e.metaKey) return 'copy'
+    // Plain Ctrl+C copies only while text is selected; otherwise it stays SIGINT.
+    if (e.ctrlKey && !e.shiftKey && !e.metaKey && !isMac && hasSelection) return 'copy'
     return null
   }
 
@@ -78,7 +80,7 @@ export const clipboardActionFor = (
 /**
  * Shape clipboard text the way a terminal expects.
  *
- * Mirrors xterm's own `prepareTextForTerminal` + `bracketTextForPaste` so that the app path and
+ * Replicates xterm's own `prepareTextForTerminal` + `bracketTextForPaste` so that the app path and
  * xterm's native path (still used for right-click and macOS Cmd+V) produce byte-identical writes.
  * Previously the app path sent CRLF verbatim and never bracketed, which is why one paste route ran
  * the pasted lines as commands while the other did not.

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, FolderOpen, Search, Terminal } from 'lucide-react'
-import type { Workspace } from '@omniterm/contract'
+import type { Workspace } from '../domain'
 
 import type { ShellOption } from '../shellOptions'
 import { orderedWorkspaceRows } from '../utils/workspaceHierarchy'
@@ -66,7 +66,7 @@ export default function NewTerminalMenu({
       folder.path,
     ].some(value => value.toLocaleLowerCase().includes(normalizedQuery)))
   }, [normalizedQuery, rows])
-  // Flat navigation order mirrors the rendered rows: "None" row, filtered folders, then shells.
+  // Flat navigation order matches the rendered rows: "None" row, filtered folders, then shells.
   const items = useMemo<MenuItem[]>(() => [
     { kind: 'folder', selection: null },
     ...filteredRows.map(({ selection }) => ({ kind: 'folder' as const, selection })),

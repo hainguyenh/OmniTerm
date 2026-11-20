@@ -3,7 +3,7 @@
  */
 import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { mockOmnitermAPI } from '../../testUtils'
 import TerminalView from '../TerminalView'
@@ -164,6 +164,29 @@ describe('TerminalView rendering & WebGL', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // Regression: xterm runs a queued write callback from a timer even after dispose(); scrolling a
+  // disposed terminal read its cleared renderer's `dimensions` and threw an uncaught TypeError.
+  it('does not scroll a terminal that was disposed before its queued write flushed', () => {
+    installApi()
+    const { rerender, unmount } = render(<TerminalView id="disposed-scroll" connection={localConnection} active={false} />)
+    const term = xterm.terminals[0]
+    const pending: Array<() => void> = []
+    term.write.mockImplementation((text: string, callback?: () => void) => {
+      term.writes.push(text)
+      if (callback) pending.push(callback)
+    })
+    rerender(<TerminalView id="disposed-scroll" connection={localConnection} active />)
+    expect(pending).toHaveLength(1)
+    unmount()
+    term.scrollToBottom.mockClear()
+    term.scrollToBottom.mockImplementation(() => {
+      throw new TypeError("Cannot read properties of undefined (reading 'dimensions')")
+    })
+
+    expect(() => pending[0]!()).not.toThrow()
+    expect(term.scrollToBottom).not.toHaveBeenCalled()
   })
 
   // Regression: the WebGL renderer must mount AFTER the first fit(). Loading it before fit()

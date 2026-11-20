@@ -1,10 +1,9 @@
 use super::*;
 use serde_json::json;
-use tauri::Manager;
 use tempfile::TempDir;
 
 #[test]
-fn workspace_commands_reject_deleted_roots_and_oversized_connection_files() {
+fn workspace_commands_reject_deleted_roots_and_unreadable_connection_files() {
     let fixture = MockApp::new();
     let app = fixture.handle();
     let root = TempDir::new().unwrap();
@@ -43,49 +42,11 @@ fn workspace_commands_reject_deleted_roots_and_oversized_connection_files() {
     assert!(error.contains("is unavailable"), "{error}");
 
     fs::create_dir_all(&project).unwrap();
-    let oversized = (0..20_000)
-        .map(|index| connection(&format!("connection-{index}")))
-        .collect::<Vec<_>>();
-    let host = fixture.app.state::<PluginHost>();
-    let error = block_on(workspace_connections::save_workspace_connections(
-        app.clone(),
-        host.clone(),
-        workspace.id.clone(),
-        oversized,
-    ))
-    .unwrap_err();
-    assert!(error.contains("too large"), "{error}");
-    assert!(!project.join(".omniterm").exists());
-
-    block_on(workspace_connections::delete_workspace_connection(
-        app.clone(),
-        host.clone(),
-        workspace.id.clone(),
-        "not-present".to_string(),
-    ))
-    .unwrap();
-    assert!(!project.join(".omniterm").exists());
-
     let blocked_file = project.join(".omniterm/connections.json");
     fs::create_dir_all(&blocked_file).unwrap();
     assert!(block_on(workspace_connections::load_workspace_connections(
-        app.clone(),
-        host.clone(),
-        workspace.id.clone(),
-    ))
-    .is_err());
-    assert!(block_on(workspace_connections::save_workspace_connections(
-        app.clone(),
-        host.clone(),
-        workspace.id.clone(),
-        vec![connection("small")],
-    ))
-    .is_err());
-    assert!(block_on(workspace_connections::delete_workspace_connection(
         app,
-        host,
         workspace.id,
-        "small".to_string(),
     ))
     .is_err());
 }
@@ -111,7 +72,6 @@ fn persistence_commands_surface_directory_and_write_failures() {
     assert!(connections::read_tree(&app).is_err());
     let save_error = block_on(connections::save_connections(
         app.clone(),
-        fixture.app.state::<PluginHost>(),
         connections::ConnectionTree::default(),
     ))
     .unwrap_err();

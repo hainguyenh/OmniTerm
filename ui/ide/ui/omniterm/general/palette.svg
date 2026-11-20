@@ -1,0 +1,7 @@
+<!-- OmniTerm: an artist's palette (colour themes) in the expui style. -->
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 1.5C4.41 1.5 1.5 4.19 1.5 7.5C1.5 10.81 4.41 13.5 8 13.5C8.83 13.5 9.25 12.9 9.25 12.35C9.25 11.7 8.7 11.3 8.7 10.55C8.7 9.85 9.28 9.3 10 9.3H11.4C13.1 9.3 14.5 8.15 14.5 6.6C14.5 3.76 11.6 1.5 8 1.5Z" stroke="#6C707E" stroke-linejoin="round"/>
+<circle cx="4.9" cy="7.6" r="0.9" fill="#6C707E"/>
+<circle cx="6.6" cy="4.7" r="0.9" fill="#6C707E"/>
+<circle cx="10" cy="4.5" r="0.9" fill="#6C707E"/>
+</svg>

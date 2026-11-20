@@ -1,0 +1,35 @@
+/* Sized and coloured like the stripe's own tool window buttons (ToolWindows.module.css). */
+.omt-awake-stripe {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--stripe-icon-button);
+  height: var(--stripe-icon-button);
+  border: 0;
+  border-radius: var(--radius-toolbar-button);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.omt-awake-stripe:hover {
+  color: var(--fg-secondary);
+  background: var(--bg-stripe-hover);
+}
+
+.omt-awake-stripe[aria-pressed='true'] {
+  color: var(--accent);
+  --icon-color: currentColor;
+}
+
+.omt-awake-stripe-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}

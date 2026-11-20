@@ -43,6 +43,9 @@ fn interactive_powershell_reports_its_working_directory() {
     assert!(bootstrap.contains("function global:prompt"));
     assert!(bootstrap.contains("& $global:__omnitermPrompt"));
     assert!(bootstrap.contains("']9;9;'"));
-    assert!(!bootstrap.contains('"'), "the argv entry must not need quote escaping");
+    assert!(
+        !bootstrap.contains('"'),
+        "the argv entry must not need quote escaping"
+    );
     assert!(powershell_interactive_bootstrap(true).starts_with(POWERSHELL_UTF8_BOOTSTRAP));
 }

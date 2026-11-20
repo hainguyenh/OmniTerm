@@ -65,9 +65,12 @@ const FULL_CHECKS = [
       'node', 'scripts/check-coverage.mjs',
       '--js', 'coverage-js/coverage-summary.json',
       '--rust', 'coverage-rust/coverage-summary.json',
+      '--rust-ide', 'coverage-rust/coverage-ide-summary.json',
       '--threshold', '85',
+      '--branch-threshold', '80',
     ],
-    fix: 'node scripts/check-coverage.mjs --js coverage-js/coverage-summary.json --rust coverage-rust/coverage-summary.json --threshold 85',
+    fix: 'node scripts/check-coverage.mjs --js coverage-js/coverage-summary.json --rust coverage-rust/coverage-summary.json'
+      + ' --rust-ide coverage-rust/coverage-ide-summary.json --threshold 85 --branch-threshold 80',
     needs: 'cargo',
   },
 ]

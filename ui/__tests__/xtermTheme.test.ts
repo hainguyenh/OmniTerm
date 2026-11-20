@@ -103,7 +103,7 @@ describe("normalizeXtermTheme", () => {
   });
 });
 
-// Mirrors styling.test.ts's approach: read the real shipped files so a future theme (built-in or
+// Follows styling.test.ts's approach: read the real shipped files so a future theme (built-in or
 // user-authored) that reintroduces an invisible color is caught here, not by a user report.
 describe("builtin theme invariants", () => {
   const themesDir = path.join(ROOT, "src-tauri", "builtinThemes");

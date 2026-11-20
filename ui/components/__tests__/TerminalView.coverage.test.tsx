@@ -3,11 +3,12 @@
  */
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { TOKYO_NIGHT } from '../../themes'
 import { mockOmnitermAPI } from '../../testUtils'
 import { resolveTerminalFontFamily } from '../../utils/terminalOptions'
+import { getSessionAttachments, recordPastedImage } from '../../utils/sessionAttachmentStore'
 import TerminalView from '../TerminalView'
 
 const xterm = vi.hoisted(() => {
@@ -47,7 +48,7 @@ const xterm = vi.hoisted(() => {
     }
 
     write = vi.fn((text: string) => { this.writes.push(text) })
-    // Mirrors the real Terminal.paste: normalize CRLF -> CR, then hand off through onData. Keeping
+    // Matches the real Terminal.paste: normalize CRLF -> CR, then hand off through onData. Keeping
     // that shape here is the point of the mock — it is how we can tell one write from two.
     paste = vi.fn((text: string) => { this.dataHandler?.(text.replace(/\r?\n/g, '\r')) })
     input = vi.fn((data: string) => { this.dataHandler?.(data) })
@@ -105,7 +106,6 @@ function subscription<K extends keyof Handlers>(key: K) {
 function installApi(resume: () => Promise<any> = async () => null) {
   mockOmnitermAPI({
     connect: {
-      interruptSession: vi.fn().mockResolvedValue(undefined),
       local: vi.fn(), localInput: vi.fn(), localResize: vi.fn(),
       onLocalReady: subscription('localReady'), onLocalData: subscription('localData'),
       onLocalError: subscription('localError'), onLocalClosed: subscription('localClosed'),
@@ -203,14 +203,7 @@ describe('TerminalView full lifecycle', () => {
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true }))).toBe(true)
     // Ctrl+Shift+N can't collide with a bare-Ctrl shell default, so it still bubbles to the app.
     expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, shiftKey: true }))).toBe(false)
-    expect(term.keyHandler?.(key('KeyN', { ctrlKey: true, altKey: true }))).toBe(false)
     expect(term.keyHandler?.(key('KeyC', { ctrlKey: true, shiftKey: true }))).toBe(false)
-    const ctrlC = key('KeyC', { ctrlKey: true })
-    expect(term.keyHandler?.(ctrlC)).toBe(false)
-    expect(ctrlC.preventDefault).toHaveBeenCalled()
-    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledWith('local-session')
-    act(() => term.dataHandler?.('\x03'))
-    expect(window.omnitermAPI.connect.interruptSession).toHaveBeenCalledTimes(2)
 
     // Every clipboard combo must preventDefault, or Chromium's native paste fires on top of ours and
     // the PTY gets the clipboard twice.
@@ -420,6 +413,20 @@ describe('TerminalView full lifecycle', () => {
     rerender(<TerminalView id="vis" connection={localConnection} active />)
     expect(term.scrollToBottom).toHaveBeenCalledTimes(1)
     width.mockReturnValue(640)
+  })
+
+  it('keeps the pane attachment list when the connection record is refreshed, and drops it on unmount', () => {
+    installApi()
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:keep')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const { rerender, unmount } = render(<TerminalView id="keep-media" connection={localConnection} />)
+    recordPastedImage('keep-media', { bytes: new Uint8Array([1]), path: '/attachments/paste-1.png' })
+
+    rerender(<TerminalView id="keep-media" connection={{ ...localConnection }} />)
+    expect(getSessionAttachments('keep-media')).toHaveLength(1)
+
+    unmount()
+    expect(getSessionAttachments('keep-media')).toHaveLength(0)
   })
 
   it('refits and repaints when the layout mode changes while the pane stays visible', () => {

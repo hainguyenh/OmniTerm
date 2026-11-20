@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 import { useDetachControl, type UseDetachControlInput } from '../useDetachControl'
 
 const local: Connection = { id: 'local', name: 'Local', type: 'LOCAL', host: '', port: '', user: '' }

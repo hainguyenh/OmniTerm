@@ -12,7 +12,7 @@
 import { useSyncExternalStore } from 'react'
 import { isValidLauncher, isValidSessionId } from './agentSessionDetector'
 import { registerDurableSlice, scheduleDurableSave } from './agentSessionDurable'
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export type StoredSessionState = 'active' | 'interrupted' | 'saved'
 

@@ -34,6 +34,8 @@ function rendererSources(dir = path.join(repoRoot, "ui")): string[] {
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) {
       if (entry === "__tests__") continue;
+      // The IDE modules keep their own diagnostics; door 2 (neuterConsole at startup) silences them in a packaged build.
+      if (full === path.join(repoRoot, "ui", "ide")) continue;
       out.push(...rendererSources(full));
       continue;
     }

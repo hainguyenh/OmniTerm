@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+import { ideAliases } from './scripts/ide-aliases.mjs'
+
 // https://vitejs.dev/config/
 //
 // Tauri is the only host, so this is a plain renderer build: Tauri serves `dist/` in production and
@@ -51,6 +53,9 @@ export default defineConfig({
     },
   },
   plugins: [react()],
+  resolve: {
+    alias: ideAliases,
+  },
   // The editor's preview workers (ui/components/editor/editorWorkers.ts) are module workers; the
   // CSP admits them because they load from the app origin, unlike blob: workers.
   worker: {

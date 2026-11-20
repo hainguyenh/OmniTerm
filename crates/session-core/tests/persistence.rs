@@ -234,7 +234,6 @@ async fn durable_manifest_never_persists_launch_command_or_environment_values() 
     manager.disconnect("session-secret").unwrap();
 }
 
-
 #[tokio::test]
 async fn set_policy_changes_live_session_policy_and_owner() {
     let dir = tempfile::tempdir().unwrap();

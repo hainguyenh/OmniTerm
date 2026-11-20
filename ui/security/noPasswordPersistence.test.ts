@@ -17,10 +17,7 @@ const root = path.resolve(process.cwd())
 const auditedPaths = [
   ...new Set([
     ...policy.scannedFiles,
-    ...policy.permissionFiles,
     ...policy.localStorageFiles,
-    policy.pluginManifest,
-    policy.rustPermissions,
   ]),
 ]
 
@@ -40,11 +37,6 @@ describe('password persistence removal', () => {
     expect(findings).toEqual([])
   })
 
-  it('does not grant plugins a credential-storage permission', () => {
-    const manifest = JSON.parse(fs.readFileSync(path.join(root, policy.pluginManifest), 'utf8'))
-    expect(manifest.omnitermPlugin.permissions).not.toContain('credentials')
-  })
-
   it('still scans every file the policy names', () => {
     // A rename used to surface as an uncaught ENOENT from the audit script, which reads like a
     // broken tool rather than a policy gap — and the instinct is then to drop the entry.
@@ -57,6 +49,6 @@ describe('password persistence removal', () => {
     // An emptied list would make every scan above pass while checking nothing.
     expect(policy.scannedFiles.length).toBeGreaterThan(0)
     expect(policy.forbiddenTokens.length).toBeGreaterThan(0)
-    expect(policy.permissionFiles.length).toBeGreaterThan(0)
+    expect(policy.localStorageFiles.length).toBeGreaterThan(0)
   })
 })

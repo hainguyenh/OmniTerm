@@ -86,11 +86,11 @@ async fn example() {
 | `AsyncFnMut()` | `&mut self` | callable multiple times, may mutate captured state |
 | `AsyncFnOnce()` | `self` | callable exactly once, may consume captured state |
 
-These mirror `Fn` / `FnMut` / `FnOnce` semantics, so the same rules apply: prefer `AsyncFn` first; fall back to `AsyncFnMut` or `AsyncFnOnce` when needed.
+These match `Fn` / `FnMut` / `FnOnce` semantics, so the same rules apply: prefer `AsyncFn` first; fall back to `AsyncFnMut` or `AsyncFnOnce` when needed.
 
 ## Key Points
 
-- `AsyncFn()` desugars the bound `F: AsyncFn<(), Output = T>` — the call syntax mirrors `Fn()`.
+- `AsyncFn()` desugars the bound `F: AsyncFn<(), Output = T>` — the call syntax matches `Fn()`.
 - Plain `async fn` items (not closures) automatically implement `AsyncFn` when their signature matches.
 - `AsyncFn` is in `std::ops` but the traits are brought in scope automatically in the 2024 edition; in older editions you may need `use std::ops::AsyncFn;`.
 - The compiler still infers `Send`-ness from the closure body; if you need `Send` futures (Tokio multi-threaded), add `+ Send` to the bound or use a `Send` wrapper.

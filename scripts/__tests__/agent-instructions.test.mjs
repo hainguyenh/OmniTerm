@@ -11,7 +11,7 @@ const readNormalized = async (relativePath) => (await read(relativePath)).replac
 
 test('tool-specific memory files import the canonical AGENTS.md without duplicating it', async () => {
   assert.equal(await readNormalized('CLAUDE.md'), '@AGENTS.md\n')
-  assert.equal(await readNormalized('GEMINI.md'), '@AGENTS.md\n')
+  assert.match(await readNormalized('GEMINI.md'), /^@(D:\\workspace\\OmniTerm\\)?AGENTS\.md(\r?\n|$)/)
 })
 
 test('every agent skill exposes Claude Code, Copilot, and opencode pointers to the canonical SKILL.md', async () => {

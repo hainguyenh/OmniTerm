@@ -94,6 +94,14 @@ export const releasePastedImage = (sessionId: string | null): void => {
   notify(slotListeners, sessionId)
 }
 
+/** Point the history's entries at files that moved (keyed by their old path). */
+export const repointPastedImages = (sessionId: string, moved: ReadonlyMap<string, string>): void => {
+  const history = slots.get(sessionId)
+  if (!history?.some((image) => moved.has(image.path))) return
+  slots.set(sessionId, history.map((image) => ({ ...image, path: moved.get(image.path) ?? image.path })))
+  notify(slotListeners, sessionId)
+}
+
 export const subscribePastedImage = (sessionId: string | null, listener: Listener): (() => void) =>
   sessionId ? addListener(slotListeners, sessionId, listener) : () => {}
 

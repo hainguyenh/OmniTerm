@@ -1,4 +1,4 @@
-import type { Connection, Workspace } from '@omniterm/contract'
+import type { Connection, Workspace } from '../domain'
 
 export function workspaceForConnection(
   workspaces: Workspace[],

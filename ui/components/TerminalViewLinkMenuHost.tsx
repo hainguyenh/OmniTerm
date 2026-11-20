@@ -1,13 +1,18 @@
 import React from 'react'
 import TerminalLinkMenu from './TerminalLinkMenu'
+import { openExternalUrl } from '../ide/platform/openUrl'
 import { safeHttpUrl } from '../utils/terminalLinks'
-import type { TerminalLinkMenuState } from '../utils/createTerminalContextMenu'
+import type { TerminalLinkMenuState, TerminalPathLink } from '../utils/createTerminalContextMenu'
 
 export interface TerminalViewLinkMenuHostProps {
   /** The active overlay state or null; null renders nothing (the pane's empty state). */
   menu: TerminalLinkMenuState | null
   /** Local-pane flag — false hides the OS-open action for remote/SSH panes. */
   isLocal: boolean
+  /** Open a path in the editor, resolved against the pane's directory. */
+  onOpenInEditor: (link: TerminalPathLink) => void
+  /** Paste into the pane, for a menu a right-click opened. */
+  onPaste: () => void
   onClose: () => void
 }
 
@@ -18,13 +23,8 @@ const copyText = (text: string) => {
 }
 const openUrl = (url: string) => {
   const validated = safeHttpUrl(url)
-  if (validated) {
-    if (window.omnitermAPI?.app?.openUrl) {
-      void window.omnitermAPI.app.openUrl(validated.href)
-    } else {
-      window.open(validated.href, '_blank', 'noopener,noreferrer')
-    }
-  }
+  // The system browser: `window.open` in the desktop webview pops a page over the app instead.
+  if (validated) void openExternalUrl(validated.href).catch(() => {})
 }
 const openPath = (path: string) => {
   void window.omnitermAPI.app.openInSystem(path)
@@ -35,6 +35,8 @@ const openPath = (path: string) => {
 export const TerminalViewLinkMenuHost: React.FC<TerminalViewLinkMenuHostProps> = ({
   menu,
   isLocal,
+  onOpenInEditor,
+  onPaste,
   onClose,
 }) =>
   menu ? (
@@ -47,6 +49,8 @@ export const TerminalViewLinkMenuHost: React.FC<TerminalViewLinkMenuHostProps> =
       onCopyText={copyText}
       onOpenUrl={openUrl}
       onOpenPath={openPath}
+      onOpenInEditor={(text) => onOpenInEditor({ text, line: menu.line, col: menu.col })}
+      {...(menu.fromContextMenu ? { onPaste } : {})}
       onClose={onClose}
     />
   ) : null

@@ -11,7 +11,8 @@ use crate::workspace_folders::{canonical_dir, new_folder};
 use crate::workspace_launch::{default_shell, script_run_request};
 use crate::workspace_scan::{WorkspaceEntry, WorkspaceEntryPage, WorkspaceScript};
 use app_core::workspace_model::{
-    logical_target, move_workspace as move_workspace_model, namespace_path, set_entry_pinned,
+    active_folders, logical_target, move_workspace as move_workspace_model, namespace_path,
+    set_entry_pinned,
 };
 pub use app_protocol::workspace::{Workspace, WorkspaceFolder, WorkspacePin};
 use std::path::Path;
@@ -172,7 +173,8 @@ pub async fn scan_scripts<R: Runtime>(
 ) -> Result<Vec<WorkspaceScript>, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
     let mut scripts = Vec::new();
-    for folder in &workspace.folders {
+    // A disabled project is skipped: it is switched off for now, not removed.
+    for folder in active_folders(&workspace) {
         let root = Path::new(&folder.path);
         if root.is_dir() {
             scripts.extend(
@@ -192,7 +194,7 @@ pub async fn scan_workspace_folders<R: Runtime>(
 ) -> Result<Vec<WorkspaceEntry>, String> {
     let workspace = find_workspace(&app, &workspace_id)?;
     let mut entries = Vec::new();
-    for folder in &workspace.folders {
+    for folder in active_folders(&workspace) {
         entries.push(WorkspaceEntry {
             id: folder.id.clone(),
             name: folder.name.clone(),

@@ -171,7 +171,7 @@ describe('installWindowsImeInput — edits outside a composition', () => {
     bridge.dispose()
   })
 
-  it('keeps the mirror in step with keys xterm sends itself', () => {
+  it('keeps the shadow buffer in step with keys xterm sends itself', () => {
     const terminal = createTerminal()
     const bridge = installWindowsImeInput(terminal)
     for (const letter of 'viet') typeLetter(terminal, letter)
@@ -242,7 +242,7 @@ describe('installWindowsImeInput — edits outside a composition', () => {
     bridge.dispose()
   })
 
-  it('restarts the mirror on a click, which may move the PTY cursor', () => {
+  it('restarts the shadow buffer on a click, which may move the PTY cursor', () => {
     const terminal = createTerminal()
     const bridge = installWindowsImeInput(terminal)
     typeLetter(terminal, 'a')
