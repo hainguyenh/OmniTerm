@@ -13,11 +13,17 @@
 //! hands it to Tauri's IPC; Tauri cannot read it as a command and logs one `console.error` in the
 //! page, which is harmless.
 
+#[cfg(windows)]
 use serde::Serialize;
 
+// The drop message types are read only by the WebView2 handler below; other platforms have no
+// handler, so they are compiled on Windows only (and the token parser also for its unit test).
+
 /// The event the page receives, with the paths of one drop.
+#[cfg(windows)]
 pub(crate) const EVENT: &str = "omniterm:native-file-drop";
 
+#[cfg(windows)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub(crate) struct DroppedPaths {
     /// The page's number for the drop, which tells it where the files were dropped.
@@ -26,6 +32,7 @@ pub(crate) struct DroppedPaths {
 }
 
 /// The drop token of a page message (its string, holding JSON), or `None` for any other message.
+#[cfg(any(windows, test))]
 pub(crate) fn drop_token(message: &str) -> Option<u64> {
     serde_json::from_str::<serde_json::Value>(message)
         .ok()?
