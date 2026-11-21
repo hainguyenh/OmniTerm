@@ -126,7 +126,7 @@ describe('SessionCleanupDialog', () => {
     expect(invokeMock).not.toHaveBeenCalledWith('agent_session_files_delete', expect.anything())
   })
 
-  it('lists Gemini CLI and Antigravity sessions under their names', async () => {
+  it('lists Antigravity sessions under its name and drops Gemini CLI ones', async () => {
     invokeMock.mockImplementation(async (command: string) => {
       if (command === 'agent_session_profiles_list') return [{ agent: 'gemini', profile: 'gemini' }, { agent: 'agy', profile: 'antigravity-cli' }]
       if (command === 'agent_session_files_list') {
@@ -140,7 +140,7 @@ describe('SessionCleanupDialog', () => {
     clearStoredSessions()
     await scanAll()
     const rows = await screen.findAllByTestId('session-cleanup-row')
-    expect(rows.map((row) => row.querySelector('td:nth-child(2)')?.textContent)).toEqual(['Gemini CLI', 'Antigravity'])
+    expect(rows.map((row) => row.querySelector('td:nth-child(2)')?.textContent)).toEqual(['Antigravity'])
   })
 
   it('deletes every selected session in one call with progress, runs on hidden, and updates the list without scanning again', async () => {

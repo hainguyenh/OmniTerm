@@ -3,13 +3,13 @@ import { invoke } from '@tauri-apps/api/core'
 import type { StoredAgentSession, StoredSessionState } from '../../utils/agentSessionStorage'
 
 /** The agents whose conversations the backend lists (`agy` is Antigravity). */
-export const SESSION_AGENTS = ['claude', 'codex', 'gemini', 'agy'] as const
+export const SESSION_AGENTS = ['claude', 'codex', 'agy'] as const
 export type SessionAgentName = (typeof SESSION_AGENTS)[number]
 
 const isSessionAgent = (value: unknown): value is SessionAgentName =>
   typeof value === 'string' && (SESSION_AGENTS as readonly string[]).includes(value)
 
-const AGENT_LABELS: Record<SessionAgentName, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini CLI', agy: 'Antigravity' }
+const AGENT_LABELS: Record<SessionAgentName, string> = { claude: 'Claude', codex: 'Codex', agy: 'Antigravity' }
 
 /** The name the dialog shows for an agent; an unknown one as it is. */
 export const agentLabel = (agent: string): string => (isSessionAgent(agent) ? AGENT_LABELS[agent] : agent)

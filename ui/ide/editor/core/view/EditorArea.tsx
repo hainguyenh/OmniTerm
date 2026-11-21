@@ -65,6 +65,7 @@ import { FloatingZoomControls } from "./EditorZoom";
 import { inputDirty } from "../model/customDocuments";
 import type { LayoutNode, SplitEdge, Tab } from "../model/tabs";
 import { dropZoneAt } from "@/ui/pointerDrag";
+import { IdleCat } from "@/ui/IdleCat";
 import { disambiguateTitles } from "../model/tabTitles";
 import { TextEditorHost } from "./TextEditorHost";
 import { FindBar } from "./FindBar";
@@ -535,7 +536,17 @@ function EmptyPane({ paneId }: { paneId: string }) {
         activatePane(paneId);
       }}
     >
-      {Launcher ? <Launcher paneId={paneId} /> : <div>{tx("Empty pane")}</div>}
+      {Launcher ? (
+        <div className={styles.emptyPaneLauncher}>
+          <IdleCat perched />
+          <Launcher paneId={paneId} />
+        </div>
+      ) : (
+        <>
+          <IdleCat />
+          <div>{tx("Empty pane")}</div>
+        </>
+      )}
       <div className={styles.emptyPaneActions}>
         {items
           .filter((item) => actions.has(item.action))

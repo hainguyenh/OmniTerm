@@ -1,4 +1,5 @@
 import { AttachmentsFooterButton } from '../../components/AttachmentsFooterButton'
+import { agentIconName } from '../../features/agent-quota/agentBrand'
 import { useAgentStatusLine } from '../../features/agent-quota/agentStatusLine'
 import { FooterMeters } from '../../features/agent-quota/FooterMeters'
 import { HeaderBusyArt } from '../../features/agent-quota/HeaderBusyArt'
@@ -54,7 +55,7 @@ export function SessionAgentHeader({ sessionId }: { sessionId: string }) {
       className="flex flex-none items-center gap-1.5 px-2.5 py-1.5 border-b border-[var(--border)] min-w-0"
       data-session-agent-header={brand}
     >
-      <Icon name={`ext:omniterm/agent-${brand}`} size={16} />
+      <Icon name={agentIconName(brand)} size={16} />
       <span className="min-w-0 max-w-[70%] shrink truncate text-[var(--fg-strong)]" title={title}>{title}</span>
       <IconButton
         icon="copy"

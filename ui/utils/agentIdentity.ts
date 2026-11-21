@@ -7,7 +7,6 @@ const AGENT_LABELS: Record<AgentBrand, string> = {
   opencode: 'OpenCode',
   copilot: 'Copilot CLI',
   agy: 'Antigravity CLI',
-  gemini: 'Gemini CLI',
 }
 
 function isBrand(value: string): value is AgentBrand {

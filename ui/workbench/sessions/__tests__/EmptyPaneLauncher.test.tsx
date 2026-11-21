@@ -77,14 +77,13 @@ describe('EmptyPaneLauncher', () => {
     render(<EmptyPaneLauncher paneId="p" />)
     const choices = sessionChoices()
     expect(choices.map((choice) => choice.getAttribute('aria-label'))).toEqual([
-      'Terminal (default)', 'Claude', 'Codex', 'Antigravity', 'Gemini CLI', 'opencode',
+      'Terminal (default)', 'Claude', 'Codex', 'Antigravity', 'opencode',
     ])
     expect(choices.map((choice) => choice.querySelector('[data-icon]')?.getAttribute('data-icon'))).toEqual([
       'terminal',
-      'ext:omniterm/agent-claude',
-      'ext:omniterm/agent-codex',
-      'ext:omniterm/agent-agy',
-      'ext:omniterm/agent-gemini',
+      'agent-claude',
+      'agent-codex',
+      'agent-agy',
       'ext:omniterm/agent-opencode',
     ])
   })

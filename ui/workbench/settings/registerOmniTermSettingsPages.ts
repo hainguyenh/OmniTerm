@@ -18,7 +18,7 @@ const AGENT_PAGES: ReadonlyArray<{
 }> = [
   { kind: 'claude', title: 'Claude Code', keywords: ['claude', 'anthropic'], view: (m) => m.ClaudeAgentPage },
   { kind: 'codex', title: 'Codex', keywords: ['codex', 'openai'], view: (m) => m.CodexAgentPage },
-  { kind: 'agy', title: 'Antigravity CLI', keywords: ['agy', 'antigravity', 'gemini'], view: (m) => m.AgyAgentPage },
+  { kind: 'agy', title: 'Antigravity CLI', keywords: ['agy', 'antigravity'], view: (m) => m.AgyAgentPage },
 ]
 
 /** True when the feature's `info` probe answers yes, i.e. it is switched on in the Plugins dialog. */

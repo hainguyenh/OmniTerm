@@ -1,4 +1,4 @@
-//! Coding agents (Claude Code, Codex, Gemini CLI…) driven over the Agent Client Protocol.
+//! Coding agents (Claude Code, Codex, Copilot…) driven over the Agent Client Protocol.
 //!
 //! A task is one agent conversation, working in its own git worktree or in the project
 //! checkout. Each task runs its agent's ACP server as a child process (newline-delimited

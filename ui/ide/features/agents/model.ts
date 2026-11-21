@@ -48,7 +48,6 @@ export function subagentStatusLabel(s: AgentSubagentStatus): string {
 const PROVIDER_ICONS = new Set([
   "claude",
   "codex",
-  "gemini",
   "copilot",
   "cursor",
   "opencode",

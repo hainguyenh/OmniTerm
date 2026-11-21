@@ -20,11 +20,13 @@ export interface ImportedIdeaKeymap {
   skippedShortcuts: number;
 }
 
-/** IDEA's bundled keymap names (`<keymap name=…>`) → our presets. */
+/**
+ * IDEA's bundled keymap names (`<keymap name=…>`) → our presets. There is no Eclipse preset: a
+ * keymap built on IDEA's Eclipse one starts from the IntelliJ preset of its OS.
+ */
 function presetOf(parent: string | null): string {
   const p = parent ?? "";
   const mac = /mac/i.test(p);
-  if (/^eclipse/i.test(p)) return mac ? "eclipse-macos" : "eclipse-windows";
   if (/^vs ?code/i.test(p)) return mac ? "vscode-macos" : "vscode-windows";
   if (mac) return "intellij-macos";
   if (p === "$default" || /^default for/i.test(p)) return "intellij-windows";

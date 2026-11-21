@@ -1,21 +1,32 @@
-import { AlarmClock } from 'lucide-react'
 import { describe, expect, it } from 'vitest'
 
-import { agentBrandFromName, iconForAgent, type AgentBrand } from '../agentBrand'
+import { agentBrandFromName, agentIconName, glyphForAgent, GLYPH_BRANDS, type AgentBrand } from '../agentBrand'
 
-const BRANDS: AgentBrand[] = ['claude', 'codex', 'opencode', 'copilot', 'agy', 'gemini']
+const BRANDS: AgentBrand[] = ['claude', 'codex', 'opencode', 'copilot', 'agy']
 
 describe('agent brand icons', () => {
-  it('gives every agent its own icon, distinct from the strip\'s wake-up clock', () => {
-    const icons = BRANDS.map(iconForAgent)
-    expect(new Set(icons).size).toBe(BRANDS.length)
-    // The quota strip draws AlarmClock as its wake-up button; an agent using it reads as a control.
-    expect(icons).not.toContain(AlarmClock)
+  it('gives every agent its own icon name', () => {
+    const names = BRANDS.map(agentIconName)
+    expect(new Set(names).size).toBe(BRANDS.length)
   })
 
-  it('maps display names to brands', () => {
+  it('draws Claude, Codex and Antigravity from the editor logo set, the same mark everywhere', () => {
+    expect((['claude', 'codex', 'agy'] as const).map(agentIconName))
+      .toEqual(['agent-claude', 'agent-codex', 'agent-agy'])
+    expect(glyphForAgent('claude')).toBeNull()
+    expect(glyphForAgent('agy')).toBeNull()
+  })
+
+  it('keeps a registered glyph for the brands without a logo', () => {
+    expect([...GLYPH_BRANDS].sort()).toEqual(['copilot', 'opencode'])
+    expect(agentIconName('opencode')).toBe('ext:omniterm/agent-opencode')
+    expect(glyphForAgent('copilot')).not.toBeNull()
+  })
+
+  it('maps display names to brands and no longer knows Gemini CLI', () => {
     expect(agentBrandFromName('Claude Code')).toBe('claude')
     expect(agentBrandFromName('Antigravity CLI')).toBe('agy')
+    expect(agentBrandFromName('Gemini CLI')).toBeNull()
     expect(agentBrandFromName('bash')).toBeNull()
   })
 })

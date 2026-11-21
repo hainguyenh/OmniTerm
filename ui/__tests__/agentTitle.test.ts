@@ -86,10 +86,8 @@ describe('parseAgentTitle', () => {
       expect(parseAgentTitle('codex cli /workspace/app')?.agentName).toBe('Codex')
     })
 
-    it('detects Gemini CLI', () => {
-      const result = parseAgentTitle('gemini cli ~/work/demo')
-      expect(result?.agentName).toBe('Gemini CLI')
-      expect(result?.folderName).toBe('demo')
+    it('no longer detects Gemini CLI', () => {
+      expect(parseAgentTitle('gemini cli ~/work/demo')?.agentName).not.toBe('Gemini CLI')
     })
 
     it('detects Antigravity CLI', () => {

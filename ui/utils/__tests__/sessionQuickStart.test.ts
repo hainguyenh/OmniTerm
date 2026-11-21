@@ -18,7 +18,7 @@ describe('quickStartProjects', () => {
   })
 
   it('offers each agent plus a plain terminal', () => {
-    expect(QUICK_START_AGENTS.map(a => a.id)).toEqual(['claude', 'codex', 'agy', 'gemini', 'opencode', 'terminal'])
+    expect(QUICK_START_AGENTS.map(a => a.id)).toEqual(['claude', 'codex', 'agy', 'opencode', 'terminal'])
     expect(QUICK_START_AGENTS.find(a => a.id === 'terminal')?.command).toBeNull()
   })
 })
@@ -41,8 +41,8 @@ describe('claudeProfileChoices', () => {
 })
 
 describe('the Google agent', () => {
-  it('defaults to Antigravity, ahead of Gemini CLI', () => {
+  it('is Antigravity alone: Gemini CLI is no longer offered', () => {
     const google = QUICK_START_AGENTS.filter(a => a.id === 'agy' || a.id === 'gemini')
-    expect(google.map(a => a.command)).toEqual(['agy', 'gemini'])
+    expect(google.map(a => a.command)).toEqual(['agy'])
   })
 })

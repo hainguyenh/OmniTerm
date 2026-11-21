@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { iconForAgent, type AgentBrand } from '../../features/agent-quota/agentBrand'
+import { agentIconName, GLYPH_BRANDS, glyphForAgent } from '../../features/agent-quota/agentBrand'
 import { registerExternalIcons } from '../../ide/ui/icons'
 import { notifyTabTitlesChanged } from '../../ide/workbench/contributions'
 import { agentBrandFor } from '../../utils/agentIdentity'
@@ -10,8 +10,6 @@ import type { QuickStartAgent } from '../../utils/sessionQuickStart'
 
 import { useSessionBridge } from './sessionBridge'
 
-const BRANDS: readonly AgentBrand[] = ['claude', 'codex', 'gemini', 'agy', 'opencode', 'copilot']
-const iconName = (brand: AgentBrand) => `ext:omniterm/agent-${brand}`
 
 const PAINT_ATTRS = /\s(fill|stroke|stroke-width|stroke-linecap|stroke-linejoin)="[^"]*"/g
 
@@ -32,23 +30,26 @@ export function paintOnGroup(svg: string): string {
 /** The tab icon of a session: its agent's brand while an agent runs in it, else the terminal glyph. */
 export function sessionIconName(sessionId: string | null): string {
   const brand = sessionId ? agentBrandFor(getPanePresence(sessionId)?.agent) : null
-  return brand ? iconName(brand) : 'terminal'
+  return brand ? agentIconName(brand) : 'terminal'
 }
 
 /** The icon of a session picker choice: the agent's brand (as its tabs show it), or the terminal glyph. */
 export function quickStartAgentIconName(agent: QuickStartAgent): string {
   if (!agent.command) return 'terminal'
   const brand = agentBrandFor(agent.id)
-  return brand ? iconName(brand) : (agent.icon ?? `agent-${agent.id}`)
+  return brand ? agentIconName(brand) : (agent.icon ?? `agent-${agent.id}`)
 }
 
 /**
- * Registers the agent brand icons (the ones the Sessions panel and the headers use) with the
- * editor's icon set, and refreshes the tab icons when a session's agent appears or goes.
+ * Registers the agent glyphs (brands without a logo in the editor's icon set) and refreshes the tab
+ * icons when a session's agent appears or goes.
  */
 export function registerAgentTabIcons(): () => void {
   const stopIcons = registerExternalIcons(
-    BRANDS.map((brand) => [iconName(brand), paintOnGroup(renderToStaticMarkup(createElement(iconForAgent(brand), { className: '' })))] as const),
+    GLYPH_BRANDS.flatMap((brand) => {
+      const glyph = glyphForAgent(brand)
+      return glyph ? [[agentIconName(brand), paintOnGroup(renderToStaticMarkup(createElement(glyph, { className: '' })))] as const] : []
+    }),
   )
   let signature = ''
   const refresh = () => {

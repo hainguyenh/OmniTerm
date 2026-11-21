@@ -21,9 +21,7 @@ export interface QuickStartAgent {
 export const QUICK_START_AGENTS: readonly QuickStartAgent[] = [
   { id: 'claude', label: 'Claude', command: 'claude' },
   { id: 'codex', label: 'Codex', command: 'codex' },
-  // Google ships two agents: Antigravity (`agy`) is the default, Gemini CLI stays one click away.
-  { id: 'agy', label: 'Antigravity', command: 'agy', icon: 'agent-gemini' },
-  { id: 'gemini', label: 'Gemini CLI', command: 'gemini' },
+  { id: 'agy', label: 'Antigravity', command: 'agy' },
   { id: 'opencode', label: 'opencode', command: 'opencode' },
   { id: 'terminal', label: 'Terminal', command: null },
 ]

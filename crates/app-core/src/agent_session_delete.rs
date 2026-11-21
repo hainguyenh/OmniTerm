@@ -51,7 +51,7 @@ fn companions(root: &SessionRoot, session: &AgentSessionFile) -> Vec<PathBuf> {
     match root.agent {
         SessionAgent::Claude => claude_companions(root, session),
         SessionAgent::Agy => agy_companions(root, &session.session_id),
-        SessionAgent::Codex | SessionAgent::Gemini => Vec::new(),
+        SessionAgent::Codex => Vec::new(),
     }
 }
 

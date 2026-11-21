@@ -63,7 +63,6 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   opencode: 'OpenCode',
   agy: 'Antigravity CLI',
   copilot: 'Copilot CLI',
-  gemini: 'Gemini CLI',
 }
 
 /**

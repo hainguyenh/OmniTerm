@@ -46,8 +46,7 @@ function launcherFor(found: { launcher?: string; profileName?: string; agent: st
     !found.profileName ||
     found.profileName === found.agent ||
     found.profileName === 'agy-gemini' ||
-    (found.agent === 'agy' && found.profileName === 'gemini') ||
-    (found.agent === 'gemini' && found.profileName === 'gemini')
+    (found.agent === 'agy' && found.profileName === 'gemini')
   ) {
     return undefined
   }

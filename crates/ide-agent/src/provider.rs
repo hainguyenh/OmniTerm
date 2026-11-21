@@ -54,7 +54,6 @@ const BUILTIN: &[(&str, &str, Driver, &[&str], &str)] = &[
         &["npx", "-y", "@agentclientprotocol/codex-acp@2.3.0"],
         "Run `codex login` in a terminal.",
     ),
-    ("gemini", "Gemini CLI", Driver::Acp, &["gemini", "--experimental-acp"], "Run `gemini` in a terminal and sign in."),
     ("copilot", "GitHub Copilot", Driver::Acp, &["copilot", "--acp"], "Run `copilot` in a terminal and sign in."),
     ("cursor", "Cursor", Driver::Acp, &["cursor-agent", "acp"], "Run `cursor-agent login` in a terminal."),
     ("opencode", "OpenCode", Driver::Acp, &["opencode", "acp"], "Run `opencode auth login` in a terminal."),
@@ -169,7 +168,7 @@ fn render_login_command<'a>(program: &Path, args: impl IntoIterator<Item = &'a s
 }
 
 /// Whether `id` names a built-in agent that needs no registry install (native drivers
-/// and `npx -y` adapters). CLI built-ins (`copilot`, `gemini`, …) can be installed and
+/// and `npx -y` adapters). CLI built-ins (`copilot`, `qwen`, …) can be installed and
 /// updated from the ACP Registry into `<config>/agents/<id>.toml`.
 pub(crate) fn is_builtin(id: &str) -> bool {
     BUILTIN.iter().any(|&(bid, _, driver, cmd, _)| bid == id && (driver != Driver::Acp || cmd.first() == Some(&"npx")))
@@ -548,12 +547,12 @@ mod tests {
         set_builtin_command(dir.path(), "codex", Some("codex")).unwrap();
         assert!(!list().iter().find(|p| p.id == "codex").unwrap().command_overridden);
         std::fs::write(
-            dir.path().join("gemini.toml"),
-            "command = \"/registry/gemini\"\n[registry]\nid = \"gemini\"\nversion = \"1.0\"\n",
+            dir.path().join("qwen.toml"),
+            "command = \"/registry/qwen\"\n[registry]\nid = \"qwen\"\nversion = \"1.0\"\n",
         )
         .unwrap();
-        let registry = list().into_iter().find(|p| p.id == "gemini").unwrap();
-        assert_eq!(registry.default_program.as_deref(), Some("gemini"));
+        let registry = list().into_iter().find(|p| p.id == "qwen").unwrap();
+        assert_eq!(registry.default_program.as_deref(), Some("qwen"));
         assert!(!registry.command_editable);
         assert_eq!(registry.command_read_only_reason, Some(AgentCommandReadOnlyReason::Registry));
         assert!(matches!(registry.source, AgentSource::Registry { .. }));
@@ -568,14 +567,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let write = |name: &str, text: &str| std::fs::write(dir.path().join(name), text).unwrap();
         write("mine.toml", "name = \"Mine\"\ncommand = \"/opt/mine\"\nargs = [\"acp\"]\n[env]\nK = \"v\"\n");
-        write("gemini.toml", "command = \"gemini\"\nargs = [\"--acp\"]\n");
+        write("qwen.toml", "command = \"qwen\"\nargs = [\"--acp\"]\n");
         write("broken.toml", "nope = 1\n");
         let specs = load(Some(dir.path()));
         let mine = specs.iter().find(|s| s.id == "mine").unwrap();
         assert_eq!((mine.name.as_str(), mine.command.as_str()), ("Mine", "/opt/mine"));
         assert_eq!(mine.env, vec![("K".to_owned(), "v".to_owned())]);
-        let gemini = specs.iter().find(|s| s.id == "gemini").unwrap();
-        assert_eq!((gemini.name.as_str(), gemini.args.as_slice()), ("gemini", &["--acp".to_owned()][..]));
+        let qwen = specs.iter().find(|s| s.id == "qwen").unwrap();
+        assert_eq!((qwen.name.as_str(), qwen.args.as_slice()), ("qwen", &["--acp".to_owned()][..]));
         assert!(!specs.iter().any(|s| s.id == "broken"));
         assert_eq!(specs.iter().filter(|s| s.id == "claude").count(), 1);
         assert!(!installed("/definitely/not/here"));

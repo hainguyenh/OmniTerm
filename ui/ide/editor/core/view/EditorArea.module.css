@@ -450,6 +450,12 @@
   color: var(--fg-muted);
   text-align: center;
 }
+.emptyPaneLauncher {
+  /* Holds the cat that lies on the launcher's top border; the margin keeps its head in view. */
+  position: relative;
+  width: min(320px, 100%);
+  margin-top: 84px;
+}
 .emptyPaneActions {
   display: flex;
   align-items: center;

@@ -94,7 +94,6 @@ export function afterRemove(agents: RegistryAgent[], id: string): RegistryAgent[
  */
 const FEATURED = [
   "copilot",
-  "gemini",
   "cursor",
   "opencode",
   "amp-acp",

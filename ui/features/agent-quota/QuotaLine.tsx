@@ -1,18 +1,21 @@
 import type React from 'react'
 import { useRef } from 'react'
 
+import { Icon } from '../../ide/ui/icons'
+
 import type { QuotaWindow } from './usage/types'
 import type { LineSize } from './quotaConfig'
-import { iconForAgent, type AgentBrand } from './agentBrand'
+import { agentIconName, glyphForAgent, type AgentBrand } from './agentBrand'
 
 import { clampLimit, WINDOW_LABELS } from './quotaConfig'
 import { animationFor, formatReset, lineTooltip, trackLabels, zoneFor } from './quotaPolicy'
 
 export type { AgentBrand } from './agentBrand'
 
+/** An agent's mark: the same logo its tabs and the session picker show. */
 export function AgentIcon({ agent, className = 'w-3 h-3' }: { agent: AgentBrand; className?: string }) {
-  const Icon = iconForAgent(agent)
-  return <Icon className={className} />
+  const Glyph = glyphForAgent(agent)
+  return Glyph ? <Glyph className={className} /> : <Icon name={agentIconName(agent)} className={className} />
 }
 
 interface QuotaLineProps {

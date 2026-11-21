@@ -321,7 +321,7 @@ function SessionCleanupBody({ profiles, scanning, covered, scope, rows, shown, o
     <div className="flex flex-1 items-center justify-center px-6 text-center text-[var(--fg-muted)]" data-testid="session-cleanup-message">{text}</div>
   )
   if (profiles === null) return message('Looking for agent profiles on this machine…')
-  if (!profiles.length) return message('No Claude, Codex, Gemini CLI or Antigravity session folders were found on this machine.')
+  if (!profiles.length) return message('No Claude, Codex or Antigravity session folders were found on this machine.')
   if (scanning) {
     return (
       <div className="flex flex-1 items-center justify-center gap-2 text-[var(--fg-muted)]">

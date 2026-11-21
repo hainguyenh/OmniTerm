@@ -2,6 +2,7 @@ import { executeAction, useActions } from "@/platform/actions";
 import { shortcutLabel } from "@/platform/keymap";
 import { useProject } from "@/platform/project";
 import { T } from "@/ui";
+import { IdleCat } from "@/ui/IdleCat";
 import { useWorkbenchSlots } from "./contributions";
 import { ErrorBoundary, Slot } from "./ErrorBoundary";
 import styles from "./EditorArea.module.css";
@@ -28,6 +29,7 @@ export function EmptyEditor() {
   const lightEdit = useProject((s) => s.lightEdit);
   return (
     <div className={styles.empty}>
+      <IdleCat />
       <dl className={styles.hints}>
         {(lightEdit ? LIGHT_EDIT_HINTS : HINTS).map((h) => {
           const keys = h.action ? (shortcutLabel(h.action) ?? h.fallback) : undefined;

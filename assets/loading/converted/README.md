@@ -19,3 +19,11 @@ Import the matching mode and tier from the frontend, for example:
 ```ts
 import loadingFastDarkUrl from '../../../assets/loading/converted/loading-fast-dark.gif'
 ```
+
+## Idle cat
+
+`idle-cat-light.gif` / `idle-cat-dark.gif` are the lazy cat (source `boring_cat.gif`, 12 frames,
+70 ms, infinite loop) with its shelf removed, cropped to the cat and scaled to 320 px wide. `dark`
+turns the black cat white (and its eyes dark) for dark surfaces. The belly ends at row 158 of 356,
+which `IdleCat`'s `perched` mode places on a box's top border.
+`ui/ide/ui/IdleCat.tsx` shows the matching one on the empty editor and empty split panes.

@@ -2,10 +2,10 @@
 //!
 //! Every agent profile keeps its own history: Claude Code under
 //! `<profile>/projects/<encoded cwd>/<uuid>.jsonl`, Codex under
-//! `<profile>/sessions/YYYY/MM/DD/rollout-*.jsonl`, Gemini CLI and Antigravity as described in
+//! `<profile>/sessions/YYYY/MM/DD/rollout-*.jsonl`, Antigravity as described in
 //! `agent_session_gemini.rs`. Claude and Codex profiles are the same directories the quota
 //! dashboard knows: `~/.claude`, `~/.claude-<x>`, `~/claude-profiles/<x>`, `~/.codex`,
-//! `~/.codex-<x>`; Gemini CLI's is `~/.gemini`, Antigravity's `~/.gemini/antigravity[-<x>]`.
+//! `~/.codex-<x>`; Antigravity's are `~/.gemini/antigravity[-<x>]`.
 //!
 //! Listing reads only the head of each text transcript (the working directory and the first
 //! prompt, so the user can tell sessions apart); Antigravity's conversation databases are never
@@ -53,18 +53,16 @@ pub const MAX_SESSIONS: usize = 5000;
 pub enum SessionAgent {
     Claude,
     Codex,
-    Gemini,
     /// Antigravity: the agy CLI and the Antigravity IDE's agent.
     Agy,
 }
 
 impl SessionAgent {
-    /// The name ids and the renderer use (`claude`, `codex`, `gemini`, `agy`).
+    /// The name ids and the renderer use (`claude`, `codex`, `agy`).
     pub fn name(self) -> &'static str {
         match self {
             SessionAgent::Claude => "claude",
             SessionAgent::Codex => "codex",
-            SessionAgent::Gemini => "gemini",
             SessionAgent::Agy => "agy",
         }
     }
@@ -177,7 +175,7 @@ fn real_subdirs(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// Transcript files of one profile: Claude's one level under `projects/`, Codex's three levels
-/// (year, month, day) under `sessions/`, Gemini CLI's chats and Antigravity's conversations.
+/// (year, month, day) under `sessions/`, and Antigravity's conversations.
 fn transcript_files(root: &SessionRoot) -> Vec<Listed> {
     match root.agent {
         SessionAgent::Claude => jsonl_in(real_subdirs(&root.dir.join("projects"))),
@@ -188,18 +186,16 @@ fn transcript_files(root: &SessionRoot) -> Vec<Listed> {
             }
             jsonl_in(dirs)
         }
-        SessionAgent::Gemini => with_metadata(gemini::gemini_chats(root)),
         SessionAgent::Agy => with_metadata(gemini::agy_conversations(root)),
     }
 }
 
-/// The session id of a transcript: Claude and Antigravity name the file after it, and a Gemini CLI
-/// chat file name is unique to its conversation; Codex puts it in the head, and a rollout without
-/// one falls back to its file name.
+/// The session id of a transcript: Claude and Antigravity name the file after it; Codex puts it in
+/// the head, and a rollout without one falls back to its file name.
 fn session_id_of(agent: SessionAgent, path: &Path, header: &SessionHeader) -> Option<String> {
     let stem = path.file_stem()?.to_str()?;
     match agent {
-        SessionAgent::Claude | SessionAgent::Gemini | SessionAgent::Agy => Some(stem.to_string()),
+        SessionAgent::Claude | SessionAgent::Agy => Some(stem.to_string()),
         SessionAgent::Codex => Some(
             header
                 .session_id
@@ -217,15 +213,10 @@ struct Candidate<'a> {
     size: u64,
 }
 
-/// What a transcript says about itself. Antigravity's databases are never opened; a Gemini CLI
-/// chat's working directory comes from its project folder.
+/// What a transcript says about itself. Antigravity's databases are never opened.
 fn header_of(candidate: &Candidate<'_>) -> SessionHeader {
     match candidate.root.agent {
         SessionAgent::Agy => SessionHeader::default(),
-        SessionAgent::Gemini => SessionHeader {
-            cwd: gemini::gemini_project_dir(&candidate.path),
-            ..read_header(&candidate.path, SessionAgent::Gemini)
-        },
         agent => read_header(&candidate.path, agent),
     }
 }

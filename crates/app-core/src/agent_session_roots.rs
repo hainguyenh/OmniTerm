@@ -36,14 +36,11 @@ pub(super) fn sorted_names(dir: &Path) -> Vec<String> {
 
 type FoundRoot = (SessionAgent, String, PathBuf);
 
-/// Gemini CLI keeps one folder per project under `~/.gemini/tmp`; Antigravity (agy and its IDE
-/// agent) keeps a `conversations` folder in `~/.gemini/antigravity` and `~/.gemini/antigravity-<x>`.
-fn gemini_roots(home: &Path) -> Vec<FoundRoot> {
+/// Antigravity (agy and its IDE agent) keeps a `conversations` folder in `~/.gemini/antigravity`
+/// and `~/.gemini/antigravity-<x>`.
+fn agy_roots(home: &Path) -> Vec<FoundRoot> {
     let gemini = home.join(".gemini");
     let mut roots = Vec::new();
-    if is_real_dir(&gemini) && is_real_dir(&gemini.join("tmp")) {
-        roots.push((SessionAgent::Gemini, "gemini".to_string(), gemini.clone()));
-    }
     for entry in sorted_names(&gemini) {
         let named = entry == "antigravity"
             || entry
@@ -57,8 +54,8 @@ fn gemini_roots(home: &Path) -> Vec<FoundRoot> {
     roots
 }
 
-/// Every profile directory under `home`, defaults first, then the named ones by name, then Gemini
-/// CLI and Antigravity. A profile name found twice (`~/.claude-work` and `~/claude-profiles/work`)
+/// Every profile directory under `home`, defaults first, then the named ones by name, then
+/// Antigravity's. A profile name found twice (`~/.claude-work` and `~/claude-profiles/work`)
 /// is numbered the second time.
 pub fn session_roots(home: &Path) -> Vec<SessionRoot> {
     let mut roots = Vec::new();
@@ -93,7 +90,7 @@ pub fn session_roots(home: &Path) -> Vec<SessionRoot> {
             roots.push((SessionAgent::Claude, format!("claude-{suffix}"), dir));
         }
     }
-    roots.extend(gemini_roots(home));
+    roots.extend(agy_roots(home));
     let mut seen: HashMap<String, usize> = HashMap::new();
     roots
         .into_iter()

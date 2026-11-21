@@ -211,7 +211,7 @@ const ICONS = {
   // Coding agents (logos via Paseo)
   "agent-claude": "omniterm/agents/claude",
   "agent-codex": "omniterm/agents/codex",
-  "agent-gemini": "omniterm/agents/gemini",
+  "agent-agy": "omniterm/agents/agy",
   "agent-copilot": "omniterm/agents/copilot",
   "agent-cursor": "omniterm/agents/cursor",
   "agent-opencode": "omniterm/agents/opencode",

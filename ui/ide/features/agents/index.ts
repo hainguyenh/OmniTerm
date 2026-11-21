@@ -1,5 +1,5 @@
 /**
- * Coding agents (Claude Code, Codex, Gemini CLI over ACP, run by `ide-agent`): the
+ * Coding agents (Claude Code, Codex, Copilot over ACP, run by `ide-agent`): the
  * Agents tool window lists tasks by what they need from the user, a task opens as an
  * editor tab (conversation + changed files), and New Task is an editor page.
  */
@@ -177,7 +177,7 @@ export function activate(): () => void {
         category: "Agents",
         icon: "plus",
         when: "projectOpen",
-        keywords: ["agent", "claude", "codex", "gemini", "ai"],
+        keywords: ["agent", "claude", "codex", "agy", "ai"],
         run: ({ arg }) => openHome(typeof arg === "string" ? arg : undefined),
       },
       {

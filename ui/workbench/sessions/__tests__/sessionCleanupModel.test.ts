@@ -52,7 +52,7 @@ const stored = (patch: Partial<StoredAgentSession>): StoredAgentSession => ({
 describe('session cleanup model', () => {
   it('validates listing entries from the backend', () => {
     expect(parseSessionFile({ ...file({}) })).toEqual(file({}))
-    expect(parseSessionFile({ ...file({}), agent: 'gemini' })).toMatchObject({ agent: 'gemini' })
+    expect(parseSessionFile({ ...file({}), agent: 'gemini' })).toBeNull()
     expect(parseSessionFile({ ...file({}), agent: 'agy' })).toMatchObject({ agent: 'agy' })
     expect(parseSessionFile({ ...file({}), agent: 'cursor' })).toBeNull()
     expect(parseSessionFile({ ...file({}), size: -1 })).toBeNull()
@@ -141,7 +141,7 @@ describe('session cleanup model', () => {
   })
 
   it('names every agent the backend lists', () => {
-    expect(['claude', 'codex', 'gemini', 'agy', 'other'].map(agentLabel)).toEqual(['Claude', 'Codex', 'Gemini CLI', 'Antigravity', 'other'])
+    expect(['claude', 'codex', 'agy', 'gemini'].map(agentLabel)).toEqual(['Claude', 'Codex', 'Antigravity', 'gemini'])
   })
 
   it('selects every selectable row, drawn or not, and clears', () => {

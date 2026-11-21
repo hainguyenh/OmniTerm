@@ -16,7 +16,7 @@ import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export type StoredSessionState = 'active' | 'interrupted' | 'saved'
 
-const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot', 'gemini'])
+const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot'])
 
 export interface StoredAgentSession {
   /** `<agent>:<sessionId>` — stable across restarts, and naturally dedupes by session. */
