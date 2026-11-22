@@ -5,7 +5,8 @@
  * ordinary command output arrives as plain text. This transformer colorizes
  * recognizable tokens (quoted strings, numbers, paths, IPs, URLs, error /
  * warning / success words) by injecting standard ANSI SGR codes, so the
- * active theme's palette decides the actual colors.
+ * active theme's palette decides the actual colors. The `links` scope colors only URLs and
+ * file paths (what a link-modifier click opens), for panes with smart colors off.
  *
  * Safety rules:
  *  - Only text currently rendered in the DEFAULT foreground color is touched —
@@ -21,19 +22,38 @@
  *    next chunk, never split or rewritten mid-sequence.
  */
 
+/** What `transform` colors: every token, only URLs and file paths, or nothing. */
+export type HighlightScope = 'all' | 'links' | 'none'
+
+// Paths start after whitespace, a quote, `=`, `(`, `:` or `[` (never mid-word, so `and/or` stays
+// prose) and may carry a `:line[:col]` location. A bare relative path needs that location, or
+// any `a/b` in prose would read as one.
+const PATH_START = /(?<=^|[\s'"=(:[])/.source
+const SEGMENT = /[\w.@~+-]+/.source
+const PATH_SOURCE = String.raw`(?<path>${PATH_START}(?:${[
+  String.raw`\/(?:${SEGMENT}\/)*${SEGMENT}\/?`,
+  String.raw`[A-Za-z]:[\\/](?:${SEGMENT}[\\/])*${SEGMENT}[\\/]?`,
+  String.raw`(?:~|\.{1,2})\/(?:${SEGMENT}\/)*${SEGMENT}\/?`,
+  String.raw`(?:${SEGMENT}[\\/])*${SEGMENT}\.[A-Za-z]\w{0,9}(?=:\d)`,
+].join('|')})(?::\d+(?::\d+)?)?)`
+const URL_SOURCE = /(?<url>\b(?:https?|file):\/\/[^\s'"<>]+)/.source
+
 const TOKEN_RE = new RegExp(
   [
-    /(?<url>\bhttps?:\/\/[^\s'"<>]+)/.source,
+    URL_SOURCE,
     /(?<quote>"[^"\n]*"|'[^'\n]*')/.source,
     /(?<err>\b(?:error(?:s)?|failed|failure|fatal|denied|refused|invalid|cannot|unable|unreachable|critical|panic|exception|not found|timed? ?out)\b)/.source,
     /(?<warn>\b(?:warning(?:s)?|warn|deprecated|missing|skipped)\b)/.source,
     /(?<ok>\b(?:success(?:ful(?:ly)?)?|completed|connected|established|started|enabled|ready|passed|online|active|running|done|ok)\b)/.source,
     /(?<ip>\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b)/.source,
-    /(?<path>(?<=^|[\s'"=(:[])\/(?:[\w.@~+-]+\/)*[\w.@~+-]+\/?)/.source,
+    PATH_SOURCE,
     /(?<num>\b\d+(?:\.\d+)*\b)/.source,
   ].join('|'),
   'gim',
 )
+
+/** The `links` scope: only what a link-modifier click can open. */
+const LINK_RE = new RegExp([URL_SOURCE, PATH_SOURCE].join('|'), 'gim')
 
 // Token → SGR open/close. Close restores default fg (39) — never a full reset,
 // so attributes the server set around us survive. URLs also toggle underline.
@@ -48,8 +68,8 @@ const STYLE: Record<string, [string, string]> = {
   num: ['\x1b[95m', '\x1b[39m'],
 }
 
-const colorize = (text: string): string =>
-  text.replace(TOKEN_RE, (match, ...args) => {
+const colorize = (text: string, pattern: RegExp): string =>
+  text.replace(pattern, (match, ...args) => {
     const groups = args[args.length - 1] as Record<string, string | undefined>
     for (const key in STYLE) {
       if (groups[key] !== undefined) {
@@ -107,7 +127,7 @@ export class OutputHighlighter {
   private carry = ''           // incomplete escape sequence held until next chunk
   private fgColored = false    // server set a non-default foreground
   private altScreen = false    // vim/htop/less etc. own the screen
-  private enabled = true
+  private scope: HighlightScope = 'all'
   // Timestamp of the last TUI-shaped sequence; 0 means none seen. See TUI_IDLE_MS.
   private tuiSeenAt = 0
   // Deadline set by noteLocalEcho(); 0 means none pending. See LOCAL_ECHO_QUIET_MS.
@@ -125,8 +145,8 @@ export class OutputHighlighter {
    * Pass every chunk through even when disabled — the sequence parser keeps
    * fg/alt-screen state in sync so re-enabling mid-session stays correct.
    */
-  transform(input: string, enabled = true): string {
-    this.enabled = enabled
+  transform(input: string, scope: boolean | HighlightScope = true): string {
+    this.scope = scope === true ? 'all' : scope === false ? 'none' : scope
     const text = this.carry + input
     this.carry = ''
     let out = ''
@@ -158,10 +178,10 @@ export class OutputHighlighter {
 
   /** Highlight only default-colored text that nothing else is drawing over. */
   private plain(segment: string): string {
-    if (!segment || !this.enabled || this.altScreen || this.fgColored) return segment
+    if (!segment || this.scope === 'none' || this.altScreen || this.fgColored) return segment
     if (this.tuiActive()) return segment
     if (this.echoQuietUntil !== 0 && Date.now() < this.echoQuietUntil) return segment
-    return colorize(segment)
+    return colorize(segment, this.scope === 'links' ? LINK_RE : TOKEN_RE)
   }
 
   /** True while a main-screen TUI is still considered to own the viewport. */

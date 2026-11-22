@@ -7,6 +7,7 @@ import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
 import { recentlyInterrupted } from '../terminal/ctrlCGuard'
+import { resolveTerminalLook } from '../terminal/terminalLook'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { useWindowRounding } from '../hooks/useWindowRounding'
 
@@ -82,6 +83,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const terminalTheme: TerminalTheme | undefined = theme
     ? (appSettings.darkMode ? theme.terminal.dark : theme.terminal.light)
     : undefined
+  const look = resolveTerminalLook(appSettings.terminalLook, terminalTheme, appSettings.darkMode)
   const fontFamilyMono = theme
     ? (appSettings.darkMode ? theme.ui.dark.fontFamilyMono : theme.ui.light.fontFamilyMono)
     : undefined
@@ -194,7 +196,8 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             }}
             onCwdChange={(cwd) => reportContext({ cwd })}
             darkMode={appSettings.darkMode}
-            theme={terminalTheme}
+            theme={look.theme}
+            look={look}
             fontSize={fontSize}
             smartColors={smartColors}
             fontFamilyMono={fontFamilyMono}

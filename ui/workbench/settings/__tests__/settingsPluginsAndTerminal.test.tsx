@@ -69,3 +69,39 @@ describe('Settings › Tools › Terminal', () => {
     expect(saved.terminalCtrlC.showHint).toBe(false)
   })
 })
+
+describe('Settings › Terminal › Appearance', () => {
+  const lastSaved = () => (save.mock.calls.at(-1) as unknown as [Partial<AppSettings>])[0]
+
+  it('shows the scheme, contrast and coloring controls with their defaults', async () => {
+    render(<TerminalPage />)
+    expect(await screen.findByLabelText('Scheme (dark mode)')).toBeTruthy()
+    expect(screen.getByLabelText('Scheme (light mode)')).toBeTruthy()
+    expect(screen.getByLabelText('Minimum contrast')).toBeTruthy()
+    expect((screen.getByLabelText('Draw bold text in bright colors') as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('Color URLs and file paths in output') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('saves the link and smart color toggles at once', async () => {
+    render(<TerminalPage />)
+    fireEvent.click(await screen.findByLabelText('Color URLs and file paths in output'))
+    await waitFor(() => expect(save).toHaveBeenCalled())
+    expect((lastSaved().terminalLook as { linkColors: boolean }).linkColors).toBe(false)
+    fireEvent.click(screen.getByLabelText(/Also color errors, warnings/))
+    await waitFor(() => expect(lastSaved().smartColors).toBe(true))
+  })
+
+  it('imports an .itermcolors file and reports one that is not a preset', async () => {
+    render(<TerminalPage />)
+    const input = await screen.findByLabelText('iTerm2 color preset file')
+    const c = (v: number) => `<dict><key>Red Component</key><real>${v}</real><key>Green Component</key><real>${v}</real><key>Blue Component</key><real>${v}</real></dict>`
+    const entries = Array.from({ length: 16 }, (_, i) => `<key>Ansi ${i} Color</key>${c(i / 15)}`).join('')
+    const xml = `<plist version="1.0"><dict>${entries}<key>Background Color</key>${c(0)}<key>Foreground Color</key>${c(1)}</dict></plist>`
+    fireEvent.change(input, { target: { files: [new File([xml], 'Night.itermcolors')] } })
+    await waitFor(() => expect(save).toHaveBeenCalled())
+    expect(lastSaved().terminalLook).toMatchObject({ darkScheme: 'custom:night', customSchemes: [{ name: 'Night' }] })
+
+    fireEvent.change(input, { target: { files: [new File(['nope'], 'broken.itermcolors')] } })
+    expect((await screen.findByRole('alert')).textContent).toContain('broken.itermcolors is not an iTerm2 color preset')
+  })
+})

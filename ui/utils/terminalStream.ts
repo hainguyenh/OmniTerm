@@ -1,7 +1,7 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SessionChannel } from './sessionChannel'
 import { chunkForWrite } from './writeChunks'
-import { OutputHighlighter } from '../highlighter'
+import { OutputHighlighter, type HighlightScope } from '../highlighter'
 import { MAX_SCROLLBACK_BYTES, loadScrollback, saveScrollback } from './scrollbackStore'
 import { OutputRate, ScrollbackBuffer } from './scrollbackBuffer'
 import type { SessionStatus } from '../components/MainLayout'
@@ -32,6 +32,8 @@ export interface TerminalStreamOptions {
   onActivity: (busy: boolean) => void
   /** Whether client-side smart colouring is on, read at write time so the toggle affects live panes. */
   smartColors: () => boolean
+  /** Whether URLs and file paths are colored while smart colouring is off; read at write time. */
+  linkColors?: () => boolean
   /** Re-fit after output that can change the pane's state (the connect banner, an attach replay). */
   refit: () => void
   /** True while this stream's terminal is still the mounted one — guards the async attach result. */
@@ -67,7 +69,7 @@ export interface TerminalStream {
 /** Subscribe to a session and start (or attach to) it. */
 export const attachTerminalStream = ({
   term, api, id, isLocal, host, mode,
-  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, refit, isCurrent, scrollbackKey,
+  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, linkColors, refit, isCurrent, scrollbackKey,
 }: TerminalStreamOptions): TerminalStream => {
   // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell behind it can
   // take much longer to actually produce a prompt — a cold WSL VM boot in particular can take several
@@ -150,8 +152,9 @@ export const attachTerminalStream = ({
     // Chunked as well: one huge message (a `cat` of a big file, a build log dumping at once) blocks a
     // frame no matter where it came from. Text at or below the chunk size passes through as-is. A
     // flood skips smart colouring (its escape state still advances) so the regex never falls behind.
-    const colour = smartColors() && !outputRate.flooding(text.length, Date.now())
-    writeChunked(term, highlighter.transform(text, colour))
+    const wanted: HighlightScope = smartColors() ? 'all' : linkColors?.() ? 'links' : 'none'
+    const scope = wanted !== 'none' && outputRate.flooding(text.length, Date.now()) ? 'none' : wanted
+    writeChunked(term, highlighter.transform(text, scope))
   }
 
   const releaseHistory = () => {

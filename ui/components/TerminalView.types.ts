@@ -1,3 +1,4 @@
+import type { TerminalLookOptions } from '../utils/terminalOptions'
 import type { EnterModes } from '../utils/enterKeys'
 import type { TerminalTheme } from '../themes'
 import type { Connection, SessionStatus } from './MainLayout'
@@ -25,6 +26,8 @@ export interface TerminalViewProps {
    */
   onExit?: (code: number) => void
   theme?: TerminalTheme
+  /** Settings › Terminal › Appearance, resolved for this pane (terminal/terminalLook.ts). */
+  look?: TerminalLookOptions & { linkColors: boolean }
   /** Appearance hint passed to locally spawned CLI tools so their palette matches xterm. */
   darkMode?: boolean
   fontSize?: number

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TOKYO_NIGHT } from '../themes'
-import { createTerminalOptions, DEFAULT_MONO_STACK, resolveTerminalFontFamily } from '../utils/terminalOptions'
+import { createTerminalOptions, DEFAULT_MONO_STACK, minimumContrastFor, resolveTerminalFontFamily } from '../utils/terminalOptions'
 
 describe('createTerminalOptions', () => {
   it('enables contrast correction only for light mode', () => {
@@ -17,6 +17,27 @@ describe('createTerminalOptions', () => {
 
     expect(dark.minimumContrastRatio).toBe(1)
     expect(light.minimumContrastRatio).toBe(2.5)
+    expect(dark.drawBoldTextInBrightColors).toBe(true)
+  })
+
+  it('applies the appearance settings over the mode defaults', () => {
+    const options = createTerminalOptions({
+      isLocal: false,
+      darkMode: true,
+      theme: TOKYO_NIGHT.terminal.dark,
+      look: { lightPalette: false, minimumContrastRatio: 4.5, boldBright: false },
+    })
+
+    expect(options.minimumContrastRatio).toBe(4.5)
+    expect(options.drawBoldTextInBrightColors).toBe(false)
+  })
+})
+
+describe('minimumContrastFor', () => {
+  it('prefers the chosen ratio, else corrects light palettes only', () => {
+    expect(minimumContrastFor(true)).toBe(1)
+    expect(minimumContrastFor(false)).toBe(2.5)
+    expect(minimumContrastFor(false, { lightPalette: true, minimumContrastRatio: 1, boldBright: true })).toBe(1)
   })
 })
 

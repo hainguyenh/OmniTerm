@@ -1,6 +1,7 @@
 import type { ITerminalOptions } from '@xterm/xterm'
 import { normalizeXtermTheme } from './xtermTheme'
 import type { TerminalTheme } from '../themes'
+import type { ResolvedTerminalLook } from '../terminal/terminalLook'
 
 /** Mono stack every terminal falls back to. Shared with the CSS var wiring in index.css. */
 export const DEFAULT_MONO_STACK = '"Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, Menlo, Monaco, "Courier New", monospace'
@@ -41,13 +42,22 @@ export interface TerminalOptionsInput {
   fontSize?: number
   fontFamilyMono?: string
   theme: TerminalTheme
+  /** Settings › Terminal › Appearance (terminal/terminalLook.ts); without it the mode decides. */
+  look?: TerminalLookOptions
 }
+
+/** The parts of a resolved look that are xterm options. */
+export type TerminalLookOptions = Pick<ResolvedTerminalLook, 'lightPalette' | 'minimumContrastRatio' | 'boldBright'>
+
+/** xterm's minimum contrast ratio for a pane: the user's choice, else 2.5 for light palettes and off for dark ones. */
+export const minimumContrastFor = (darkMode: boolean | undefined, look?: TerminalLookOptions): number =>
+  look?.minimumContrastRatio ?? (darkMode === false ? 2.5 : 1)
 
 /**
  * The option set every pane is constructed with, in one place so a pane in a detached window can
  * never drift from one in the main window.
  */
-export const createTerminalOptions = ({ isLocal, darkMode, fontSize, fontFamilyMono, theme }: TerminalOptionsInput): ITerminalOptions => ({
+export const createTerminalOptions = ({ isLocal, darkMode, fontSize, fontFamilyMono, theme, look }: TerminalOptionsInput): ITerminalOptions => ({
   cursorBlink: true,
   // Spelled out so an unfocused pane's cursor can never silently regress to xterm's own default
   // hollow-outline fallback, which reads as "the cursor is gone".
@@ -67,10 +77,12 @@ export const createTerminalOptions = ({ isLocal, darkMode, fontSize, fontFamilyM
   // cell and the result cannot be cached in the renderer's glyph atlas, so a pane under heavy output
   // pays for it on every frame. Limit it to light mode, where the readability issue occurs.
   //
-  minimumContrastRatio: darkMode === false ? 2.5 : 1,
+  minimumContrastRatio: minimumContrastFor(darkMode, look),
+  // iTerm2's "Brighten bold text"; xterm's own default is on.
+  drawBoldTextInBrightColors: look?.boldBright ?? true,
   scrollback: 5000,
   allowProposedApi: true, // required by the Unicode11Addon
   // ConPTY-specific wrap/reflow heuristics; SSH's channel isn't ConPTY.
   ...(isLocal ? { windowsPty: { backend: 'conpty' as const } } : {}),
-  theme: normalizeXtermTheme(theme, darkMode === false),
+  theme: normalizeXtermTheme(theme, look?.lightPalette ?? darkMode === false),
 })

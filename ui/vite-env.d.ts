@@ -100,6 +100,8 @@ interface AppSettings {
   gitUtilEnabled?: boolean
   /** Terminal Ctrl+C rules; validated by ui/terminal/ctrlCSettings.ts. */
   terminalCtrlC?: unknown
+  /** Terminal color scheme, contrast, bold and link colors; validated by ui/terminal/terminalLook.ts. */
+  terminalLook?: unknown
   // Editor Shortcuts settings are declared alongside, in editorSettings.d.ts (interface merging).
 }
 

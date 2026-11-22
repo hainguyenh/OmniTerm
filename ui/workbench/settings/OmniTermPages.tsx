@@ -22,6 +22,7 @@ import { loadShellOptions, type ShellOption } from '../../shellOptions'
 
 import { notifyCustomArtChanged } from './customArtSync'
 import { OMNITERM_SETTINGS_PAGES } from './settingsPageIds'
+import { TerminalAppearanceForm } from './TerminalAppearanceForm'
 import { TerminalCtrlCForm } from './TerminalCtrlCForm'
 import { useAppSettings } from './useAppSettings'
 import { useDialogHost } from './useDialogHost'
@@ -68,7 +69,7 @@ export function BackupPage() {
   return <GeneralSettingsPage sections={['backup']} />
 }
 
-/** Settings › Terminal: Ctrl+C rules, the default shell and workspace, completion and close prompts. */
+/** Settings › Terminal: appearance, Ctrl+C rules, the default shell and workspace, completion and close prompts. */
 export function TerminalPage() {
   const { appSettings, setAppSettings, patch } = useAppSettings()
   const { showAlert, host } = useDialogHost()
@@ -82,6 +83,12 @@ export function TerminalPage() {
   if (!appSettings) return null
   return (
     <>
+      <TerminalAppearanceForm
+        value={appSettings.terminalLook}
+        smartColors={appSettings.smartColors}
+        onChange={(terminalLook) => patch({ terminalLook })}
+        onSmartColorsChange={(smartColors) => patch({ smartColors })}
+      />
       <TerminalCtrlCForm value={appSettings.terminalCtrlC} onChange={(terminalCtrlC) => patch({ terminalCtrlC })} />
       <GeneralSettings
         appSettings={appSettings}

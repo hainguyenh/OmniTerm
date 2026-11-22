@@ -4,6 +4,7 @@ import { QuotaPaneLines, SuspendedOverlay, UsageProbeOverlay } from '../features
 import { isRenewing } from '../hooks/useRenewSession'
 import { closesOnExit } from '../sessionExit'
 import { recentlyInterrupted } from '../terminal/ctrlCGuard'
+import { resolveTerminalLook } from '../terminal/terminalLook'
 import { resolveEnterModes } from '../utils/enterKeys'
 import { zoomedFontSize } from '../utils/paneZoom'
 import { showSessionTab } from '../workbench/sessions/sessionTabActions'
@@ -45,6 +46,11 @@ export function SessionPaneContent({ model, tab, active, layoutEpoch, zoom, roun
   const conn = connById(tab.connId)
   const appearance = resolveAppearance?.(tab.id, tab.connId) ?? {}
   const terminalTheme = themes.find(theme => theme.id === (appearance.themeId ?? appSettings.themeId)) ?? currentTheme
+  const look = resolveTerminalLook(
+    appSettings.terminalLook,
+    appSettings.darkMode ? terminalTheme.terminal.dark : terminalTheme.terminal.light,
+    appSettings.darkMode,
+  )
   const terminalFontSize = zoomedFontSize(appearance.fontSize ?? appSettings.fontSize, zoom)
   const terminalTarget = { id: tab.id, connId: tab.connId }
   const restoreOutcome = restoreOutcomes[tab.id]
@@ -106,7 +112,8 @@ export function SessionPaneContent({ model, tab, active, layoutEpoch, zoom, roun
       // own tab with it (see sessionExit.ts). skipConfirm: the session is already gone.
       // Renew kills this process on purpose; that exit must not close the tab.
       onExit={(code) => { if (!isRenewing(tab.id) && closesOnExit(conn, code, recentlyInterrupted(tab.id, Date.now()))) closeTabs([tab.id], true) }}
-      theme={appSettings.darkMode ? terminalTheme.terminal.dark : terminalTheme.terminal.light}
+      theme={look.theme}
+      look={look}
       fontSize={terminalFontSize} smartColors={appSettings.smartColors}
       onFontSizeChange={onFontSizeChange
         ? (size) => onFontSizeChange(size - terminalFontSize, terminalTarget)

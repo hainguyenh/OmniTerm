@@ -10,7 +10,6 @@ import { imagePasteModeFor, latchAgent } from '../utils/agentRegistry'
 import { parseAgentTitle } from '../utils/agentTitle'
 import { getPanePresence } from '../utils/agentPresenceStore'
 import { findSessionByTabId } from '../utils/agentSessionStorage'
-import { normalizeXtermTheme } from '../utils/xtermTheme'
 import { createCoalescer } from '../utils/coalesce'
 import { createWebglController } from '../utils/webglController'
 import { createSessionChannel } from '../utils/sessionChannel'
@@ -40,10 +39,11 @@ import PastedImageViewerHost from './PastedImageViewerHost'
 import SessionUnavailableOverlay from './SessionUnavailableOverlay'
 import CtrlCHint from './CtrlCHint'
 import type { TerminalViewProps } from './TerminalView.types'
+import { useTerminalAppearance } from './useTerminalAppearance'
 
 export { DEFAULT_MONO_STACK }
 
-const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
+const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, onRestart, onMetrics, onActivity, onExit, onTitleChange, onCwdChange, theme, darkMode, look, fontSize, smartColors, fontFamilyMono, onFontSizeChange, mode = 'connect', active = true, layoutEpoch, shortcuts, enterModes }) => {
   const terminalRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const [sessionUnavailable, setSessionUnavailable] = React.useState(false)
@@ -111,34 +111,10 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   const shortcutsRef = useRef(shortcuts)
   shortcutsRef.current = shortcuts
 
-  // Apply theme changes dynamically without recreating the terminal.
-  useEffect(() => {
-    const term = termRef.current
-    if (!term) return
-    term.options.minimumContrastRatio = darkMode === false ? 2.5 : 1
-    if (theme) {
-      term.options.theme = normalizeXtermTheme(theme, darkMode === false)
-    }
-  }, [theme, darkMode])
-
-  // Apply font size and family changes dynamically.
-  useEffect(() => {
-    const term = termRef.current
-    if (!term) return
-    let changed = false
-    if (fontSize && term.options.fontSize !== fontSize) {
-      term.options.fontSize = fontSize
-      changed = true
-    }
-    if (fontFamilyMono) {
-      const family = resolveTerminalFontFamily(fontFamilyMono)
-      if (term.options.fontFamily !== family) {
-        term.options.fontFamily = family
-        changed = true
-      }
-    }
-    if (changed) requestAnimationFrame(() => safeFitRef.current())
-  }, [fontSize, fontFamilyMono])
+  useTerminalAppearance(termRef, safeFitRef, { theme, darkMode, look, fontSize, fontFamilyMono })
+  // Read at write-time, like smart colors, so the toggle applies to live panes.
+  const linkColorsRef = useRef(look?.linkColors ?? false)
+  linkColorsRef.current = look?.linkColors ?? false
 
   useEffect(() => {
     if (!terminalRef.current) return
@@ -147,7 +123,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     cwdRef.current ??= connection.localCwd ?? findSessionByTabId(id)?.cwd ?? null
 
     const term = new Terminal(createTerminalOptions({
-      isLocal, darkMode, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
+      isLocal, darkMode, look, fontSize, fontFamilyMono, theme: theme ?? TOKYO_NIGHT.terminal.dark,
     }))
     termRef.current = term
 
@@ -375,6 +351,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onMetrics: (m) => cbs.current.onMetrics?.(m),
       onActivity: (busy) => cbs.current.onActivity?.(busy),
       smartColors: () => smartColorsRef.current === true,
+      linkColors: () => linkColorsRef.current,
       // A fresh PTY/replay needs the real grid resent even when its size is unchanged.
       refit: () => safeFit(true),
       isCurrent: () => termRef.current === term,
