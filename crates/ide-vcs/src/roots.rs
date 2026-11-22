@@ -20,18 +20,25 @@ pub struct Repos {
 }
 
 impl Repos {
-    /// Discovers repositories in independent project folders of a workspace.
+    /// Discovers repositories in independent project folders of a workspace. The primary
+    /// repository is the first folder's (the project's own), whatever the members sort as.
     pub fn discover_roots(roots: &[PathBuf], skip: &dyn Fn(&Path) -> bool) -> IdeResult<Self> {
         let mut repos = Vec::new();
+        let mut primary_root: Option<PathBuf> = None;
         for root in roots {
-            for repo in Self::discover(root, skip)?.repos {
+            let found = Self::discover(root, skip)?;
+            if primary_root.is_none() {
+                primary_root = found.primary().map(|r| r.root().to_path_buf());
+            }
+            for repo in found.repos {
                 if !repos.iter().any(|r: &Arc<Repo>| r.root() == repo.root()) {
                     repos.push(repo);
                 }
             }
         }
         repos.sort_by(|a, b| a.root().cmp(b.root()));
-        let primary = (!repos.is_empty()).then_some(0);
+        let primary =
+            primary_root.and_then(|p| repos.iter().position(|r| r.root() == p)).or((!repos.is_empty()).then_some(0));
         Ok(Self { repos, primary })
     }
 
@@ -254,5 +261,23 @@ mod tests {
         assert_eq!(repos.all().len(), 2);
         assert_eq!(repos.primary().unwrap().root(), root.join("a"), "the first when none contains the project root");
         assert!(repos.for_path(&root.join("c.txt")).is_none());
+    }
+
+    #[test]
+    fn workspace_primary_is_the_project_repository_not_the_first_sorted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = dunce::canonicalize(tmp.path()).unwrap();
+        let (project, member) = (base.join("z-project"), base.join("a-member"));
+        git_init(&project);
+        git_init(&member);
+        let repos = Repos::discover_roots(&[project.clone(), member.clone()], &|_| false).unwrap();
+        assert_eq!(repos.roots(), [member.clone(), project.clone()]);
+        assert_eq!(repos.primary().unwrap().root(), project, "the project's own repository stays primary");
+
+        // A project folder outside git: the first member with a repository is primary.
+        let plain = base.join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        let repos = Repos::discover_roots(&[plain, member.clone()], &|_| false).unwrap();
+        assert_eq!(repos.primary().unwrap().root(), member);
     }
 }

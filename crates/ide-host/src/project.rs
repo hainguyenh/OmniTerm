@@ -352,6 +352,13 @@ impl Host {
         }
         // Shared handle: `unwatched_reason` is a live query on the watcher,
         // filled after `start` returns so the on-change callback can reach it.
+        let repo_scan = RepoScan {
+            root: root.clone(),
+            repos: repos.clone(),
+            settings: settings.clone(),
+            sink: sink.clone(),
+            build_cache: build_cache.clone(),
+        };
         let watcher_weak = Arc::new(std::sync::OnceLock::<std::sync::Weak<Watcher>>::new());
         // One-shot latch for the post-start watch-limit warning (#1915): the
         // synchronous startup walk and a later batch can both observe it.
@@ -362,7 +369,7 @@ impl Host {
             let window = window.to_owned();
             let kotlin_bridge = kotlin_bridge.clone();
             let phpstan = phpstan.clone();
-            let repos = repos.clone();
+            let repo_scan = repo_scan.clone();
             let settings = settings.clone();
             let index = index.clone();
             let documents = documents.clone();
@@ -432,43 +439,7 @@ impl Host {
                             sink.emit(IdeEvent::ProjectRootsChanged { root: root.clone().into() });
                         }
                     }
-                    // A repository was cloned / initialised / removed below the project:
-                    // its `.git/HEAD` appeared or went. A linked worktree's `.git` is a
-                    // plain gitfile, and that file is the only marker written inside the
-                    // worktree itself, so the `.git` path counts too.
-                    let known = repos.read().roots();
-                    let mut git_dirs = changed.iter().chain(&batch.removed).chain(&batch.vcs).any(|p| {
-                        let dir = if p.ends_with(".git/HEAD") {
-                            p.parent().and_then(Path::parent)
-                        } else if p.ends_with(".git") {
-                            p.parent()
-                        } else {
-                            None
-                        };
-                        let Some(dir) = dir else { return false };
-                        known.iter().any(|r| r == dir) != p.exists()
-                    });
-                    // A linked worktree was registered or unregistered in the main
-                    // gitdir: `git worktree add` / `remove` creates or deletes
-                    // `.git/worktrees/<name>`. Its own gitfile is written before the
-                    // watcher can watch the new directory, so this entry is what
-                    // Linux per-directory watchers see.
-                    git_dirs |= batch.vcs.iter().any(|p| {
-                        let rest: Vec<_> = p
-                            .components()
-                            .skip_while(|c| c.as_os_str() != ".git")
-                            .skip(1) // the `.git` component itself
-                            .map(|c| c.as_os_str().to_string_lossy().into_owned())
-                            .collect();
-                        matches!(rest.as_slice(), [first, ..] if first == "worktrees" && rest.len() <= 2)
-                    });
-                    if git_dirs {
-                        scan_repositories(&root, &repos, &settings, &sink, &build_cache);
-                    }
-                    let vcs_moved = batch.vcs.iter().any(|p| vcs_path_changed(p));
-                    if git_dirs || vcs_moved {
-                        sink.emit(IdeEvent::VcsChanged { root: root.clone().into() });
-                    }
+                    repo_scan.on_batch(batch, &changed);
                     // A watch limit hit after startup (per-directory mode, Linux):
                     // folders past the limit never sync — surface it once, like
                     // the polling fallback below (#1915). The check itself is
@@ -541,17 +512,15 @@ impl Host {
                     &lsp,
                     Some(&kotlin_bridge),
                     Some(&phpstan),
+                    &repo_scan,
                 )?;
                 Some((r.clone(), w))
             })
             .collect();
         mark("watcher");
         {
-            let (root, repos, settings, sink) = (root.clone(), repos.clone(), settings.clone(), sink.clone());
-            let build_cache = build_cache.clone();
-            std::thread::Builder::new()
-                .name("omniterm-vcs-roots".into())
-                .spawn(move || scan_repositories(&root, &repos, &settings, &sink, &build_cache))?;
+            let repo_scan = repo_scan.clone();
+            std::thread::Builder::new().name("omniterm-vcs-roots".into()).spawn(move || repo_scan.run())?;
         }
         mark("git");
         tracing::info!("opened {} in window {window} in {} ms {laps:?}", root.display(), started.elapsed().as_millis());
@@ -823,40 +792,103 @@ fn light_watcher(
     )
 }
 
-/// Looks for repositories nested below the project (and the one containing it);
-/// emits `VcsChanged` when the set of roots changed.
-fn scan_repositories(
-    root: &Path,
-    repos: &RwLock<Repos>,
-    settings: &SettingsStore,
-    sink: &SharedSink,
-    build_cache: &Path,
-) {
-    let ignored = settings.effective().ignored_names();
-    let skip = |p: &Path| {
-        p.file_name().is_some_and(|n| {
-            let name = n.to_string_lossy();
-            ignored.is_ignored_name(&name)
-                || (ide_workspace::unity::GENERATED_DIRS.contains(&name.as_ref())
-                    && p.parent().is_some_and(ide_workspace::unity::is_project))
-        })
-    };
-    let mut roots = vec![root.to_path_buf()];
-    roots.extend(content_roots(&settings.effective(), root, build_cache));
-    match Repos::discover_roots(&roots, &skip) {
-        Ok(found) => {
-            if found.roots() != repos.read().roots() {
-                *repos.write() = found;
-                sink.emit(IdeEvent::VcsChanged { root: root.to_path_buf().into() });
+/// Keeps a project's repository set in step with its folders: the project root and every
+/// workspace member, each watched by its own watcher.
+#[derive(Clone)]
+pub(crate) struct RepoScan {
+    root: PathBuf,
+    repos: Arc<RwLock<Repos>>,
+    settings: Arc<SettingsStore>,
+    sink: SharedSink,
+    build_cache: PathBuf,
+}
+
+impl RepoScan {
+    /// Looks for repositories nested below the project and its workspace members (and the
+    /// ones containing them); emits `VcsChanged` when the set of roots changed.
+    pub(crate) fn run(&self) {
+        let ignored = self.settings.effective().ignored_names();
+        let skip = |p: &Path| {
+            p.file_name().is_some_and(|n| {
+                let name = n.to_string_lossy();
+                ignored.is_ignored_name(&name)
+                    || (ide_workspace::unity::GENERATED_DIRS.contains(&name.as_ref())
+                        && p.parent().is_some_and(ide_workspace::unity::is_project))
+            })
+        };
+        let mut roots = vec![self.root.clone()];
+        roots.extend(content_roots(&self.settings.effective(), &self.root, &self.build_cache));
+        match Repos::discover_roots(&roots, &skip) {
+            Ok(found) => {
+                let current = self.repos.read();
+                let same = found.roots() == current.roots()
+                    && found.primary().map(|r| r.root()) == current.primary().map(|r| r.root());
+                drop(current);
+                if !same {
+                    *self.repos.write() = found;
+                    self.sink.emit(IdeEvent::VcsChanged { root: self.root.clone().into() });
+                }
             }
+            Err(e) => tracing::warn!("looking for git repositories: {e}"),
         }
-        Err(e) => tracing::warn!("looking for git repositories: {e}"),
     }
+
+    /// Reacts to a watcher batch of the project or a workspace member: rescans when a
+    /// repository appeared or went, and emits `VcsChanged` when git state moved.
+    fn on_batch(&self, batch: &ide_vfs::FsBatch, changed: &[PathBuf]) {
+        let known = self.repos.read().roots();
+        let git_dirs = repositories_changed(&known, changed, batch);
+        if git_dirs {
+            self.run();
+        }
+        if git_dirs || batch.vcs.iter().any(|p| vcs_path_changed(p)) {
+            self.sink.emit(IdeEvent::VcsChanged { root: self.root.clone().into() });
+        }
+    }
+}
+
+/// Whether a batch adds or removes a repository: its `.git/HEAD` appeared or went (a
+/// repository was cloned / initialised / removed), or, for a linked worktree, its `.git`
+/// gitfile (the only marker written inside the worktree itself) or its registration in
+/// the main gitdir (`.git/worktrees/<name>`, written before the watcher can watch the new
+/// directory, so this entry is what Linux per-directory watchers see).
+fn repositories_changed(known: &[PathBuf], changed: &[PathBuf], batch: &ide_vfs::FsBatch) -> bool {
+    let toggled = changed.iter().chain(&batch.removed).chain(&batch.vcs).any(|p| {
+        let dir = if p.ends_with(".git/HEAD") {
+            p.parent().and_then(Path::parent)
+        } else if p.ends_with(".git") {
+            p.parent()
+        } else {
+            None
+        };
+        let Some(dir) = dir else { return false };
+        known.iter().any(|r| r == dir) != p.exists()
+    });
+    toggled
+        || batch.vcs.iter().any(|p| {
+            let rest: Vec<_> = p
+                .components()
+                .skip_while(|c| c.as_os_str() != ".git")
+                .skip(1) // the `.git` component itself
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            matches!(rest.as_slice(), [first, ..] if first == "worktrees" && rest.len() <= 2)
+        })
 }
 
 impl Project {
     pub fn refresh_repositories(&self) {
-        scan_repositories(&self.root, &self.repos, &self.settings, &self.sink, &self.build_cache_dir());
+        self.repo_scan().run();
+    }
+
+    fn repo_scan(&self) -> RepoScan {
+        RepoScan {
+            root: self.root.clone(),
+            repos: self.repos.clone(),
+            settings: self.settings.clone(),
+            sink: self.sink.clone(),
+            build_cache: self.build_cache_dir(),
+        }
     }
 
     /// The project's git repositories.
@@ -1126,6 +1158,7 @@ impl Project {
                 &self.lsp,
                 self.kotlin_bridge.as_ref(),
                 self.phpstan.as_ref(),
+                &self.repo_scan(),
             ) {
                 watchers.push((r, w));
             }
@@ -1374,8 +1407,11 @@ fn content_root_watcher(
     lsp: &Arc<LspManager>,
     kotlin_bridge: Option<&Arc<crate::kotlin_bridge::KotlinBridge>>,
     phpstan: Option<&Arc<crate::phpstan::Phpstan>>,
+    repo_scan: &RepoScan,
 ) -> Option<Watcher> {
     let (kotlin_bridge, phpstan) = (kotlin_bridge.cloned(), phpstan.cloned());
+    // A member below the project root is covered by the project watcher already.
+    let repo_scan = (!dir.starts_with(&repo_scan.root)).then(|| repo_scan.clone());
     let (index, documents, history, lsp) = (index.clone(), documents.clone(), history.clone(), lsp.clone());
     let root = dir.to_path_buf();
     Watcher::start(
@@ -1399,6 +1435,9 @@ fn content_root_watcher(
             }
             documents.on_disk_changed(&[&changed[..], &ignored].concat());
             record_external_changes(&history, &changed, &batch.removed);
+            if let Some(scan) = &repo_scan {
+                scan.on_batch(batch, &changed);
+            }
         }),
     )
     .map_err(|e| tracing::warn!("content root watcher {}: {e}", dir.display()))
