@@ -110,6 +110,44 @@ describe('buildSessionsTree', () => {
     expect(terminalOnly[0]?.groups.flatMap(g => g.sessions.map(s => s.id))).not.toContain('tx')
   })
 
+  it('lists a session under the scoped workspace when another workspace shares its folder', () => {
+    // "OmniTerm" also has a workspace of its own, created first; the multi-folder one is shown.
+    const multi = { id: 'w3', name: 'All', folders: [{ path: 'D:/other/site' }, { path: 'D:/workspace/OmniTerm' }] } as unknown as Workspace
+    const tabs = [{ id: 't2', connId: 'a', name: 'claude' }]
+    const worktree = 'D:/workspace/OmniTerm/.claude/worktrees/agent-1'
+    const sections = buildSessionsTree(input({ tabs, workspaces: [workspace, multi], scopeWorkspaceId: 'w3', cwdOf: () => worktree }))
+    expect(sections[0]?.groups.map(g => [g.label, g.sessions.map(s => s.id)])).toEqual([
+      ['site', []],
+      ['OmniTerm', ['t2']],
+    ])
+    const remembered = buildSessionsTree(input({
+      tabs: [], workspaces: [workspace, multi], scopeWorkspaceId: 'w3', filter: 'resume', stored: [stored({ cwd: worktree })],
+    }))
+    expect(storedSessionCount(remembered)).toBe(1)
+  })
+
+  it('puts sessions of the scoped workspace outside its projects under Others, listed last', () => {
+    const tabs = [{ id: 't2', connId: 'a', name: 'claude' }, { id: 't1', connId: 'a', name: 'pwsh' }]
+    const sections = buildSessionsTree(input({
+      tabs,
+      connById: () => conn('a', { workspaceId: 'w1' }),
+      cwdOf: (id) => (id === 't1' ? 'D:/workspace/OmniTerm' : 'C:/Users/me/orca/workspaces/weever'),
+      agentOf: (id) => (id === 't2' ? 'claude' : undefined),
+      scopeWorkspaceId: 'w1',
+    }))
+    expect(sections[0]?.groups.map(g => [g.label, g.sessions.map(s => s.id)])).toEqual([
+      ['OmniTerm', ['t1']],
+      ['Others', ['t2']],
+    ])
+    const noWorkspace = buildSessionsTree(input({
+      tabs: [{ id: 'tx', connId: 'c', name: 'claude' }],
+      connById: () => conn('c', { localCwd: 'D:/removed/project' }),
+      scopeWorkspaceId: 'w1',
+      agentOf: () => 'claude',
+    }))
+    expect(noWorkspace[0]?.groups.map(g => [g.label, g.sessions.map(s => s.id)])).toEqual([['OmniTerm', []], ['Others', ['tx']]])
+  })
+
   it('marks agent sessions', () => {
     const [first] = groups()
     expect(first?.sessions.map(s => s.kind)).toEqual(['terminal', 'agent'])

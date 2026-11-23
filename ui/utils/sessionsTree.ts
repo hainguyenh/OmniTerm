@@ -80,9 +80,8 @@ const folderProject = (folder: WorkspaceFolder): Project => ({
   cwd: folder.path,
 })
 
-/** The workspace project folder `cwd` lies in (the innermost one across every workspace). */
-function folderOf(cwd: string | undefined, workspaces: readonly Workspace[]): Placement | null {
-  if (!cwd) return null
+/** The innermost project folder of `workspaces` that `cwd` lies in. */
+function innermostFolder(cwd: string, workspaces: readonly Workspace[]): Placement | null {
   const dir = normalized(cwd)
   let found: { workspace: Workspace; folder: WorkspaceFolder; length: number } | null = null
   for (const workspace of workspaces) {
@@ -96,25 +95,46 @@ function folderOf(cwd: string | undefined, workspaces: readonly Workspace[]): Pl
 }
 
 /**
+ * The workspace project folder `cwd` lies in. Workspaces can share a folder (a multi-folder
+ * workspace often holds projects that also have their own workspace), so the `preferred` ones are
+ * asked first, in order: otherwise a session of the workspace shown would land in whichever
+ * workspace was created first, and the scoped tree would hide it.
+ */
+function folderOf(cwd: string | undefined, workspaces: readonly Workspace[], preferred: readonly (Workspace | null | undefined)[] = []): Placement | null {
+  if (!cwd) return null
+  for (const workspace of preferred) {
+    const inside = workspace ? innermostFolder(cwd, [workspace]) : null
+    if (inside) return inside
+  }
+  return innermostFolder(cwd, workspaces)
+}
+
+/**
  * Where an open session belongs: the workspace project folder it runs in, else its connection's
  * workspace with the folder it runs in (or, for a remote connection, the connection) as project.
  */
-function placeTab(tab: SessionsTreeTab, input: SessionsTreeInput): Placement {
+function placeTab(tab: SessionsTreeTab, input: SessionsTreeInput, scoped: Workspace | null): Placement {
   const conn = input.connById(tab.connId)
   const cwd = input.cwdOf(tab.id) ?? conn?.localCwd
-  const inFolder = folderOf(cwd, input.workspaces)
-  if (inFolder) return inFolder
   const workspace = workspaceForConnection([...input.workspaces], conn) ?? null
+  const inFolder = folderOf(cwd, input.workspaces, [scoped, workspace])
+  if (inFolder) return inFolder
   if (cwd) return { workspace, project: { key: `dir:${normalized(cwd)}`, label: lastSegment(cwd), ...(conn?.type === 'LOCAL' ? { cwd } : {}) } }
   return { workspace, project: { key: `conn:${tab.connId}`, label: conn?.name || tab.name } }
 }
 
 /** Where a remembered session belongs; it only knows its folder. */
-function placeStored(session: StoredAgentSession, input: SessionsTreeInput): Placement {
-  const inFolder = folderOf(session.cwd, input.workspaces)
+function placeStored(session: StoredAgentSession, input: SessionsTreeInput, scoped: Workspace | null): Placement {
+  const inFolder = folderOf(session.cwd, input.workspaces, [scoped])
   if (inFolder) return inFolder
   if (session.cwd) return { workspace: null, project: { key: `dir:${normalized(session.cwd)}`, label: lastSegment(session.cwd), cwd: session.cwd } }
   return { workspace: null, project: { key: `stored:${session.id}`, label: session.folderName ?? 'Workspace' } }
+}
+
+const OTHERS: Project = { key: 'others', label: 'Others' }
+
+function isStrayFolder(project: Project, workspace: Workspace): boolean {
+  return project.key.startsWith('dir:') && !(workspace.folders ?? []).some((folder) => folderProject(folder).key === project.key)
 }
 
 function isResumable(session: StoredAgentSession): boolean {
@@ -176,8 +196,12 @@ export function buildSessionsTree(input: SessionsTreeInput): SessionSection[] {
     const groups = sections.get(sectionKey(placement.workspace))
       ?? (placement.workspace === null && node.kind === 'agent' && scoped ? sections.get(sectionKey(scoped)) : undefined)
     if (!groups) return
-    const group = groups.get(placement.project.key) ?? { ...placement.project, sessions: [] }
-    groups.set(placement.project.key, group)
+    // In the scoped tree, a local folder that is none of the workspace's projects (a git worktree
+    // outside the project, a folder an agent moved to) says nothing the user can place: such
+    // sessions share one "Others" group instead of a group per stray folder.
+    const project = scoped && isStrayFolder(placement.project, scoped) ? OTHERS : placement.project
+    const group = groups.get(project.key) ?? { ...project, sessions: [] }
+    groups.set(project.key, group)
     group.sessions.push(node)
   }
 
@@ -187,12 +211,12 @@ export function buildSessionsTree(input: SessionsTreeInput): SessionSection[] {
     const kind = agent ? 'agent' : 'terminal'
     if (input.filter === 'agents' && kind !== 'agent') continue
     if (input.filter === 'terminals' && kind !== 'terminal') continue
-    add(placeTab(tab, input), { id: tab.id, name: tab.name, kind, agent })
+    add(placeTab(tab, input, scoped), { id: tab.id, name: tab.name, kind, agent })
   }
   if (input.filter !== 'terminals') {
     for (const session of input.stored ?? []) {
       if (!isResumable(session)) continue
-      add(placeStored(session, input), {
+      add(placeStored(session, input, scoped), {
         id: `stored:${session.id}`,
         name: session.title ?? session.folderName ?? 'Untitled session',
         kind: 'agent',
@@ -204,7 +228,9 @@ export function buildSessionsTree(input: SessionsTreeInput): SessionSection[] {
 
   const labels = new Map(shown.map((workspace) => [sectionKey(workspace), workspace]))
   return [...sections.entries()].flatMap(([key, groups]) => {
-    const listed = [...groups.values()].filter((group) => group.sessions.length > 0 || seeded.has(group.key))
+    const listed = [...groups.values()]
+      .filter((group) => group.sessions.length > 0 || seeded.has(group.key))
+      .sort((a, b) => Number(a.key === OTHERS.key) - Number(b.key === OTHERS.key))
     if (!listed.length && !scoped) return []
     const workspace = labels.get(key) ?? null
     return [{ key, label: workspace?.name ?? 'No workspace', workspaceId: workspace?.id ?? null, groups: numbered(listed) }]
