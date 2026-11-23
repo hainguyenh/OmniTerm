@@ -17,7 +17,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 import { useTasks } from '../../../ide/workbench/tasks'
 import { parseProgress, progressText } from '../../cleanupJob'
 import { TempCleanupOverlay } from '../TempCleanupDialog'
-import { applyCleanReport, daysSince, deletable, deletableTotal, parseCleanReport, parseTempGroup } from '../tempCleanupModel'
+import { applyCleanReport, daysSince, deletable, deletableTotal, idleGroups, parseCleanReport, parseTempGroup } from '../tempCleanupModel'
 import { useTempCleanup } from '../tempCleanupStore'
 
 const NOW = Math.floor(Date.now() / 1000)
@@ -55,6 +55,9 @@ describe('the temp clean-up model', () => {
     expect(deletable({ ...parsed[1], idle: [] }, 7)).toEqual({ entries: 10, bytes: 2048 })
     expect(deletableTotal(parsed, new Set(['claude-*', 'tmp*.tmp']), 1)).toEqual({ entries: 3, bytes: 5_000_000 })
     expect(deletableTotal(parsed, new Set(), 0)).toEqual({ entries: 0, bytes: 0 })
+    expect(idleGroups(parsed, 0).map((g) => g.key)).toEqual(['claude-*', 'tmp*.tmp'])
+    expect(idleGroups(parsed, 7).map((g) => g.key)).toEqual(['claude-*'])
+    expect(idleGroups(parsed, 30)).toEqual([])
     expect(parseTempGroup({ ...groups[0], idle: [{ days: 7, entries: -1, bytes: 0 }, 'x'] })?.idle).toEqual([])
     expect(daysSince(NOW - 3 * 86_400, Date.now())).toBe(3)
     expect(daysSince(NOW + 1000, Date.now())).toBe(0)
@@ -108,7 +111,7 @@ describe('TempCleanupDialog', () => {
     expect(invokeMock).not.toHaveBeenCalled()
     expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/Press Scan/)
     fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
-    expect(await screen.findAllByTestId('temp-cleanup-row')).toHaveLength(2)
+    expect(await screen.findAllByTestId('temp-cleanup-row')).toHaveLength(1)
     const del = screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement
     expect(del.disabled).toBe(true)
     fireEvent.click(screen.getByLabelText('Select claude-*'))
@@ -121,19 +124,30 @@ describe('TempCleanupDialog', () => {
     )
     await waitFor(() => expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/1 entry skipped.*locked\.tmp/))
     expect(invokeMock.mock.calls.filter(([c]) => c === 'temp_cleanup_scan')).toHaveLength(1)
-    expect(screen.getAllByTestId('temp-cleanup-row')).toHaveLength(1)
+    expect(useTempCleanup.getState().groups?.map((g) => g.key)).toEqual(['tmp*.tmp'])
+    expect(screen.queryAllByTestId('temp-cleanup-row')).toHaveLength(0)
+    expect(screen.getByTestId('temp-cleanup-none-idle').textContent).toMatch(/Nothing has been idle for 7\+ days/)
   })
 
-  it('does not offer a delete that would remove nothing at the chosen idle time', async () => {
+  it('lists only the kinds with something idle for the chosen time', async () => {
     invokeMock.mockImplementation((command: string) => (command === 'temp_cleanup_scan' ? Promise.resolve(groups) : Promise.resolve({})))
     render(<TempCleanupOverlay />)
     fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
     await screen.findAllByTestId('temp-cleanup-row')
-    expect(screen.getAllByTestId('temp-cleanup-idle').map((cell) => cell.textContent)).toEqual([expect.stringMatching(/^1 · /), 'none'])
-    fireEvent.click(screen.getByLabelText('Select tmp*.tmp'))
-    const del = screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement
-    expect(del.disabled).toBe(true)
-    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/Nothing in the ticked kinds has been idle for 7\+ days/)
+    expect(screen.queryByLabelText('Select tmp*.tmp')).toBeNull()
+    expect(screen.getAllByTestId('temp-cleanup-idle').map((cell) => cell.textContent)).toEqual([expect.stringMatching(/^1 · /)])
+    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/in 2 kinds of entry; 1 idle for 7\+ days\.$/)
+    expect((screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('says to choose a shorter time when nothing has been idle that long', async () => {
+    invokeMock.mockImplementation((command: string) => (command === 'temp_cleanup_scan' ? Promise.resolve([groups[1]]) : Promise.resolve({})))
+    render(<TempCleanupOverlay />)
+    fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
+    expect((await screen.findByTestId('temp-cleanup-none-idle')).textContent).toMatch(/Choose a shorter time under Idle for/)
+    expect(screen.queryAllByTestId('temp-cleanup-row')).toHaveLength(0)
+    expect((screen.getByLabelText('Select all') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('keeps a delete running in the status bar when the dialog is hidden, with Cancel', async () => {

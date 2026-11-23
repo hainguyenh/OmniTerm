@@ -5,7 +5,7 @@ import { Spinner } from '../../ide/ui/Spinner'
 import { progressText } from '../cleanupJob'
 import { formatBytes } from '../sessions/sessionCleanupModel'
 
-import { daysSince, deletable, deletableTotal, type TempGroup } from './tempCleanupModel'
+import { daysSince, deletable, deletableTotal, idleGroups, type TempGroup } from './tempCleanupModel'
 import { cancelTempJobNow, startTempClean, startTempScan, useTempCleanup, type TempJob } from './tempCleanupStore'
 
 const AGE_OPTIONS = [
@@ -21,6 +21,12 @@ export const DEFAULT_IDLE_DAYS = 7
 
 const plural = (count: number, one: string) => `${count} ${one}${count === 1 ? '' : 's'}`
 
+/** The footer text after a scan: the whole temp folder, and how much of it the filter lists. */
+function scanSummary(bytes: number, kinds: number, shown: number, idleLabel: string): string {
+  const whole = `${formatBytes(bytes)} in ${plural(kinds, 'kind')} of entry`
+  return shown === kinds ? `${whole}.` : `${whole}; ${shown} idle for ${idleLabel}.`
+}
+
 /** Overlay: the dialog, mounted only while open. */
 export function TempCleanupOverlay() {
   const open = useTempCleanup((s) => s.open)
@@ -29,15 +35,12 @@ export function TempCleanupOverlay() {
   return <TempCleanupDialog onClose={() => setOpen(false)} />
 }
 
-/** How much of `group` Delete removes at the chosen idle time; muted when that is nothing. */
+/** How much of `group` Delete removes at the chosen idle time. */
 function IdleCell({ group, days }: { group: TempGroup; days: number }) {
   const part = deletable(group, days)
   return (
-    <td
-      className={part.entries ? 'px-2 py-1 text-right' : 'px-2 py-1 text-right text-[var(--fg-muted)]'}
-      data-testid="temp-cleanup-idle"
-    >
-      {part.entries ? `${part.entries} · ${formatBytes(part.bytes)}` : 'none'}
+    <td className="px-2 py-1 text-right" data-testid="temp-cleanup-idle">
+      {`${part.entries} · ${formatBytes(part.bytes)}`}
     </td>
   )
 }
@@ -78,19 +81,19 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
 
   const run = () => {
     setConfirming(false)
-    const keys = [...selected]
+    const keys = chosen.map((group) => group.key)
     setSelected(new Set())
     void startTempClean(keys, days)
   }
 
   const all = groups ?? []
-  const chosen = all.filter((group) => selected.has(group.key))
+  // Only the kinds with something idle for the chosen time are listed: a row Delete would leave
+  // untouched read as a clean-up that does not work. A ticked kind the filter hides is not deleted.
+  const shown = idleGroups(all, days)
+  const chosen = shown.filter((group) => selected.has(group.key))
   const total = all.reduce((sum, group) => sum + group.bytes, 0)
-  // What the ticked kinds lose at the chosen idle time: an agent's temp folders are rarely a week
-  // old, and a Delete that then "removed 0, kept N" read as a clean-up that does not work.
-  const toDelete = deletableTotal(all, selected, days)
+  const toDelete = deletableTotal(shown, selected, days)
   const idleLabel = days === 0 ? 'any time' : `${days}+ days`
-  const nothingOldEnough = chosen.length > 0 && toDelete.entries === 0
   const buttons: DialogButton[] = confirming
     ? [
         { label: 'Delete Permanently', role: 'default', onClick: run },
@@ -107,9 +110,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
     ? jobMessage(job)
     : confirming
       ? `Delete ${plural(toDelete.entries, 'entry')} (${formatBytes(toDelete.bytes)}) of ${plural(chosen.length, 'kind')} idle for ${idleLabel}? This cannot be undone.`
-      : nothingOldEnough
-        ? `Nothing in the ticked kinds has been idle for ${idleLabel}. Choose a shorter time under Idle for.`
-        : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
+      : (status ?? (groups ? scanSummary(total, all.length, shown.length, idleLabel) : 'Press Scan to list the temp folder.'))
 
   return (
     <Dialog
@@ -166,10 +167,10 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
                 <th className="w-[28px] px-2 py-1">
                   <Checkbox
                     aria-label="Select all"
-                    checked={all.length > 0 && chosen.length === all.length}
-                    indeterminate={chosen.length > 0 && chosen.length < all.length}
-                    disabled={busy || !all.length}
-                    onChange={(on) => setSelected(on ? new Set(all.map((group) => group.key)) : new Set())}
+                    checked={shown.length > 0 && chosen.length === shown.length}
+                    indeterminate={chosen.length > 0 && chosen.length < shown.length}
+                    disabled={busy || !shown.length}
+                    onChange={(on) => setSelected(on ? new Set(shown.map((group) => group.key)) : new Set())}
                   />
                 </th>
                 <th className="px-2 py-1 font-normal">Kind</th>
@@ -182,7 +183,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
               </tr>
             </thead>
             <tbody>
-              {all.map((group) => (
+              {shown.map((group) => (
                 <tr key={group.key} className="border-b border-[var(--border)]" data-testid="temp-cleanup-row">
                   <td className="px-2 py-1">
                     <Checkbox
@@ -203,6 +204,11 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
           </table>
           {groups && !all.length && (
             <div className="px-6 py-8 text-center text-[var(--fg-muted)]">The temp folder is empty.</div>
+          )}
+          {all.length > 0 && !shown.length && (
+            <div className="px-6 py-8 text-center text-[var(--fg-muted)]" data-testid="temp-cleanup-none-idle">
+              Nothing has been idle for {idleLabel}. Choose a shorter time under Idle for.
+            </div>
           )}
         </div>
       </div>

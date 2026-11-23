@@ -70,6 +70,11 @@ export function deletable(group: TempGroup, days: number): { entries: number; by
   return share ? { entries: share.entries, bytes: share.bytes } : { entries: group.entries, bytes: group.bytes }
 }
 
+/** The groups that have something to delete at an idle time of `days`: the ones the dialog lists. */
+export function idleGroups(groups: readonly TempGroup[], days: number): TempGroup[] {
+  return groups.filter((group) => deletable(group, days).entries > 0)
+}
+
 /** What deleting the groups named in `selected` with an idle time of `days` removes. */
 export function deletableTotal(
   groups: readonly TempGroup[],
