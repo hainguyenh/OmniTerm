@@ -69,6 +69,7 @@ import {
   type DiffSide,
 } from "./diffInput";
 import { diffAnnotations } from "./diffAnnotations";
+import { setAllInOneDiff } from "./allInOneDiff";
 import { annotationsShown, blameSlot, toggleAnnotations } from "./blame";
 import { diffBlameTarget } from "./diffBlame";
 import { changedChainNeighbour } from "./diffNavigation";
@@ -223,6 +224,7 @@ export function DiffEditor({
   toolbarActions,
   onNeighbour,
   onJumpToSource,
+  fit = false,
 }: {
   input: EditorInput;
   toolbarActions?: ReactNode;
@@ -234,6 +236,11 @@ export function DiffEditor({
   onNeighbour?: (data: DiffData) => void;
   /** Called as Jump to Source opens the file in an editor: a modal host closes, or the editor stays hidden behind it. */
   onJumpToSource?: () => void;
+  /**
+   * A block of the all-in-one diff: as tall as its content (the host scrolls), without the
+   * toolbar and with side-by-side panes always aligned.
+   */
+  fit?: boolean;
 }) {
   const data = input.data as DiffData;
   const { path, left, right } = data;
@@ -246,6 +253,8 @@ export function DiffEditor({
     const saved = loadDiffOptions();
     return data.mode ? { ...saved, mode: data.mode } : saved;
   });
+  /** Side-by-side panes padded to line up; a fitted block always is (its host scrolls, not the panes). */
+  const aligned = fit || opts.alignChanges;
   const [lang, setLang] = useState<Extension | null>(null);
   const [chunkInfo, setChunkInfo] = useState({ count: 0, current: -1, moves: 0, whitespaceOnly: false });
   const [busy, setBusy] = useState(false);
@@ -459,7 +468,7 @@ export function DiffEditor({
     let views: Views;
     if (opts.mode === "split") {
       let merge: MergeView | null = null;
-      const panes = opts.alignChanges
+      const panes = aligned
         ? null
         : new UnalignedPanes({
             sync: syncScroll.current,
@@ -592,7 +601,7 @@ export function DiffEditor({
     statics,
     lang,
     opts.mode,
-    opts.alignChanges,
+    aligned,
     opts.collapse,
     opts.ignore,
     opts.highlight,
@@ -609,7 +618,8 @@ export function DiffEditor({
     const views = viewsRef.current;
     if (!views) return;
     // Aligned panes scroll in MergeView's outer element, which scrollSnapshot does not cover.
-    const outer = views.merge && !views.panes ? views.merge.dom : null;
+    // A fitted block has no scroller of its own: anchoring would scroll the all-in-one diff.
+    const outer = !fit && views.merge && !views.panes ? views.merge.dom : null;
     const top = outer?.getBoundingClientRect().top;
     const block = top == null ? null : views.b.lineBlockAtHeight(Math.max(0, top - views.b.documentTop));
     const anchor =
@@ -634,7 +644,7 @@ export function DiffEditor({
       });
       return () => cancelAnimationFrame(frame);
     }
-  }, [softWrap, wrapSlot]);
+  }, [softWrap, wrapSlot, fit]);
 
   useEffect(() => viewsRef.current?.panes?.setSync(opts.syncScroll), [opts.syncScroll]);
 
@@ -1009,10 +1019,25 @@ export function DiffEditor({
       {
         id: "align",
         label: "Align Changes",
-        checked: opts.alignChanges,
-        disabled: opts.mode !== "split",
+        checked: aligned,
+        disabled: opts.mode !== "split" || fit,
         run: () => setOpts({ alignChanges: !opts.alignChanges }),
       },
+      // A tab of one file of a change: show every file of it in one scrollable tab instead.
+      ...(data.chain && data.chain.length > 1 && !data.embedded && !fit
+        ? [
+            { kind: "separator" } as const,
+            {
+              id: "allInOne",
+              label: "Show All Files in One Diff View",
+              checked: false,
+              run: () => {
+                setAllInOneDiff(true);
+                void openDiff(data).then(() => editorService().closeInput?.(input.key));
+              },
+            },
+          ]
+        : []),
       ...contribs.flatMap((c) => {
         const items = c.settingsItems?.() ?? [];
         return items.length ? [{ kind: "separator" } as const, ...items] : [];
@@ -1105,7 +1130,7 @@ export function DiffEditor({
 
   return (
     <div
-      className={styles.root}
+      className={clsx(styles.root, fit && styles.fit)}
       onKeyDown={onKeyDown}
       onFocusCapture={() => {
         setFocusedDiffNavigator(nav.current);
@@ -1118,7 +1143,7 @@ export function DiffEditor({
         }
       }}
     >
-      <div ref={toolbarRef} className={styles.toolbar} role="toolbar" aria-label={tx("Diff")}>
+      <div ref={toolbarRef} className={styles.toolbar} role="toolbar" aria-label={tx("Diff")} hidden={fit}>
         <IconButton
           icon="arrow-up"
           title="Previous Difference"
@@ -1327,7 +1352,7 @@ export function DiffEditor({
         className={clsx(
           styles.host,
           opts.highlight === "none" && styles.noHighlight,
-          opts.mode === "split" && (opts.alignChanges ? !opts.syncScroll && styles.unsynced : styles.unaligned),
+          opts.mode === "split" && (aligned ? !opts.syncScroll && styles.unsynced : styles.unaligned),
         )}
         hidden={!!binary || !!error || !ready}
         aria-label={diffTitle(data)}
