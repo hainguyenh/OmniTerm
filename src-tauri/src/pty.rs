@@ -1,6 +1,7 @@
 //! Tauri bridge to the out-of-process terminal session daemon.
 
 use crate::launcher;
+use crate::pty_flow::{OutputCredit, OutputFlows};
 #[cfg(test)]
 #[path = "pty_tests.rs"]
 mod tests;
@@ -33,6 +34,8 @@ pub struct PtySessionMeta {
 
 pub struct PtyManager {
     pub sessions: Arc<DashMap<String, PtySessionMeta>>,
+    /// Output each stream sent that its renderer has not written yet (see pty_flow.rs).
+    flows: Arc<OutputFlows>,
     client: OnceLock<SessionDaemonClient>,
     lease_started: AtomicBool,
     shutdown_requested: Arc<AtomicBool>,
@@ -41,6 +44,7 @@ impl PtyManager {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(DashMap::new()),
+            flows: Arc::new(OutputFlows::default()),
             client: OnceLock::new(),
             lease_started: AtomicBool::new(false),
             shutdown_requested: Arc::new(AtomicBool::new(false)),
@@ -214,12 +218,9 @@ pub async fn start_local_session<R: Runtime>(
         &subscription.snapshot,
         subscription.replay.len(),
     );
-    if !subscription.replay.is_empty() {
-        on_data
-            .send(Response::new(std::mem::take(&mut subscription.replay)))
-            .map_err(|error| error.to_string())?;
-    }
-    spawn_stream(id, subscription, on_data, on_status, state.inner());
+    let credit = state.flows.open(&id);
+    send_replay(&on_data, &credit, &mut subscription)?;
+    spawn_stream(id, subscription, on_data, on_status, state.inner(), credit);
     Ok(())
 }
 
@@ -248,7 +249,17 @@ pub async fn disconnect_session(
     id: String,
 ) -> Result<(), String> {
     state.sessions.remove(&id);
+    state.flows.close(&id);
     state.client()?.disconnect(id).await
+}
+
+/// The renderer wrote `bytes` of a session's output to its terminal, which lets a stream that
+/// stopped reading for it go on.
+#[tauri::command]
+pub fn ack_session_output(state: tauri::State<'_, PtyManager>, id: String, bytes: u64) {
+    state
+        .flows
+        .ack(&id, usize::try_from(bytes).unwrap_or(usize::MAX));
 }
 
 pub(crate) async fn attach_existing_session(
@@ -270,18 +281,16 @@ pub(crate) async fn attach_existing_session(
         &subscription.snapshot,
         subscription.replay.len(),
     );
-    if !subscription.replay.is_empty() {
-        on_data
-            .send(Response::new(std::mem::take(&mut subscription.replay)))
-            .map_err(|error| error.to_string())?;
-    }
+    let credit = manager.flows.open(&id);
+    send_replay(&on_data, &credit, &mut subscription)?;
     let snapshot = subscription.snapshot.clone();
-    spawn_stream(id, subscription, on_data, on_status, manager);
+    spawn_stream(id, subscription, on_data, on_status, manager, credit);
     Ok(Some(snapshot))
 }
 
 pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     manager.sessions.remove(id);
+    manager.flows.close(id);
     let Ok(client) = manager.client() else {
         return;
     };
@@ -291,16 +300,39 @@ pub(crate) fn kill_session(manager: &PtyManager, id: &str) {
     });
 }
 
+/// Send an attach's buffered scrollback down the data channel, counted like live output.
+fn send_replay(
+    on_data: &Channel<Response>,
+    credit: &OutputCredit,
+    subscription: &mut SessionSubscription,
+) -> Result<(), String> {
+    if subscription.replay.is_empty() {
+        return Ok(());
+    }
+    let replay = std::mem::take(&mut subscription.replay);
+    credit.sent(replay.len());
+    on_data
+        .send(Response::new(replay))
+        .map_err(|error| error.to_string())
+}
+
 fn spawn_stream(
     id: String,
     mut subscription: SessionSubscription,
     on_data: Channel<Response>,
     on_status: Channel<SessionStatus>,
     manager: &PtyManager,
+    credit: Arc<OutputCredit>,
 ) {
     let sessions = manager.sessions.clone();
+    let flows = Arc::clone(&manager.flows);
     tauri::async_runtime::spawn(async move {
         loop {
+            // Stop reading while the renderer is far behind (see pty_flow.rs). A credit closed by a
+            // newer stream for this id, or by a disconnect, ends this one.
+            if !credit.room().await {
+                break;
+            }
             let message = match subscription.next().await {
                 Ok(message) => message,
                 Err(error) => {
@@ -320,6 +352,7 @@ fn spawn_stream(
             };
             match message {
                 ServerMessage::Data { data } => {
+                    credit.sent(data.len());
                     if on_data.send(Response::new(data)).is_err() {
                         break;
                     }
@@ -350,5 +383,6 @@ fn spawn_stream(
                 _ => {}
             }
         }
+        flows.release(&id, &credit);
     });
 }

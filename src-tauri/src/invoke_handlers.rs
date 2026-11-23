@@ -23,6 +23,7 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         pty::send_session_input,
         pty_interrupt::interrupt_session,
         pty::resize_session,
+        pty::ack_session_output,
         pty::disconnect_session,
         pty_resolve::prepare_ssh_session,
         // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer

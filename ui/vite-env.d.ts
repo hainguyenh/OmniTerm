@@ -201,7 +201,7 @@ interface Window {
       sshInput: (id: string, data: string) => void
       sshResize: (id: string, size: { cols: number, rows: number }) => void
       onSSHReady: (id: string, cb: () => void) => () => void
-      onSSHData: (id: string, cb: (data: Uint8Array) => void) => () => void
+      onSSHData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => () => void
       onSSHError: (id: string, cb: (err: string) => void) => () => void
       onSSHClosed: (id: string, cb: () => void) => () => void
       onSessionMetrics: (id: string, cb: (m: SessionMetrics) => void) => () => void
@@ -215,8 +215,10 @@ interface Window {
       localInput: (id: string, data: string) => void
       localResize: (id: string, size: { cols: number, rows: number }) => void
       onLocalReady: (id: string, cb: (label?: string, replay?: { available: boolean; bytes: number; generation: number }) => void) => () => void
-      onLocalData: (id: string, cb: (data: Uint8Array) => void) => () => void
+      onLocalData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => () => void
       onLocalError: (id: string, cb: (err: string) => void) => () => void
+      /** Bytes of a session's output a pane wrote to its terminal, for a data handler that returned 'ack-later'. */
+      ackOutput: (id: string, bytes: number) => void
       // The shell's exit code. Absent under Electron, whose closed event carries no status.
       onLocalClosed: (id: string, cb: (code?: number) => void) => () => void
       /**

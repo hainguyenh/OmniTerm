@@ -6,6 +6,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { failSession, onSession, startSession, type ReplayMetadata } from './tauriSessions'
+import { ackSessionOutput } from './sessionOutputAck'
 import { diag } from './diag'
 import { sendInOrder } from './utils/sessionInputQueue'
 
@@ -40,8 +41,10 @@ export function createConnectAPI(): any {
     localResize: (id: string, size: { cols: number; rows: number }) =>
       invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
     onLocalReady: (id: string, cb: (label?: string, replay?: ReplayMetadata) => void) => onSession(id, 'ready', cb),
-    onLocalData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
+    onLocalData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => onSession(id, 'data', cb),
     onLocalError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
+    // A pane whose data handler returned 'ack-later' reports here what it wrote (sessionOutputAck.ts).
+    ackOutput: (id: string, bytes: number) => ackSessionOutput(id, bytes),
     onLocalClosed: (id: string, cb: (code: number) => void) => onSession(id, 'closed', cb),
     // Busy/idle: sessiond polls the PTY process tree and forwards activity on the existing channel.
     onLocalActivity: (id: string, cb: (busy: boolean) => void) => onSession(id, 'activity', cb),
@@ -61,7 +64,7 @@ export function createConnectAPI(): any {
     sshInput: (id: string, data: string) => { void sendInOrder(id, () => invoke('send_session_input', { id, data })) },
     sshResize: (id: string, size: { cols: number; rows: number }) => invoke('resize_session', { id, cols: size.cols, rows: size.rows }).catch(() => {}),
     onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
-    onSSHData: (id: string, cb: (data: Uint8Array) => void) => onSession(id, 'data', cb),
+    onSSHData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => onSession(id, 'data', cb),
     onSSHError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
     onSSHClosed: (id: string, cb: () => void) => onSession(id, 'closed', () => cb()),
     onSessionMetrics: (id: string, cb: (m: any) => void) =>

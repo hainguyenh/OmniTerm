@@ -22,7 +22,10 @@ export interface SessionChannel {
   dispose?: () => void
   /** Each `on*` returns a synchronous unsubscribe — see omnitermAPI.ts. */
   onReady: (cb: (label?: string, replay?: ReplayMetadata) => void) => () => void
-  onData: (cb: (data: Uint8Array) => void) => () => void
+  /** A callback returning `'ack-later'` reports the bytes through `ack` once they are written. */
+  onData: (cb: (data: Uint8Array) => 'ack-later' | void) => () => void
+  /** Bytes of output written to the terminal; lets the backend keep reading (sessionOutputAck.ts). */
+  ack?: (bytes: number) => void
   onError: (cb: (err: string) => void) => () => void
   onClosed: (cb: (code?: number) => void) => () => void
 }
@@ -68,5 +71,7 @@ export const createSessionChannel = (
       onClosed: (cb) => window.omnitermAPI.connect.onSSHClosed(id, () => cb(0)),
     }
   channel.dispose = resizeQueue.cancel
+  // Local and SSH panes stream over the same session channels, so they acknowledge the same way.
+  channel.ack = (bytes) => window.omnitermAPI.connect.ackOutput(id, bytes)
   return channel
 }

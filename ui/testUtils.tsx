@@ -207,6 +207,7 @@ const defaults: Api = {
     onLocalReady: noopSub,
     onLocalData: noopSub,
     onLocalError: noopSub,
+    ackOutput: () => {},
     onLocalClosed: noopSub,
     onLocalActivity: noopSub,
   },

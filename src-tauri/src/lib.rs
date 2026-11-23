@@ -48,6 +48,7 @@ pub use app_protocol::{openshell, session_status, shell_spec};
 pub use app_core::win_job;
 pub use app_core::{launch, proc_activity, rdp_launch, tree_validate, workspace_launch};
 pub mod pty;
+mod pty_flow;
 mod pty_interrupt;
 mod pty_lease;
 pub mod pty_resolve;

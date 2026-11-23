@@ -57,12 +57,24 @@ export interface TerminalStreamOptions {
 
 const UNAVAILABLE_SESSION_MESSAGE = 'session is no longer available'
 
+/**
+ * How often a pane with new output saves its scrollback. An agent's spinner keeps a pane dirty for
+ * hours, and every save rewrites up to 512 KB in IndexedDB: at 3 s, a few agent panes kept the disk
+ * and the webview busy for nothing. Unmount still saves at once.
+ */
+export const SCROLLBACK_SAVE_MS = 15_000
+
 export const isUnavailableSessionError = (error: string) =>
   error.trim().toLowerCase().includes(UNAVAILABLE_SESSION_MESSAGE)
 
-/** Feed `text` to xterm in pieces it can parse without blocking a frame. */
-const writeChunked = (term: Terminal, text: string) => {
-  for (const chunk of chunkForWrite(text)) term.write(chunk)
+/** Feed `text` to xterm in pieces it can parse without blocking a frame; `parsed` runs after the last. */
+const writeChunked = (term: Terminal, text: string, parsed: () => void) => {
+  const chunks = chunkForWrite(text)
+  if (chunks.length === 0) {
+    parsed()
+    return
+  }
+  chunks.forEach((chunk, i) => term.write(chunk, i === chunks.length - 1 ? parsed : undefined))
 }
 
 export interface TerminalStream {
@@ -104,6 +116,21 @@ export const attachTerminalStream = ({
   const decoder = new TextDecoder('utf-8')
   const highlighter = new OutputHighlighter()
   const outputRate = new OutputRate()
+  // Flow control: the backend stops reading the session while 8 MiB it sent is unacknowledged
+  // (src-tauri/src/pty_flow.rs). Bytes are acknowledged once xterm has parsed the paint that carried
+  // them, so a pane that cannot keep up slows the stream instead of queueing it in memory.
+  let receivedBytes = 0 // arrived since the last paint
+  let inFlightBytes = 0 // painted, not parsed yet
+  let disposed = false
+  const paint = (data: string) => {
+    const bytes = receivedBytes
+    receivedBytes = 0
+    inFlightBytes += bytes
+    writeChunked(term, data, () => {
+      inFlightBytes -= bytes
+      if (!disposed && bytes > 0) api.ack?.(bytes)
+    })
+  }
   // Paints at the configured rate (Settings › Tools › Terminal › Maximum refresh rate), and at most
   // every 250 ms while the pane or the window is hidden: an agent's spinner in a background tab kept
   // xterm repainting for nothing. The shown pane with the default "Unlimited" writes every chunk at
@@ -111,7 +138,7 @@ export const attachTerminalStream = ({
   const gate = new OutputGate({
     maxFps: () => workflowSettings().terminal.maxFps,
     hidden: () => (typeof document !== 'undefined' && document.hidden) || visible?.() === false,
-    write: (data) => writeChunked(term, data),
+    write: paint,
   })
   const emit = (text: string) => gate.push(text)
 
@@ -140,7 +167,6 @@ export const attachTerminalStream = ({
   const scrollBuffer = new ScrollbackBuffer(MAX_SCROLLBACK_BYTES)
   let scrollDirty = false
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
-  const SCROLLBACK_SAVE_MS = 3_000
 
   const appendScrollback = (text: string) => {
     if (!scrollbackKey) return
@@ -213,6 +239,7 @@ export const attachTerminalStream = ({
   })
 
   const cleanupData = api.onData((data: Uint8Array) => {
+    receivedBytes += data.byteLength
     if (!sawFirstData) {
       sawFirstData = true
       onStatus('connected')
@@ -223,9 +250,11 @@ export const attachTerminalStream = ({
     if (gated !== null) {
       gated.push(text)
       gatedReplay.push(replay)
-      return
+    } else {
+      handleText(text, replay)
     }
-    handleText(text, replay)
+    // Acknowledged by `paint` once parsed, or by `dispose` if the pane goes first.
+    return api.ack ? 'ack-later' : undefined
   })
 
   const cleanupError = api.onError((err: string) => {
@@ -334,6 +363,12 @@ export const attachTerminalStream = ({
       cleanupActivity()
       api.dispose?.()
       gate.dispose()
+      // Whatever this pane still holds is released, so a pane remounted on the same stream does not
+      // start out owing the backend for output it will never paint.
+      disposed = true
+      const held = receivedBytes + inFlightBytes
+      if (held > 0) api.ack?.(held)
+      receivedBytes = 0
       // Final scrollback flush — unmount is the last moment the full buffer is owned here.
       if (scrollTimer) clearTimeout(scrollTimer)
       scrollTimer = null
