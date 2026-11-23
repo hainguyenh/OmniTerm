@@ -7354,5 +7354,14 @@
   "Expand All Files": "展开所有文件",
   "Collapse All Files": "折叠所有文件",
   "Show Files in Separate Diff Tabs": "在单独的差异标签页中显示文件",
-  "Show All Files in One Diff View": "在一个差异视图中显示所有文件"
+  "Show All Files in One Diff View": "在一个差异视图中显示所有文件",
+  "Execute branch operations on all repositories": "在所有仓库执行分支操作",
+  "Only applies to projects with several Git repositories.": "仅对包含多个 Git 仓库的项目生效。",
+  "Branches have diverged": "分支已分叉",
+  "Check out the same branch in all repositories to operate on them together.": "在所有仓库签出同一分支后，才能同时操作它们。",
+  "Rename branch {name} ({root})": "重命名分支 {name}（{root}）",
+  "rename it back to {name}": "改回原名 {name}",
+  "restore {name} and check out the previous branch again": "恢复 {name} 并重新签出之前的分支",
+  "Unset upstream of {to} ({root})": "取消 {to} 的上游分支（{root}）",
+  "Group by Repository": "按仓库分组"
 }

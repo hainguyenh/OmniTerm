@@ -4765,6 +4765,8 @@ export type GitSettings = {
 	inlineBlame?: boolean,
 	/**  Branch of each repository root beside it in the Project view (on by default in OmniTerm). */
 	showBranchInProjectView?: boolean,
+	/**  Branch operations from the branches popup act on every repository of the project. */
+	syncBranchOperations?: boolean,
 	/**  Path to the git executable; empty = auto-detect. */
 	executable?: string,
 	/**  Default of Update Project: `merge` | `rebase`. */

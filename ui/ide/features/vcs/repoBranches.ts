@@ -54,6 +54,8 @@ export interface CommonBranch {
   /** Checked out in every repository. */
   current: boolean;
   favorite: boolean;
+  /** Tracks a remote branch in some repository. */
+  upstream: boolean;
 }
 
 /** Branches present in every repository (by name), local and remote, sorted like the single-repository lists. */
@@ -74,6 +76,7 @@ export function commonBranches(
           remote: b.remote,
           current: b.current && all.every((x) => x!.current),
           favorite: isFavoriteBranch(b, favorites),
+          upstream: !!b.upstream || all.some((x) => !!x!.upstream),
         },
       ];
     });
@@ -91,6 +94,8 @@ export type BranchGroupKind = "recent" | "local" | "remote";
 export type RepoRow =
   /** Section header; an empty label draws a separator. */
   | { type: "section"; key: string; label: string }
+  /** A warning above the branches (not selectable): the repositories are on different branches. */
+  | { type: "notice"; key: string; label: string; detail: string }
   | { type: "action"; key: string; action: PopupAction; matches: number[] | null }
   /** Collapsible group (common branches, or one of the current repository's lists) or prefix / remote folder. */
   | { type: "group"; key: string; label: string; expanded: boolean; depth: number }
@@ -132,13 +137,16 @@ export interface MultiRepoInput extends Omit<BranchTreeOptions, "expanded"> {
   recent?: readonly string[];
   /** Tags of the current repository. */
   tags?: readonly string[];
+  /** Branch operations act on all repositories (the setting): the common branches are listed. */
+  sync: boolean;
 }
 
 /**
  * Rows of the Branches popup with several repositories (the popup's project list chooses the
- * current one): actions; then, when they are all on the same branch, the branches common to all
- * of them (acting on all of them), otherwise the current repository's recent, local and remote
- * branches and tags, in collapsible groups (Recent open, Local open only without Recent). A query
+ * current one): actions; then, with `sync`, the branches common to all of them (acting on all of
+ * them; a notice when the repositories are on different branches), otherwise the current
+ * repository's recent, local and remote branches and tags, in collapsible groups (Recent open,
+ * Local open only without Recent). A query
  * filters actions and branches, expands every group, and adds the other repositories' matching
  * branches.
  */
@@ -155,6 +163,7 @@ export function buildMultiRepoRows({
   groupByPrefix = true,
   showRecent = true,
   showTags = true,
+  sync,
 }: MultiRepoInput): RepoRow[] {
   const q = query.trim();
   const match = (text: string): number[] | null | false => (q ? (fuzzyMatch(text, q) ?? false) : null);
@@ -251,11 +260,17 @@ export function buildMultiRepoRows({
     );
   };
 
-  const shared = !widgetShowsRepo(repos);
   const groups: RepoRow[] = [];
+  if (sync && widgetShowsRepo(repos))
+    groups.push({
+      type: "notice",
+      key: "notice:diverged",
+      label: tx("Branches have diverged"),
+      detail: tx("Check out the same branch in all repositories to operate on them together."),
+    });
   let shown = new Set<string>();
   const currentRepo = repos.find((r) => r.root === current) ?? repos[0];
-  if (shared) {
+  if (sync) {
     const loaded = repos.every((r) => branches[r.root]);
     const common = loaded
       ? commonBranches(
@@ -301,7 +316,7 @@ export function buildMultiRepoRows({
 
   if (q) {
     for (const repo of repos) {
-      if (!shared && repo === currentRepo) continue;
+      if (!sync && repo === currentRepo) continue;
       const list = branches[repo.root] ?? [];
       const own = (l: Branch[]) => l.filter((b) => !shown.has(`${b.remote}:${b.name}`));
       const rows = [

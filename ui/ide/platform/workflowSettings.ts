@@ -20,6 +20,7 @@ export interface IssueLinkValid {
 export interface GitSettingsValid {
   inlineBlame: boolean;
   showBranchInProjectView: boolean;
+  syncBranchOperations: boolean;
   executable: string;
   updateMethod: UpdateMethod;
   autoUpdateOnPushRejected: boolean;
@@ -211,6 +212,7 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
     git: {
       inlineBlame: false,
       showBranchInProjectView: true,
+      syncBranchOperations: true,
       executable: "",
       updateMethod: "merge",
       autoUpdateOnPushRejected: false,
@@ -347,6 +349,7 @@ export function validateVcs(raw: unknown): VcsSettingsValid {
     git: {
       inlineBlame: bool(g.inlineBlame, d.git.inlineBlame),
       showBranchInProjectView: bool(g.showBranchInProjectView, d.git.showBranchInProjectView),
+      syncBranchOperations: bool(g.syncBranchOperations, d.git.syncBranchOperations),
       executable: text(g.executable, d.git.executable).trim(),
       updateMethod: oneOf(g.updateMethod, ["merge", "rebase"] as const, d.git.updateMethod),
       autoUpdateOnPushRejected: bool(g.autoUpdateOnPushRejected, d.git.autoUpdateOnPushRejected),

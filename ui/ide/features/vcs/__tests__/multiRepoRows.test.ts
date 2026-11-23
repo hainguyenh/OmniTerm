@@ -15,6 +15,7 @@ const rows = (query: string) =>
     actions: [{ id: "vcs.newBranch", label: "New Branch…", group: "branch" }],
     expanded: new Map(),
     current: A.root,
+    sync: false,
   });
 
 describe("buildMultiRepoRows", () => {

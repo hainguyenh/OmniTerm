@@ -1019,5 +1019,14 @@
   "Collapse All Files": "Collapse All Files",
   "Show Files in Separate Diff Tabs": "Show Files in Separate Diff Tabs",
   "Show All Files in One Diff View": "Show All Files in One Diff View",
-  "No changes": "No changes"
+  "No changes": "No changes",
+  "Execute branch operations on all repositories": "Execute branch operations on all repositories",
+  "Only applies to projects with several Git repositories.": "Only applies to projects with several Git repositories.",
+  "Branches have diverged": "Branches have diverged",
+  "Check out the same branch in all repositories to operate on them together.": "Check out the same branch in all repositories to operate on them together.",
+  "Rename branch {name} ({root})": "Rename branch {name} ({root})",
+  "rename it back to {name}": "rename it back to {name}",
+  "restore {name} and check out the previous branch again": "restore {name} and check out the previous branch again",
+  "Unset upstream of {to} ({root})": "Unset upstream of {to} ({root})",
+  "Group by Repository": "Group by Repository"
 }

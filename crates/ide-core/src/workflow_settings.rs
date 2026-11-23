@@ -46,6 +46,8 @@ pub struct GitSettings {
     pub inline_blame: bool,
     /// Branch of each repository root beside it in the Project view (on by default in OmniTerm).
     pub show_branch_in_project_view: bool,
+    /// Branch operations from the branches popup act on every repository of the project.
+    pub sync_branch_operations: bool,
     /// Path to the git executable; empty = auto-detect.
     pub executable: String,
     /// Default of Update Project: `merge` | `rebase`.
@@ -84,6 +86,7 @@ impl Default for GitSettings {
         Self {
             inline_blame: false,
             show_branch_in_project_view: true,
+            sync_branch_operations: true,
             executable: String::new(),
             update_method: "merge".into(),
             auto_update_on_push_rejected: false,
@@ -423,5 +426,18 @@ impl Default for ExternalTool {
             synchronize_after: true,
             open_console: true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_settings_without_sync_key_execute_on_all_repositories() {
+        let missing: GitSettings = serde_json::from_str("{}").expect("empty settings parse");
+        assert!(missing.sync_branch_operations);
+        let off: GitSettings = serde_json::from_str(r#"{"syncBranchOperations":false}"#).expect("settings parse");
+        assert!(!off.sync_branch_operations);
     }
 }
