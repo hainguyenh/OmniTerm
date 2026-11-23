@@ -11,6 +11,10 @@
   color: var(--fg-subtle);
   font-weight: 400;
 }
+/* A count that opens its commits, inside the widget's own button. */
+.syncCount {
+  cursor: pointer;
+}
 .icon {
   flex: none;
   color: var(--fg-muted);

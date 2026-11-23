@@ -1,6 +1,6 @@
 import { branchesByRepo } from "./multiRoot";
 /** Title bar branch widget (branch name + incoming / outgoing markers) + Branches popup. */
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import clsx from "clsx";
 import { create } from "zustand";
 import type { Branch, BranchInfo } from "@/bindings";
@@ -41,6 +41,8 @@ import { useWorkspaceStore } from "../../../platform/workspaceStore";
 import { decodeWorkspaceSelection } from "../../../utils/workspaceSelection";
 import { rootContaining } from "../../../workbench/footerGitModel";
 import { BranchSync } from "./BranchSync";
+import { showSyncCommits } from "./SyncCommitsPopup";
+import type { SyncDirection } from "./syncCommits";
 import { chooseBranchProject, setBranchProjectsCollapsed, useBranchProject, useChosenBranchProject } from "./branchProject";
 import { ProjectRadioList } from "./ProjectRadioList";
 import styles from "./BranchWidget.module.css";
@@ -133,6 +135,16 @@ export function BranchWidget() {
   ]
     .filter(Boolean)
     .join("\n");
+  // A count lists its commits; the rest of the widget keeps opening the branches popup.
+  const openSync = (direction: SyncDirection) => (e: MouseEvent) => {
+    e.stopPropagation();
+    useBranchesPopup.setState({ open: false });
+    showSyncCommits({
+      repo: current,
+      branch: { branch: branch.head, upstream: branch.upstream, ahead: branch.ahead, behind: branch.behind },
+      direction,
+    });
+  };
   return (
     <>
       <BarButton
@@ -154,12 +166,20 @@ export function BranchWidget() {
         {branch.operation && !inProgress(branch.operation) && (
           <span className={styles.operation}>{branch.operation}</span>
         )}
-        {/* Muted ↓incoming ↑outgoing counts; the tooltip spells them out. */}
+        {/* Muted ↓incoming ↑outgoing counts; the tooltip spells them out, a click lists the commits. */}
         {(branch.behind > 0 || branch.ahead > 0) && (
           <span className={styles.sync} aria-hidden="true">
-            {[branch.behind > 0 ? `↓${branch.behind}` : "", branch.ahead > 0 ? `↑${branch.ahead}` : ""]
-              .filter(Boolean)
-              .join(" ")}
+            {branch.behind > 0 && (
+              <span className={styles.syncCount} data-sync-direction="incoming" onClick={openSync("incoming")}>
+                ↓{branch.behind}
+              </span>
+            )}
+            {branch.behind > 0 && branch.ahead > 0 && " "}
+            {branch.ahead > 0 && (
+              <span className={styles.syncCount} data-sync-direction="outgoing" onClick={openSync("outgoing")}>
+                ↑{branch.ahead}
+              </span>
+            )}
           </span>
         )}
         <Icon name="chevron-down" size={12} className={styles.chevron} />
@@ -188,6 +208,7 @@ const POPUP_ACTIONS: PopupAction[] = [
   { id: "vcs.update", label: "Update Project…", icon: "git-pull", group: "sync" },
   { id: "vcs.commit", label: "Commit…", icon: "commit", group: "sync" },
   { id: "vcs.push", label: "Push…", icon: "git-push", group: "sync" },
+  { id: "vcs.syncCommits", label: "Incoming and Outgoing Commits…", icon: "history", group: "sync" },
   { id: "vcs.newBranch", label: "New Branch…", icon: "plus", group: "branch" },
   { id: "vcs.checkoutRevision", label: "Checkout Tag or Revision…", icon: "branch", group: "branch" },
 ];

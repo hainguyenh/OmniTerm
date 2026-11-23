@@ -993,5 +993,13 @@
   "Stash Selected Files…": "Stash Selected Files…",
   "Select the files to stash in the Commit view first": "Select the files to stash in the Commit view first",
   "Cannot ignore the commit": "Cannot ignore the commit",
-  "Ignore This Commit": "Ignore This Commit"
+  "Ignore This Commit": "Ignore This Commit",
+  "Incoming commits": "Incoming commits",
+  "Outgoing commits": "Outgoing commits",
+  "Incoming and outgoing commits": "Incoming and outgoing commits",
+  "Incoming and Outgoing Commits…": "Incoming and Outgoing Commits…",
+  "Show Incoming and Outgoing Commits": "Show Incoming and Outgoing Commits",
+  "Open in Git Log": "Open in Git Log",
+  "Could not show diff": "Could not show diff",
+  "This branch has no upstream. Push it to compare with a remote branch.": "This branch has no upstream. Push it to compare with a remote branch."
 }
