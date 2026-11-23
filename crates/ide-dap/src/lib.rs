@@ -1011,7 +1011,7 @@ impl DebugManager {
         let mut launch = if launch_in_config {
             None
         } else {
-            let reply = s.conn.send_request(request, arguments.clone())?;
+            let reply = s.conn.send_request(request, arguments.clone()).await?;
             Some(Box::pin(async move { reply.await.unwrap_or(Err(DapError::Closed)) }))
         };
         let mut initialized = s.initialized.subscribe();
@@ -1079,7 +1079,7 @@ impl DebugManager {
         }
         if s.supports("supportsConfigurationDoneRequest") {
             if s.adapter == kotlin::ADAPTER {
-                drop(s.conn.send_request("configurationDone", json!({}))?);
+                drop(s.conn.send_request("configurationDone", json!({})).await?);
             } else {
                 s.conn.request_timeout("configurationDone", Value::Null, REQUEST_TIMEOUT).await?;
             }
@@ -1093,7 +1093,7 @@ impl DebugManager {
             }
             None => {
                 // GDB 15: the breakpoints are in, so its `run` cannot miss them.
-                let reply = s.conn.send_request(request, arguments)?;
+                let reply = s.conn.send_request(request, arguments).await?;
                 reply.await.unwrap_or(Err(DapError::Closed))?;
             }
         }

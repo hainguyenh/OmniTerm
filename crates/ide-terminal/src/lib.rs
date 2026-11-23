@@ -6,7 +6,7 @@ mod utf8;
 pub use utf8::Utf8Decoder;
 
 use ide_core::{IdeError, IdeEvent, IdeResult, SharedSink, TerminalId};
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -24,6 +24,92 @@ const BATCH_INTERVAL: Duration = Duration::from_millis(4);
 const BATCH_BYTES: usize = 64 * 1024;
 /// After the shell exits, how long to keep draining output still in flight.
 const EXIT_DRAIN: Duration = Duration::from_millis(250);
+/// High-water mark for output not yet consumed by the pump: the PTY reader blocks past it,
+/// which applies kernel pipe backpressure instead of letting a slow UI accumulate unbounded
+/// chunks in memory.
+const OUTPUT_HIGH_WATER: usize = 16 * 1024 * 1024;
+
+#[derive(Default)]
+struct BudgetState {
+    pending: usize,
+    closed: bool,
+}
+
+/// Byte budget shared by the output producer and the pump that consumes it.
+#[derive(Clone, Default)]
+struct ByteBudget(Arc<(Mutex<BudgetState>, Condvar)>);
+
+impl ByteBudget {
+    /// Reserves `bytes` in the queue, waiting for the pump to catch up. An oversized chunk
+    /// is let through (waiting cannot free memory already allocated by its producer).
+    fn acquire(&self, bytes: usize) -> bool {
+        let (lock, cv) = &*self.0;
+        let mut state = lock.lock();
+        while !state.closed && bytes < OUTPUT_HIGH_WATER && state.pending + bytes > OUTPUT_HIGH_WATER {
+            cv.wait(&mut state);
+        }
+        if state.closed {
+            return false;
+        }
+        state.pending += bytes;
+        true
+    }
+
+    fn release(&self, bytes: usize) {
+        let (lock, cv) = &*self.0;
+        let mut state = lock.lock();
+        state.pending = state.pending.saturating_sub(bytes);
+        cv.notify_all();
+    }
+
+    fn close(&self) {
+        let (lock, cv) = &*self.0;
+        lock.lock().closed = true;
+        cv.notify_all();
+    }
+}
+
+#[derive(Clone)]
+struct OutputSender {
+    tx: mpsc::Sender<Msg>,
+    budget: ByteBudget,
+}
+
+struct OutputReceiver {
+    rx: mpsc::Receiver<Msg>,
+    budget: ByteBudget,
+}
+
+impl Drop for OutputReceiver {
+    fn drop(&mut self) {
+        // A panicking pump must not leave producers waiting on a budget nobody releases.
+        self.budget.close();
+    }
+}
+
+impl OutputSender {
+    fn data(&self, data: &[u8]) -> bool {
+        if !self.budget.acquire(data.len()) {
+            return false;
+        }
+        if self.tx.send(Msg::Data(data.to_vec())).is_err() {
+            self.budget.release(data.len());
+            return false;
+        }
+        true
+    }
+
+    fn exited(&self, code: Option<i32>) {
+        let _ = self.tx.send(Msg::Exited(code));
+    }
+}
+
+/// An output queue whose producers block once [`OUTPUT_HIGH_WATER`] unconsumed bytes are queued.
+fn output_channel() -> (OutputSender, OutputReceiver) {
+    let (tx, rx) = mpsc::channel();
+    let budget = ByteBudget::default();
+    (OutputSender { tx, budget: budget.clone() }, OutputReceiver { rx, budget })
+}
 /// Grace period between SIGHUP and SIGKILL on [`TerminalManager::kill`].
 #[cfg(unix)]
 const KILL_GRACE: Duration = Duration::from_millis(1500);
@@ -214,16 +300,16 @@ impl TerminalManager {
         });
         self.sessions.lock().insert(id, session);
 
-        let (tx, rx) = mpsc::channel::<Msg>();
+        let (out, output) = output_channel();
         let spawned = spawn_reader(
             id,
             reader,
-            tx.clone(),
+            out.clone(),
             #[cfg(unix)]
             wait_readable,
         )
-        .and_then(|_| spawn_waiter(id, child, tx))
-        .and_then(|_| spawn_pump(id, rx, on_output, exited, self.sessions.clone(), sink, Instant::now()));
+        .and_then(|_| spawn_waiter(id, child, out))
+        .and_then(|_| spawn_pump(id, output, on_output, exited, self.sessions.clone(), sink, Instant::now()));
         if let Err(e) = spawned {
             if let Some(s) = self.sessions.lock().remove(&id) {
                 let _ = s.killer.lock().kill();
@@ -431,7 +517,7 @@ fn terminate(session: &Session) {
 fn spawn_reader(
     id: TerminalId,
     mut reader: Box<dyn Read + Send>,
-    tx: mpsc::Sender<Msg>,
+    tx: OutputSender,
     #[cfg(unix)] mut wait_readable: impl FnMut() -> std::io::Result<()> + Send + 'static,
 ) -> std::io::Result<()> {
     std::thread::Builder::new().name(format!("omniterm-term-read-{}", id.0)).spawn(move || {
@@ -440,7 +526,9 @@ fn spawn_reader(
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    if tx.send(Msg::Data(buf[..n].to_vec())).is_err() {
+                    // Blocks past the byte high-water mark: a slow consumer stalls the
+                    // PTY reader, which lets the kernel pipe backpressure the shell.
+                    if !tx.data(&buf[..n]) {
                         break;
                     }
                 }
@@ -472,7 +560,7 @@ fn spawn_reader(
 fn spawn_waiter(
     id: TerminalId,
     mut child: Box<dyn portable_pty::Child + Send + Sync>,
-    tx: mpsc::Sender<Msg>,
+    tx: OutputSender,
 ) -> std::io::Result<()> {
     std::thread::Builder::new().name(format!("omniterm-term-wait-{}", id.0)).spawn(move || {
         let code = match child.wait() {
@@ -483,14 +571,14 @@ fn spawn_waiter(
                 None
             }
         };
-        let _ = tx.send(Msg::Exited(code));
+        tx.exited(code);
     })?;
     Ok(())
 }
 
 fn spawn_pump(
     id: TerminalId,
-    rx: mpsc::Receiver<Msg>,
+    output: OutputReceiver,
     on_output: Box<dyn Fn(String) + Send>,
     exited: Arc<AtomicBool>,
     sessions: Sessions,
@@ -530,8 +618,10 @@ fn spawn_pump(
                 (Some(a), None) | (None, Some(a)) => a,
                 (None, None) => Duration::from_secs(3600),
             };
-            match rx.recv_timeout(wait) {
+            match output.rx.recv_timeout(wait) {
                 Ok(Msg::Data(bytes)) => {
+                    // The pump owns these bytes now; wake any producer waiting on the cap.
+                    output.budget.release(bytes.len());
                     decoder.decode_into(&bytes, &mut pending);
                     if !pending.is_empty() && batch_started.is_none() {
                         batch_started = Some(Instant::now());
@@ -558,6 +648,7 @@ fn spawn_pump(
         pending.push_str(&decoder.finish());
         flush(&mut pending, &mut batch_started);
         exited.store(true, Ordering::Release);
+        output.budget.close();
         sessions.lock().remove(&id);
         let code = exit.flatten();
         tracing::debug!(%id, ?code, "terminal exited");
@@ -770,6 +861,98 @@ fn default_chere_invoking(shell: &str, user: &BTreeMap<String, String>, inherite
     }
     let set = |v: Option<&str>| v.is_some_and(|v| !v.is_empty());
     !set(user.get("CHERE_INVOKING").map(String::as_str)) && !set(inherited)
+}
+
+/// Platform-independent, unlike `tests` below: the byte budget never touches a PTY.
+#[cfg(test)]
+mod backpressure_tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    #[test]
+    fn output_past_the_byte_budget_blocks_the_producer_until_the_pump_drains() {
+        let (out, receiver) = output_channel();
+        let chunk = vec![b'x'; 16 * 1024];
+        let chunk_len = chunk.len();
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let count = accepted.clone();
+        let producer = std::thread::spawn(move || {
+            // 64 MiB, four times the high-water mark. With no pump draining it, only the
+            // budget's worth can be accepted; the producer then blocks.
+            for _ in 0..4096 {
+                if !out.data(&chunk) {
+                    break;
+                }
+                count.fetch_add(chunk.len(), Ordering::Relaxed);
+            }
+        });
+        // Poll instead of sleeping a fixed time: a loaded CI box may schedule the
+        // producer late, but it must eventually fill the budget.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let pending = loop {
+            let pending = receiver.budget.0.0.lock().pending;
+            if pending >= OUTPUT_HIGH_WATER || Instant::now() >= deadline {
+                break pending;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        assert!(pending <= OUTPUT_HIGH_WATER + chunk_len, "{pending}");
+        assert!(pending > OUTPUT_HIGH_WATER - chunk_len, "the producer should have filled the budget: {pending}");
+        // Closing the queue releases the blocked producer.
+        drop(receiver);
+        producer.join().expect("producer thread panicked");
+        assert!(accepted.load(Ordering::Relaxed) <= OUTPUT_HIGH_WATER + 2 * chunk_len);
+    }
+
+    #[test]
+    fn draining_the_queue_lets_a_blocked_producer_finish_without_dropping_output() {
+        let (out, receiver) = output_channel();
+        let chunk = vec![b'x'; 1024 * 1024];
+        // 32 MiB through a 16 MiB budget: completes only because the consumer releases bytes.
+        let producer = std::thread::spawn(move || (0..32).all(|_| out.data(&chunk)));
+        let mut received = 0;
+        while received < 32 * 1024 * 1024 {
+            match receiver.rx.recv_timeout(Duration::from_secs(5)) {
+                Ok(Msg::Data(bytes)) => {
+                    receiver.budget.release(bytes.len());
+                    received += bytes.len();
+                }
+                Ok(Msg::Exited(_)) => panic!("no exit was sent"),
+                Err(e) => panic!("the producer stalled: {e}"),
+            }
+        }
+        assert!(producer.join().expect("producer thread panicked"), "the producer saw a closed queue");
+        assert_eq!(receiver.budget.0.0.lock().pending, 0);
+    }
+
+    #[test]
+    #[ignore = "prints the peak buffered output bytes"]
+    fn output_backpressure_numbers() {
+        let (out, receiver) = output_channel();
+        let chunk = vec![b'x'; 16 * 1024];
+        let accepted = Arc::new(AtomicUsize::new(0));
+        let count = accepted.clone();
+        let producer = std::thread::spawn(move || {
+            for _ in 0..4096 {
+                if !out.data(&chunk) {
+                    break;
+                }
+                count.fetch_add(chunk.len(), Ordering::Relaxed);
+            }
+        });
+        // No pump (no consumer) for this window: measure how much a fast producer can
+        // pile up before the budget stops it.
+        std::thread::sleep(Duration::from_millis(300));
+        let pending = receiver.budget.0.0.lock().pending;
+        drop(receiver);
+        producer.join().expect("producer thread panicked");
+        println!(
+            "peak pending {} bytes ({} MiB) of {} MiB produced",
+            pending,
+            pending / (1024 * 1024),
+            accepted.load(Ordering::Relaxed) / (1024 * 1024)
+        );
+    }
 }
 
 #[cfg(all(test, unix))]
