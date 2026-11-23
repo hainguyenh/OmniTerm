@@ -13,6 +13,7 @@ import { call, commands, isTauri, type TerminalId } from "@/platform/ipc";
 import { tx } from "@/platform/i18n";
 import { notifications, registerFontZoomSurface } from "@/workbench/contributions";
 import { fitScheduler, settledResize } from "./fit";
+import { OutputGate } from "./outputGate";
 import { watchWindowsPty, windowsPty } from "./windowsPty";
 import { installTerminalDrop } from "./drop";
 import { installDomRowCache } from "./domRowCache";
@@ -193,6 +194,12 @@ export class TerminalSession {
   private readonly ptyResize = settledResize((cols, rows) => this.resizePty(cols, rows));
   /** Keystrokes typed while the PTY is still starting; sent as soon as it exists. */
   private pendingInput = "";
+  /** PTY output on its way to xterm, painted at most at the configured rate (see outputGate.ts). */
+  private readonly outputGate = new OutputGate({
+    maxFps: () => workflowSettings().terminal.maxFps,
+    hidden: () => typeof document !== "undefined" && document.hidden,
+    write: (data) => this.term.write(data),
+  });
   private lastSize = { cols: 0, rows: 0 };
   /** Per-tab font size offset (px) relative to `workflowSettings().terminal.fontSize`. */
   private fontZoom = 0;
@@ -548,6 +555,7 @@ export class TerminalSession {
   async start() {
     if (this.disposed || this.snapshot.status === "starting" || this.snapshot.status === "running") return;
     const generation = ++this.generation;
+    this.outputGate.clear();
     const custom = this.opts.command;
     this.update({ status: "starting", exitCode: null, appTitle: null, commandRunning: !!custom && !custom.shell });
     if (!isTauri()) {
@@ -560,7 +568,7 @@ export class TerminalSession {
     this.lastSize = { cols, rows };
     const channel = new Channel<string>();
     channel.onmessage = (chunk) => {
-      if (generation === this.generation && !this.disposed) this.term.write(chunk);
+      if (generation === this.generation && !this.disposed) this.outputGate.push(chunk);
     };
     try {
       const t = workflowSettings().terminal;
@@ -632,6 +640,8 @@ export class TerminalSession {
       if (this.disposed || this.snapshot.status !== "exited") return;
       const suffix = code !== null && code !== 0 ? ` (exit code ${code})` : "";
       const hint = this.opts.command?.onExit ? "" : `${RESTART_HINT}\r\n`;
+      // The process's last output is painted before the banner, never after it.
+      this.outputGate.flush();
       this.term.write(`\r\n\x1b[2m[Process completed${suffix}]\x1b[0m\r\n${hint}`);
       this.opts.onExit?.(this.key);
     }, 60);
@@ -776,6 +786,7 @@ export class TerminalSession {
       this.opts.command?.onExit?.(null, true);
     this.fitter.cancel();
     this.ptyResize.cancel();
+    this.outputGate.dispose();
     this.pendingInput = "";
     this.resizeObserver?.disconnect();
     this.host.removeEventListener("mousedown", this.onMiddleClick);

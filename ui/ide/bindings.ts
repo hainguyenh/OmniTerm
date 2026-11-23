@@ -8860,6 +8860,8 @@ export type TerminalSettings = {
 	/**  `block` | `underline` | `bar`. */
 	cursorShape?: string,
 	cursorBlink?: boolean,
+	/**  Cap PTY→xterm paint rate: `unlimited` | `60` | `30` | `15` | `10`. */
+	maxFps?: string,
 	useEditorFont?: boolean,
 	fontFamily?: string,
 	fontSize?: number | null,

@@ -191,6 +191,20 @@ describe('createTerminalContextMenu — a file path in the output', () => {
     expect(setLinkMenu).toHaveBeenCalledWith(expect.objectContaining({ kind: 'path', text: 'src/app/main.ts', line: 12 }))
   })
 
+  it('lets a plain click on a path through to xterm, so an agent\'s click-to-select menu still gets it', () => {
+    const openPath = vi.fn()
+    const { onLinkClick, setLinkMenu } = makeHandler({ term: pathLine, openPath })
+    const e = click({ button: 0, clientX: 80, clientY: 6 })
+
+    onLinkClick(e)
+
+    expect(openPath).not.toHaveBeenCalled()
+    expect(setLinkMenu).not.toHaveBeenCalled()
+    expect(e.preventDefault).not.toHaveBeenCalled()
+    expect(e.stopPropagation).not.toHaveBeenCalled()
+    expect(e.stopImmediatePropagation).not.toHaveBeenCalled()
+  })
+
   it('keeps a URL on the menu even when paths open straight away', () => {
     const openPath = vi.fn()
     const { onLinkClick, setLinkMenu } = makeHandler({ openPath })

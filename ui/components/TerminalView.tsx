@@ -66,6 +66,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // WebGL budget without re-running the main effect.
   const touchRendererRef = useRef<() => void>(() => {})
   const activeRef = useRef(active)
+  const streamVisibilityRef = useRef<() => void>(() => {})
   activeRef.current = active
 
   // Read at write-time so the toggle applies to live sessions immediately.
@@ -346,7 +347,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onExit: (code) => {
         if (recentlyInterrupted(id, Date.now())) {
           exitedAfterInterrupt = true
-          term.write(exitBannerText(code))
+          stream.write(exitBannerText(code))
         }
         cbs.current.onExit?.(code)
       },
@@ -355,11 +356,13 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       smartColors: () => smartColorsRef.current === true,
       linkColors: () => linkColorsRef.current,
       themeColors: () => themeColorsRef.current,
+      visible: () => activeRef.current,
       // A fresh PTY/replay needs the real grid resent even when its size is unchanged.
       refit: () => safeFit(true),
       isCurrent: () => termRef.current === term,
     })
     noteLocalEcho = stream.noteLocalEcho
+    streamVisibilityRef.current = stream.visibilityChanged
 
     // Coalesced (not raw safeFit): a drag-resize fires this on every intermediate frame, and
     // fitting/resizing on each one is itself a source of TUI frame corruption.
@@ -391,6 +394,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       disposeSaveRequests()
       window.removeEventListener('omniterm:zoom-changed', onZoomChanged)
       stream.dispose()
+      streamVisibilityRef.current = () => {}
       forgetCtrlC(id)
       safeFitRef.current = () => {}
       touchRendererRef.current = () => {}
@@ -418,6 +422,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     const layoutChanged = active && layoutEpochRef.current !== layoutEpoch
     wasActiveRef.current = active
     layoutEpochRef.current = layoutEpoch
+    // Output held while the pane was hidden is painted now (or held from now on).
+    streamVisibilityRef.current()
     if (!active) {
       if (buffer) wasAtBottomRef.current = buffer.viewportY == null || buffer.baseY == null || buffer.viewportY >= buffer.baseY - 1
       return
