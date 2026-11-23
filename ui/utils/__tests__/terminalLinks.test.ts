@@ -7,6 +7,7 @@ import {
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
+  joinedPathCandidates,
   linkSpansOnLine,
   oscLinkTarget,
   registerPlainTextLinks,
@@ -125,6 +126,15 @@ describe('findLinkOrPathAt', () => {
     expect(linkSpansOnLine(line).map((span) => span.text)).toEqual(['src/a.ts', 'src/b.ts'])
     expect(linkSpansOnLine('see Docs src/a.ts').map((span) => span.text)).toEqual(['src/a.ts'])
     expect(linkSpansOnLine('runs/Sprint 254 done').map((span) => span.text)).toEqual(['runs/Sprint'])
+  })
+
+  it('joins a path only with the word across the line break it touches', () => {
+    const span = linkSpansOnLine('see src/a.ts:12')[0]!
+    expect(joinedPathCandidates(span, 'see src/a.ts:12', 'before', 'More text')).toEqual(['src/a.ts More', 'src/a.tsMore'])
+    const opening = linkSpansOnLine('  src/a.ts then')[0]!
+    expect(joinedPathCandidates(opening, '  src/a.ts then', 'see the', null)).toEqual(['the src/a.ts', 'thesrc/a.ts'])
+    const inside = linkSpansOnLine('see src/a.ts then')[0]!
+    expect(joinedPathCandidates(inside, 'see src/a.ts then', 'x', 'y')).toEqual([])
   })
 
   it('does NOT match a bare filename with no path separator', () => {
@@ -290,6 +300,21 @@ describe('cell-accurate link detection', () => {
     for (const [x, y] of [[255, 5], [105, 25], [15, 45]]) {
       expect(findLinkOrPathInTerminal(terminal, grid(40, 3), x!, y!)).toMatchObject({ kind: 'path', text: path })
     }
+  })
+
+  // Regression: an agent wraps its own reply with hard line breaks, so `runs/Sprint 254/…` became
+  // two links, `…/runs/Sprint` and `254/…`, and neither named a file.
+  it('offers the path joined across a hard line break, from either half', () => {
+    const { terminal } = cellTerminal([
+      { cells: narrow('Report 56159: test/runs/Sprint') },
+      { cells: narrow('  254/56159-overview/latest.html') },
+    ])
+    const joined = ['test/runs/Sprint 254/56159-overview/latest.html', 'test/runs/Sprint254/56159-overview/latest.html']
+    expect(findLinkOrPathInTerminal(terminal, grid(40, 2), 255, 5)).toMatchObject({ text: 'test/runs/Sprint', candidates: joined })
+    expect(findLinkOrPathInTerminal(terminal, grid(40, 2), 105, 25)).toMatchObject({
+      text: '254/56159-overview/latest.html',
+      candidates: joined,
+    })
   })
 
   it('measures columns on the xterm screen, not on the wider pane around it', () => {

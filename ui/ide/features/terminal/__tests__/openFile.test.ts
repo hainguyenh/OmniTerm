@@ -46,6 +46,15 @@ describe("opening a file a terminal printed", () => {
     expect(await findFileLink({ path: "lib/b.ts" }, "", [""])).toBe("D:/work/app/lib/b.ts");
   });
 
+  // Regression: a path an agent's reply broke across two lines opened neither half.
+  it("tries the joined readings first, then the printed path", async () => {
+    onDisk.add("D:/work/tests/runs/Sprint 254/latest.html");
+    const link = { path: "runs/Sprint", candidates: ["runs/Sprint 254/latest.html", "runs/Sprint254/latest.html"] };
+    expect(await findFileLink(link, "D:/elsewhere", ["D:/work/app", "D:/work/tests"])).toBe("D:/work/tests/runs/Sprint 254/latest.html");
+    onDisk.add("D:/work/app/src/a.ts");
+    expect(await findFileLink({ path: "src/a.ts", candidates: ["src/a.ts More"] }, "D:/work/app")).toBe("D:/work/app/src/a.ts");
+  });
+
   it("opens the file at the printed line and column", async () => {
     onDisk.add("D:/work/app/src/a.ts");
     expect(await openFileLink({ path: "./src/a.ts", line: 12, col: 5 }, "D:/work/app")).toBe(true);

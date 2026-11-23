@@ -1,6 +1,6 @@
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
 
-import { indexOfCell, logicalLineAt } from './terminalLogicalLine'
+import { adjacentLogicalLine, indexOfCell, logicalLineAt, type LogicalLine } from './terminalLogicalLine'
 
 const PLAIN_URL_RE = /\bhttps?:\/\/[^\s<>'"`]+/gi
 const TRAILING_URL_PUNCTUATION_RE = /[),.;:!?\]}]+$/
@@ -79,6 +79,13 @@ export interface DetectedLinkOrPath {
   line?: number
   /** 1-based column printed after the line (`a.ts:12:5`). */
   col?: number
+  /**
+   * Longer readings to try before `text`, most likely first: the path joined with the word that
+   * ends the line before it or starts the line after it. An agent that wraps its own reply breaks
+   * `runs/Sprint 254/a.html` into `runs/Sprint` and `254/a.html`; only the opener, which checks the
+   * disk, can tell a split path from a path followed by prose.
+   */
+  candidates?: string[]
 }
 
 /** The `:line[:col]` that follows a path at `end`, when there is one. */
@@ -121,6 +128,39 @@ export const findLinkOrPathAt = (line: string, col: number): DetectedLinkOrPath 
   return linkSpansOnLine(line).find((span) => col >= span.start && col < span.end) ?? null
 }
 
+const LEADING_WORD_RE = /^\s*([^\s<>"'`]+)/
+const TRAILING_WORD_RE = /([^\s<>"'`]+)$/
+
+/**
+ * The readings of `span` (on `line`) joined across a hard line break: the word that ends the line
+ * before it when the span opens its line, the word that starts the line after it when the span
+ * closes its line — joined with a space (the break replaced one) and without (it fell mid-word).
+ */
+export const joinedPathCandidates = (
+  span: DetectedLinkOrPath,
+  line: string,
+  before: string | null,
+  after: string | null,
+): string[] => {
+  const opensLine = !line.slice(0, span.start).trim()
+  const closesLine = !line.slice(span.end).replace(PATH_LOCATION_RE, '').trim()
+  const prev = opensLine && before ? TRAILING_WORD_RE.exec(before.trimEnd())?.[1] : undefined
+  const next = closesLine && after ? LEADING_WORD_RE.exec(after)?.[1]?.replace(TRAILING_PATH_PUNCTUATION_RE, '') : undefined
+  const heads = prev ? [`${prev} `, prev, ''] : ['']
+  const tails = next ? [` ${next}`, next, ''] : ['']
+  const candidates = heads.flatMap((head) => tails.map((tail) => `${head}${span.text}${tail}`))
+  return candidates.filter((candidate) => candidate !== span.text)
+}
+
+/** `found` on `line` with the readings joined across the lines around it, when there are any. */
+const withJoinedCandidates = (term: Terminal, line: LogicalLine, found: DetectedLinkOrPath): DetectedLinkOrPath => {
+  if (found.kind !== 'path') return found
+  const before = adjacentLogicalLine(term, line, -1)?.text ?? null
+  const after = adjacentLogicalLine(term, line, 1)?.text ?? null
+  const candidates = joinedPathCandidates(found, line.text, before, after)
+  return candidates.length ? { ...found, candidates } : found
+}
+
 /**
  * Same, but starting from a mouse event inside the terminal pane. Maps the cursor's pixel position
  * to a buffer (col, row) using xterm's affine layout (cellWidth = clientWidth / cols), then probes
@@ -158,7 +198,8 @@ export const findLinkOrPathInTerminal = (
   const line = logicalLineAt(term, bufferRow)
   if (!line) return null
   const index = indexOfCell(line, bufferRow, col)
-  return index < 0 ? null : findLinkOrPathAt(line.text, index)
+  const found = index < 0 ? null : findLinkOrPathAt(line.text, index)
+  return found ? withJoinedCandidates(term, line, found) : null
 }
 
 /** The links of the logical line holding buffer row `y - 1` that touch that row (xterm asks per row). */

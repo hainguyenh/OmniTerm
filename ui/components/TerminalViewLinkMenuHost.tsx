@@ -49,7 +49,7 @@ export const TerminalViewLinkMenuHost: React.FC<TerminalViewLinkMenuHostProps> =
       onCopyText={copyText}
       onOpenUrl={openUrl}
       onOpenPath={openPath}
-      onOpenInEditor={(text) => onOpenInEditor({ text, line: menu.line, col: menu.col })}
+      onOpenInEditor={(text) => onOpenInEditor({ text, line: menu.line, col: menu.col, candidates: menu.candidates })}
       {...(menu.fromContextMenu ? { onPaste } : {})}
       onClose={onClose}
     />

@@ -69,3 +69,19 @@ export function indexOfCell(line: LogicalLine, row: number, col: number): number
   // The right half of a wide character belongs to the character on its left.
   return line.cells.findIndex((cell) => cell.row === row && cell.col === col - 1 && cell.wide === true)
 }
+
+/**
+ * The logical line printed right before (`-1`) or after (`1`) `line`, or null at the edge of the
+ * buffer. A TUI that wraps its own text (an agent's reply) ends each row with a hard line break,
+ * so a long path it prints lands on two logical lines.
+ */
+export function adjacentLogicalLine(term: Terminal, line: LogicalLine, direction: -1 | 1): LogicalLine | null {
+  const first = line.cells[0]
+  const last = line.cells[line.cells.length - 1]
+  if (!first || !last) return null
+  if (direction < 0) return first.row > 0 ? logicalLineAt(term, first.row - 1) : null
+  const buffer = term.buffer.active
+  let row = last.row
+  while (buffer.getLine(row + 1)?.isWrapped) row++
+  return logicalLineAt(term, row + 1)
+}

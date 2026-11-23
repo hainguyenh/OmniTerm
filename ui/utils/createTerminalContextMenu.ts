@@ -24,12 +24,14 @@ export interface TerminalLinkMenuState {
   line?: number
   /** 1-based column printed after the line. */
   col?: number
+  /** Readings of a path joined across a hard line break, tried before `text`. */
+  candidates?: string[]
   /** Opened by a right-click, which otherwise pastes: the menu then offers Paste too. */
   fromContextMenu?: boolean
 }
 
 /** A path printed in the pane, with the location after it. */
-export type TerminalPathLink = Pick<DetectedLinkOrPath, 'text' | 'line' | 'col'>
+export type TerminalPathLink = Pick<DetectedLinkOrPath, 'text' | 'line' | 'col' | 'candidates'>
 
 export interface CreateTerminalContextMenuArgs {
   term: Terminal
@@ -83,6 +85,7 @@ export const createTerminalContextMenu =
       text: found.text,
       ...(found.line !== undefined ? { line: found.line } : {}),
       ...(found.col !== undefined ? { col: found.col } : {}),
+      ...(found.candidates ? { candidates: found.candidates } : {}),
     })
 
     const onContextMenu = (e: MouseEvent): void => {
