@@ -1538,6 +1538,15 @@ mod tests {
     }
 
     #[test]
+    fn folders_of_changed_files_are_coloured_unless_turned_off() {
+        let settings: Settings = serde_json::from_str("{}").unwrap();
+        assert!(settings.vcs.show_dirty_directories, "a changed file is hard to find without its folders coloured");
+        let json = r#"{"vcs":{"showDirtyDirectories":false}}"#;
+        let settings: Settings = serde_json::from_str(json).unwrap();
+        assert!(!settings.vcs.show_dirty_directories);
+    }
+
+    #[test]
     fn window_close_settings_default_off_and_round_trip() {
         for old in [r#"{}"#, r#"{"general":{"confirmExit":false}}"#] {
             let settings: Settings = serde_json::from_str(old).unwrap();

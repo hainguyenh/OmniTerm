@@ -202,8 +202,9 @@ export const DEFAULT_EXTERNAL_TOOL: ExternalToolValid = {
 
 export const DEFAULT_WORKFLOW: WorkflowSettings = {
   vcs: {
-    // IDEA's VcsConfiguration.SHOW_DIRTY_RECURSIVELY is off by default.
-    showDirtyDirectories: false,
+    // On by default (IDEA keeps SHOW_DIRTY_RECURSIVELY off): in a large tree a changed
+    // file is hard to find when only the file itself is coloured.
+    showDirtyDirectories: true,
     limitHistory: true,
     historyLimit: 1000,
     git: {

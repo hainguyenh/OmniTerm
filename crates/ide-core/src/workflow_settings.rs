@@ -25,8 +25,9 @@ pub struct VcsSettings {
 impl Default for VcsSettings {
     fn default() -> Self {
         Self {
-            // IDEA's VcsConfiguration.SHOW_DIRTY_RECURSIVELY is off by default.
-            show_dirty_directories: false,
+            // On by default (IDEA keeps SHOW_DIRTY_RECURSIVELY off): in a large tree a changed
+            // file is hard to find when only the file itself is coloured.
+            show_dirty_directories: true,
             limit_history: true,
             history_limit: 1000,
             git: GitSettings::default(),
