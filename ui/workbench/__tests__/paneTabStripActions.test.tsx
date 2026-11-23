@@ -61,7 +61,7 @@ describe('pane actions', () => {
   it('keep tab and pane actions in the strip and float the editor actions over the content', async () => {
     await act(() => controller.openInput({ kind: 'test-doc', key: 'test-doc:1' }))
     render(<EditorAreaView />)
-    const maximize = screen.getByRole('button', { name: 'Maximize / restore this pane' })
+    const maximize = screen.getByRole('button', { name: 'Maximize this pane' })
     const newSession = screen.getByRole('button', { name: 'New terminal or agent session in this pane' })
     const split = screen.getByRole('button', { name: 'Split Right' })
     const more = screen.getByRole('button', { name: 'Tab Actions' })

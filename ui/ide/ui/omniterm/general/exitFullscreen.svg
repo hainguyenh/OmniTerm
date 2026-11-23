@@ -1,0 +1,7 @@
+<!-- OmniTerm: leave the full-screen view (the four corner brackets turned inward, expui style). -->
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M2.5 6H5C5.55228 6 6 5.55228 6 5V2.5" stroke="#6C707E" stroke-linecap="round"/>
+<path d="M13.5 6H11C10.4477 6 10 5.55228 10 5V2.5" stroke="#6C707E" stroke-linecap="round"/>
+<path d="M10 13.5V11C10 10.4477 10.4477 10 11 10H13.5" stroke="#6C707E" stroke-linecap="round"/>
+<path d="M6 13.5V11C6 10.4477 5.55228 10 5 10H2.5" stroke="#6C707E" stroke-linecap="round"/>
+</svg>

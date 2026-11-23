@@ -19,13 +19,15 @@ const invoke = vi.hoisted(() => vi.fn(async (..._args: unknown[]): Promise<unkno
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
 
 import { getAction } from '../../ide/platform/actions'
+import { evaluateWhen, getContext } from '../../ide/platform/context'
 import { useWorkbenchSlots } from '../../ide/workbench/contributions'
 import { omnitermActionId } from '../../platform/omnitermActions'
 import { useWorkspaceStore } from '../../platform/workspaceStore'
 import { resetPanePresenceForTests, setPanePresence } from '../../utils/agentPresenceStore'
 import { glyphGrid } from '../layout/layoutGlyphs'
 import { LayoutPresetPicker } from '../layout/LayoutPresetPicker'
-import { registerPaneTitleActions, TOGGLE_MAXIMIZE_PANE } from '../layout/paneTitleActions'
+import { applyEditorPreset, maximizeActivePane, restoreMaximized } from '../layout/layoutPresetStore'
+import { PANE_MAXIMIZED, registerPaneTitleActions, TOGGLE_MAXIMIZE_PANE } from '../layout/paneTitleActions'
 import { resetQuotaStore, updateQuota } from '../../features/agent-quota/quotaStore'
 import { clearStoredSessions, upsertSession } from '../../utils/agentSessionStorage'
 import { clearPaneConsole, registerPaneConsole } from '../../utils/paneConsoles'
@@ -46,15 +48,36 @@ describe('pane title actions', () => {
   it('adds Maximize to the editor actions, New Session to every pane tab strip, the session launcher to the empty pane, and removes them again', () => {
     const dispose = registerPaneTitleActions()
     expect(slots.items).toEqual([
-      expect.objectContaining({ slot: 'editor.title', action: TOGGLE_MAXIMIZE_PANE, icon: 'fullscreen' }),
+      expect.objectContaining({ slot: 'editor.title', action: TOGGLE_MAXIMIZE_PANE, icon: 'fullscreen', when: `!${PANE_MAXIMIZED}` }),
+      expect.objectContaining({ slot: 'editor.title', action: TOGGLE_MAXIMIZE_PANE, icon: 'fullscreen-exit', when: PANE_MAXIMIZED }),
       expect.objectContaining({ slot: 'editor.pane', action: omnitermActionId('newSession'), icon: 'plus' }),
     ])
     expect(getAction(NEW_SESSION_IN_PANE)).toBeDefined()
     expect(useWorkbenchSlots.getState().emptyPane).toBe(EmptyPaneLauncher)
     dispose()
-    expect(slots.disposed).toBe(2)
+    expect(slots.disposed).toBe(3)
     expect(getAction(NEW_SESSION_IN_PANE)).toBeUndefined()
     expect(useWorkbenchSlots.getState().emptyPane).toBeUndefined()
+  })
+})
+
+describe('the maximize button', () => {
+  it('turns into Restore while a pane is maximized', () => {
+    const dispose = registerPaneTitleActions()
+    expect(getContext()[PANE_MAXIMIZED]).toBe(false)
+    expect(applyEditorPreset('2')).toBe(true)
+    act(() => {
+      maximizeActivePane()
+    })
+    expect(getContext()[PANE_MAXIMIZED]).toBe(true)
+    expect(evaluateWhen(PANE_MAXIMIZED)).toBe(true)
+    expect(evaluateWhen(`!${PANE_MAXIMIZED}`)).toBe(false)
+    act(() => {
+      restoreMaximized()
+    })
+    expect(getContext()[PANE_MAXIMIZED]).toBe(false)
+    dispose()
+    expect(getContext()[PANE_MAXIMIZED]).toBeUndefined()
   })
 })
 

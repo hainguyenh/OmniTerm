@@ -265,6 +265,7 @@ const ICONS = {
   "preview-only": "general/previewOnly",
   maximize: "image/fitContent",
   fullscreen: "omniterm/general/fullscreen",
+  "fullscreen-exit": "omniterm/general/exitFullscreen",
   download: "omniterm/general/download",
   "zoom-in": "omniterm/general/zoomIn",
   "zoom-out": "omniterm/general/zoomOut",
