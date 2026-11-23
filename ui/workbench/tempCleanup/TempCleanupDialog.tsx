@@ -5,7 +5,7 @@ import { Spinner } from '../../ide/ui/Spinner'
 import { progressText } from '../cleanupJob'
 import { formatBytes } from '../sessions/sessionCleanupModel'
 
-import { daysSince, selectedBytes } from './tempCleanupModel'
+import { daysSince, deletable, deletableTotal, type TempGroup } from './tempCleanupModel'
 import { cancelTempJobNow, startTempClean, startTempScan, useTempCleanup, type TempJob } from './tempCleanupStore'
 
 const AGE_OPTIONS = [
@@ -27,6 +27,19 @@ export function TempCleanupOverlay() {
   const setOpen = useTempCleanup((s) => s.setOpen)
   if (!open) return null
   return <TempCleanupDialog onClose={() => setOpen(false)} />
+}
+
+/** How much of `group` Delete removes at the chosen idle time; muted when that is nothing. */
+function IdleCell({ group, days }: { group: TempGroup; days: number }) {
+  const part = deletable(group, days)
+  return (
+    <td
+      className={part.entries ? 'px-2 py-1 text-right' : 'px-2 py-1 text-right text-[var(--fg-muted)]'}
+      data-testid="temp-cleanup-idle"
+    >
+      {part.entries ? `${part.entries} · ${formatBytes(part.bytes)}` : 'none'}
+    </td>
+  )
 }
 
 /** The footer text of a running job. */
@@ -73,6 +86,11 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
   const all = groups ?? []
   const chosen = all.filter((group) => selected.has(group.key))
   const total = all.reduce((sum, group) => sum + group.bytes, 0)
+  // What the ticked kinds lose at the chosen idle time: an agent's temp folders are rarely a week
+  // old, and a Delete that then "removed 0, kept N" read as a clean-up that does not work.
+  const toDelete = deletableTotal(all, selected, days)
+  const idleLabel = days === 0 ? 'any time' : `${days}+ days`
+  const nothingOldEnough = chosen.length > 0 && toDelete.entries === 0
   const buttons: DialogButton[] = confirming
     ? [
         { label: 'Delete Permanently', role: 'default', onClick: run },
@@ -88,8 +106,10 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
   const message = job
     ? jobMessage(job)
     : confirming
-      ? `Delete entries of ${plural(chosen.length, 'kind')} (up to ${formatBytes(selectedBytes(all, selected))}) idle for ${days === 0 ? 'any time' : `${days}+ days`}? This cannot be undone.`
-      : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
+      ? `Delete ${plural(toDelete.entries, 'entry')} (${formatBytes(toDelete.bytes)}) of ${plural(chosen.length, 'kind')} idle for ${idleLabel}? This cannot be undone.`
+      : nothingOldEnough
+        ? `Nothing in the ticked kinds has been idle for ${idleLabel}. Choose a shorter time under Idle for.`
+        : (status ?? (groups ? `${formatBytes(total)} in ${plural(all.length, 'kind')} of entry.` : 'Press Scan to list the temp folder.'))
 
   return (
     <Dialog
@@ -112,7 +132,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
       }
       footer={
         confirming || busy ? null : (
-          <Button icon="trash" disabled={!chosen.length} onClick={() => setConfirming(true)} data-testid="temp-cleanup-delete">
+          <Button icon="trash" disabled={toDelete.entries === 0} onClick={() => setConfirming(true)} data-testid="temp-cleanup-delete">
             Delete…
           </Button>
         )
@@ -155,6 +175,9 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
                 <th className="px-2 py-1 font-normal">Kind</th>
                 <th className="w-[80px] px-2 py-1 text-right font-normal">Entries</th>
                 <th className="w-[90px] px-2 py-1 text-right font-normal">Size</th>
+                <th className="w-[130px] px-2 py-1 text-right font-normal" title="What Delete removes at the chosen idle time">
+                  Idle {idleLabel}
+                </th>
                 <th className="w-[110px] px-2 py-1 text-right font-normal">Newest</th>
               </tr>
             </thead>
@@ -172,6 +195,7 @@ export function TempCleanupDialog({ onClose }: { onClose: () => void }) {
                   <td className="truncate px-2 py-1" title={group.key}>{group.key}</td>
                   <td className="px-2 py-1 text-right">{group.entries}</td>
                   <td className="px-2 py-1 text-right">{formatBytes(group.bytes)}</td>
+                  <IdleCell group={group} days={days} />
                   <td className="px-2 py-1 text-right">{daysSince(group.newest, scannedAt)}d ago</td>
                 </tr>
               ))}

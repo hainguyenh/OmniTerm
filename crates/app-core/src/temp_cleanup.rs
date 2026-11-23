@@ -28,6 +28,20 @@ use walk::{measure, remove_tree};
 /// Entries a skipped list keeps; the rest are only counted.
 const MAX_SKIPPED_LISTED: usize = 50;
 
+/// The idle times the Clean Temp Files dialog offers, in days. A scan says how much of each group
+/// every one of them would delete, so the dialog never offers a clean-up that removes nothing.
+pub const IDLE_DAYS: [u32; 4] = [1, 3, 7, 30];
+
+/// The entries of a group unchanged for at least `days` days: what a clean-up with that idle
+/// time removes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IdleShare {
+    pub days: u32,
+    pub entries: u64,
+    pub bytes: u64,
+}
+
 /// Entries of one kind: the same name once ids, hashes and numbers are masked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +55,8 @@ pub struct TempGroup {
     /// Seconds since the epoch of the least and most recently changed entry.
     pub oldest: u64,
     pub newest: u64,
+    /// One share per [`IDLE_DAYS`], in that order.
+    pub idle: Vec<IdleShare>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
@@ -205,22 +221,42 @@ pub fn scan_with(root: &Path, progress: &Progress<'_>) -> Result<Vec<TempGroup>,
         tally.finish(bytes, total, progress);
         Some((child, files, bytes))
     });
+    let now = SystemTime::now();
     let mut groups: BTreeMap<String, TempGroup> = BTreeMap::new();
     for (child, files, bytes) in sized.into_iter().flatten() {
         let changed = child.modified.map_or(0, secs);
-        let group = groups.entry(child.key.clone()).or_insert(TempGroup {
-            key: child.key,
-            entries: 0,
-            files: 0,
-            bytes: 0,
-            oldest: u64::MAX,
-            newest: 0,
+        // An entry without a modified time is removed by any clean-up (see `clean_with`).
+        let idle_for = child.modified.map_or(Duration::MAX, |modified| {
+            now.duration_since(modified).unwrap_or(Duration::ZERO)
         });
+        let group = groups
+            .entry(child.key.clone())
+            .or_insert_with(|| TempGroup {
+                key: child.key,
+                entries: 0,
+                files: 0,
+                bytes: 0,
+                oldest: u64::MAX,
+                newest: 0,
+                idle: IDLE_DAYS
+                    .iter()
+                    .map(|&days| IdleShare {
+                        days,
+                        ..IdleShare::default()
+                    })
+                    .collect(),
+            });
         group.entries += 1;
         group.files += files;
         group.bytes += bytes;
         group.oldest = group.oldest.min(changed);
         group.newest = group.newest.max(changed);
+        for share in &mut group.idle {
+            if idle_for >= Duration::from_secs(u64::from(share.days) * 86_400) {
+                share.entries += 1;
+                share.bytes += bytes;
+            }
+        }
     }
     let mut list: Vec<TempGroup> = groups.into_values().collect();
     list.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.key.cmp(&b.key)));

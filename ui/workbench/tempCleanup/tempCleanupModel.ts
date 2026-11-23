@@ -1,5 +1,12 @@
 import { invoke } from '@tauri-apps/api/core'
 
+/** The entries of a group unchanged for at least `days` days: what that idle time deletes. */
+export interface IdleShare {
+  days: number
+  entries: number
+  bytes: number
+}
+
 /** A kind of entry in the temp folder, as `temp_cleanup_scan` reports it. */
 export interface TempGroup {
   key: string
@@ -9,6 +16,8 @@ export interface TempGroup {
   /** Seconds since the epoch of the least and most recently changed entry. */
   oldest: number
   newest: number
+  /** One share per idle time the dialog offers (1, 3, 7 and 30 days). */
+  idle: IdleShare[]
 }
 
 /** What a clean-up did to one group. */
@@ -33,6 +42,14 @@ export function parseTempGroup(raw: unknown): TempGroup | null {
   const r = raw as Record<string, unknown>
   if (typeof r.key !== 'string' || !r.key) return null
   if (![r.entries, r.files, r.bytes, r.oldest, r.newest].every(isCount)) return null
+  const idle = Array.isArray(r.idle)
+    ? r.idle.flatMap((item): IdleShare[] => {
+        const s = item as Record<string, unknown> | null
+        return s && isCount(s.days) && isCount(s.entries) && isCount(s.bytes)
+          ? [{ days: s.days, entries: s.entries, bytes: s.bytes }]
+          : []
+      })
+    : []
   return {
     key: r.key,
     entries: r.entries as number,
@@ -40,7 +57,33 @@ export function parseTempGroup(raw: unknown): TempGroup | null {
     bytes: r.bytes as number,
     oldest: r.oldest as number,
     newest: r.newest as number,
+    idle,
   }
+}
+
+/**
+ * What deleting `group` with an idle time of `days` removes. "Any time" (0) is the whole group;
+ * a scan without the shares (an older backend) cannot tell, and counts the whole group as well.
+ */
+export function deletable(group: TempGroup, days: number): { entries: number; bytes: number } {
+  const share = days > 0 ? group.idle.find((s) => s.days === days) : undefined
+  return share ? { entries: share.entries, bytes: share.bytes } : { entries: group.entries, bytes: group.bytes }
+}
+
+/** What deleting the groups named in `selected` with an idle time of `days` removes. */
+export function deletableTotal(
+  groups: readonly TempGroup[],
+  selected: ReadonlySet<string>,
+  days: number,
+): { entries: number; bytes: number } {
+  return groups.reduce(
+    (total, group) => {
+      if (!selected.has(group.key)) return total
+      const part = deletable(group, days)
+      return { entries: total.entries + part.entries, bytes: total.bytes + part.bytes }
+    },
+    { entries: 0, bytes: 0 },
+  )
 }
 
 export function parseCleanReport(raw: unknown): CleanReport {
@@ -79,7 +122,14 @@ export function applyCleanReport(groups: readonly TempGroup[], report: CleanRepo
     if (!result) return [group]
     const entries = Math.max(0, group.entries - result.removed)
     if (!entries) return []
-    return [{ ...group, entries, bytes: Math.max(0, group.bytes - result.freedBytes) }]
+    // The removed entries were the idlest: each share loses them, down to nothing. Exact for the
+    // shorter idle times; a rescan corrects a longer one that kept a refused entry.
+    const idle = group.idle.map((share) => ({
+      ...share,
+      entries: Math.max(0, share.entries - result.removed),
+      bytes: Math.max(0, share.bytes - result.freedBytes),
+    }))
+    return [{ ...group, entries, bytes: Math.max(0, group.bytes - result.freedBytes), idle }]
   }).sort((a, b) => b.bytes - a.bytes || a.key.localeCompare(b.key))
 }
 
@@ -104,10 +154,6 @@ export async function cancelTempJob(): Promise<void> {
 
 /** The backend's progress event of a temp scan or clean-up. */
 export const TEMP_PROGRESS_EVENT = 'temp-cleanup:progress'
-
-/** The total size of the groups named in `selected`. */
-export const selectedBytes = (groups: readonly TempGroup[], selected: ReadonlySet<string>) =>
-  groups.reduce((total, group) => total + (selected.has(group.key) ? group.bytes : 0), 0)
 
 /** How long ago `seconds` (since the epoch) was, in whole days; 0 for a time in the future. */
 export const daysSince = (seconds: number, now: number) => Math.max(0, Math.floor((now - seconds * 1000) / 86_400_000))

@@ -89,6 +89,36 @@ fn a_scan_groups_sizes_and_orders_the_children() {
 }
 
 #[test]
+fn a_scan_says_how_much_each_idle_time_would_delete() {
+    let dir = tempdir().expect("tempdir");
+    let root = temp_root(&dir);
+    for (name, days) in [
+        ("agent-111111", 0),
+        ("agent-222222", 2),
+        ("agent-333333", 10),
+    ] {
+        fs::create_dir_all(root.join(name)).unwrap();
+        fs::write(root.join(name).join("f.bin"), vec![0u8; 100]).unwrap();
+        set_age(&root.join(name), days);
+    }
+    let groups = scan(&root).unwrap();
+    let shares: Vec<(u32, u64, u64)> = groups[0]
+        .idle
+        .iter()
+        .map(|share| (share.days, share.entries, share.bytes))
+        .collect();
+    // The 7-day default of the dialog removes only the 10-day-old entry: the user sees it before
+    // deleting instead of a clean-up that "removed 0, kept 3".
+    assert_eq!(
+        shares,
+        vec![(1, 2, 200), (3, 1, 100), (7, 1, 100), (30, 0, 0)]
+    );
+    let keys = ["agent-*".to_string()];
+    let report = clean(&root, Some(&keys), WEEK, SystemTime::now()).unwrap();
+    assert_eq!((report.removed, report.kept), (1, 2));
+}
+
+#[test]
 fn clean_removes_old_entries_of_the_chosen_groups_only() {
     let dir = tempdir().expect("tempdir");
     let root = temp_root(&dir);

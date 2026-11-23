@@ -17,13 +17,18 @@ vi.mock('@tauri-apps/api/event', () => ({
 import { useTasks } from '../../../ide/workbench/tasks'
 import { parseProgress, progressText } from '../../cleanupJob'
 import { TempCleanupOverlay } from '../TempCleanupDialog'
-import { applyCleanReport, daysSince, parseCleanReport, parseTempGroup, selectedBytes } from '../tempCleanupModel'
+import { applyCleanReport, daysSince, deletable, deletableTotal, parseCleanReport, parseTempGroup } from '../tempCleanupModel'
 import { useTempCleanup } from '../tempCleanupStore'
 
 const NOW = Math.floor(Date.now() / 1000)
+const shares = (entries: number[], bytes: number[]) =>
+  [1, 3, 7, 30].map((days, i) => ({ days, entries: entries[i], bytes: bytes[i] }))
 const groups = [
-  { key: 'claude-*', entries: 3, files: 40, bytes: 5_000_000, oldest: NOW - 9 * 86_400, newest: NOW - 2 * 86_400 },
-  { key: 'tmp*.tmp', entries: 10, files: 10, bytes: 2048, oldest: NOW, newest: NOW },
+  {
+    key: 'claude-*', entries: 3, files: 40, bytes: 5_000_000, oldest: NOW - 9 * 86_400, newest: NOW - 2 * 86_400,
+    idle: shares([3, 1, 1, 0], [5_000_000, 4_000_000, 4_000_000, 0]),
+  },
+  { key: 'tmp*.tmp', entries: 10, files: 10, bytes: 2048, oldest: NOW, newest: NOW, idle: shares([0, 0, 0, 0], [0, 0, 0, 0]) },
 ]
 
 describe('the temp clean-up model', () => {
@@ -41,10 +46,16 @@ describe('the temp clean-up model', () => {
     ])
   })
 
-  it('sums the selected groups and ages in whole days', () => {
+  it('says what each idle time deletes, and ages in whole days', () => {
     const parsed = groups.map((g) => parseTempGroup(g)!)
-    expect(selectedBytes(parsed, new Set(['claude-*']))).toBe(5_000_000)
-    expect(selectedBytes(parsed, new Set())).toBe(0)
+    expect(deletable(parsed[0], 0)).toEqual({ entries: 3, bytes: 5_000_000 })
+    expect(deletable(parsed[0], 7)).toEqual({ entries: 1, bytes: 4_000_000 })
+    expect(deletable(parsed[1], 7)).toEqual({ entries: 0, bytes: 0 })
+    // A scan without the shares (an older backend) counts the whole group.
+    expect(deletable({ ...parsed[1], idle: [] }, 7)).toEqual({ entries: 10, bytes: 2048 })
+    expect(deletableTotal(parsed, new Set(['claude-*', 'tmp*.tmp']), 1)).toEqual({ entries: 3, bytes: 5_000_000 })
+    expect(deletableTotal(parsed, new Set(), 0)).toEqual({ entries: 0, bytes: 0 })
+    expect(parseTempGroup({ ...groups[0], idle: [{ days: 7, entries: -1, bytes: 0 }, 'x'] })?.idle).toEqual([])
     expect(daysSince(NOW - 3 * 86_400, Date.now())).toBe(3)
     expect(daysSince(NOW + 1000, Date.now())).toBe(0)
   })
@@ -57,7 +68,9 @@ describe('the temp clean-up model', () => {
       skipped: [],
       groups: [{ key: 'claude-*', removed: 2, freedBytes: 4_000_000 }, { key: 'tmp*.tmp', removed: 10, freedBytes: 2048 }],
     })
-    expect(applyCleanReport(groups, report)).toEqual([{ ...groups[0], entries: 1, bytes: 1_000_000 }])
+    expect(applyCleanReport(groups, report)).toEqual([
+      { ...groups[0], entries: 1, bytes: 1_000_000, idle: shares([1, 0, 0, 0], [1_000_000, 0, 0, 0]) },
+    ])
   })
 
   it('reads progress events and says how far a job has got', () => {
@@ -101,7 +114,7 @@ describe('TempCleanupDialog', () => {
     fireEvent.click(screen.getByLabelText('Select claude-*'))
     await waitFor(() => expect(del.disabled).toBe(false))
     fireEvent.click(del)
-    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/cannot be undone/)
+    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/Delete 1 entry .* idle for 7\+ days\? This cannot be undone/)
     fireEvent.click(screen.getByText('Delete Permanently'))
     await waitFor(() =>
       expect(invokeMock).toHaveBeenCalledWith('temp_cleanup_run', { keys: ['claude-*'], olderThanHours: 7 * 24 }),
@@ -109,6 +122,18 @@ describe('TempCleanupDialog', () => {
     await waitFor(() => expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/1 entry skipped.*locked\.tmp/))
     expect(invokeMock.mock.calls.filter(([c]) => c === 'temp_cleanup_scan')).toHaveLength(1)
     expect(screen.getAllByTestId('temp-cleanup-row')).toHaveLength(1)
+  })
+
+  it('does not offer a delete that would remove nothing at the chosen idle time', async () => {
+    invokeMock.mockImplementation((command: string) => (command === 'temp_cleanup_scan' ? Promise.resolve(groups) : Promise.resolve({})))
+    render(<TempCleanupOverlay />)
+    fireEvent.click(screen.getByTestId('temp-cleanup-rescan'))
+    await screen.findAllByTestId('temp-cleanup-row')
+    expect(screen.getAllByTestId('temp-cleanup-idle').map((cell) => cell.textContent)).toEqual([expect.stringMatching(/^1 · /), 'none'])
+    fireEvent.click(screen.getByLabelText('Select tmp*.tmp'))
+    const del = screen.getByTestId('temp-cleanup-delete') as HTMLButtonElement
+    expect(del.disabled).toBe(true)
+    expect(screen.getByTestId('temp-cleanup-status').textContent).toMatch(/Nothing in the ticked kinds has been idle for 7\+ days/)
   })
 
   it('keeps a delete running in the status bar when the dialog is hidden, with Cancel', async () => {
