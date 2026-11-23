@@ -1246,9 +1246,16 @@ impl Repo {
         write::rebase(self, onto)
     }
     /// `keep_index`: changes already staged stay in the index (and the working tree).
-    pub fn stash_push(&self, message: Option<&str>, include_untracked: bool, keep_index: bool) -> IdeResult<()> {
+    /// `paths` (absolute) stashes only those files; empty stashes the whole working tree.
+    pub fn stash_push(
+        &self,
+        message: Option<&str>,
+        include_untracked: bool,
+        keep_index: bool,
+        paths: &[PathBuf],
+    ) -> IdeResult<()> {
         let _scope = crate::ExecutionScope::enter(self.execution_allowed.load(std::sync::atomic::Ordering::Acquire));
-        write::stash_push(self, message, include_untracked, keep_index)
+        write::stash_push(self, message, include_untracked, keep_index, paths)
     }
     /// `reinstate_index`: also restore what was staged when the stash was made.
     pub fn stash_apply(&self, index: u32, pop: bool, reinstate_index: bool) -> IdeResult<()> {

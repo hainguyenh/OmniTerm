@@ -7326,5 +7326,7 @@
   "Imported {count} MCP servers from the project.": "已从项目导入 {count} 个 MCP 服务器。",
   "Show branch and incoming/outgoing commits in the Project view": "在项目视图中显示分支及传入/传出提交",
   "Up to date with {upstream}": "已与 {upstream} 同步",
-  "Highlight occurrences of selected text": "高亮所选文本的匹配项"
+  "Highlight occurrences of selected text": "高亮所选文本的匹配项",
+  "Stash Selected Files…": "储藏所选文件…",
+  "Select the files to stash in the Commit view first": "请先在提交视图中选择要贮藏的文件"
 }

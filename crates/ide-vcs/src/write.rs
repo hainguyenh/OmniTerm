@@ -1024,8 +1024,18 @@ pub(crate) fn rebase(r: &Repo, onto: &str) -> IdeResult<()> {
     })
 }
 
-pub(crate) fn stash_push(r: &Repo, message: Option<&str>, include_untracked: bool, keep_index: bool) -> IdeResult<()> {
-    let mut args = vec!["stash", "push", "-q"];
+pub(crate) fn stash_push(
+    r: &Repo,
+    message: Option<&str>,
+    include_untracked: bool,
+    keep_index: bool,
+    paths: &[PathBuf],
+) -> IdeResult<()> {
+    let rel = r.rel_paths(paths)?;
+    // `--literal-pathspecs` only with paths: without any, `git stash push` limits itself to the
+    // magic pathspec `:/`, which literal pathspecs turn into a missing file.
+    let mut args = if rel.is_empty() { vec![] } else { vec!["--literal-pathspecs"] };
+    args.extend(["stash", "push", "-q"]);
     if include_untracked {
         args.push("--include-untracked");
     }
@@ -1034,6 +1044,10 @@ pub(crate) fn stash_push(r: &Repo, message: Option<&str>, include_untracked: boo
     }
     if let Some(m) = message.filter(|m| !m.trim().is_empty()) {
         args.extend(["-m", m]);
+    }
+    if !rel.is_empty() {
+        args.push("--");
+        args.extend(rel.iter().map(String::as_str));
     }
     run(r.root(), &args, None).map(|_| ())
 }

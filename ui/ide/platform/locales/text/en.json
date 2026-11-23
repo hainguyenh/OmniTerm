@@ -989,5 +989,7 @@
   "Imported {count} MCP servers from the project.": "Imported {count} MCP servers from the project.",
   "Show branch and incoming/outgoing commits in the Project view": "Show branch and incoming/outgoing commits in the Project view",
   "Up to date with {upstream}": "Up to date with {upstream}",
-  "Highlight occurrences of selected text": "Highlight occurrences of selected text"
+  "Highlight occurrences of selected text": "Highlight occurrences of selected text",
+  "Stash Selected Files…": "Stash Selected Files…",
+  "Select the files to stash in the Commit view first": "Select the files to stash in the Commit view first"
 }
