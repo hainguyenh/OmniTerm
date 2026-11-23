@@ -6,7 +6,7 @@
 import { writeClipboardText } from "@/platform/clipboard";
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { create } from "zustand";
-import type { ApplyOutcome, FileStatus, ShelvedChangeList, ShelfDiffFile } from "@/bindings";
+import type { ApplyOutcome, ChangelistState, FileStatus, ShelvedChangeList, ShelfDiffFile } from "@/bindings";
 import { setContext } from "@/platform/context";
 import { shortcutLabel } from "@/platform/keymap";
 import { openDiff, openVcsDiff, withChain, type DiffData } from "./diffInput";
@@ -77,6 +77,13 @@ export function defaultChangeFiles(paths?: readonly string[]): FileStatus[] {
   );
 }
 
+/** Name a shelf of `list`'s changes gets by default: the list's name once the project has several. */
+function shelfName(state: ChangelistState, list: string): string {
+  return state.lists.length > 1
+    ? (state.lists.find((l) => l.id === list) ?? activeList(state)).name
+    : "Uncommitted changes";
+}
+
 export function shelveChanges(paths?: readonly string[]) {
   const files = defaultChangeFiles(paths);
   if (!files.length) {
@@ -84,8 +91,42 @@ export function shelveChanges(paths?: readonly string[]) {
     return;
   }
   const state = useChangelists.getState().state;
-  const name = state.lists.length > 1 ? activeList(state).name : "Uncommitted changes";
-  openDialog((close) => <ShelveDialog files={files} initialName={name} onClose={close} />);
+  openDialog((close) => <ShelveDialog files={files} initialName={shelfName(state, state.active)} onClose={close} />);
+}
+
+/** IDEA's Shelve Silently: no dialog, one shelf per changelist the changes belong to, named after it. */
+export async function shelveSilently(paths?: readonly string[]) {
+  // Without a dialog to review the files, pick them after unsaved edits reach the disk.
+  await saveAll();
+  await refreshNow();
+  const files = defaultChangeFiles(paths);
+  if (!files.length) {
+    notifications().notify({ group: "vcs", level: "info", title: "No changes to shelve" });
+    return;
+  }
+  const state = useChangelists.getState().state;
+  const byList = new Map<string, string[]>();
+  for (const f of files) {
+    const list = listOf(state, relOf(f.path));
+    const own = byList.get(list);
+    if (own) own.push(stripSlash(f.path));
+    else byList.set(list, [stripSlash(f.path)]);
+  }
+  for (const [list, chosen] of byList) if (!(await shelveFiles(shelfName(state, list), chosen))) return;
+}
+
+async function shelveFiles(name: string, paths: string[]): Promise<ShelvedChangeList | undefined> {
+  const entry = await runOp(tx`Shelve changes “${name}”`, () => call(commands.vcsShelve(name, paths)));
+  if (!entry) return undefined;
+  void loadShelves().catch(() => undefined);
+  notifications().notify({
+    group: "vcs",
+    level: "info",
+    title: `Shelved ${entry.files.length} file${entry.files.length === 1 ? "" : "s"}`,
+    body: entry.name,
+    actions: [{ label: "Show Shelf", run: showShelf }],
+  });
+  return entry;
 }
 
 /** A checkable list of changed files (Shelve, Create Patch). */
@@ -145,16 +186,7 @@ function ShelveDialog({
     if (!chosen.length || !name.trim()) return;
     onClose();
     await saveAll();
-    const entry = await runOp(tx`Shelve changes “${name.trim()}”`, () => call(commands.vcsShelve(name.trim(), chosen)));
-    if (!entry) return;
-    void loadShelves().catch(() => undefined);
-    notifications().notify({
-      group: "vcs",
-      level: "info",
-      title: `Shelved ${entry.files.length} file${entry.files.length === 1 ? "" : "s"}`,
-      body: entry.name,
-      actions: [{ label: "Show Shelf", run: showShelf }],
-    });
+    await shelveFiles(name.trim(), chosen);
   };
   return (
     <Dialog
@@ -206,6 +238,36 @@ export async function reportApply(outcome: ApplyOutcome, what: string) {
   notifications().notify({ group: "vcs", level: "info", title: `${what}: ${n} file${n === 1 ? "" : "s"} changed` });
 }
 
+/** Unshelves `entry` (only `path` of it when given) into the `target` changelist. */
+async function applyShelf(entry: ShelvedChangeList, path: string | undefined, remove: boolean, target: string) {
+  const outcome = await runOp(
+    tx`Unshelve “${entry.name}”`,
+    () => call(commands.vcsUnshelve(entry.id, remove, path ?? null)),
+    {
+      refresh: false,
+    },
+  );
+  if (!outcome) return;
+  await refreshNow();
+  const repo = shelfRepository(entry);
+  const rels = [...outcome.applied, ...outcome.conflicts].map((p) => relOf(repositoryPath(repo, p)));
+  updateChangelists((s) => moveFiles(s, rels, target));
+  void loadShelves().catch(() => undefined);
+  await reportApply(outcome, `Unshelved “${entry.name}”`);
+}
+
+/**
+ * IDEA's Unshelve Silently: no dialog; into the changelist named like the shelf, else the active one,
+ * removing applied files from the shelf as the Shelf setting says.
+ */
+export async function unshelveSilently(entry: ShelvedChangeList, path?: string) {
+  if (!entry.files.length) return;
+  const state = useChangelists.getState().state;
+  const target = state.lists.find((l) => l.name === entry.name)?.id ?? state.active;
+  await saveAll();
+  await applyShelf(entry, path, workflowSettings().vcs.shelf.removeApplied, target);
+}
+
 export function unshelve(entry: ShelvedChangeList, path?: string) {
   openDialog((close) => <UnshelveDialog entry={entry} path={path} onClose={close} />);
 }
@@ -214,23 +276,10 @@ function UnshelveDialog({ entry, path, onClose }: { entry: ShelvedChangeList; pa
   const lists = useChangelists((s) => s.state);
   const [target, setTarget] = useState(lists.active);
   const [remove, setRemove] = useState(() => workflowSettings().vcs.shelf.removeApplied);
-  const repo = shelfRepository(entry);
   const run = async () => {
     onClose();
     await saveAll();
-    const outcome = await runOp(
-      tx`Unshelve “${entry.name}”`,
-      () => call(commands.vcsUnshelve(entry.id, remove, path ?? null)),
-      {
-        refresh: false,
-      },
-    );
-    if (!outcome) return;
-    await refreshNow();
-    const rels = [...outcome.applied, ...outcome.conflicts].map((p) => relOf(repositoryPath(repo, p)));
-    updateChangelists((s) => moveFiles(s, rels, target));
-    void loadShelves().catch(() => undefined);
-    await reportApply(outcome, `Unshelved “${entry.name}”`);
+    await applyShelf(entry, path, remove, target);
   };
   return (
     <Dialog
