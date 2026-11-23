@@ -184,6 +184,7 @@
   "menu.remote.reloadEnvironment": "Reload Environment",
   "menu.file.new": "New…",
   "menu.file.newScratchFile": "New Scratch File…",
+  "menu.vcs.cloneProject": "New Project from Version Control…",
   "menu.file.openInNewWindow": "Open in New Window…",
   "menu.project.attach": "Attach Project…",
   "menu.file.openProject": "Open…",

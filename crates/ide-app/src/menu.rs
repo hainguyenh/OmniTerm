@@ -219,6 +219,7 @@ pub fn spec(os: Os) -> Vec<Entry> {
     let mut file = vec![
         act("file.newProject", "New Project…"),
         act("workspace.create", "New Workspace…"),
+        act("vcs.cloneProject", "New Project from Version Control…"),
         act("workspace.open", "Open Workspace…"),
         act("workspace.manage", "Manage Workspace…"),
         act("file.new", "New…"),
@@ -2229,6 +2230,7 @@ mod tests {
             let ids = action_ids(&spec(os));
             for required in [
                 "file.newProject",
+                "vcs.cloneProject",
                 "file.renameProject",
                 "file.reloadAllFromDisk",
                 "file.exportSettings",

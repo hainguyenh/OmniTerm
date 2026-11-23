@@ -184,6 +184,7 @@
   "menu.remote.reloadEnvironment": "重新加载环境",
   "menu.file.new": "新建…",
   "menu.file.newScratchFile": "新建临时文件…",
+  "menu.vcs.cloneProject": "从版本控制新建项目…",
   "menu.file.openInNewWindow": "在新窗口中打开…",
   "menu.project.attach": "附加项目…",
   "menu.file.openProject": "打开…",
