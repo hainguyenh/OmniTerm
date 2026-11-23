@@ -15,6 +15,20 @@ struct Entry {
 }
 
 pub(crate) fn status(r: &Repo) -> IdeResult<Vec<FileStatus>> {
+    read_status(r, &[])
+}
+
+/// Status of `paths` only (repository-relative, `/`-separated): the dirty-scope refresh.
+///
+/// A watcher batch touches a few files, and the full status walks the whole tree; gitoxide's
+/// pathspec filtering keeps that batch proportional to what changed, in-process (no `git`
+/// program runs, so Restricted Mode is unaffected). An empty list is the full status, so a
+/// caller that lost the paths still gets a correct answer.
+pub(crate) fn status_paths(r: &Repo, paths: &[String]) -> IdeResult<Vec<FileStatus>> {
+    read_status(r, paths)
+}
+
+fn read_status(r: &Repo, pathspec: &[String]) -> IdeResult<Vec<FileStatus>> {
     let repo = r.gix()?;
     let mut map: BTreeMap<String, Entry> = BTreeMap::new();
     let mut conflicts: HashSet<String> = HashSet::new();
@@ -33,7 +47,8 @@ pub(crate) fn status(r: &Repo) -> IdeResult<Vec<FileStatus>> {
         .index_worktree_rewrites(None)
         .index_worktree_submodules(gix::status::Submodule::AsConfigured { check_dirty: true })
         .tree_index_track_renames(gix::status::tree_index::TrackRenames::Given(gix::diff::Rewrites::default()));
-    let mut iter = platform.into_iter(Vec::<gix::bstr::BString>::new()).map_err(gx)?;
+    let patterns: Vec<gix::bstr::BString> = pathspec.iter().map(|path| path.as_str().into()).collect();
+    let mut iter = platform.into_iter(patterns).map_err(gx)?;
     for item in iter.by_ref() {
         let item = item.map_err(gx)?;
         match item {

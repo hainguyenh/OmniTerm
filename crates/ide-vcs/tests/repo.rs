@@ -2018,3 +2018,40 @@ fn reword_refuses_commits_outside_the_current_branch() {
     fx.git(&["checkout", "-q", "main"]);
     assert!(fx.repo().reword(&side, "other").is_err());
 }
+
+#[test]
+fn status_paths_reads_only_the_named_paths() {
+    // The dirty-scope refresh: a watcher batch names a few paths, and git's pathspec
+    // filtering keeps the answer proportional to the batch instead of the whole tree.
+    let fx = Fixture::new();
+    fx.write("a.txt", "a\n");
+    fx.write("b.txt", "a\n");
+    fx.write("dir/c.txt", "a\n");
+    fx.commit_all("base");
+    fx.write("a.txt", "b\n");
+    fx.write("b.txt", "b\n");
+    fx.write("dir/c.txt", "b\n");
+    fx.write("new.txt", "n\n");
+    let repo = fx.repo();
+    repo.set_ignored_names(ide_core::settings::Settings::default().ignored_names());
+
+    let one = repo.status_paths(&[fx.path("a.txt")]).unwrap();
+    assert_eq!(one.len(), 1, "{one:#?}");
+    assert_eq!(one[0].rel_path, "a.txt");
+    assert_eq!(one[0].unstaged, Some(ChangeKind::Modified));
+
+    // A directory stands for everything below it, as the watcher reports a removed one.
+    let dir = repo.status_paths(&[fx.path("dir")]).unwrap();
+    assert_eq!(dir.iter().map(|s| s.rel_path.as_str()).collect::<Vec<_>>(), ["dir/c.txt"]);
+
+    // A new file the batch names is reported as untracked, not as a directory entry.
+    let new = repo.status_paths(&[fx.path("new.txt")]).unwrap();
+    assert_eq!((new[0].rel_path.as_str(), new[0].unstaged), ("new.txt", Some(ChangeKind::Untracked)));
+
+    // Paths outside the repository are ignored rather than an error; nothing named is nothing read.
+    let outside = if cfg!(windows) { PathBuf::from("C:/elsewhere/x.txt") } else { PathBuf::from("/elsewhere/x.txt") };
+    assert!(repo.status_paths(&[outside]).unwrap().is_empty());
+
+    // An empty list is the full status, so a caller that lost the paths stays correct.
+    assert_eq!(repo.status_paths(&[]).unwrap().len(), 4);
+}
