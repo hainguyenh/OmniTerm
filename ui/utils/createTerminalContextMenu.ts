@@ -111,7 +111,7 @@ export const createTerminalContextMenu =
 
     const onLinkClick = (e: MouseEvent): void => {
       // Platform-conventional modifier: Cmd on macOS, Ctrl elsewhere. The linkifier's hover-cue
-      // (see `registerPlainUrlLinks`) and the menu stay on the same modifier via this single check.
+      // (see `registerPlainTextLinks`) and the menu stay on the same modifier via this single check.
       if (!isTerminalLinkModifierClick(e)) return
       if (e.button !== 0) return
       const detected = detectAt(e)

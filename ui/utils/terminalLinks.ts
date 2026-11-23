@@ -1,5 +1,7 @@
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
 
+import { indexOfCell, logicalLineAt } from './terminalLogicalLine'
+
 const PLAIN_URL_RE = /\bhttps?:\/\/[^\s<>'"`]+/gi
 const TRAILING_URL_PUNCTUATION_RE = /[),.;:!?\]}]+$/
 
@@ -77,27 +79,34 @@ const pathLocation = (line: string, end: number): Pick<DetectedLinkOrPath, 'line
   return col > 0 ? { line: row, col } : { line: row }
 }
 
-/** Map a client cursor position on a line text to whatever link or path sits at `col`, or null. */
-export const findLinkOrPathAt = (line: string, col: number): DetectedLinkOrPath | null => {
-  if (col < 0 || col >= line.length) return null
-
+/**
+ * Every URL and path on `line`, URLs first. A path inside a URL (`https://h/x.txt` has a `/x.txt`
+ * tail) is no path of its own.
+ */
+export const linkSpansOnLine = (line: string): DetectedLinkOrPath[] => {
+  const spans: DetectedLinkOrPath[] = []
   for (const match of line.matchAll(PLAIN_URL_RE)) {
     const raw = match[0].replace(TRAILING_URL_PUNCTUATION_RE, '')
     if (!raw || !safeHttpUrl(raw)) continue
     const start = match.index ?? 0
-    const end = start + raw.length
-    if (col >= start && col < end) return { kind: 'url', text: raw, start, end }
+    spans.push({ kind: 'url', text: raw, start, end: start + raw.length })
   }
-
+  const urls = [...spans]
   for (const match of line.matchAll(FILE_PATH_RE)) {
     const raw = match[0].replace(TRAILING_PATH_PUNCTUATION_RE, '')
     if (!raw) continue
     const start = match.index ?? 0
     const end = start + raw.length
-    if (col >= start && col < end) return { kind: 'path', text: raw, start, end, ...pathLocation(line, end) }
+    if (urls.some((url) => start < url.end && end > url.start)) continue
+    spans.push({ kind: 'path', text: raw, start, end, ...pathLocation(line, end) })
   }
+  return spans
+}
 
-  return null
+/** Map a client cursor position on a line text to whatever link or path sits at `col`, or null. */
+export const findLinkOrPathAt = (line: string, col: number): DetectedLinkOrPath | null => {
+  if (col < 0 || col >= line.length) return null
+  return linkSpansOnLine(line).find((span) => col >= span.start && col < span.end) ?? null
 }
 
 /**
@@ -112,7 +121,10 @@ export const findLinkOrPathInTerminal = (
   clientX: number,
   clientY: number,
 ): DetectedLinkOrPath | null => {
-  const rect = termEl.getBoundingClientRect()
+  // The grid is xterm's screen element: the pane around it is wider by the scrollbar and the part
+  // of a cell that did not fit, which skewed every column computed from the pane's own width.
+  const screen = termEl.querySelector<HTMLElement>('.xterm-screen')
+  const rect = (screen ?? termEl).getBoundingClientRect()
   if (rect.width === 0 || rect.height === 0) return null
   const left = clientX - rect.left
   const top = clientY - rect.top
@@ -130,30 +142,33 @@ export const findLinkOrPathInTerminal = (
 
   // xterm's `viewportY` is the buffer line at the top of the visible viewport (0-indexed). Adding
   // the in-viewport row gets the same index the link provider receives (minus its +1 sentinel).
-  const buf = term.buffer.active
-  const line = buf.getLine(buf.viewportY + row)?.translateToString(true)
+  const bufferRow = term.buffer.active.viewportY + row
+  const line = logicalLineAt(term, bufferRow)
   if (!line) return null
-  return findLinkOrPathAt(line, col)
+  const index = indexOfCell(line, bufferRow, col)
+  return index < 0 ? null : findLinkOrPathAt(line.text, index)
 }
 
-const plainUrlsOnLine = (text: string, y: number): ILink[] => {
+/** The links of the logical line holding buffer row `y - 1` that touch that row (xterm asks per row). */
+const plainLinksOnRow = (term: Terminal, y: number): ILink[] => {
+  const line = logicalLineAt(term, y - 1)
+  if (!line) return []
   const links: ILink[] = []
-  for (const match of text.matchAll(PLAIN_URL_RE)) {
-    const raw = match[0]
-    const trimmed = raw.replace(TRAILING_URL_PUNCTUATION_RE, '')
-    if (!trimmed) continue
-    const start = match.index ?? 0
-    const end = start + trimmed.length
-    if (!safeHttpUrl(trimmed)) continue
+  for (const span of linkSpansOnLine(line.text)) {
+    const first = line.cells[span.start]
+    const last = line.cells[span.end - 1]
+    if (!first || !last || first.row > y - 1 || last.row < y - 1) continue
     links.push({
-      text: trimmed,
+      text: span.text,
+      // 1-based and inclusive; a span wrapped onto the next rows keeps one range across them.
       range: {
-        start: { x: start + 1, y },
-        end: { x: end + 1, y },
+        start: { x: first.col + 1, y: first.row + 1 },
+        end: { x: last.col + (last.wide ? 2 : 1), y: last.row + 1 },
       },
+      decorations: { underline: true, pointerCursor: true },
       activate: () => {
-        // The modifier-click menu (see `createTerminalContextMenu`) owns link activation now; this
-        // no-op keeps xterm's hover-decoration without making it direct-open the URL underneath.
+        // The modifier click (see `createTerminalContextMenu`) owns activation: a plain click on
+        // an agent's output must not open a file or a page. This keeps only the hover cue.
       },
     })
   }
@@ -161,15 +176,15 @@ const plainUrlsOnLine = (text: string, y: number): ILink[] => {
 }
 
 /**
- * Register plain URL linkification so xterm underlines URL spans on the platform link-modifier
- * hover. xterm's `activate` is a no-op — the modifier-click overlay menu owns link activation for
- * both URLs and paths. xterm's built-in provider continues to handle OSC 8 links.
+ * Underline URLs and file paths on hover, so it shows that a modifier click opens them. xterm's
+ * `activate` is a no-op — the modifier-click handler opens a path in the editor (a local pane) or
+ * shows the URL/path menu. xterm's built-in provider continues to handle OSC 8 links.
  */
-export const registerPlainUrlLinks = (term: Terminal) => {
+export const registerPlainTextLinks = (term: Terminal) => {
   const provider: ILinkProvider = {
     provideLinks: (bufferLineNumber, callback) => {
-      const line = term.buffer.active.getLine(bufferLineNumber - 1)
-      callback(line ? plainUrlsOnLine(line.translateToString(true), bufferLineNumber) : undefined)
+      const links = plainLinksOnRow(term, bufferLineNumber)
+      callback(links.length ? links : undefined)
     },
   }
   if (typeof term.registerLinkProvider !== 'function') return { dispose: () => {} }

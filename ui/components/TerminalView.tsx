@@ -17,7 +17,7 @@ import { createTerminalOptions, DEFAULT_MONO_STACK, resolveTerminalFontFamily } 
 import { createNativePasteGate, createTerminalClipboard, writeClipboardText } from '../utils/terminalClipboard'
 import { recordPastedImage, recordSavedAttachments, releaseSessionMedia } from '../utils/sessionAttachmentStore'
 import { attachTerminalStream } from '../utils/terminalStream'
-import { registerPlainUrlLinks } from '../utils/terminalLinks'
+import { registerPlainTextLinks } from '../utils/terminalLinks'
 import { openTerminalPath } from '../utils/terminalOpenPath'
 import '@xterm/xterm/css/xterm.css'
 import { TOKYO_NIGHT } from '../themes'
@@ -160,7 +160,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       registerPaneConsole(id, term),
       onScrollDisposable,
     ]
-    const plainLinkDisposable = registerPlainUrlLinks(term)
+    const plainLinkDisposable = registerPlainTextLinks(term)
     // Fixes box-drawing/emoji width measurement — agent TUIs lean on both, and the default table
     // mis-measures wide glyphs, itself a source of garbled output.
     term.loadAddon(new Unicode11Addon())
@@ -236,7 +236,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
     let suppressNativePasteUntil = 0
 
     // `onLinkClick` owns modifier-clicks on plain-text links, `linkHandler` those on OSC 8 hyperlinks
-    // (an agent's `[a.ts](file:///…)`); `registerPlainUrlLinks` keeps the hover cue.
+    // (an agent's `[a.ts](file:///…)`); `registerPlainTextLinks` keeps the hover cue.
     const { onContextMenu, onLinkClick, linkHandler } = createTerminalContextMenu({
       term,
       termElRef: terminalRef,
