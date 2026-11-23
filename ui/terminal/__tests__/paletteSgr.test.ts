@@ -56,6 +56,21 @@ describe('OutputHighlighter palette colors', () => {
     expect(highlighter.transform('x\x1b[38;2;20', 'none')).toBe('x')
     expect(highlighter.transform('4;0;0my', 'none')).toBe('\x1b[31my')
   })
+
+  // Regression: in dark mode an agent's grey text inside its own grey message block took the
+  // scheme's dim bright-black and could barely be read.
+  it("keeps an agent's text color inside its own RGB background, and maps it again after", () => {
+    const highlighter = new OutputHighlighter()
+    highlighter.setPaletteColors(true)
+    const block = '\x1b[48;2;55;55;55m\x1b[38;2;153;153;153mhi\x1b[39m'
+    expect(highlighter.transform(block, 'none')).toBe(block)
+    const both = '\x1b[38;2;153;153;153;48;5;237mhi'
+    expect(highlighter.transform(both, 'none')).toBe(both)
+    expect(highlighter.transform('\x1b[49m\x1b[38;2;102;102;102mx', 'none')).toBe('\x1b[49m\x1b[90mx')
+    expect(highlighter.transform('\x1b[48;5;237m\x1b[0m\x1b[38;2;204;0;0mx', 'none')).toBe('\x1b[48;5;237m\x1b[0m\x1b[31mx')
+    // An ANSI background follows the scheme, so the text on it does too.
+    expect(highlighter.transform('\x1b[44m\x1b[38;2;204;0;0mx', 'none')).toBe('\x1b[44m\x1b[31mx')
+  })
 })
 
 describe('themeColors setting', () => {

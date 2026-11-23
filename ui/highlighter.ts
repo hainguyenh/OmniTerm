@@ -128,6 +128,8 @@ const CURSOR_POS_RE = /^\x1b\[(\d*)(?:;(\d*))?[Hf]$/
 export class OutputHighlighter {
   private carry = ''           // incomplete escape sequence held until next chunk
   private fgColored = false    // server set a non-default foreground
+  // A 24-bit or 256-color background is active: an agent's own block (a message, a diff line).
+  private extendedBg = false
   private altScreen = false    // vim/htop/less etc. own the screen
   private scope: HighlightScope = 'all'
   // Timestamp of the last TUI-shaped sequence; 0 means none seen. See TUI_IDLE_MS.
@@ -179,7 +181,9 @@ export class OutputHighlighter {
       }
       const seq = text.slice(esc, esc + seqLen)
       this.updateState(seq)
-      out += this.paletteColors ? paletteSgr(seq) : seq
+      // Inside an agent's own RGB background the agent picked its text color to read on it; the
+      // scheme's slot for that grey (often a dim bright-black) can sink into the block in dark mode.
+      out += this.paletteColors && !this.extendedBg ? paletteSgr(seq) : seq
       i = esc + seqLen
     }
     return out
@@ -231,10 +235,16 @@ export class OutputHighlighter {
       const params = seq.slice(2, -1).split(';')
       for (let i = 0; i < params.length; i++) {
         const p = parseInt(params[i] || '0', 10)
-        if (p === 0 || p === 39) this.fgColored = false
+        if (p === 0) {
+          this.fgColored = false
+          this.extendedBg = false
+        } else if (p === 39) this.fgColored = false
         else if ((p >= 30 && p <= 37) || (p >= 90 && p <= 97)) this.fgColored = true
-        else if (p === 38) {
-          this.fgColored = true
+        else if (p === 49 || (p >= 40 && p <= 47) || (p >= 100 && p <= 107)) this.extendedBg = false
+        else if (p === 38 || p === 48) {
+          const extended = params[i + 1] === '5' || params[i + 1] === '2'
+          if (p === 38) this.fgColored = true
+          else this.extendedBg = extended
           i += params[i + 1] === '5' ? 2 : params[i + 1] === '2' ? 4 : 0 // skip color args
         }
       }
