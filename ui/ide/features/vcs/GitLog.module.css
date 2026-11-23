@@ -69,7 +69,7 @@
   --tree-detail-flex-shrink: 1000;
 }
 .branchRepos {
-  margin-left: var(--space-1-5);
+  margin-left: 6px;
   color: var(--fg-subtle);
 }
 .branchDetail {
