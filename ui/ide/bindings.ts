@@ -4791,6 +4791,11 @@ export type GitSettings = {
 	/**  Stashes and shelves share one tab. */
 	combineStashAndShelf?: boolean,
 	/**
+	 *  The non-modal Commit tool window works on the index: Staged / Unstaged groups,
+	 *  stage and unstage instead of inclusion checkboxes, and no change lists.
+	 */
+	stagingArea?: boolean,
+	/**
 	 *  Scan the working tree with `git status` (for file systems whose metadata only
 	 *  the system git reads correctly) instead of in process.
 	 */

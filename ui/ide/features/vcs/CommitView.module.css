@@ -413,3 +413,13 @@
   display: inline-flex;
   margin-right: 2px;
 }
+/* Staging area: Stage / Unstage on the hovered or selected row, as a hover icon at the row's end. */
+.stageButton {
+  flex: none;
+  margin-left: auto;
+  visibility: hidden;
+}
+[role="treeitem"]:hover .stageButton,
+[role="treeitem"][aria-selected="true"] .stageButton {
+  visibility: visible;
+}

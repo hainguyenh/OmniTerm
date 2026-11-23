@@ -64,6 +64,7 @@ import {
 import { applyStash, commitChanges, deleteFiles, dropStash, showUnstashDialog, stashChanges } from "./changeOps";
 import { CommitOptionsPopup } from "./CommitOptions";
 import { DEFAULT_LIST_NAME, useChangelists, withListDefaults } from "./changelists";
+import { inclusionChecks, isCommitAll, useStagingArea } from "./staging";
 import { addToChangelist, commitFiles } from "./changelistsUi";
 import { acceptSide } from "./conflictsUi";
 import { copyChangesAsPatch } from "./patches";
@@ -391,13 +392,14 @@ export function nodeMenu(
     {
       label: "Stage",
       icon: "plus",
-      disabled: !files.some((f) => f.unstaged),
+      // Under Staged Changes, a partially staged file only offers Unstage.
+      disabled: !files.some((f) => f.unstaged) || nodes.every((n) => n.group === "staged"),
       run: () => void runOp(tx`Stage ${paths.length} files`, () => call(commands.vcsStage(paths))),
     },
     {
       label: "Unstage",
       icon: "minus",
-      disabled: !files.some((f) => f.staged),
+      disabled: !files.some((f) => f.staged) || nodes.every((n) => n.group === "unstaged" || n.group === "unversioned"),
       run: () => void runOp(tx`Unstage ${paths.length} files`, () => call(commands.vcsUnstage(paths))),
     },
     { kind: "separator" },
@@ -422,6 +424,41 @@ export function nodeMenu(
     { label: "Copy File Name", icon: "copy", run: () => copyChangePaths(nodes, "name") },
   );
   return items;
+}
+
+/**
+ * The staging operation of a node of the staging area's tree: Unstage under Staged, Stage
+ * under Unstaged and Unversioned Files, applied to every file below the node.
+ */
+export function stageOperation(n: ChangeNode): { label: string; icon: "plus" | "minus"; paths: string[] } | null {
+  const paths = n.files.map((f) => stripSlash(f.path));
+  if (!paths.length) return null;
+  if (n.group === "staged") return { label: "Unstage", icon: "minus", paths };
+  if (n.group === "unstaged" || n.group === "unversioned") return { label: "Stage", icon: "plus", paths };
+  return null;
+}
+
+function StageButton({ node }: { node: ChangeNode }) {
+  const op = stageOperation(node);
+  if (!op) return null;
+  const { label, icon, paths } = op;
+  const count = paths.length;
+  return (
+    <IconButton
+      icon={icon}
+      title={label}
+      size="small"
+      className={styles.stageButton}
+      onMouseDown={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        void runOp(icon === "plus" ? tx`Stage ${count} files` : tx`Unstage ${count} files`, () =>
+          call(icon === "plus" ? commands.vcsStage(paths) : commands.vcsUnstage(paths)),
+        ).then(() => refreshNow());
+      }}
+    />
+  );
 }
 
 function CheckMark({
@@ -460,7 +497,11 @@ function useCommitChecks() {
   const root = useVcs((s) => s.root) ?? "";
   const userChecks = useCommit((s) => s.checks);
   const lists = useChangelists((s) => s.state);
-  return useMemo(() => withListDefaults(status, root, lists, userChecks), [status, root, lists, userChecks]);
+  const staging = useStagingArea();
+  return useMemo(
+    () => inclusionChecks(status, root, lists, userChecks, staging),
+    [status, root, lists, userChecks, staging],
+  );
 }
 
 /** Number of changes the commit would include (only the target project's, with several). */
@@ -534,12 +575,15 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
   const status = useVcs((s) => s.status);
   const root = useVcs((s) => s.root) ?? "";
   const groupByDir = useCommit((s) => s.groupByDir);
-  const groupByStaging = useCommit((s) => s.groupByStaging);
+  // With the staging area the Commit tool window shows the index: Staged / Unstaged, no lists or checkboxes.
+  const staging = useStagingArea() && mode === "commit";
+  const groupByStaging = useCommit((s) => s.groupByStaging) || staging;
   const diffPreview = useCommit((s) => s.diffPreview);
   const doubleClickOpensDiff = useWorkflowSettings((s) => s.vcs.commit.doubleClickOpensDiff);
-  const lists = useChangelists((s) => s.state);
+  const changelists = useChangelists((s) => s.state);
+  const lists = staging ? undefined : changelists;
   const checks = useCommitChecks();
-  const checkboxes = mode !== "local";
+  const checkboxes = mode !== "local" && !staging;
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   // IDEA starts with Unversioned Files collapsed.
   // With several projects each one has its own Unversioned Files group (keys are scoped by project).
@@ -679,7 +723,9 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
             showContextMenu(bottomLeft(viewRef.current), [
               { kind: "header", label: "Group By" },
               { label: "Directory", checked: groupByDir, run: () => setGroupByDir(!groupByDir) },
-              { label: "Staging State", checked: groupByStaging, run: () => setGroupByStaging(!groupByStaging) },
+              ...(staging
+                ? []
+                : [{ label: "Staging State", checked: groupByStaging, run: () => setGroupByStaging(!groupByStaging) }]),
               ...(mode === "local"
                 ? [
                     { kind: "separator" } as const,
@@ -874,12 +920,13 @@ export function ChangesTree({ mode }: { mode: "commit" | "local" | "dialog" }) {
                 )}
                 {label}
                 {n.type === "group" && <span className={styles.detail}>{fileCount(n.files.length)}</span>}
-                {n.type === "file" && n.files[0] && isPartiallyStaged(n.files[0]) && (
+                {!staging && n.type === "file" && n.files[0] && isPartiallyStaged(n.files[0]) && (
                   <span className={styles.partial} title={tx("Partially staged: only staged hunks are committed")}>
                     <T>partial</T>
                   </span>
                 )}
                 {n.detail && <span className={styles.detail}>{n.detail}</span>}
+                {staging && <StageButton node={n} />}
               </span>
             );
           }}
@@ -1122,8 +1169,8 @@ function CommitMessageActions() {
 }
 
 /** Label of the Commit button. */
-export function commitLabel(amend: boolean, problems: boolean): string {
-  return problems ? "Commit Anyway" : amend ? "Amend Commit" : "Commit";
+export function commitLabel(amend: boolean, problems: boolean, all = false): string {
+  return problems ? "Commit Anyway" : amend ? "Amend Commit" : all ? "Commit All" : "Commit";
 }
 
 /** Label of the Commit and Push button. */
@@ -1140,13 +1187,15 @@ function CommitPanel({ included }: { included: number }) {
   const { canCommit } = runner;
   // After Fixup… / Squash Into…, the second button commits and autosquashes the target.
   const fixup = useCommit((s) => pendingFixup(s.message, s.fixupTarget));
+  const staging = useStagingArea();
+  const commitAll = useVcs((s) => staging && isCommitAll(s.status));
 
   return (
     <div className={styles.commit}>
       <CommitMessageField included={included} runner={runner} />
       <div className={styles.commitActions}>
         <Button variant="primary" disabled={!canCommit} onClick={() => void runner.run(false)} title="⌘↩">
-          <T>{commitLabel(amend, checkProblems.length > 0)}</T>
+          <T>{commitLabel(amend, checkProblems.length > 0, commitAll)}</T>
         </Button>
         {fixup ? (
           <Button

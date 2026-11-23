@@ -1005,5 +1005,8 @@
   "Detect changes with the Git command line": "Detect changes with the Git command line",
   "Slower, but matches git status where encryption or file protection software makes files look modified.": "Slower, but matches git status where encryption or file protection software makes files look modified.",
   "Shelve Silently": "Shelve Silently",
-  "Unshelve Silently": "Unshelve Silently"
+  "Unshelve Silently": "Unshelve Silently",
+  "Enable staging area": "Enable staging area",
+  "Commit works on the Git index: stage and unstage changes instead of checking them. Change lists are not used. Only for the non-modal commit interface.": "Commit works on the Git index: stage and unstage changes instead of checking them. Change lists are not used. Only for the non-modal commit interface.",
+  "Commit All": "Commit All"
 }
