@@ -7328,5 +7328,7 @@
   "Up to date with {upstream}": "已与 {upstream} 同步",
   "Highlight occurrences of selected text": "高亮所选文本的匹配项",
   "Stash Selected Files…": "储藏所选文件…",
-  "Select the files to stash in the Commit view first": "请先在提交视图中选择要贮藏的文件"
+  "Select the files to stash in the Commit view first": "请先在提交视图中选择要贮藏的文件",
+  "Cannot ignore the commit": "无法忽略该提交",
+  "Ignore This Commit": "忽略此提交"
 }
