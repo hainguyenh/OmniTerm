@@ -46,9 +46,21 @@ export const isTerminalLinkModifierClick = (event: MouseEvent): boolean =>
  *  - a POSIX absolute `/`
  *  - a bare multi-segment relative `a/b/c.ext` (requires at least one separator; `name.txt` alone
  *    is intentionally NOT matched — `country.iso` in shell output is a word, not a path).
- *  Trailing punctuation, angles, and quotes are excluded so a trailing `;` or `]` is not eaten. */
-const FILE_PATH_RE =
-  /(?<![A-Za-z])[A-Za-z]:[\\/][\w.\\/-]+|~\/[\w.\\/-]+|\.\/[\w.\\/-]+|\.\.\/[\w.\\/-]+|(?<!\w)\/[\w.-]+(?:[\\/][\w.-]+)*|(?<!\w)[\w.-]+(?:[\\/][\w.-]+)+/g
+ *  Trailing punctuation, angles, and quotes are excluded so a trailing `;` or `]` is not eaten.
+ *  A folder between two separators may hold single spaces (`runs/Sprint 254/a.html`,
+ *  `C:\My Documents\a.txt`) when each word after a space starts with a digit or a capital: prose
+ *  between two paths (`src/a.ts and src/b.ts`) stays two paths. The first and last segment never
+ *  take a space, so `see src/a.ts` does not swallow `see`. */
+const SPACED_DIR = String.raw`(?:[\w.-]+(?: [A-Z0-9][\w.-]*)*[\\/])*`
+const FILE_PATH_RE = new RegExp(
+  [
+    String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]${SPACED_DIR}[\w.\\/-]+`,
+    String.raw`(?:~|\.|\.\.)\/${SPACED_DIR}[\w.\\/-]+`,
+    String.raw`(?<!\w)\/${SPACED_DIR}[\w.-]+(?:[\\/][\w.-]+)*`,
+    String.raw`(?<!\w)[\w.-]+[\\/]${SPACED_DIR}[\w.-]+(?:[\\/][\w.-]+)*`,
+  ].join('|'),
+  'g',
+)
 const TRAILING_PATH_PUNCTUATION_RE = /[),.;:!?\]}"'`]+$/
 /** A location printed right after a path: `:12`, `:12:5`, `(12)` or `(12,5)` (1-based). */
 const PATH_LOCATION_RE = /^(?::(\d+)(?::(\d+))?|\((\d+)(?:[,:](\d+))?\))/

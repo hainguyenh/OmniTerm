@@ -7,6 +7,7 @@ import {
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
+  linkSpansOnLine,
   oscLinkTarget,
   registerPlainTextLinks,
   safeHttpUrl,
@@ -107,6 +108,23 @@ describe('findLinkOrPathAt', () => {
     const plain = findLinkOrPathAt('wrote .bizreq/outbox/56069-decision-task.md', 8)
     expect(plain?.text).toBe('.bizreq/outbox/56069-decision-task.md')
     expect(plain?.line).toBeUndefined()
+  })
+
+  it('keeps a folder name with spaces inside one path', () => {
+    const line = 'Report 56159: test/test-results/runs/Sprint 254/56159-migration-hours-overview/latest.html'
+    const whole = 'test/test-results/runs/Sprint 254/56159-migration-hours-overview/latest.html'
+    expect(findLinkOrPathAt(line, line.indexOf('Sprint'))?.text).toBe(whole)
+    expect(findLinkOrPathAt(line, line.indexOf('254/'))?.text).toBe(whole)
+    expect(findLinkOrPathAt(line, line.indexOf('latest'))?.text).toBe(whole)
+    expect(findLinkOrPathAt('open C:\\My Documents\\a.txt', 8)?.text).toBe('C:\\My Documents\\a.txt')
+    expect(findLinkOrPathAt('open ./My Files/a.txt', 8)?.text).toBe('./My Files/a.txt')
+  })
+
+  it('does not join two paths, or a path and a word, across a space', () => {
+    const line = 'edited src/a.ts and src/b.ts'
+    expect(linkSpansOnLine(line).map((span) => span.text)).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(linkSpansOnLine('see Docs src/a.ts').map((span) => span.text)).toEqual(['src/a.ts'])
+    expect(linkSpansOnLine('runs/Sprint 254 done').map((span) => span.text)).toEqual(['runs/Sprint'])
   })
 
   it('does NOT match a bare filename with no path separator', () => {
