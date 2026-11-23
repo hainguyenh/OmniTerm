@@ -115,6 +115,8 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
   // Read at write-time, like smart colors, so the toggle applies to live panes.
   const linkColorsRef = useRef(look?.linkColors ?? false)
   linkColorsRef.current = look?.linkColors ?? false
+  const themeColorsRef = useRef(look?.themeColors ?? false)
+  themeColorsRef.current = look?.themeColors ?? false
 
   useEffect(() => {
     if (!terminalRef.current) return
@@ -352,6 +354,7 @@ const TerminalView: React.FC<TerminalViewProps> = ({ id, connection, onStatus, o
       onActivity: (busy) => cbs.current.onActivity?.(busy),
       smartColors: () => smartColorsRef.current === true,
       linkColors: () => linkColorsRef.current,
+      themeColors: () => themeColorsRef.current,
       // A fresh PTY/replay needs the real grid resent even when its size is unchanged.
       refit: () => safeFit(true),
       isCurrent: () => termRef.current === term,

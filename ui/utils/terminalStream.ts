@@ -34,6 +34,8 @@ export interface TerminalStreamOptions {
   smartColors: () => boolean
   /** Whether URLs and file paths are colored while smart colouring is off; read at write time. */
   linkColors?: () => boolean
+  /** Whether programs' 24-bit and 256-color foregrounds take the scheme's ANSI colors; read at write time. */
+  themeColors?: () => boolean
   /** Re-fit after output that can change the pane's state (the connect banner, an attach replay). */
   refit: () => void
   /** True while this stream's terminal is still the mounted one — guards the async attach result. */
@@ -69,7 +71,7 @@ export interface TerminalStream {
 /** Subscribe to a session and start (or attach to) it. */
 export const attachTerminalStream = ({
   term, api, id, isLocal, host, mode,
-  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, linkColors, refit, isCurrent, scrollbackKey,
+  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, linkColors, themeColors, refit, isCurrent, scrollbackKey,
 }: TerminalStreamOptions): TerminalStream => {
   // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell behind it can
   // take much longer to actually produce a prompt — a cold WSL VM boot in particular can take several
@@ -140,13 +142,14 @@ export const attachTerminalStream = ({
   const handleText = (text: string, replay: boolean) => {
     appendScrollback(text)
     scheduleScrollbackSave()
+    highlighter.setPaletteColors(themeColors?.() ?? false)
     if (replay) {
       // Scrollback that was already rendered once (an attach replay, or restored history). It is
       // fed to the highlighter with colouring OFF so its escape-sequence state still matches the
       // screen, and the ORIGINAL text is written: running an 8-alternation regex with a lookbehind
       // over a quarter of a megabyte, synchronously, was most of the freeze on attach/detach.
-      highlighter.transform(text, false)
-      writeChunked(term, text)
+      // Its colors are mapped like live output (a cheap pass over escape sequences only).
+      writeChunked(term, highlighter.transform(text, false))
       return
     }
     // Chunked as well: one huge message (a `cat` of a big file, a build log dumping at once) blocks a
@@ -162,8 +165,8 @@ export const attachTerminalStream = ({
     if (historyState === 'indexeddb' && !historyLoaded) return
     if (historyState === 'indexeddb' && savedHistory) {
       scrollBuffer.replace(savedHistory)
-      highlighter.transform(savedHistory, false)
-      writeChunked(term, savedHistory)
+      highlighter.setPaletteColors(themeColors?.() ?? false)
+      writeChunked(term, highlighter.transform(savedHistory, false))
     }
     const queued = gated
     const queuedReplay = gatedReplay

@@ -82,7 +82,7 @@ describe('resolveTerminalLook', () => {
 
   it('follows the theme by default, with contrast correction only on light palettes', () => {
     expect(resolveTerminalLook(undefined, theme, true)).toEqual({
-      theme, lightPalette: false, minimumContrastRatio: 1, boldBright: true, linkColors: true,
+      theme, lightPalette: false, minimumContrastRatio: 1, boldBright: true, linkColors: true, themeColors: true,
     })
     expect(resolveTerminalLook(undefined, theme, false)).toMatchObject({ lightPalette: true, minimumContrastRatio: 2.5 })
   })

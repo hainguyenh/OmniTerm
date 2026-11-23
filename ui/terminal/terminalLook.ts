@@ -22,6 +22,11 @@ export interface TerminalLookSettings {
   boldBright: boolean
   /** Color and underline URLs and file paths in plain output. */
   linkColors: boolean
+  /**
+   * Programs' own 24-bit and 256-color text (agent CLIs paint their UI in fixed RGB) is drawn with
+   * the scheme's ANSI colors, so it follows the theme. See `paletteSgr`.
+   */
+  themeColors: boolean
   /** Schemes imported from `.itermcolors` files. */
   customSchemes: TerminalColorScheme[]
 }
@@ -32,6 +37,7 @@ export const DEFAULT_TERMINAL_LOOK: Readonly<TerminalLookSettings> = {
   minContrast: 'auto',
   boldBright: true,
   linkColors: true,
+  themeColors: true,
   customSchemes: [],
 }
 
@@ -107,6 +113,7 @@ export function parseTerminalLook(raw: unknown): TerminalLookSettings {
       : 'auto',
     boldBright: typeof source.boldBright === 'boolean' ? source.boldBright : DEFAULT_TERMINAL_LOOK.boldBright,
     linkColors: typeof source.linkColors === 'boolean' ? source.linkColors : DEFAULT_TERMINAL_LOOK.linkColors,
+    themeColors: typeof source.themeColors === 'boolean' ? source.themeColors : DEFAULT_TERMINAL_LOOK.themeColors,
     customSchemes,
   }
 }
@@ -152,6 +159,7 @@ export interface ResolvedTerminalLook {
   minimumContrastRatio: number
   boldBright: boolean
   linkColors: boolean
+  themeColors: boolean
 }
 
 export function resolveTerminalLook(
@@ -168,6 +176,7 @@ export function resolveTerminalLook(
     minimumContrastRatio: look.minContrast === 'auto' ? (lightPalette ? 2.5 : 1) : look.minContrast,
     boldBright: look.boldBright,
     linkColors: look.linkColors,
+    themeColors: look.themeColors,
   }
 }
 

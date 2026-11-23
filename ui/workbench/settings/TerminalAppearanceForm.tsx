@@ -123,6 +123,12 @@ export function TerminalAppearanceForm({ value, smartColors, onChange, onSmartCo
         onChange={(boldBright) => set({ boldBright })}
         label="Draw bold text in bright colors"
       />
+      <span>Program colors</span>
+      <Checkbox
+        checked={look.themeColors}
+        onChange={(themeColors) => set({ themeColors })}
+        label="Draw agents' and programs' RGB colors with the scheme's colors"
+      />
       <span>Links</span>
       <Checkbox
         checked={look.linkColors}

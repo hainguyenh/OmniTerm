@@ -22,6 +22,8 @@
  *    next chunk, never split or rewritten mid-sequence.
  */
 
+import { paletteSgr } from './terminal/paletteSgr'
+
 /** What `transform` colors: every token, only URLs and file paths, or nothing. */
 export type HighlightScope = 'all' | 'links' | 'none'
 
@@ -132,6 +134,13 @@ export class OutputHighlighter {
   private tuiSeenAt = 0
   // Deadline set by noteLocalEcho(); 0 means none pending. See LOCAL_ECHO_QUIET_MS.
   private echoQuietUntil = 0
+  // Programs' 24-bit and 256-color foregrounds are drawn with the scheme's ANSI colors.
+  private paletteColors = false
+
+  /** Draw extended foreground colors with the scheme's ANSI slots; see `paletteSgr`. */
+  setPaletteColors(on: boolean): void {
+    this.paletteColors = on
+  }
 
   /**
    * The app just sent the terminal something it will echo back — a paste. Colouring is suspended
@@ -170,7 +179,7 @@ export class OutputHighlighter {
       }
       const seq = text.slice(esc, esc + seqLen)
       this.updateState(seq)
-      out += seq
+      out += this.paletteColors ? paletteSgr(seq) : seq
       i = esc + seqLen
     }
     return out
