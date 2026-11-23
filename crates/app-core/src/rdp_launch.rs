@@ -28,6 +28,58 @@ pub fn rdp_command(path: &str, os: &str) -> Result<(String, Vec<String>), String
     }
 }
 
+/// The address `mstsc /v:` connects to: the host, with `:port` only when it is not the default.
+///
+/// Launching by address writes no `.rdp` file, so the system client records the host in its own
+/// history the way a typed connection does — instead of a Jump List entry per launch named after a
+/// temporary file. Host and port come from a saved profile, so they are checked before they reach
+/// an argument: a hostname, an IPv4 address or a bracketed IPv6 address, and a port in 1–65535.
+pub fn rdp_address(host: &str, port: &str) -> Result<String, String> {
+    let bracketed_v6 = host.len() > 2
+        && host.starts_with('[')
+        && host.ends_with(']')
+        && host[1..host.len() - 1]
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.');
+    let plain = !host.is_empty()
+        && !host.starts_with(['-', '/', '.'])
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'));
+    if !bracketed_v6 && !plain {
+        return Err("Remote Desktop host contains unsupported characters.".to_string());
+    }
+    let port = port.trim();
+    if port.is_empty() || port == "3389" {
+        return Ok(host.to_string());
+    }
+    match port.parse::<u16>() {
+        Ok(value) if value > 0 => Ok(format!("{host}:{value}")),
+        _ => Err("Remote Desktop port must be between 1 and 65535.".to_string()),
+    }
+}
+
+/// `reg.exe` arguments that pre-fill the user name the system client suggests for `address` — the
+/// same `UsernameHint` value `mstsc` itself stores after a sign-in. No password is involved. `None`
+/// when there is no user name, or one that could be read as a switch or carries control characters.
+pub fn username_hint_args(address: &str, user: &str) -> Option<Vec<String>> {
+    let user = user.trim();
+    if user.is_empty() || user.starts_with(['/', '-']) || user.chars().any(char::is_control) {
+        return None;
+    }
+    Some(vec![
+        "add".to_string(),
+        format!(r"HKCU\Software\Microsoft\Terminal Server Client\Servers\{address}"),
+        "/v".to_string(),
+        "UsernameHint".to_string(),
+        "/t".to_string(),
+        "REG_SZ".to_string(),
+        "/d".to_string(),
+        user.to_string(),
+        "/f".to_string(),
+    ])
+}
+
 /// Launch `path` in the OS Remote Desktop client and return as soon as it has started.
 ///
 /// `path` must already have been through `safepath::safe_runnable_path` — this function does no

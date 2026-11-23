@@ -22,7 +22,10 @@ function sessionInfos(model: MainLayoutModel): SessionInfo[] {
         connId: tab.connId,
         name: tab.name,
         connType: conn?.type ?? 'LOCAL',
-        workspaceId: workspaceForConnection(workspaces, conn)?.id ?? null,
+        // A remote session has no folder: it opens in the workspace shown when it was connected.
+        // Tagged with the workspace its profile is saved in, connecting from "All workspaces" (or
+        // from another workspace's list) started it with no tab, so Connect looked like it did nothing.
+        workspaceId: conn && conn.type !== 'LOCAL' ? null : workspaceForConnection(workspaces, conn)?.id ?? null,
         status: model.statuses[tab.id] ?? 'connecting',
         busy: model.activity[tab.id],
         cwd: model.sessionCwds?.[tab.id] ?? conn?.localCwd ?? null,

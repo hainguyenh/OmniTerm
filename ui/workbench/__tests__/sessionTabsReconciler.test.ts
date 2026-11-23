@@ -125,6 +125,19 @@ describe('session tabs reconciler', () => {
     expect(keys(tabsNow())).toEqual(['session:a', 'session:b'])
   })
 
+  it('shows a session that comes back under the id of one that ended (an SSH or RDP reconnect)', async () => {
+    const { host, state, tabsNow } = fakeHost({ sessions: [session('a')] })
+    const reconciler = createSessionTabsReconciler(host)
+    await reconciler.run()
+    state.sessions = []
+    await reconciler.run()
+    expect(keys(tabsNow())).toEqual([])
+    state.sessions = [session('a')]
+    await reconciler.run()
+    expect(host.openAndShow).toHaveBeenCalledExactlyOnceWith(sessionInput('a'))
+    expect(keys(tabsNow())).toEqual(['session:a'])
+  })
+
   it('turns a split duplicate into a new shell in the same folder, in the split pane', async () => {
     const { host, state, api, tabsNow } = fakeHost({ sessions: [session('a')] })
     const reconciler = createSessionTabsReconciler(host)

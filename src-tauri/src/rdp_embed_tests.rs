@@ -311,3 +311,25 @@ fn rdp_disconnect_removes_session_and_cleans_up() {
     assert!(!temp_file.exists());
     let _ = fs::remove_dir_all(&cache);
 }
+
+/// Windows starts the system client by address, so no `.rdp` file reaches its Jump List; only drive
+/// redirection (which has no command-line switch) and other platforms still need a file.
+#[test]
+fn windows_launches_by_address_unless_drives_are_redirected() {
+    let mut conn = rdp_conn();
+    conn.redirect_drives = None;
+    assert!(launches_by_address(&conn, "windows"));
+    conn.redirect_drives = Some(false);
+    assert!(launches_by_address(&conn, "windows"));
+    conn.redirect_drives = Some(true);
+    assert!(!launches_by_address(&conn, "windows"));
+    conn.redirect_drives = None;
+    assert!(!launches_by_address(&conn, "macos"));
+}
+
+/// A user name that cannot be a safe hint is skipped without running anything.
+#[test]
+fn an_unusable_username_hint_is_skipped() {
+    set_username_hint("desk", "");
+    set_username_hint("desk", "/f");
+}

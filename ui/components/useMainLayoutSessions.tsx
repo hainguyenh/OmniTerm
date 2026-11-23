@@ -7,6 +7,7 @@ import { mintSessionId } from './mainLayoutShared'
 import type { useMainLayoutBase } from './useMainLayoutBase'
 import { sessionCloseNeedsConfirm } from '../workbench/sessions/sessionBusy'
 import { closeSessionFromEvent } from '../workbench/sessions/sessionClose'
+import { showSessionTab } from '../workbench/sessions/sessionTabActions'
 import { useSessionRecoveryState } from '../hooks/useSessionRecoveryState'
 
 export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>) {
@@ -81,6 +82,12 @@ export function useMainLayoutSessions(base: ReturnType<typeof useMainLayoutBase>
           setActiveTabs(prev => [...prev, { id: conn.id, connId: conn.id, name: conn.name }]);
       }
       showTab(conn.id, { autoFillOnly: !alreadyOpen, newTab: !alreadyOpen });
+      if (alreadyOpen) {
+          // Connecting to a connection that is open again shows its tab; one that ended reconnects.
+          const status = statuses[conn.id];
+          if (status === 'closed' || status === 'error') reconnectSession(conn.id);
+          showSessionTab(conn.id);
+      }
   };
   const scriptRuns = useScriptRuns({
       isEditorOpen: isScriptFileOpen,

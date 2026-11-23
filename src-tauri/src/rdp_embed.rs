@@ -14,7 +14,8 @@
 //!
 //! # Credentials
 //!
-//! The generated `.rdp` file carries host, port and username only. No `password 51:b:` blob, no
+//! On Windows the client is started by address (`mstsc /v:host[:port]`) and writes no file; see
+//! `launches_by_address`. The `.rdp` file generated otherwise carries host, port and username only. No `password 51:b:` blob, no
 //! `prompt for credentials`, no `cmdkey`, and nothing on the command line — the client prompts the user.
 //! Keep it that way: a password on argv is readable by any process on the machine, and one in the file
 //! is a password OmniTerm wrote to disk.
@@ -161,6 +162,33 @@ fn create_temp_rdp_file<R: Runtime>(
     Ok(temp_file)
 }
 
+/// Whether the system client is started by address (`mstsc /v:`) instead of from a temp `.rdp`.
+///
+/// Every `.rdp` file `mstsc` opens is added to its Jump List, so a temp file per launch filled the
+/// Recent list with one `omniterm_rdp_…` entry per connect — and a file deleted while the client was
+/// still starting could leave it with nothing to open. By address there is no file at all. Drive
+/// redirection has no command-line switch, so a profile that asks for it still goes through a file.
+fn launches_by_address(conn: &Connection, os: &str) -> bool {
+    os == "windows" && !conn.redirect_drives.unwrap_or(false)
+}
+
+/// Pre-fills the user name the system client suggests for `address`. Best-effort: without it the
+/// client simply asks for the user name as well.
+fn set_username_hint(address: &str, user: &str) {
+    let Some(args) = crate::rdp_launch::username_hint_args(address, user) else {
+        return;
+    };
+    let mut command = std::process::Command::new("reg.exe");
+    command.args(&args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = command.status();
+}
+
 /// Remove a session's temp file and tell the renderer the session is over.
 fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&Path>) {
     if let Some(path) = temp_file {
@@ -180,18 +208,23 @@ pub async fn connect_rdp<R: Runtime>(
         return Err("Not an RDP connection.".to_string());
     }
 
-    let seq = app
-        .try_state::<RdpSessionManager>()
-        .map(|m| m.next_seq())
-        .unwrap_or(0);
-    let temp_file = create_temp_rdp_file(&app, &conn, seq)?;
-    let path_str = temp_file.to_string_lossy().to_string();
-
-    let (exe, args) = match crate::rdp_launch::rdp_command(&path_str, std::env::consts::OS) {
-        Ok(cmd) => cmd,
-        Err(e) => {
-            let _ = fs::remove_file(&temp_file);
-            return Err(e);
+    let (exe, args, temp_file) = if launches_by_address(&conn, std::env::consts::OS) {
+        let address = crate::rdp_launch::rdp_address(&conn.host, &conn.port)?;
+        set_username_hint(&address, &conn.user);
+        ("mstsc.exe".to_string(), vec![format!("/v:{address}")], None)
+    } else {
+        let seq = app
+            .try_state::<RdpSessionManager>()
+            .map(|m| m.next_seq())
+            .unwrap_or(0);
+        let temp_file = create_temp_rdp_file(&app, &conn, seq)?;
+        let path_str = temp_file.to_string_lossy().to_string();
+        match crate::rdp_launch::rdp_command(&path_str, std::env::consts::OS) {
+            Ok((exe, args)) => (exe, args, Some(temp_file)),
+            Err(e) => {
+                let _ = fs::remove_file(&temp_file);
+                return Err(e);
+            }
         }
     };
 
@@ -199,15 +232,17 @@ pub async fn connect_rdp<R: Runtime>(
         Ok(child) => child,
         Err(e) => {
             // Do not leave a file naming a host behind for a session that never started.
-            let _ = fs::remove_file(&temp_file);
+            if let Some(path) = &temp_file {
+                let _ = fs::remove_file(path);
+            }
             let message = format!("Failed to launch RDP client: {e}");
             let _ = app.emit(&format!("rdp-error-{id}"), message.clone());
             return Err(message);
         }
     };
 
-    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
-        mgr.register(id.clone(), temp_file.clone());
+    if let (Some(mgr), Some(path)) = (app.try_state::<RdpSessionManager>(), &temp_file) {
+        mgr.register(id.clone(), path.clone());
     }
     let _ = app.emit(&format!("rdp-ready-{id}"), ());
 

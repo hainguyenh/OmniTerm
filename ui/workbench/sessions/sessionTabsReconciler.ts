@@ -193,7 +193,10 @@ export function createSessionTabsReconciler(host: ReconcilerHost) {
       acted = true
     }
     if (legacyLayout) host.consumeLegacyLayout()
-    knownSessions = new Set([...(knownSessions ?? []), ...live.keys()])
+    // Only the sessions live now: a saved SSH or RDP connection reuses its connection id as the
+    // session id, so connecting again after its session ended is a new session that must be shown,
+    // not a returning one opened in the background.
+    knownSessions = new Set(live.keys())
     knownTabs = new Set(collect(host.tabs()).map((ref) => ref.tabId))
     if (acted) again = true
   }

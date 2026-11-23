@@ -22,6 +22,8 @@ vi.mock('../../hooks/useScriptRuns', () => ({
 vi.mock('../../hooks/useDetachControl', () => ({
   useDetachControl: () => ({ stateOf: detachStateOf, toggle: detachToggle }),
 }))
+const showSessionTabMock = vi.hoisted(() => vi.fn())
+vi.mock('../../workbench/sessions/sessionTabActions', () => ({ showSessionTab: showSessionTabMock }))
 vi.mock('../PaneHeader', () => ({
   default: (p: any) => <div data-testid="pane-header">
     <button onClick={p.onFocus}>focus</button><button onClick={p.onDragStart}>drag</button>
@@ -160,6 +162,21 @@ describe('useMainLayoutSessions complete behavior', () => {
     expect(result.current.base.ephemeralConns.some((c: Connection) => c.id === 'event-shell')).toBe(true)
     unmount()
     expect(shellCleanup).toHaveBeenCalled()
+  })
+
+  it('shows an open remote connection again and reconnects one that ended', () => {
+    const { result } = renderHook(() => useHarness({
+      tabs: [{ id: 'ssh', connId: 'ssh', name: 'SSH' }],
+      statuses: { ssh: 'connected' },
+    }))
+    act(() => result.current.sessions.handleConnect(ssh))
+    expect(showSessionTabMock).toHaveBeenCalledWith('ssh')
+    expect(result.current.reconnectKeys.ssh).toBeUndefined()
+
+    act(() => result.current.base.setStatus('ssh', 'closed'))
+    act(() => result.current.sessions.handleConnect(ssh))
+    expect(result.current.reconnectKeys.ssh).toBe(1)
+    expect(result.current.base.activeTabs).toHaveLength(1)
   })
 
   it('opens a new terminal in the focused pane when every pane is occupied', () => {
