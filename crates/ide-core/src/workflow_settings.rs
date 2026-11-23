@@ -70,6 +70,9 @@ pub struct GitSettings {
     pub push_dialog_only_protected: bool,
     /// Stashes and shelves share one tab.
     pub combine_stash_and_shelf: bool,
+    /// Scan the working tree with `git status` (for file systems whose metadata only
+    /// the system git reads correctly) instead of in process.
+    pub cli_status: bool,
 }
 
 impl Default for GitSettings {
@@ -91,6 +94,7 @@ impl Default for GitSettings {
             show_push_dialog: true,
             push_dialog_only_protected: false,
             combine_stash_and_shelf: false,
+            cli_status: false,
         }
     }
 }

@@ -7336,5 +7336,7 @@
   "Incoming and Outgoing Commits…": "传入和传出的提交…",
   "Show Incoming and Outgoing Commits": "显示传入和传出的提交",
   "Open in Git Log": "在 Git 日志中打开",
-  "This branch has no upstream. Push it to compare with a remote branch.": "此分支没有上游分支。推送后再与远程分支比较。"
+  "This branch has no upstream. Push it to compare with a remote branch.": "此分支没有上游分支。推送后再与远程分支比较。",
+  "Detect changes with the Git command line": "使用 Git 命令行检测更改",
+  "Slower, but matches git status where encryption or file protection software makes files look modified.": "速度较慢，但在加密或文件保护软件导致文件被误判为已修改时，结果与 git status 一致。"
 }

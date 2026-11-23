@@ -16,6 +16,7 @@ pub async fn status(host: &Host, window: &str) -> IdeResult<Vec<FileStatus>> {
         }
         for r in repos.all() {
             r.set_ignored_names(settings.ignored_names());
+            r.set_cli_status(settings.vcs.git.cli_status);
         }
         repos.status()
     })
@@ -37,6 +38,7 @@ pub async fn status_paths(host: &Host, window: &str, paths: Vec<std::path::PathB
         }
         for r in repos.all() {
             r.set_ignored_names(settings.ignored_names());
+            r.set_cli_status(settings.vcs.git.cli_status);
         }
         repos.status_paths(&paths)
     })

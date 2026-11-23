@@ -34,6 +34,7 @@ export interface GitSettingsValid {
   showPushDialog: boolean;
   pushDialogOnlyProtected: boolean;
   combineStashAndShelf: boolean;
+  cliStatus: boolean;
 }
 
 export interface CommitSettingsValid {
@@ -222,6 +223,7 @@ export const DEFAULT_WORKFLOW: WorkflowSettings = {
       showPushDialog: true,
       pushDialogOnlyProtected: false,
       combineStashAndShelf: false,
+      cliStatus: false,
     },
     commit: {
       nonModal: true,
@@ -356,6 +358,7 @@ export function validateVcs(raw: unknown): VcsSettingsValid {
       showPushDialog: bool(g.showPushDialog, d.git.showPushDialog),
       pushDialogOnlyProtected: bool(g.pushDialogOnlyProtected, d.git.pushDialogOnlyProtected),
       combineStashAndShelf: bool(g.combineStashAndShelf, d.git.combineStashAndShelf),
+      cliStatus: bool(g.cliStatus, d.git.cliStatus),
     },
     commit: {
       nonModal: bool(c.nonModal, d.commit.nonModal),
