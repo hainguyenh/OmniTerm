@@ -11,7 +11,7 @@ vi.mock("@/platform/ipc", () => ({
   call: async (request: Promise<unknown>) => request,
   commands: {
     fsEntryKind: async (path: string) => (onDisk.has(path) ? "file" : null),
-    findFiles: async (query: string) => indexed.filter((h) => h.relPath.endsWith(query)),
+    findFilesNamed: async (name: string) => indexed.filter((h) => h.path.split("/").pop() === name).map((h) => h.path),
   },
 }));
 vi.mock("@/workbench/contributions", () => ({
@@ -53,6 +53,19 @@ describe("opening a file a terminal printed", () => {
     expect(await findFileLink(link, "D:/elsewhere", ["D:/work/app", "D:/work/tests"])).toBe("D:/work/tests/runs/Sprint 254/latest.html");
     onDisk.add("D:/work/app/src/a.ts");
     expect(await findFileLink({ path: "src/a.ts", candidates: ["src/a.ts More"] }, "D:/work/app")).toBe("D:/work/app/src/a.ts");
+  });
+
+  // Regression: a project file with brackets in its name, printed relative to a folder the shell
+  // is not in, showed "File not found" (the fuzzy file search ranked it out of its top five).
+  it("finds a project file by its name and path tail, preferring the shell's own project", async () => {
+    const rel = "spdd/reviews/56070-202611221515-[Handoff]-service-delivery-tc02-tc03.md";
+    indexed.push(
+      { path: `D:/work/other/${rel}`, relPath: rel },
+      { path: `D:/work/app/docs/${rel}`, relPath: `docs/${rel}` },
+      { path: "D:/work/app/x/56070-202611221515-[Handoff]-service-delivery-tc02-tc03.md", relPath: "x/n.md" },
+    );
+    expect(await findFileLink({ path: rel }, "D:/work/app", [])).toBe(`D:/work/app/docs/${rel}`);
+    expect(await findFileLink({ path: rel }, "", ["D:/work/other", "D:/work/app"])).toBe(`D:/work/other/${rel}`);
   });
 
   it("opens the file at the printed line and column", async () => {

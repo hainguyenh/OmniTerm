@@ -27,17 +27,36 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-/** The project file whose path ends with `rel`, from the project index. */
-async function indexedFile(rel: string): Promise<string | null> {
+const slashes = (path: string) => path.replace(/\\/g, "/");
+const relative = (path: string) => slashes(path).replace(/^(?:\.\/)+/, "");
+
+/** How far `path` is from the preferred folders: the first of `bases` holding it, else past them all. */
+function rank(path: string, bases: readonly string[]): number {
+  const lower = slashes(path).toLowerCase();
+  const index = bases.findIndex((base) => base && lower.startsWith(`${slashes(base).toLowerCase().replace(/\/+$/, "")}/`));
+  return index < 0 ? bases.length : index;
+}
+
+/**
+ * The project file whose path ends with `rel`. Looked up by its exact file name, so a name the
+ * fuzzy file search ranks poorly (`56070-…-[Handoff]-….md`) is still found; of several files with
+ * that tail, the one under the first of `bases` (the shell's directory, then the projects) wins,
+ * then the shortest path, then the alphabetically first, so the pick never depends on index order.
+ */
+async function indexedFile(rel: string, bases: readonly string[]): Promise<string | null> {
+  const name = rel.split("/").pop();
+  if (!name) return null;
+  let hits: string[];
   try {
-    const hits = await call(commands.findFiles(rel, 5));
-    return hits.find((h) => h.relPath === rel || h.relPath.endsWith(`/${rel}`))?.path ?? null;
+    hits = await call(commands.findFilesNamed(name));
   } catch {
     return null;
   }
+  const tail = `/${rel.toLowerCase()}`;
+  const matches = hits.filter((hit) => `/${slashes(hit).toLowerCase()}`.endsWith(tail));
+  matches.sort((a, b) => rank(a, bases) - rank(b, bases) || a.length - b.length || a.localeCompare(b));
+  return matches[0] ?? null;
 }
-
-const relative = (path: string) => path.replace(/\\/g, "/").replace(/^(?:\.\/)+/, "");
 
 /**
  * Where `link` points: each reading (the candidates, then the path) against the shell's directory,
@@ -57,15 +76,16 @@ export async function findFileLink(link: FileLink, cwd: string, roots: readonly 
       if (await isFile(path)) return path;
     }
   }
+  const bases = [cwd, ...roots];
   for (const reading of readings) {
-    const hit = await indexedFile(relative(reading));
+    const hit = await indexedFile(relative(reading), bases);
     if (hit) return hit;
   }
   // The basename alone is ambiguous (`a/x.ts` vs `b/x.ts`): it is the last resort, for the printed
   // path only, and only when that path names a directory the index could not match.
   const rel = relative(link.path);
   const name = rel.split("/").pop() ?? rel;
-  return name === rel ? null : indexedFile(name);
+  return name === rel ? null : indexedFile(name, bases);
 }
 
 /** Opens `link` in the editor at its line; a link that names no file shows "File not found". */

@@ -47,21 +47,39 @@ export const isTerminalLinkModifierClick = (event: MouseEvent): boolean =>
  *  - a bare multi-segment relative `a/b/c.ext` (requires at least one separator; `name.txt` alone
  *    is intentionally NOT matched — `country.iso` in shell output is a word, not a path).
  *  Trailing punctuation, angles, and quotes are excluded so a trailing `;` or `]` is not eaten.
+ *  A name may hold square brackets after its first character (`56070-[Handoff]-review.md`); a
+ *  closing bracket the name did not open is punctuation (`[see src/a.ts]`, `[a](src/a.ts)`).
  *  A folder between two separators may hold single spaces (`runs/Sprint 254/a.html`,
  *  `C:\My Documents\a.txt`) when each word after a space starts with a digit or a capital: prose
  *  between two paths (`src/a.ts and src/b.ts`) stays two paths. The first and last segment never
  *  take a space, so `see src/a.ts` does not swallow `see`. */
-const SPACED_DIR = String.raw`(?:[\w.-]+(?: [A-Z0-9][\w.-]*)*[\\/])*`
+const NAME_CHAR = String.raw`[\w.\[\]-]`
+const NAME = String.raw`[\w.-]${NAME_CHAR}*`
+const SPACED_DIR = String.raw`(?:${NAME}(?: [A-Z0-9]${NAME_CHAR}*)*[\\/])*`
 const FILE_PATH_RE = new RegExp(
   [
-    String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]${SPACED_DIR}[\w.\\/-]+`,
-    String.raw`(?:~|\.|\.\.)\/${SPACED_DIR}[\w.\\/-]+`,
-    String.raw`(?<!\w)\/${SPACED_DIR}[\w.-]+(?:[\\/][\w.-]+)*`,
-    String.raw`(?<!\w)[\w.-]+[\\/]${SPACED_DIR}[\w.-]+(?:[\\/][\w.-]+)*`,
+    String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]${SPACED_DIR}[\w.\\/\[\]-]+`,
+    String.raw`(?:~|\.|\.\.)\/${SPACED_DIR}[\w.\\/\[\]-]+`,
+    String.raw`(?<!\w)\/${SPACED_DIR}${NAME}(?:[\\/]${NAME_CHAR}+)*`,
+    String.raw`(?<!\w)${NAME}[\\/]${SPACED_DIR}${NAME_CHAR}+(?:[\\/]${NAME_CHAR}+)*`,
   ].join('|'),
   'g',
 )
-const TRAILING_PATH_PUNCTUATION_RE = /[),.;:!?\]}"'`]+$/
+const TRAILING_PATH_PUNCTUATION_RE = /[,.;:!?"'`]$/
+const CLOSERS: Record<string, string> = { ')': '(', ']': '[', '}': '{' }
+const count = (text: string, char: string) => text.split(char).length - 1
+
+/** `raw` without the punctuation that ends a sentence, or a bracket it closes but never opened. */
+const trimPathEnd = (raw: string): string => {
+  let text = raw
+  for (;;) {
+    const last = text.at(-1)
+    if (!last) return text
+    const opener = CLOSERS[last]
+    if (opener ? count(text, opener) >= count(text, last) : !TRAILING_PATH_PUNCTUATION_RE.test(last)) return text
+    text = text.slice(0, -1)
+  }
+}
 /** A location printed right after a path: `:12`, `:12:5`, `(12)` or `(12,5)` (1-based). */
 const PATH_LOCATION_RE = /^(?::(\d+)(?::(\d+))?|\((\d+)(?:[,:](\d+))?\))/
 
@@ -112,7 +130,7 @@ export const linkSpansOnLine = (line: string): DetectedLinkOrPath[] => {
   }
   const urls = [...spans]
   for (const match of line.matchAll(FILE_PATH_RE)) {
-    const raw = match[0].replace(TRAILING_PATH_PUNCTUATION_RE, '')
+    const raw = trimPathEnd(match[0])
     if (!raw) continue
     const start = match.index ?? 0
     const end = start + raw.length
@@ -145,11 +163,45 @@ export const joinedPathCandidates = (
   const opensLine = !line.slice(0, span.start).trim()
   const closesLine = !line.slice(span.end).replace(PATH_LOCATION_RE, '').trim()
   const prev = opensLine && before ? TRAILING_WORD_RE.exec(before.trimEnd())?.[1] : undefined
-  const next = closesLine && after ? LEADING_WORD_RE.exec(after)?.[1]?.replace(TRAILING_PATH_PUNCTUATION_RE, '') : undefined
+  const next = closesLine && after ? trimPathEnd(LEADING_WORD_RE.exec(after)?.[1] ?? '') || undefined : undefined
   const heads = prev ? [`${prev} `, prev, ''] : ['']
   const tails = next ? [` ${next}`, next, ''] : ['']
   const candidates = heads.flatMap((head) => tails.map((tail) => `${head}${span.text}${tail}`))
   return candidates.filter((candidate) => candidate !== span.text)
+}
+
+const FILE_NAME_RE = /\.[A-Za-z0-9]{1,10}$/
+const JOINER_END_RE = /[-_.\\/]$/
+
+/**
+ * The word that opens `line` when it finishes a path the line before broke off: an agent wrapping
+ * its reply prints `spdd/reviews/56070-` and `Handoff-review.md` on two lines, and the second half
+ * has no separator, so on its own it is no path. Only a word right after a path that closes its
+ * line, and that looks like the rest of one (a file name, or the path ended mid-name on `-`, `_`,
+ * `.` or a separator), is taken; the opener checks the joined readings against the disk.
+ */
+export const continuationSpan = (line: string, before: string | null): DetectedLinkOrPath | null => {
+  if (!before) return null
+  const head = /^(\s*)([^\s<>"'`]+)/.exec(line)
+  const text = trimPathEnd(head?.[2] ?? '')
+  if (!head || !text) return null
+  const start = head[1]!.length
+  const end = start + text.length
+  if (linkSpansOnLine(line).some((span) => start < span.end && end > span.start)) return null
+  const prev = linkSpansOnLine(before).filter((span) => span.kind === 'path').at(-1)
+  if (!prev || before.slice(prev.end).trim()) return null
+  const midName = JOINER_END_RE.test(prev.text)
+  if (!midName && !FILE_NAME_RE.test(text)) return null
+  const joined = `${prev.text}${text}`
+  const spaced = `${prev.text} ${text}`
+  return { kind: 'path', text, start, end, ...pathLocation(line, end), candidates: midName ? [joined, spaced] : [spaced, joined] }
+}
+
+/** The links of `line`, with the continuation of a path broken off on the line before. */
+const spansWithContinuation = (term: Terminal, line: LogicalLine): DetectedLinkOrPath[] => {
+  const spans = linkSpansOnLine(line.text)
+  const continuation = continuationSpan(line.text, adjacentLogicalLine(term, line, -1)?.text ?? null)
+  return continuation ? [...spans, continuation] : spans
 }
 
 /** `found` on `line` with the readings joined across the lines around it, when there are any. */
@@ -198,8 +250,11 @@ export const findLinkOrPathInTerminal = (
   const line = logicalLineAt(term, bufferRow)
   if (!line) return null
   const index = indexOfCell(line, bufferRow, col)
-  const found = index < 0 ? null : findLinkOrPathAt(line.text, index)
-  return found ? withJoinedCandidates(term, line, found) : null
+  if (index < 0) return null
+  const found = findLinkOrPathAt(line.text, index)
+  if (found) return withJoinedCandidates(term, line, found)
+  const continuation = continuationSpan(line.text, adjacentLogicalLine(term, line, -1)?.text ?? null)
+  return continuation && index >= continuation.start && index < continuation.end ? continuation : null
 }
 
 /** The links of the logical line holding buffer row `y - 1` that touch that row (xterm asks per row). */
@@ -207,7 +262,7 @@ const plainLinksOnRow = (term: Terminal, y: number): ILink[] => {
   const line = logicalLineAt(term, y - 1)
   if (!line) return []
   const links: ILink[] = []
-  for (const span of linkSpansOnLine(line.text)) {
+  for (const span of spansWithContinuation(term, line)) {
     const first = line.cells[span.start]
     const last = line.cells[span.end - 1]
     if (!first || !last || first.row > y - 1 || last.row < y - 1) continue
