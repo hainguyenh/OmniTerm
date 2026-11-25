@@ -79,7 +79,7 @@ interface Handlers {
   sshReady?: () => void
   sshData?: (data: Uint8Array) => void
   sshError?: (error: string) => void
-  sshClosed?: () => void
+  sshClosed?: (code?: number) => void
   metrics?: (metrics: SessionMetrics) => void
 }
 
@@ -303,7 +303,7 @@ describe('TerminalView full lifecycle', () => {
     expect(term.writes.join('')).toContain('error 42')
     act(() => handlers.metrics?.({ latency: 21, cpu: 4, memUsed: 128, memTotal: 1024, diskUsedPct: 8, ts: Date.now() }))
     expect(onMetrics).toHaveBeenCalledWith(expect.objectContaining({ latency: 21 }))
-    act(() => handlers.sshClosed?.())
+    act(() => handlers.sshClosed?.(0))
     expect(onExit).toHaveBeenCalledWith(0)
     expect(term.writes.join('')).toContain('exit code 0')
   })
