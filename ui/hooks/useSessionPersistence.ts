@@ -14,7 +14,7 @@ import {
 } from '../utils/sessionStore'
 import { mergePendingSnapshot } from '../utils/sessionCheckpoint'
 import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../utils/agentSessionDetector'
-import { bindActiveSession, clearActiveForTab, findSessionByTabId, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
+import { bindActiveSession, clearActiveForTab, findSessionByTabId, isSessionBoundToOtherTab, promoteStaleActiveSessions } from '../utils/agentSessionStorage'
 import { hydrateAgentSessionStore } from '../utils/agentSessionDurable'
 import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../utils/agentPresenceStore'
 import { extractAgentWorkItem } from '../utils/agentWorkItem'
@@ -320,8 +320,11 @@ export function useSessionPersistence({
           nextPresence[tab.id] = presenceOf(found, priorSessionId, modelInfo, launchCwd)
           let sessionId = priorSessionId
           if (found.agent === 'claude') {
-            sessionId = (await resolveClaudeSessionId(found, cwd)) ?? priorSessionId
+            const resolved = await resolveClaudeSessionId(found, cwd)
             if (cancelled) return
+            // Another pane's session (same folder, written last) is not this pane's: binding it here
+            // would release this pane's own session, a bookmarked one as a stray `saved` entry.
+            sessionId = resolved && !isSessionBoundToOtherTab(`claude:${resolved}`, tab.id) ? resolved : priorSessionId
           } else if (!sessionId) {
             sessionId = 'latest'
           }

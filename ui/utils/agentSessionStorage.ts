@@ -236,6 +236,15 @@ export function clearActiveForTab(tabId: string): void {
   if (ids.size > 0) persist(releaseEntries(current, ids))
 }
 
+/**
+ * Whether another open pane already runs this session. Claude's session file is found by "newest
+ * in the folder", so two panes in one folder can each see the other's file as newest; the poll
+ * keeps a pane's own id instead of taking one another pane holds.
+ */
+export function isSessionBoundToOtherTab(id: string, tabId: string): boolean {
+  return loadStoredSessions().some(item => item.id === id && item.state === 'active' && item.tabId !== undefined && item.tabId !== tabId)
+}
+
 export function findSessionByTabId(tabId: string): StoredAgentSession | undefined {
   return loadStoredSessions().find(item => item.tabId === tabId && item.state !== 'saved')
 }

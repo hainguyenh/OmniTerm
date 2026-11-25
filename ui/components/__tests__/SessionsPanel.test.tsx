@@ -269,4 +269,32 @@ describe('SessionsPanel', () => {
     expect(screen.getByText('pwsh')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Claude' })).toBeTruthy()
   })
+
+  it('bookmarks a running agent from its row and shows it as bookmarked, then removes it', () => {
+    useWorkspaceStore.setState({ workspaces: [workspace], selection: 'w1' })
+    const sessionId = '33333333-3333-4333-8333-333333333333'
+    setPanePresence({ t1: { agent: 'claude', profileName: 'claude', pid: 7, startTime: 7, agentSessionId: sessionId, claudeSessionId: sessionId } })
+    upsertSession({ id: `claude:${sessionId}`, tabId: 't1', agent: 'claude', profileName: 'claude', sessionId, cwd: 'D:/work/app', state: 'active', updatedAt: Date.now() })
+    setup()
+
+    const button = screen.getByTestId('session-quick-bookmark')
+    expect(button.getAttribute('data-state')).toBe('none')
+    fireEvent.click(button)
+
+    expect(screen.getByTestId('session-quick-bookmark').getAttribute('data-state')).toBe('bookmarked')
+    expect(loadStoredSessions()[0]?.bookmarked).toBe(true)
+    // Still the live row: no separate remembered row appears for it.
+    expect(screen.queryByTestId('stored-session-row')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('session-quick-bookmark'))
+    expect(screen.getByTestId('session-quick-bookmark').getAttribute('data-state')).toBe('none')
+    expect(loadStoredSessions()[0]?.bookmarked).toBe(false)
+  })
+
+  it('offers no quick bookmark on a plain terminal row', () => {
+    useWorkspaceStore.setState({ workspaces: [workspace], selection: 'w1' })
+    setup()
+    expect(screen.queryByTestId('session-quick-bookmark')).toBeNull()
+  })
 })
+
