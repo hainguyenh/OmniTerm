@@ -267,6 +267,7 @@ fn server_cfg(name: &str) -> LanguageServerConfig {
         tsserver_project: false,
         tsserver_project_extras: Default::default(),
         resync_on_configuration: false,
+        file_only: false,
         pinned: None,
     }
 }
@@ -6036,5 +6037,26 @@ async fn reopening_within_the_idle_delay_keeps_the_server() {
     h.mgr.did_close(other);
     tokio::time::sleep(Duration::from_millis(900)).await;
     assert_eq!(h.mgr.servers().len(), 1);
+    h.mgr.shutdown_all().await;
+}
+
+/// Regression: an unsaved buffer (`untitled:`) was opened on every server of its language, and
+/// marksman exits on a URI that is not a file, so the client restarted it in a loop. A server marked
+/// `file-only` gets the files on disk only; the others still get the unsaved buffer.
+#[tokio::test(flavor = "multi_thread")]
+async fn file_only_server_is_not_sent_an_unsaved_buffer() {
+    let h = harness_configured("mock", "mk", &[("any", incremental_caps()), ("files", incremental_caps())], |cfg| {
+        cfg.file_only = cfg.name == "files";
+    });
+    let (any, files) = (h.launcher.state("any"), h.launcher.state("files"));
+    let file = h.root.join("a.mk");
+    std::fs::write(&file, "saved").unwrap();
+    h.mgr.did_open(DocId::next(), &file, &h.lang, 1, "saved");
+    eventually(|| any.docs.lock().contains_key(&uri_of(&file)) && files.docs.lock().contains_key(&uri_of(&file))).await;
+
+    h.mgr.did_open_virtual(DocId::next(), "untitled:Untitled-1", &h.lang, 1, "unsaved");
+    eventually(|| any.docs.lock().contains_key("untitled:Untitled-1")).await;
+    let opened: Vec<_> = files.notified("textDocument/didOpen").iter().map(|v| v["textDocument"]["uri"].clone()).collect();
+    assert_eq!(opened, vec![json!(uri_of(&file))]);
     h.mgr.shutdown_all().await;
 }

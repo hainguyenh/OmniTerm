@@ -177,6 +177,11 @@ pub struct LanguageServerConfig {
     /// it parses a document.
     #[serde(default)]
     pub resync_on_configuration: bool,
+    /// Opens only documents saved on disk (`file:` URIs): an unsaved buffer (`untitled:`) or
+    /// another virtual document is not sent. Marksman exits on any other scheme, and the client
+    /// restarted it in a loop while such a tab stayed open.
+    #[serde(default)]
+    pub file_only: bool,
     /// Set on plugin languages: start exactly this approved program.
     #[serde(skip)]
     pub pinned: Option<ProgramPin>,

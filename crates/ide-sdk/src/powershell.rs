@@ -88,6 +88,7 @@ mod tests {
             tsserver_project: false,
             tsserver_project_extras: Default::default(),
             resync_on_configuration: false,
+            file_only: false,
             pinned: None,
         }
     }

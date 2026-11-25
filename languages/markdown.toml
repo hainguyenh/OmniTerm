@@ -12,4 +12,6 @@ name = "marksman"
 command = "marksman"
 args = ["server"]
 root-markers = [".marksman.toml"]
+# Marksman exits on a document that is not a file on disk (an unsaved `untitled:` tab).
+file-only = true
 install-hint = "brew install marksman (https://github.com/artempyanykh/marksman/releases)"

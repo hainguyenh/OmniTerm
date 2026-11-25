@@ -273,6 +273,11 @@ fn rpc_err(server: &str, method: &str, e: RpcError) -> IdeError {
 
 /// Sends the user's `didOpen` for `path`, closing a transient copy of the file
 /// first (one a references search opened).
+/// The servers that may open a document not on disk: those marked `file-only` are left out.
+fn without_file_only(servers: Vec<Arc<Server>>) -> Vec<Arc<Server>> {
+    servers.into_iter().filter(|server| !server.config.file_only).collect()
+}
+
 fn user_did_open(server: &Server, run: &Running, path: &Path, uri: &lsp::Uri, params: Value) {
     if server.take_transient(path, run.generation)
         && let Err(e) = run.peer.notify("textDocument/didClose", json!({ "textDocument": { "uri": uri } }))
@@ -1021,7 +1026,7 @@ impl LspManager {
         };
         let servers = match self.origin_server(uri) {
             Some(s) => vec![s],
-            None => self.servers_for(language, &self.project_root),
+            None => without_file_only(self.servers_for(language, &self.project_root)),
         };
         self.attach(doc, PathBuf::from(uri), lsp_uri, language, version, text, servers);
     }
