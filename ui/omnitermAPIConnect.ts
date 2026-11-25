@@ -66,7 +66,8 @@ export function createConnectAPI(): any {
     onSSHReady: (id: string, cb: () => void) => onSession(id, 'ready', () => cb()),
     onSSHData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => onSession(id, 'data', cb),
     onSSHError: (id: string, cb: (err: string) => void) => onSession(id, 'error', cb),
-    onSSHClosed: (id: string, cb: () => void) => onSession(id, 'closed', () => cb()),
+    // ssh.exe's own exit code: 255 when it could not connect or log in, so the tab stays with its error.
+    onSSHClosed: (id: string, cb: (code: number) => void) => onSession(id, 'closed', cb),
     onSessionMetrics: (id: string, cb: (m: any) => void) =>
       onEvent<any>(`session-metrics-${id}`, cb),
 

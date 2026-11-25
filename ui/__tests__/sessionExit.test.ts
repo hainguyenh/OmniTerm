@@ -25,6 +25,8 @@ describe('closesOnExit', () => {
   it('closes SSH sessions on clean exit but leaves RDP and unknown alone', () => {
     expect(closesOnExit({ type: 'SSH', localKeepOpen: false }, 0)).toBe(true)
     expect(closesOnExit({ type: 'SSH' }, 0)).toBe(true)
+    // ssh.exe exits 255 when it cannot connect or log in: the tab stays so its error can be read.
+    expect(closesOnExit({ type: 'SSH' }, 255)).toBe(false)
     expect(closesOnExit({ type: 'RDP' }, 0)).toBe(false)
     expect(closesOnExit(undefined, 0)).toBe(false)
     expect(closesOnExit(null, 0)).toBe(false)

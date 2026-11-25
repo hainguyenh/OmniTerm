@@ -52,7 +52,12 @@ pub async fn prepare_ssh_session<R: Runtime>(
     app: AppHandle<R>,
     conn_id: String,
 ) -> Result<(), String> {
-    let conn = resolve_connection_by_id(&app, &conn_id).await?;
+    // The saved profile only: a previous connect left its `ssh.exe` launch in the ad-hoc registry
+    // under this same id, and that entry reads as a LOCAL shell, so reconnecting failed with
+    // "Not an SSH connection." until the tab was closed.
+    let conn = lookup_saved(&app, &conn_id)
+        .await
+        .ok_or_else(|| format!("Unknown connection \"{conn_id}\"."))?;
     if conn.conn_type != "SSH" {
         return Err("Not an SSH connection.".to_string());
     }

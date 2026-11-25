@@ -339,3 +339,24 @@ fn prepare_ssh_session_defaults_user_and_port() {
             .contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
     }
 }
+
+/// Regression: connecting a saved SSH profile again (Reconnect, or Connect on a session that ended)
+/// must not read the `ssh.exe` launch the first connect left in the ad-hoc registry under the same
+/// id: that entry is a LOCAL shell, so the second connect failed with "Not an SSH connection.".
+#[test]
+fn prepare_ssh_session_reads_the_saved_profile_on_a_reconnect() {
+    let fixture = Fixture::new();
+    let app = fixture.handle();
+    let mut conn = ssh_connection("ssh-reconnect");
+    conn.host = "bad;host".to_string();
+    save_one(&app, conn);
+    // What the first connect left behind.
+    app.state::<AdhocRegistry>().insert_named(
+        "ssh-reconnect".to_string(),
+        crate::adhoc::quick_shell_request(None).expect("a default shell request"),
+    );
+
+    // The saved SSH profile is checked (its unsafe host is refused), not the LOCAL ad-hoc entry.
+    let err = block_on(prepare_ssh_session(app, "ssh-reconnect".to_string())).unwrap_err();
+    assert!(err.contains("unsupported characters"), "got: {err}");
+}

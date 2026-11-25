@@ -203,7 +203,7 @@ interface Window {
       onSSHReady: (id: string, cb: () => void) => () => void
       onSSHData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => () => void
       onSSHError: (id: string, cb: (err: string) => void) => () => void
-      onSSHClosed: (id: string, cb: () => void) => () => void
+      onSSHClosed: (id: string, cb: (code: number) => void) => () => void
       onSessionMetrics: (id: string, cb: (m: SessionMetrics) => void) => () => void
       // ── LOCAL (ConPTY) ──────────────────────────────────────────────────────
       // sessionId is this instance's unique key (IPC channels + PTY); connId is the saved

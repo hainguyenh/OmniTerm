@@ -140,7 +140,7 @@ describe('session subscriptions', () => {
     api.connect.onLocalError('s1', failed)
     api.connect.onLocalClosed('s1', closed)
     api.connect.onLocalActivity('s1', activity)
-    // The SSH wrappers drop the payload their local counterparts forward.
+    // The SSH ready wrapper drops the label its local counterpart forwards.
     api.connect.onSSHReady('s1', ready)
     api.connect.onSSHClosed('s1', closed)
 
@@ -159,8 +159,9 @@ describe('session subscriptions', () => {
     expect(ready).toHaveBeenCalledWith()
     expect(data).toHaveBeenCalledWith(new Uint8Array([1]))
     expect(failed).toHaveBeenCalledWith('boom')
-    expect(closed).toHaveBeenCalledWith(3)
-    expect(closed).toHaveBeenCalledWith()
+    // Both the local and the SSH close carry the process's exit code.
+    expect(closed).toHaveBeenNthCalledWith(1, 3)
+    expect(closed).toHaveBeenNthCalledWith(2, 3)
     expect(activity).toHaveBeenCalledWith(true)
   })
 })
