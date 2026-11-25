@@ -32,8 +32,13 @@ pub async fn start(
 ) -> IdeResult<()> {
     let project = host.project(window)?;
     // Excluded roots (Project Structure marks and detected `target`, `node_modules`, …) and
-    // ignored names are never searched.
-    query.exclude.extend(project.search_excludes());
+    // ignored names are never searched; "Include ignored files" opens the excluded roots
+    // along with the `.gitignore`d folders, never the ignored names (`.git`, …).
+    if query.include_ignored {
+        query.exclude.extend(project.ignored_name_excludes());
+    } else {
+        query.exclude.extend(project.search_excludes());
+    }
     let cancel = host.begin_request(request);
     let events = on_event.clone();
     let syntax = host.syntax();

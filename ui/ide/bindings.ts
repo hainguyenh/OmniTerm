@@ -403,6 +403,8 @@ export const commands = {
 	springRouteSources: () => typedError<RouteSource[], IdeError>(__TAURI_INVOKE("spring_route_sources")),
 	findFiles: (query: string, limit: number) => typedError<FileMatch[], IdeError>(__TAURI_INVOKE("find_files", { query, limit })),
 	findFilesNamed: (name: string) => typedError<IpcPath[], IdeError>(__TAURI_INVOKE("find_files_named", { name })),
+	/**  Files in ignored folders matching `query` (Search Everywhere, "Include non-project items"). */
+	findIgnoredFiles: (query: string, limit: number) => typedError<FileMatch[], IdeError>(__TAURI_INVOKE("find_ignored_files", { query, limit })),
 	/**  Folders holding indexed files, for `@` references. */
 	findDirs: (query: string, limit: number) => typedError<FileMatch[], IdeError>(__TAURI_INVOKE("find_dirs", { query, limit })),
 	findSymbols: (query: string, filter: SymbolFilter, limit: number) => typedError<SymbolMatch[], IdeError>(__TAURI_INVOKE("find_symbols", { query, filter, limit })),
@@ -8176,6 +8178,12 @@ export type SearchQuery = {
 	maxMatches: number,
 	/**  Where in the code a match may lie (IDEA's search context filter). */
 	context?: SearchContext,
+	/**
+	 *  Also walk the folders `.gitignore` / `.ignore` / `info/exclude` skip
+	 *  (build output, `node_modules`, vendored trees). Off by default: a
+	 *  project search finds only project files, like IDEA's.
+	 */
+	includeIgnored?: boolean,
 };
 
 export type SearchScope = { kind: "project" } | { kind: "directory"; path: IpcPath } | { kind: "files"; paths: IpcPath[] } | 

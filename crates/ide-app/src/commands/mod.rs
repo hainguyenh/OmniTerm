@@ -225,6 +225,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
         nav::spring_route_sources,
         nav::find_files,
         nav::find_files_named,
+        nav::find_ignored_files,
         nav::find_dirs,
         nav::find_symbols,
         nav::mark_recent,

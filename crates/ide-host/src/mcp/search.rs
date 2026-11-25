@@ -437,6 +437,7 @@ async fn text_search(call: Call, is_regex: bool) -> IdeResult<Output> {
         scope: SearchScope::Project,
         max_matches,
         context: Default::default(),
+        include_ignored: false,
     };
     if is_regex && let Err(e) = ide_search::match_ranges("", &query) {
         return Err(IdeError::invalid(format!("Invalid regex pattern: {pattern} ({})", e.message)));

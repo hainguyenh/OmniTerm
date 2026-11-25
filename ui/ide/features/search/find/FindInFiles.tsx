@@ -224,11 +224,12 @@ function FindInFilesDialog() {
     directory: s.directory,
     namedScope: s.namedScope,
     context: s.context,
+    includeIgnored: s.includeIgnored,
   };
   const query = useMemo(
     () => buildQuery(options, scope, POPUP_MAX_MATCHES),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [s.pattern, s.caseSensitive, s.wholeWord, s.isRegex, s.maskEnabled, s.mask, s.context, scope],
+    [s.pattern, s.caseSensitive, s.wholeWord, s.isRegex, s.maskEnabled, s.mask, s.context, s.includeIgnored, scope],
   );
   const queryKey = JSON.stringify(query);
 
@@ -456,7 +457,14 @@ function FindInFilesDialog() {
 
   /** IDEA's "Clear all options" (⇧⌥⌫): back to a plain search everywhere. */
   const clearOptions = () =>
-    set({ caseSensitive: false, wholeWord: false, isRegex: false, maskEnabled: false, context: "any" });
+    set({
+      caseSensitive: false,
+      wholeWord: false,
+      isRegex: false,
+      maskEnabled: false,
+      context: "any",
+      includeIgnored: false,
+    });
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
@@ -534,11 +542,16 @@ function FindInFilesDialog() {
         ]
       : [{ label: kind === "find" ? "No recent searches" : "No recent replacements", disabled: true }];
   };
-  const contextItems: MenuItem[] = SEARCH_CONTEXTS.map((c) => ({
-    label: c.label,
-    checked: c.value === s.context ? true : undefined,
-    run: () => set({ context: c.value }),
-  }));
+  const contextItems: MenuItem[] = [
+    ...SEARCH_CONTEXTS.map((c) => ({
+      label: c.label,
+      checked: c.value === s.context ? true : undefined,
+      run: () => set({ context: c.value }),
+    })),
+    { kind: "separator" },
+    // Folders `.gitignore` excludes (build output, `node_modules`) are left out of a project search.
+    { label: "Include Ignored Files", checked: s.includeIgnored, run: () => set({ includeIgnored: !s.includeIgnored }) },
+  ];
   const pendingSelected = s.replace && !stale ? pendingUsages(chosen, marks).length : 0;
   // A multi-line query takes the arrow keys, so IDEA names the keys that still move through results.
   const nextKey = shortcutLabel("find.popup.nextResult");
@@ -565,7 +578,13 @@ function FindInFilesDialog() {
         rowHeight={ROW}
         aria-label="Matches"
         empty={
-          <EmptyResults state={state} options={options} onClear={clearOptions} onRegex={() => set({ isRegex: true })} />
+          <EmptyResults
+            state={state}
+            options={options}
+            onClear={clearOptions}
+            onRegex={() => set({ isRegex: true })}
+            onIncludeIgnored={() => set({ includeIgnored: true })}
+          />
         }
         renderItem={(r, st) => {
           const state = s.replace ? groupState(r, marks) : "pending";
@@ -655,7 +674,7 @@ function FindInFilesDialog() {
             ref={contextRef}
             icon="filter"
             title="Search Context"
-            pressed={s.context !== "any"}
+            pressed={s.context !== "any" || s.includeIgnored}
             onClick={() => setContextMenu(true)}
           />
           <IconButton icon="pin" title="Pin Window" pressed={s.pinned} onClick={() => setFindPopupPinned(!s.pinned)} />
@@ -943,11 +962,13 @@ function EmptyResults({
   options: o,
   onClear,
   onRegex,
+  onIncludeIgnored,
 }: {
   state: FindState;
   options: FindOptions;
   onClear: () => void;
   onRegex: () => void;
+  onIncludeIgnored: () => void;
 }) {
   const masked = o.maskEnabled && !!o.mask.trim();
   if (!o.pattern && !masked) return <div className={styles.empty}>{tx("Type search query to find in files")}</div>;
@@ -960,9 +981,18 @@ function EmptyResults({
     o.isRegex && { label: "Regex", key: "Alt+X" },
     masked && { label: "File mask", key: "Alt+K" },
     o.context !== "any" && { label: "Filter", key: "" },
+    o.includeIgnored && { label: "Ignored files", key: "" },
   ].filter((u) => !!u);
   const regex = !!o.pattern && !o.isRegex && couldBeRegex(o.pattern);
   const clearKey = formatBinding("Shift+Alt+Backspace");
+  // Nothing in the project's own files: the folders `.gitignore` excludes may still hold it.
+  const ignored = !!o.pattern && !o.includeIgnored && (
+    <div className={styles.emptyOptions}>
+      <button type="button" className={styles.link} onClick={onIncludeIgnored}>
+        <T>Search in ignored files too</T>
+      </button>
+    </div>
+  );
   return (
     <div className={styles.empty}>
       <div>
@@ -1000,6 +1030,7 @@ function EmptyResults({
           </div>
         </div>
       ) : null}
+      {ignored}
     </div>
   );
 }

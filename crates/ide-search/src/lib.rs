@@ -9,6 +9,7 @@
 
 mod engine;
 mod files;
+mod ignored;
 mod iter;
 mod line;
 mod mask;
@@ -18,6 +19,7 @@ mod replace;
 mod words;
 
 pub use files::{ScopeFile, scope_files};
+pub use ignored::ignored_files;
 pub use mask::FileMask;
 pub use pattern::ScopePattern;
 pub use replace::{
@@ -50,6 +52,12 @@ pub struct SearchQuery {
     #[serde(default)]
     #[specta(optional)]
     pub context: SearchContext,
+    /// Also walk the folders `.gitignore` / `.ignore` / `info/exclude` skip
+    /// (build output, `node_modules`, vendored trees). Off by default: a
+    /// project search finds only project files, like IDEA's.
+    #[serde(default)]
+    #[specta(optional)]
+    pub include_ignored: bool,
 }
 
 /// IDEA's search context: matches anywhere, only in, or outside comments and
@@ -236,6 +244,7 @@ pub fn search_in_context(
         context: query.context,
         literals,
         max_matches: query.max_matches,
+        include_ignored: query.include_ignored,
         overlay,
         cancel,
         on_file,

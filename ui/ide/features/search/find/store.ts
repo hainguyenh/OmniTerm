@@ -51,6 +51,8 @@ export interface FindOptions {
   namedScope: NamedScope;
   /** IDEA's search context filter (funnel menu): anywhere, only / except comments and string literals. */
   context: SearchContext;
+  /** Also search the folders `.gitignore` excludes (build output, `node_modules`, …). */
+  includeIgnored: boolean;
 }
 
 interface FindPopupState extends FindOptions {
@@ -83,6 +85,7 @@ export const useFindPopup = create<FindPopupState>(() => ({
   directory: "",
   namedScope: "projectFiles",
   context: "any",
+  includeIgnored: false,
   pinned: loadJson<unknown>(PINNED_KEY, false) === true,
   newTab: loadJson<unknown>(NEW_TAB_KEY, false) === true,
 }));
@@ -232,6 +235,7 @@ export function buildQuery(o: FindOptions, scope: SearchScope, maxMatches: numbe
     maxMatches,
   };
   if (o.context !== "any") q.context = o.context;
+  if (o.includeIgnored) q.includeIgnored = true;
   return q;
 }
 
@@ -289,5 +293,6 @@ export function describeQuery(q: SearchQuery, root: string | null): string {
     }
   })();
   const context = q.context && q.context !== "any" ? SEARCH_CONTEXTS.find((c) => c.value === q.context)?.label : null;
-  return `'${q.pattern}' in ${where}${q.include.length ? ` (${q.include.join(", ")})` : ""}${context ? `, ${context.toLowerCase()}` : ""}`;
+  const ignored = q.includeIgnored ? ", including ignored files" : "";
+  return `'${q.pattern}' in ${where}${q.include.length ? ` (${q.include.join(", ")})` : ""}${context ? `, ${context.toLowerCase()}` : ""}${ignored}`;
 }

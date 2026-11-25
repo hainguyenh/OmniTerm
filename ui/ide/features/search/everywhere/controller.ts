@@ -40,6 +40,8 @@ import {
 
 export interface SeDeps {
   findFiles(query: string, limit: number): Promise<FileMatch[]>;
+  /** Files in the folders the index leaves out (`.gitignore`d), for "Include non-project items". */
+  findIgnoredFiles?(query: string, limit: number): Promise<FileMatch[]>;
   findSymbols(query: string, filter: SymbolFilter, limit: number): Promise<SymbolMatch[]>;
   /** Optional language-server symbols; rejects with `unavailable` when no server. */
   workspaceSymbols?(request: RequestId, query: string): Promise<WorkspaceSymbol[]>;
@@ -282,11 +284,17 @@ export class SeController {
               ? (path: string) => (!scope || scope(path)) && (!filter || passesFilter(filter, path))
               : null;
           // Over-fetch so a narrowed scope still fills the section.
-          const [fetched, pasted] = await Promise.all([
-            this.deps.findFiles(text, keep ? limit * 4 + 1 : limit + 1),
+          const fetch = keep ? limit * 4 + 1 : limit + 1;
+          const [fetched, pasted, ignored] = await Promise.all([
+            this.deps.findFiles(text, fetch),
             pastedPathFile(text, this.deps.root(), this.deps.entryKind),
+            req.includeNonProject && this.deps.findIgnoredFiles
+              ? this.deps.findIgnoredFiles(text, fetch).catch((): FileMatch[] => [])
+              : Promise.resolve([]),
           ]);
-          const found = keep ? fetched.filter((m) => keep(m.path)) : fetched;
+          // Files of ignored folders follow the project's own, which the index ranks.
+          const all = [...fetched, ...ignored.filter((m) => !fetched.some((f) => samePath(f.path, m.path)))];
+          const found = keep ? all.filter((m) => keep(m.path)) : all;
           // A pasted path that names an existing file leads, even when the index has not got it.
           const matches = pasted ? [pasted, ...found.filter((m) => !samePath(m.path, pasted.path))] : found;
           this.set(
@@ -421,6 +429,8 @@ export class SeController {
       scope: req?.fileSet && req.fileSet !== "all" ? { kind: "fileSet", set: req.fileSet } : { kind: "project" },
       maxMatches: limit + 1,
     };
+    // "Include non-project items" also searches the folders `.gitignore` excludes.
+    if (req?.includeNonProject) query.includeIgnored = true;
     await this.deps.searchText(request, query, (f) => {
       if (!this.isLive(id, gen) || hasMore) return;
       for (const t of textItems(f.path, f.relPath, f.matches)) {

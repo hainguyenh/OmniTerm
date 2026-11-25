@@ -297,6 +297,7 @@ pub fn restricted_command_allowed(cmd: &str) -> bool {
             | "deploy_test_connection"
             | "find_files"
             | "find_files_named"
+            | "find_ignored_files"
             | "find_dirs"
             | "find_symbols"
             | "mark_recent"

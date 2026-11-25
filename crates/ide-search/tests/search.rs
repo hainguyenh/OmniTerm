@@ -28,6 +28,7 @@ fn query(pattern: &str) -> SearchQuery {
         scope: SearchScope::Project,
         max_matches: 0,
         context: Default::default(),
+        include_ignored: false,
     }
 }
 
@@ -240,6 +241,30 @@ fn searches_ignored_and_hidden_files_but_not_ignored_folders() {
     let one = SearchScope::Files { paths: vec![ide_core::IpcPath(p.path().join("build.log"))] };
     let (views, _) = run(p.path(), &SearchQuery { scope: one, ..query("needle") });
     assert_eq!(paths(&views), ["build.log"]);
+}
+
+#[test]
+fn include_ignored_also_searches_ignored_folders_but_never_git() {
+    // "Include ignored files": a file the project search cannot reach (an agent's report in a
+    // `.gitignore`d folder) is found; `.git` stays out.
+    let p = project(&[
+        (".gitignore", b"target/
+reviews/
+"),
+        ("src/a.rs", b"needle
+"),
+        ("target/debug/out.rs", b"needle
+"),
+        ("reviews/56070-[Handoff]-service.md", b"needle
+"),
+        (".git/config", b"needle
+"),
+    ]);
+    let (views, _) = run(p.path(), &query("needle"));
+    assert_eq!(paths(&views), ["src/a.rs"], "off by default");
+
+    let (views, _) = run(p.path(), &SearchQuery { include_ignored: true, ..query("needle") });
+    assert_eq!(paths(&views), ["reviews/56070-[Handoff]-service.md", "src/a.rs", "target/debug/out.rs"]);
 }
 
 #[test]

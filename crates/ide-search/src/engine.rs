@@ -33,6 +33,7 @@ pub(crate) struct Request<'a> {
     pub context: SearchContext,
     pub literals: Option<Literals<'a>>,
     pub max_matches: u32,
+    pub include_ignored: bool,
     pub overlay: Overlay<'a>,
     pub cancel: &'a CancellationToken,
     pub on_file: &'a (dyn Fn(FileMatches) + Sync),
@@ -143,7 +144,7 @@ pub(crate) fn run(req: Request<'_>) -> IdeResult<SearchSummary> {
     }
 
     if !ctx.ctl.should_stop() {
-        walk_files(&on_disk, || {
+        walk_files(&on_disk, req.include_ignored, || {
             let mut searcher = searcher_builder.build();
             let matcher = matcher.clone();
             let ctx = &ctx;
@@ -175,19 +176,25 @@ pub(crate) type VisitFile<'s> = Box<dyn FnMut(&Path) -> WalkState + Send + 's>;
 /// `.gitignore` / `.ignore` / `info/exclude` are skipped with everything in
 /// them, while ignored files elsewhere (`.env`) and hidden files and folders
 /// (`.github`, `.eslintrc`) are visited. `.git`, symlinks and archives (jar,
-/// zip: browsed, not searched) are never visited.
-pub(crate) fn walk_files<'s>(roots: &[PathBuf], mut visitor: impl FnMut() -> VisitFile<'s> + Send) {
+/// zip: browsed, not searched) are never visited. With `include_ignored` the
+/// ignored folders are walked too ("Include ignored files"); `.git` stays out.
+pub(crate) fn walk_files<'s>(
+    roots: &[PathBuf],
+    include_ignored: bool,
+    mut visitor: impl FnMut() -> VisitFile<'s> + Send,
+) {
     let Some((first, rest)) = roots.split_first() else { return };
     let mut walk = WalkBuilder::new(first);
     for path in rest {
         walk.add(path);
     }
+    let ignores = !include_ignored;
     walk.hidden(false)
-        .ignore(true)
-        .git_ignore(true)
-        .git_global(true)
-        .git_exclude(true)
-        .parents(true)
+        .ignore(ignores)
+        .git_ignore(ignores)
+        .git_global(ignores)
+        .git_exclude(ignores)
+        .parents(ignores)
         .require_git(ide_core::ignored::inside_git_repo(first))
         .follow_links(false)
         .threads(std::thread::available_parallelism().map_or(4, |n| n.get()).min(12))

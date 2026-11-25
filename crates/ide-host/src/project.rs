@@ -1061,6 +1061,15 @@ impl Project {
     pub fn search_excludes(&self) -> Vec<String> {
         let mut out: Vec<String> =
             self.roots().excluded_globs().iter().map(|d| format!("{}/**", d.trim_start_matches('/'))).collect();
+        out.extend(self.ignored_name_excludes());
+        out
+    }
+
+    /// The part of [`Self::search_excludes`] a search that includes ignored files
+    /// keeps: the ignored names and "Exclude files" patterns, not the excluded
+    /// roots (which are mostly the build output and dependency folders it asks for).
+    pub fn ignored_name_excludes(&self) -> Vec<String> {
+        let mut out = Vec::new();
         let settings = self.settings.effective();
         let names =
             settings.files.ignored_names.iter().cloned().chain(settings.project_structure.exclude_file_patterns());

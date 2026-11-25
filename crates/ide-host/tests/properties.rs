@@ -47,6 +47,7 @@ async fn find(host: &Host, paths: Vec<PathBuf>, pattern: &str) -> Vec<ide_search
             scope: SearchScope::Files { paths: paths.into_iter().map(Into::into).collect() },
             max_matches: 0,
             context: Default::default(),
+            include_ignored: false,
         },
         Arc::new(move |event| {
             if let search::SearchEvent::File { file } = event {
@@ -164,6 +165,7 @@ async fn properties_search_git_and_document_coordinates_agree() {
         scope: SearchScope::Files { paths: vec![closed_path.clone().into()] },
         max_matches: 0,
         context: Default::default(),
+        include_ignored: false,
     };
     search::replace_in_files(
         &host,

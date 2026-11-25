@@ -58,6 +58,20 @@ pub async fn find_files_named(host: &Host, window: &str, name: String) -> IdeRes
     blocking(move || Ok(project.index.files_named(&name).into_iter().map(Into::into).collect())).await
 }
 
+/// Files in the folders the index leaves out (`.gitignore`d build output, dependencies)
+/// matching `query`, for Search Everywhere's "Include non-project items".
+pub async fn find_ignored_files(host: &Host, window: &str, query: String, limit: u32) -> IdeResult<Vec<FileMatch>> {
+    let project = host.project(window)?;
+    let cancel = ide_core::CancellationToken::new();
+    blocking(move || {
+        Ok(ide_search::ignored_files(&project.root, &query, limit as usize, &cancel)
+            .into_iter()
+            .map(|file| FileMatch { path: file.path.into(), rel_path: file.rel_path, score: 0, indices: Vec::new() })
+            .collect())
+    })
+    .await
+}
+
 pub fn find_dirs(host: &Host, window: &str, query: String, limit: u32) -> IdeResult<Vec<FileMatch>> {
     Ok(host.project(window)?.index.find_dirs(&query, limit as usize))
 }
@@ -249,6 +263,9 @@ pub(crate) fn register(d: &mut Dispatcher) {
     d.add("index_file_extensions", |c| async move { index_file_extensions(&c.host, &c.window) });
     d.add("find_files", |c| async move { find_files(&c.host, &c.window, c.arg("query")?, c.arg("limit")?) });
     d.add("find_files_named", |c| async move { find_files_named(&c.host, &c.window, c.arg("name")?).await });
+    d.add("find_ignored_files", |c| async move {
+        find_ignored_files(&c.host, &c.window, c.arg("query")?, c.arg("limit")?).await
+    });
     d.add("find_dirs", |c| async move { find_dirs(&c.host, &c.window, c.arg("query")?, c.arg("limit")?) });
     d.add("find_symbols", |c| async move {
         find_symbols(&c.host, &c.window, c.arg("query")?, c.arg("filter")?, c.arg("limit")?)
