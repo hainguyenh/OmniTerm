@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { Connection, Workspace } from '../../../domain'
@@ -114,6 +114,30 @@ describe('editing connections', () => {
 
     fireEvent.contextMenu(row('Ubuntu'))
     expect((menus.last as MenuItem[]).map((entry) => ('label' in entry ? entry.label : '—'))).toEqual(['Connect'])
+  })
+
+  it('connects, edits and deletes a saved profile from the buttons of its row; a local one only connects', async () => {
+    // Regression: the rows had no buttons, so a connection could be used only from its right-click menu.
+    const { onConnect } = publish()
+    render(<ConnectionsToolWindow />)
+    const buttons = (name: string) => within(row(name)).queryAllByRole('button').map((button) => button.getAttribute('aria-label'))
+    expect(buttons('web-01')).toEqual(['Connect', 'Edit…', 'Delete'])
+    expect(buttons('Ubuntu')).toEqual(['Connect'])
+    expect(buttons('SSH')).toEqual([])
+
+    fireEvent.click(within(row('web-01')).getByRole('button', { name: 'Connect' }))
+    expect(onConnect).toHaveBeenCalledWith(SAVED)
+    // A quick second click on a button does not connect a second time through the row.
+    fireEvent.doubleClick(within(row('web-01')).getByRole('button', { name: 'Connect' }))
+    expect(onConnect).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(within(row('web-01')).getByRole('button', { name: 'Edit…' }))
+    expect((screen.getByLabelText('Host') as HTMLInputElement).value).toBe('web.example')
+    act(() => closeConnectionForm())
+
+    fireEvent.click(within(row('web-01')).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(api.deleteConnection).toHaveBeenCalledWith('w1', 'web'))
+    expect(confirm).toHaveBeenCalled()
   })
 
   it('lists an ssh typed in a terminal, shows its terminal and saves it as a connection', async () => {

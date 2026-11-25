@@ -8,16 +8,8 @@ import { showSessionTab } from '../sessions/sessionTabActions'
 import { useShellPanels } from '../shellPanelsStore'
 import { connectionRowMenu, newConnectionMenu } from './connectionActions'
 import { ConnectionFormDialog } from './ConnectionFormDialog'
-import {
-  buildConnectionTree,
-  expandableKeys,
-  isLeaf,
-  nodeDetail,
-  nodeIcon,
-  nodeLabel,
-  type ActiveSsh,
-  type ConnectionNode,
-} from './connectionNodes'
+import { buildConnectionTree, expandableKeys, isLeaf, nodeLabel, type ActiveSsh, type ConnectionNode } from './connectionNodes'
+import { CONNECTION_ROW_CLASS, ConnectionRow } from './ConnectionRow'
 import { useLocalSshSessions } from './useLocalSshSessions'
 
 export const CONNECTIONS_TOOL_WINDOW = 'omniterm.connections'
@@ -37,8 +29,8 @@ function useActiveSsh(): readonly ActiveSsh[] {
 /**
  * Saved SSH, Remote Desktop and local connections of the workspace in scope, grouped by type (and
  * by workspace under "All workspaces"), under the `ssh` sessions running unsaved in a terminal.
- * Enter or double-click connects (or shows that terminal); right-click edits, deletes or saves;
- * typing filters the tree.
+ * Enter or double-click connects (or shows that terminal); the buttons of a hovered row and its
+ * right-click menu connect, edit, delete or save; typing filters the tree.
  */
 export function ConnectionsToolWindow() {
   const panel = useShellPanels((s) => s.connections)
@@ -61,8 +53,8 @@ export function ConnectionsToolWindow() {
         getLabel={nodeLabel}
         getChildren={childrenOf}
         isExpandable={(node) => !isLeaf(node)}
-        getIcon={nodeIcon}
-        getDetail={nodeDetail}
+        renderNode={(node, state) => <ConnectionRow node={node} state={state} workspaceId={workspaceId} />}
+        rowClassName={() => CONNECTION_ROW_CLASS}
         expanded={expanded}
         onExpandedChange={(_next, node, isExpanded) =>
           setCollapsed((current) => {

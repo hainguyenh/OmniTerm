@@ -37,21 +37,30 @@ export async function deleteConnection(connection: Connection): Promise<void> {
   }
 }
 
+/** One thing a row does: on its right-click menu and as a button shown while the row is hovered. */
+export interface ConnectionRowAction {
+  id: string
+  label: string
+  icon: string
+  danger?: boolean
+  run: () => void
+}
+
 /**
- * The right-click menu of a row. A saved SSH or Remote Desktop profile: Connect, Edit, Delete (a
- * local one is listed but not edited here). An `ssh` typed in a terminal: show that terminal, or
- * save its address as a connection of the workspace in scope.
+ * What a row does. A saved SSH or Remote Desktop profile: Connect, Edit, Delete (a local one is
+ * listed but not edited here). An `ssh` typed in a terminal: show that terminal, or save its
+ * address as a connection of the workspace in scope. A group does nothing of its own.
  */
-export function connectionRowMenu(node: ConnectionNode, workspaceId: string | null): MenuItem[] {
+export function connectionRowActions(node: ConnectionNode, workspaceId: string | null): ConnectionRowAction[] {
   if (node.kind === 'ssh-session') {
     return [
       { id: 'show', label: 'Show Terminal', icon: 'terminal', run: () => showSessionTab(node.session.sessionId) },
       { id: 'save', label: 'Save as Connection…', icon: 'plus', run: () => openConnectionForm(draftFromSsh(node.session), workspaceId) },
     ]
   }
-  if (node.kind !== 'connection') return newConnectionMenu(workspaceId)
+  if (node.kind !== 'connection') return []
   const { connection } = node
-  const connect: MenuItem = {
+  const connect: ConnectionRowAction = {
     id: 'connect',
     label: 'Connect',
     icon: 'run',
@@ -60,8 +69,16 @@ export function connectionRowMenu(node: ConnectionNode, workspaceId: string | nu
   if (connection.type === 'LOCAL') return [connect]
   return [
     connect,
-    { kind: 'separator' },
     { id: 'edit', label: 'Edit…', icon: 'edit', run: () => openConnectionForm(draftFromConnection(connection), connection.workspaceId ?? workspaceId, true) },
     { id: 'delete', label: 'Delete', icon: 'trash', danger: true, run: () => void deleteConnection(connection) },
   ]
+}
+
+/** The right-click menu of a row: its actions (Connect set apart), or New on a group. */
+export function connectionRowMenu(node: ConnectionNode, workspaceId: string | null): MenuItem[] {
+  const actions = connectionRowActions(node, workspaceId)
+  if (!actions.length) return newConnectionMenu(workspaceId)
+  const items: MenuItem[] = actions.map(({ id, label, icon, danger, run }) => ({ id, label, icon, run, ...(danger ? { danger } : {}) }))
+  if (node.kind === 'connection' && items.length > 1) items.splice(1, 0, { kind: 'separator' })
+  return items
 }
