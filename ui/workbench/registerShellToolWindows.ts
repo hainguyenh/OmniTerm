@@ -5,6 +5,8 @@ import { registerOverlay, registerToolWindow } from '../ide/workbench/contributi
 import { NOTIFICATIONS_TOOL_WINDOW } from '../ide/workbench/Notifications'
 import { setDefaultStripeWindows } from '../ide/workbench/toolwindows/store'
 
+import { CleanUpToolWindow } from './cleanup/CleanUpToolWindow'
+import { CLEANUP_TOOL_WINDOW } from './cleanup/cleanUpViewStore'
 import { CONNECTIONS_TOOL_WINDOW, ConnectionsHeaderActions, ConnectionsToolWindow } from './connections/ConnectionsToolWindow'
 import { ProblemsToolWindow } from './problems/ProblemsToolWindow'
 import { useProblemsStore } from './problems/problemsStore'
@@ -36,6 +38,7 @@ export const STRIPE_WINDOWS: readonly string[] = [
   'omniterm.sessions',
   CONNECTIONS_TOOL_WINDOW,
   STICKY_NOTES_WINDOW,
+  CLEANUP_TOOL_WINDOW,
   TERMINAL_WINDOW,
   'run',
   'debug',
@@ -45,7 +48,7 @@ export const STRIPE_WINDOWS: readonly string[] = [
 ]
 
 /**
- * Shell tool windows (Project, Sessions, Connections, Sticky Notes, and Problems). Session bookmarks live inside
+ * Shell tool windows (Project, Sessions, Connections, Sticky Notes, Clean Up, and Problems). Session bookmarks live inside
  * Sessions; the Bookmarks stripe button belongs to the editor (editor bookmarks).
  * They have `requiresProject: false`, so they remain accessible even when no workspace is open.
  */
@@ -97,6 +100,16 @@ export function registerShellToolWindows(): () => void {
       requiresProject: false,
       component: StickyNotesToolWindow,
       useBadge: useStickyNotesBadge,
+    }),
+    registerToolWindow({
+      id: CLEANUP_TOOL_WINDOW,
+      title: 'Clean Up',
+      icon: 'broom',
+      anchor: 'left',
+      // After Sticky Notes (32).
+      order: 33,
+      requiresProject: false,
+      component: CleanUpToolWindow,
     }),
     registerOverlay({ id: 'omniterm.sessions.cleanup', component: SessionCleanupOverlay }),
     registerOverlay({ id: 'omniterm.temp.cleanup', component: TempCleanupOverlay }),

@@ -197,6 +197,14 @@ fn remotes_and_worktrees_are_managed() {
     let wt = moved;
     repo.remove_worktree(&wt, false).unwrap();
     assert_eq!(repo.worktrees().unwrap().len(), 1);
+
+    // A worktree whose folder was deleted by hand is prunable until pruned.
+    let gone = tmp.path().join("work-gone");
+    repo.add_worktree(&gone, "main", Some("gone")).unwrap();
+    std::fs::remove_dir_all(&gone).unwrap();
+    assert!(repo.worktrees().unwrap()[1].prunable);
+    repo.prune_worktrees().unwrap();
+    assert_eq!(repo.worktrees().unwrap().len(), 1);
 }
 
 #[test]

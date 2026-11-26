@@ -11,7 +11,7 @@ use crate::parallel::Progress;
 
 /// Files and bytes under `path` (a file counts as one), links not followed; unreadable parts
 /// count as nothing. Stops early once cancelled.
-pub(super) fn measure(path: &Path, is_dir: bool, len: u64, progress: &Progress<'_>) -> (u64, u64) {
+pub(crate) fn measure(path: &Path, is_dir: bool, len: u64, progress: &Progress<'_>) -> (u64, u64) {
     if !is_dir {
         return (1, len);
     }
@@ -79,14 +79,14 @@ fn remove_link(path: &Path, parent: Option<&Path>) -> io::Result<()> {
 }
 
 /// What one removal freed, and the first error that kept part of it.
-pub(super) struct Removal {
+pub(crate) struct Removal {
     pub freed: u64,
     pub error: Option<io::Error>,
 }
 
 /// Removes `path` and everything below it in one pass, counting the bytes of the files it removes.
 /// A part that cannot be removed is left and the walk goes on; links are removed, not followed.
-pub(super) fn remove_tree(path: &Path, progress: &Progress<'_>) -> Removal {
+pub(crate) fn remove_tree(path: &Path, progress: &Progress<'_>) -> Removal {
     let mut removal = Removal {
         freed: 0,
         error: None,

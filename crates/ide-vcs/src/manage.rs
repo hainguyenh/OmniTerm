@@ -313,6 +313,12 @@ impl Repo {
         args.extend(["--", &path]);
         run(self.root(), &args, None).map(|_| ())
     }
+
+    /// Drops the records of worktrees whose folder is gone (`git worktree prune`).
+    pub fn prune_worktrees(&self) -> IdeResult<()> {
+        let _scope = crate::ExecutionScope::enter(self.execution_allowed.load(std::sync::atomic::Ordering::Acquire));
+        run(self.root(), &["worktree", "prune"], None).map(|_| ())
+    }
 }
 
 #[cfg(test)]

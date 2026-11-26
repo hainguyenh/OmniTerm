@@ -18,6 +18,7 @@ pub mod launch;
 mod parallel;
 pub mod proc_activity;
 pub mod rdp_launch;
+pub mod rust_cleanup;
 pub mod safepath;
 pub mod ssh_target;
 pub mod temp_cleanup;

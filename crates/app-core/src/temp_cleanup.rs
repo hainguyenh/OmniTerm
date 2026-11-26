@@ -23,7 +23,7 @@ use crate::parallel::{par_map, Tally};
 mod walk;
 
 pub use crate::parallel::{Progress, Step};
-use walk::{measure, remove_tree};
+pub(crate) use walk::{measure, remove_tree};
 
 /// Entries a skipped list keeps; the rest are only counted.
 const MAX_SKIPPED_LISTED: usize = 50;
