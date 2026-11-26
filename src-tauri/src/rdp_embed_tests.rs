@@ -172,7 +172,7 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
         .unwrap();
     }
 
-    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string()))
+    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string(), None))
         .expect_err("Linux has no built-in RDP client");
     assert!(error.contains("No Remote Desktop client"), "got {error:?}");
 
@@ -284,7 +284,7 @@ fn connect_rdp_rejects_non_rdp_connections() {
     ))
     .unwrap();
 
-    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string()))
+    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string(), None))
         .expect_err("Should reject non-RDP");
     assert!(error.contains("Not an RDP connection"));
 }

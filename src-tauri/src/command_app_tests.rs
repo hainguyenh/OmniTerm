@@ -113,6 +113,7 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
         block_on(rdp_embed::connect_rdp(
             app.clone(),
             "local-rdp-check".to_string(),
+            None,
         ))
         .unwrap_err(),
         "Not an RDP connection."
@@ -120,6 +121,7 @@ fn rdp_commands_reject_non_rdp_connections_and_cleanup_registered_files() {
     assert!(block_on(rdp_embed::connect_rdp(
         app.clone(),
         "missing-rdp".to_string(),
+        None,
     ))
     .is_err());
 

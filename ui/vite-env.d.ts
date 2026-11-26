@@ -183,7 +183,7 @@ interface Window {
       onChanged: (callback: () => void) => () => void
     }
     connect: {
-      rdp: (id: string) => Promise<{ ok: boolean; error?: string }>
+      rdp: (id: string, bounds?: { x: number; y: number; width: number; height: number; dpr: number }) => Promise<{ ok: boolean; error?: string }>
       rdpDisconnect: (id: string) => void
       rdpSetBounds: (id: string, bounds: { x: number; y: number; width: number; height: number; dpr: number }) => void
       rdpSetVisible: (id: string, visible: boolean) => void
@@ -194,6 +194,7 @@ interface Window {
       overlayInit: () => Promise<{ id: string; name: string } | null>
       onRDPLatency: (id: string, cb: (ms: number | null) => void) => () => void
       onRDPReady: (id: string, cb: () => void) => () => void
+      onRDPDocked: (id: string, cb: () => void) => () => void
       onRDPError: (id: string, cb: (err: string) => void) => () => void
       onRDPClosed: (id: string, cb: () => void) => () => void
       ssh: (id: string, darkMode?: boolean) => void

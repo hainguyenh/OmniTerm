@@ -303,7 +303,14 @@ describe('RDP', () => {
   it('launches through connect_rdp with the connection id', async () => {
     invokeMock.mockResolvedValueOnce({ ok: true })
     await expect(api.connect.rdp('c1')).resolves.toMatchObject({ ok: true })
-    expect(invokeMock).toHaveBeenCalledWith('connect_rdp', { id: 'c1' })
+    expect(invokeMock).toHaveBeenCalledWith('connect_rdp', { id: 'c1', bounds: null })
+  })
+
+  it('sends the pane size with the launch so the client opens as a dockable window', async () => {
+    invokeMock.mockResolvedValueOnce({ ok: true })
+    const bounds = { x: 1, y: 2, width: 300, height: 200, dpr: 1.5 }
+    await api.connect.rdp('c1', bounds)
+    expect(invokeMock).toHaveBeenCalledWith('connect_rdp', { id: 'c1', bounds })
   })
 
   /** A refused launch has to surface as `{ ok: false }` — the renderer branches on it. */
@@ -321,16 +328,14 @@ describe('RDP', () => {
     expect(invokeMock).toHaveBeenCalledWith('rdp_disconnect', { id: 'c1' })
   })
 
-  /**
-   * The client is a separate top-level window, not embedded in a pane. These stay no-ops because the
-   * backend commands they used to call had empty bodies — the renderer believed it was positioning
-   * something. Pinned so nobody re-adds a host command to make them "work".
-   */
-  it('does not call the backend to position a window it does not embed', () => {
+  /** Regression: these were no-ops, so the client window was never docked into its pane. */
+  it('reports the pane bounds and visibility to the host that docks the client', () => {
     invokeMock.mockClear()
-    api.connect.rdpSetBounds('c1', { x: 0, y: 0, width: 10, height: 10, dpr: 1 })
+    const bounds = { x: 0, y: 0, width: 10, height: 10, dpr: 1 }
+    api.connect.rdpSetBounds('c1', bounds)
     api.connect.rdpSetVisible('c1', true)
-    expect(invokeMock).not.toHaveBeenCalled()
+    expect(invokeMock).toHaveBeenCalledWith('rdp_set_bounds', { id: 'c1', bounds })
+    expect(invokeMock).toHaveBeenCalledWith('rdp_set_visible', { id: 'c1', visible: true })
   })
 
   it('subscribes to the lifecycle events the backend emits', () => {
@@ -338,8 +343,9 @@ describe('RDP', () => {
     api.connect.onRDPReady('c1', () => {})
     api.connect.onRDPError('c1', () => {})
     api.connect.onRDPClosed('c1', () => {})
+    api.connect.onRDPDocked('c1', () => {})
     const events = listenMock.mock.calls.map((c) => c[0])
-    expect(events).toEqual(['rdp-ready-c1', 'rdp-error-c1', 'rdp-closed-c1'])
+    expect(events).toEqual(['rdp-ready-c1', 'rdp-error-c1', 'rdp-closed-c1', 'rdp-docked-c1'])
   })
 })
 

@@ -10,6 +10,15 @@ import { ackSessionOutput } from './sessionOutputAck'
 import { diag } from './diag'
 import { sendInOrder } from './utils/sessionInputQueue'
 
+/** An RDP pane's rectangle in CSS pixels, with the device pixel ratio that converts it. */
+interface RdpPaneBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+  dpr: number
+}
+
 function onEvent<T>(eventName: string, callback: (payload: T) => void): () => void {
   let unlisten: UnlistenFn | null = null
   let cancelled = false
@@ -71,19 +80,21 @@ export function createConnectAPI(): any {
     onSessionMetrics: (id: string, cb: (m: any) => void) =>
       onEvent<any>(`session-metrics-${id}`, cb),
 
-    // The RDP client runs in its own window; `rdp-ready` / `rdp-error` / `rdp-closed` below report
-    // its lifecycle. `{ ok: false }` on failure is what the renderer already handles.
-    rdp: (id: string) =>
-      invoke<{ ok: boolean }>('connect_rdp', { id })
+    // The system RDP client is launched by the host, which docks its session window into the pane
+    // reported through `rdpSetBounds` (Windows). `rdp-ready` / `rdp-docked` / `rdp-error` /
+    // `rdp-closed` report its lifecycle. `{ ok: false }` on failure is what the renderer handles.
+    rdp: (id: string, bounds?: RdpPaneBounds) =>
+      invoke<{ ok: boolean }>('connect_rdp', { id, bounds: bounds ?? null })
         .catch((e) => ({ ok: false, error: e instanceof Error ? e.message : String(e) })),
     rdpDisconnect: (id: string) => { void invoke('rdp_disconnect', { id }).catch((e) => diag.error('[omnitermAPI] rdpDisconnect failed', e)) },
     rdpInput: (_id: string, _d: string) => {},
     rdpResize: (_id: string, _s: { cols: number; rows: number }) => {},
-    // No-ops, and honestly so: the client is a separate top-level window, not embedded in a pane.
-    // The backend commands these used to call had empty bodies, so the renderer believed it was
-    // positioning something. Docking belongs to a plugin — see the note in src-tauri/src/rdp_embed.rs.
-    rdpSetBounds: (..._args: unknown[]) => {},
-    rdpSetVisible: (..._args: unknown[]) => {},
+    rdpSetBounds: (id: string, bounds: RdpPaneBounds) => {
+      void invoke('rdp_set_bounds', { id, bounds }).catch((e) => diag.error('[omnitermAPI] rdpSetBounds failed', e))
+    },
+    rdpSetVisible: (id: string, visible: boolean) => {
+      void invoke('rdp_set_visible', { id, visible }).catch((e) => diag.error('[omnitermAPI] rdpSetVisible failed', e))
+    },
     rdpSetOverlay: (..._args: unknown[]) => {},
     rdpSetDetached: (..._args: unknown[]) => {},
     rdpResetTrust: (_h: string, _p?: string) => Promise.resolve(),
@@ -91,6 +102,7 @@ export function createConnectAPI(): any {
     overlayInit: () => Promise.resolve(null),
     onRDPLatency: (_id: string, _cb: (ms: number | null) => void) => () => {},
     onRDPReady: (id: string, cb: () => void) => onEvent<null>(`rdp-ready-${id}`, cb),
+    onRDPDocked: (id: string, cb: () => void) => onEvent<null>(`rdp-docked-${id}`, cb),
     onRDPError: (id: string, cb: (err: string) => void) => onEvent<string>(`rdp-error-${id}`, cb),
     onRDPClosed: (id: string, cb: () => void) => onEvent<null>(`rdp-closed-${id}`, cb),
   }

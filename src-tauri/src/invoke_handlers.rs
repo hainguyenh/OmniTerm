@@ -26,11 +26,11 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         pty::ack_session_output,
         pty::disconnect_session,
         pty_resolve::prepare_ssh_session,
-        // RDP. No `rdp_set_bounds` / `rdp_set_visible`: both bodies were empty, so the renderer
-        // positioned a window that was never reparented and got no error saying so. Docking, if
-        // built, belongs to a plugin — see the note at the top of rdp_embed.rs.
+        // RDP: the client's session window is docked into the pane that reports its bounds.
         rdp_embed::connect_rdp,
         rdp_embed::rdp_disconnect,
+        rdp_embed::rdp_set_bounds,
+        rdp_embed::rdp_set_visible,
         // Detached terminal windows
         terminal_window::detach_terminal,
         terminal_window::bootstrap_terminal_window,

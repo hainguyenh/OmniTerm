@@ -2,15 +2,10 @@
 //!
 //! # Ownership
 //!
-//! The host launches a credential-free `mstsc` for a saved RDP connection.
-//!
-//! This module deliberately does **not** embed the client window into a pane. It used to advertise that
-//! it did — `rdp_set_bounds` and `rdp_set_visible` were registered commands whose bodies were empty, so
-//! the renderer positioned a window that was never reparented and got no error telling it so. They are
-//! gone; a command that silently succeeds while doing nothing is worse than one that is absent.
-//!
-//! If docking is built later, expose a *generic* "embed this process's top-level window into a pane
-//! rect" capability rather than RDP-specific commands, so the host touches no credential.
+//! The host launches a credential-free `mstsc` for a saved RDP connection. On Windows its session
+//! window is then docked into the pane (`rdp_dock`): `rdp_set_bounds` / `rdp_set_visible` report
+//! the pane and the session's watcher thread keeps the client window on it. Closing the pane closes
+//! the client, since its window lives inside the app.
 //!
 //! # Credentials
 //!
@@ -21,11 +16,13 @@
 //! is a password OmniTerm wrote to disk.
 
 use crate::connections::Connection;
+use crate::rdp_dock::{physical_rect, window_size_args, DockRegistry};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 #[cfg(test)]
@@ -34,6 +31,9 @@ mod tests;
 
 /// Prefix for the temporary `.rdp` files this module writes, and the startup sweep that removes them.
 const TEMP_PREFIX: &str = "omniterm_rdp_";
+
+/// How often a session's watcher checks the client: exit, a close request, and its docked window.
+const WATCH_INTERVAL: Duration = Duration::from_millis(150);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdpBounds {
@@ -49,6 +49,8 @@ pub struct RdpSessionManager {
     /// Makes each launch's temp file unique. Two panes on one connection shared a single path, so
     /// disconnecting either deleted the file the other was still identified by.
     seq: AtomicU64,
+    /// Where each session's pane is, so its client window can be docked there.
+    pub(crate) dock: DockRegistry,
 }
 
 struct RdpSession {
@@ -66,6 +68,7 @@ impl RdpSessionManager {
         Self {
             sessions: Mutex::new(std::collections::HashMap::new()),
             seq: AtomicU64::new(0),
+            dock: DockRegistry::default(),
         }
     }
 
@@ -201,6 +204,7 @@ fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&P
 pub async fn connect_rdp<R: Runtime>(
     app: AppHandle<R>,
     id: String,
+    bounds: Option<RdpBounds>,
 ) -> Result<serde_json::Value, String> {
     // Resolves through the ad-hoc registry, the global tree, then workspace profiles.
     let conn = crate::pty_resolve::resolve_connection_by_id(&app, &id).await?;
@@ -208,10 +212,16 @@ pub async fn connect_rdp<R: Runtime>(
         return Err("Not an RDP connection.".to_string());
     }
 
+    let pane = bounds.as_ref().and_then(physical_rect);
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_bounds(&id, pane, 0);
+    }
     let (exe, args, temp_file) = if launches_by_address(&conn, std::env::consts::OS) {
         let address = crate::rdp_launch::rdp_address(&conn.host, &conn.port)?;
         set_username_hint(&address, &conn.user);
-        ("mstsc.exe".to_string(), vec![format!("/v:{address}")], None)
+        let mut args = vec![format!("/v:{address}")];
+        args.extend(window_size_args(pane));
+        ("mstsc.exe".to_string(), args, None)
     } else {
         let seq = app
             .try_state::<RdpSessionManager>()
@@ -241,8 +251,11 @@ pub async fn connect_rdp<R: Runtime>(
         }
     };
 
-    if let (Some(mgr), Some(path)) = (app.try_state::<RdpSessionManager>(), &temp_file) {
-        mgr.register(id.clone(), path.clone());
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        if let Some(path) = &temp_file {
+            mgr.register(id.clone(), path.clone());
+        }
+        mgr.dock.begin(&id);
     }
     let _ = app.emit(&format!("rdp-ready-{id}"), ());
 
@@ -252,22 +265,77 @@ pub async fn connect_rdp<R: Runtime>(
     let watcher = app.clone();
     let watch_id = id.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = child;
-        let _ = child.wait();
-        let temp = watcher
-            .try_state::<RdpSessionManager>()
-            .and_then(|m| m.remove(&watch_id));
+        watch_client(&watcher, &watch_id, child);
+        let temp = watcher.try_state::<RdpSessionManager>().and_then(|m| {
+            m.dock.end(&watch_id);
+            m.remove(&watch_id)
+        });
         finish_session(&watcher, &watch_id, temp.as_deref());
     });
 
     Ok(serde_json::json!({ "ok": true }))
 }
 
+/// Waits for the client to exit, closing it when its pane asks to and keeping its session window
+/// docked on the pane meanwhile.
+fn watch_client<R: Runtime>(app: &AppHandle<R>, id: &str, mut child: std::process::Child) {
+    #[cfg(windows)]
+    let mut docker = crate::rdp_dock::Docker::new(child.id());
+    loop {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        let manager = app.try_state::<RdpSessionManager>();
+        if manager.as_ref().is_some_and(|m| m.dock.should_stop(id)) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(pane) = manager.and_then(|m| m.dock.snapshot(id)) {
+            if docker.tick(&pane) {
+                let _ = app.emit(&format!("rdp-docked-{id}"), ());
+            }
+        }
+        std::thread::sleep(WATCH_INTERVAL);
+    }
+}
+
 #[tauri::command]
 pub async fn rdp_disconnect<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
-    let temp = app
-        .try_state::<RdpSessionManager>()
-        .and_then(|m| m.remove(&id));
+    let temp = app.try_state::<RdpSessionManager>().and_then(|m| {
+        m.dock.request_stop(&id);
+        m.remove(&id)
+    });
     finish_session(&app, &id, temp.as_deref());
     Ok(())
+}
+
+/// The pane of session `id` moved or resized. `window` is the app window showing it, the one the
+/// client's session window is docked into.
+#[tauri::command]
+pub fn rdp_set_bounds<R: Runtime>(
+    window: tauri::Window<R>,
+    app: AppHandle<R>,
+    id: String,
+    bounds: RdpBounds,
+) {
+    #[cfg(windows)]
+    let parent = window.hwnd().map_or(0, |handle| handle.0 as isize);
+    #[cfg(not(windows))]
+    let parent = {
+        drop(window);
+        0
+    };
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_bounds(&id, physical_rect(&bounds), parent);
+    }
+}
+
+/// Shows or hides the docked client of session `id` with its pane (tab switches, modal overlays).
+#[tauri::command]
+pub fn rdp_set_visible<R: Runtime>(app: AppHandle<R>, id: String, visible: bool) {
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_visible(&id, visible);
+    }
 }

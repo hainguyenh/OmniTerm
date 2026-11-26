@@ -188,6 +188,7 @@ const defaults: Api = {
     overlayInit: async () => null,
     onRDPLatency: noopSub,
     onRDPReady: noopSub,
+    onRDPDocked: noopSub,
     onRDPError: noopSub,
     onRDPClosed: noopSub,
     ssh: () => {},

@@ -57,6 +57,7 @@ pub mod safepath_command;
 pub use app_core::safepath;
 pub use app_core::workspace_scan;
 pub mod custom_art;
+pub mod rdp_dock;
 pub mod rdp_embed;
 pub mod shell_probe;
 pub mod ssh_sessions;
