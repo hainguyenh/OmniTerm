@@ -182,6 +182,11 @@ pub struct LanguageServerConfig {
     /// restarted it in a loop while such a tab stayed open.
     #[serde(default)]
     pub file_only: bool,
+    /// Sends every change as the whole text, even when the server accepts incremental
+    /// changes. Marksman exits on a change range that does not fit its copy of the
+    /// document; with the whole text there is no range to get wrong.
+    #[serde(default)]
+    pub full_sync: bool,
     /// Set on plugin languages: start exactly this approved program.
     #[serde(skip)]
     pub pinned: Option<ProgramPin>,

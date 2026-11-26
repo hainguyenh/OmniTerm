@@ -644,6 +644,16 @@ mod tests {
         assert_eq!(rust.language_servers[0].name, "rust-analyzer");
     }
 
+    /// Marksman exits on a non-file document and on a change range that does not fit its copy.
+    #[test]
+    fn marksman_gets_files_only_and_the_whole_text() {
+        let markdown = reg().get(&LanguageId::new("markdown")).unwrap();
+        let marksman = markdown.language_servers.iter().find(|s| s.name == "marksman").unwrap();
+        assert!(marksman.file_only && marksman.full_sync);
+        let others = reg().get(&LanguageId::new("rust")).unwrap();
+        assert!(others.language_servers.iter().all(|s| !s.full_sync));
+    }
+
     #[test]
     fn alternative_servers_are_fallbacks() {
         let reg = reg();

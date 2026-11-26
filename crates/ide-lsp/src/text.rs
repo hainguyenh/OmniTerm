@@ -91,9 +91,12 @@ impl DocText {
     }
 
     /// Applies one LSP-style change (UTF-16 range in the current text).
-    /// Fails when the range starts past the end of the document.
+    /// Fails, changing nothing, when the range does not fit this text: a position past the
+    /// end of its line or of the document, or an end before the start. Such a range means
+    /// this copy no longer matches the editor's, and forwarding it would make a strict
+    /// server (marksman) exit; the caller resends the full text instead.
     pub fn apply(&mut self, range: Range, text: &str) -> Result<(), ()> {
-        if range.start.line as usize >= self.lines.len() || range.end < range.start {
+        if range.end < range.start || !self.contains(range.start) || !self.contains(range.end) {
             return Err(());
         }
         let start = self.byte_offset(range.start);
@@ -101,6 +104,12 @@ impl DocText {
         self.text.replace_range(start..end, text);
         self.reindex_from(range.start.line as usize + 1);
         Ok(())
+    }
+
+    /// Whether `pos` (UTF-16) lies on a line of this text, at most at the line's end.
+    fn contains(&self, pos: Pos) -> bool {
+        (pos.line as usize) < self.lines.len()
+            && units(self.line(pos.line as usize), Encoding::Utf16) >= pos.col as usize
     }
 
     pub fn set(&mut self, text: &str) {
@@ -222,6 +231,21 @@ mod tests {
         d.apply(r(1, 0, 1, 0), "end").unwrap();
         assert_eq!(d.as_str(), "}\nend");
         assert!(d.apply(r(5, 0, 5, 0), "x").is_err());
+    }
+
+    /// Regression: a range past the end of a line or of the document was clamped here and
+    /// forwarded unclamped, and marksman exited on it ("Position outside of line map").
+    #[test]
+    fn apply_rejects_a_range_that_does_not_fit() {
+        let mut d = DocText::new("ab\nc😀\n");
+        for bad in [r(0, 3, 0, 3), r(0, 0, 0, 9), r(1, 0, 1, 4), r(0, 0, 3, 0), r(1, 1, 0, 0)] {
+            assert!(d.apply(bad, "x").is_err(), "{bad:?}");
+            assert_eq!(d.as_str(), "ab\nc😀\n", "{bad:?} changed nothing");
+        }
+        d.apply(r(0, 2, 1, 3), "").unwrap();
+        assert_eq!(d.as_str(), "ab\n");
+        d.apply(r(1, 0, 1, 0), "end").unwrap();
+        assert_eq!(d.as_str(), "ab\nend");
     }
 
     #[test]

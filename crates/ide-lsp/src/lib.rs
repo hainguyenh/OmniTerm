@@ -1102,6 +1102,8 @@ impl LspManager {
                     let caps = run.caps.read();
                     (caps.sync, caps.encoding)
                 };
+                let sync =
+                    if a.server.config.full_sync && sync == SyncKind::Incremental { SyncKind::Full } else { sync };
                 (sync != SyncKind::None).then(|| (a.server.clone(), run, sync, enc))
             })
             .collect();
@@ -1191,7 +1193,12 @@ impl LspManager {
     pub fn did_save(&self, doc: DocId, text: &str) {
         let mut docs = self.docs.lock();
         let Some(d) = docs.get_mut(&doc) else { return };
-        if d.text.as_str() != text {
+        // The saved text is the editor's: a copy that differs has missed a change, and so have
+        // the servers it was sent to. Correct both, or the next incremental change lands on
+        // text the server does not have.
+        let resync = d.text.as_str() != text;
+        if resync {
+            tracing::warn!("lsp text copy of {} out of sync at save; resending full text", d.path.display());
             Arc::make_mut(&mut d.text).set(text);
         }
         for a in &d.servers {
@@ -1199,7 +1206,20 @@ impl LspManager {
             if a.opened_gen != Some(run.generation) {
                 continue;
             }
-            let Some(include_text) = run.caps.read().save else { continue };
+            let (sync, save) = {
+                let caps = run.caps.read();
+                (caps.sync, caps.save)
+            };
+            if resync && sync != SyncKind::None {
+                let params = json!({
+                    "textDocument": { "uri": d.uri, "version": d.version },
+                    "contentChanges": [{ "text": text }],
+                });
+                if let Err(e) = run.peer.notify("textDocument/didChange", params) {
+                    tracing::debug!("{}: didChange: {e}", a.server.name);
+                }
+            }
+            let Some(include_text) = save else { continue };
             let mut params = json!({ "textDocument": { "uri": d.uri } });
             if include_text {
                 params["text"] = json!(text);

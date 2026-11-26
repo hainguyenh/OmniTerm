@@ -828,7 +828,12 @@ fn set_or_remove(map: &mut HashMap<PathBuf, Vec<lsp::Diagnostic>>, path: PathBuf
 pub(crate) fn crash_excerpt(lines: &[&str], n: usize) -> String {
     const MAX_LINES: usize = 12;
     let start = lines.len().saturating_sub(n);
-    let excerpt: Vec<&str> = match lines.iter().rposition(|l| is_error_headline(l)) {
+    let named = lines.iter().rposition(|l| is_error_headline(l));
+    let headline = match (named, stack_message(lines)) {
+        (Some(a), Some(b)) => Some(a.max(b)),
+        (a, b) => a.or(b),
+    };
+    let excerpt: Vec<&str> = match headline {
         Some(i) if i >= start => lines[start..].to_vec(),
         Some(i) if lines.len() - i <= MAX_LINES => lines[i..].to_vec(),
         Some(i) => [lines[i], "…"].into_iter().chain(lines[start..].iter().copied()).collect(),
@@ -841,7 +846,28 @@ fn is_error_headline(line: &str) -> bool {
     let l = line.trim_start();
     let head = l.split(':').next().unwrap_or_default();
     let named = (head.ends_with("Error") || head.ends_with("Exception")) && !head.contains(' ') && head.len() < l.len();
-    named || l.starts_with("Exception in thread") || l.starts_with("thread '") && l.contains("panicked")
+    named
+        || l.starts_with("Exception in thread")
+        || l.starts_with("Unhandled exception.")
+        || l.starts_with("thread '") && l.contains("panicked")
+}
+
+/// The message printed just above the last stack trace: .NET servers (marksman) print
+/// a plain message such as `Position outside of line map: (50,0)` and then indented
+/// `at …` frames, so the headline has no `…Exception:` shape to match.
+fn stack_message(lines: &[&str]) -> Option<usize> {
+    let last_frame = lines.iter().rposition(|l| is_stack_frame(l))?;
+    let first_frame = lines[..last_frame].iter().rposition(|l| !is_stack_frame(l)).map_or(0, |i| i + 1);
+    lines[..first_frame].iter().rposition(|l| {
+        let t = l.trim();
+        !t.is_empty() && !t.chars().all(|c| c == '-' || c == '=')
+    })
+}
+
+/// An indented `at …` frame (.NET, JVM, Node.js) or a .NET trace separator.
+fn is_stack_frame(line: &str) -> bool {
+    let l = line.trim_start();
+    (l.len() < line.len() && l.starts_with("at ")) || l.starts_with("--- End of ")
 }
 
 #[cfg(test)]
@@ -1212,5 +1238,37 @@ mod tests {
         assert_eq!(crash_excerpt(&plain, 2), "listening\nbye");
         // "Error" in prose is not a headline.
         assert_eq!(crash_excerpt(&["No Error here: fine", "a", "b"], 2), "a\nb");
+    }
+
+    /// Regression: marksman's fatal-error report puts a plain message above a .NET stack, and the
+    /// crash notification showed only the last frames (`at Marksman.Program.startLSP …`).
+    #[test]
+    fn crash_excerpt_keeps_the_message_above_a_dotnet_stack() {
+        let marksman = [
+            "---------------------------------------------------------------------------",
+            "Marksman encountered a fatal error",
+            "Please, report the error at https://github.com/artempyanykh/marksman/issues",
+            "---------------------------------------------------------------------------",
+            "Marksman version: 2026-02-08",
+            "Workspace:",
+            "  Document count: 1",
+            "---------------------------------------------------------------------------",
+            "Position outside of line map: (50,0)",
+            "   at Marksman.Text.LineMap.FindOffset(Position pos) in D:\\a\\marksman\\Marksman\\Text.fs:line 58",
+            "   at Marksman.Text.applyChangeOne(Text text, TextDocumentContentChangeEvent change)",
+            "   at Marksman.Server.go@393-11.Invoke(StateMessage msg)",
+            "--- End of stack trace from previous location ---",
+            "   at Ionide.LanguageServerProtocol.Server.start@309-2.Invoke(FSharpFunc`2 customizeRpc)",
+            "   at Marksman.Program.startLSP(Int32 verbosity, Boolean waitForDebugger)",
+            "   at Marksman.Program.lspCommand@99.Invoke(Tuple`2 tupledArg)",
+            "   at System.CommandLine.Invocation.AnonymousSynchronousCommandLineAction.Invoke(ParseResult parseResult)",
+            "   at System.CommandLine.Invocation.InvocationPipeline.Invoke(ParseResult parseResult)",
+        ];
+        let out = crash_excerpt(&marksman, 5);
+        assert!(out.starts_with("Position outside of line map: (50,0)\n   at Marksman.Text.LineMap"), "{out}");
+        assert!(out.ends_with("InvocationPipeline.Invoke(ParseResult parseResult)"), "{out}");
+
+        let dotnet = ["Unhandled exception. System.IO.IOException: Broken pipe", "   at A.B()", "   at A.C()"];
+        assert_eq!(crash_excerpt(&dotnet, 2), dotnet.join("\n"));
     }
 }

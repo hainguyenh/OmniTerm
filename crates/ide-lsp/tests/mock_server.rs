@@ -268,6 +268,7 @@ fn server_cfg(name: &str) -> LanguageServerConfig {
         tsserver_project_extras: Default::default(),
         resync_on_configuration: false,
         file_only: false,
+        full_sync: false,
         pinned: None,
     }
 }
@@ -1239,6 +1240,68 @@ async fn full_sync_and_desync_recovery() {
     // A change that does not fit the tracked text forces a full resync from the source of truth.
     h.mgr.did_change(doc, 3, &[change(rng(7, 0, 7, 0), "zz")], &|| "truth".to_owned());
     eventually(|| full.docs.lock()[&uri] == "truth" && inc.docs.lock()[&uri] == "truth").await;
+}
+
+/// Regression: a range past the end of its line was clamped on the tracked copy but sent to the
+/// server as is, and marksman exited ("Position outside of line map"). It now forces a full resync.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_column_past_the_end_of_its_line_resyncs_the_full_text() {
+    let h = harness(&[("inc", json!({ "textDocumentSync": 2 }))]);
+    let (doc, path) = h.open("a.mk", "abc\nde");
+    h.wait_status("inc", ServerStatus::Ready).await;
+    let inc = h.launcher.state("inc");
+    let uri = uri_of(&path);
+    eventually(|| inc.docs.lock().contains_key(&uri)).await;
+
+    h.mgr.did_change(doc, 2, &[change(rng(0, 9, 0, 9), "zz")], &|| "truth".to_owned());
+    eventually(|| inc.docs.lock()[&uri] == "truth").await;
+    let sent = inc.notified("textDocument/didChange");
+    assert!(sent.iter().all(|c| c["contentChanges"][0].get("range").is_none()), "{sent:?}");
+}
+
+/// Regression: a tracked copy found stale at save was corrected silently, so the server kept the
+/// stale text and the next incremental change landed on text it did not have.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_copy_found_stale_at_save_resyncs_the_server_before_did_save() {
+    let h = harness(&[("inc", incremental_caps())]);
+    let (doc, path) = h.open("a.mk", "old\n");
+    h.wait_status("inc", ServerStatus::Ready).await;
+    let inc = h.launcher.state("inc");
+    let uri = uri_of(&path);
+    eventually(|| inc.docs.lock().contains_key(&uri)).await;
+
+    h.mgr.did_save(doc, "saved text\n");
+    eventually(|| inc.notified("textDocument/didSave").len() == 1).await;
+    assert_eq!(inc.docs.lock()[&uri], "saved text\n");
+    let methods: Vec<String> = inc.notifications.lock().iter().map(|(m, _)| m.clone()).collect();
+    let change = methods.iter().rposition(|m| m == "textDocument/didChange").expect("a resync was sent");
+    let save = methods.iter().rposition(|m| m == "textDocument/didSave").unwrap();
+    assert!(change < save, "{methods:?}");
+
+    // In sync now: a save of the same text sends no further change.
+    h.mgr.did_save(doc, "saved text\n");
+    eventually(|| inc.notified("textDocument/didSave").len() == 2).await;
+    assert_eq!(inc.notified("textDocument/didChange").len(), 1);
+}
+
+/// A server marked `full-sync` (marksman) gets the whole text on every change even though it
+/// accepts ranges; the others still get ranges.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_full_sync_server_gets_the_whole_text_on_every_change() {
+    let h = harness_configured("mock", "mk", &[("whole", incremental_caps()), ("ranges", incremental_caps())], |cfg| {
+        cfg.full_sync = cfg.name == "whole";
+    });
+    let (doc, path) = h.open("a.mk", "abc");
+    h.wait_status("whole", ServerStatus::Ready).await;
+    h.wait_status("ranges", ServerStatus::Ready).await;
+    let (whole, ranges) = (h.launcher.state("whole"), h.launcher.state("ranges"));
+    let uri = uri_of(&path);
+    eventually(|| whole.docs.lock().contains_key(&uri) && ranges.docs.lock().contains_key(&uri)).await;
+
+    h.mgr.did_change(doc, 2, &[change(rng(0, 3, 0, 3), "d")], &|| unreachable!());
+    eventually(|| whole.docs.lock()[&uri] == "abcd" && ranges.docs.lock()[&uri] == "abcd").await;
+    assert_eq!(whole.notified("textDocument/didChange")[0]["contentChanges"], json!([{ "text": "abcd" }]));
+    assert!(ranges.notified("textDocument/didChange")[0]["contentChanges"][0].get("range").is_some());
 }
 
 #[tokio::test(flavor = "multi_thread")]
