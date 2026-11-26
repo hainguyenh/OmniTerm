@@ -4,7 +4,7 @@ import type { Worktree } from "@/bindings";
  * Comparison key of a path: `/` separators, no trailing slash, drive letter lowercased
  * (Git prints `C:/…` with the drive in either case).
  */
-function pathKey(p: string): string {
+export function pathKey(p: string): string {
   const s = p.replace(/\\/g, "/").replace(/(.)\/+$/, "$1");
   return /^[A-Za-z]:\//.test(s) ? s.toLowerCase() : s;
 }

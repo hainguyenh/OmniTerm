@@ -139,6 +139,11 @@ export interface MultiRepoInput extends Omit<BranchTreeOptions, "expanded"> {
   tags?: readonly string[];
   /** Branch operations act on all repositories (the setting): the common branches are listed. */
   sync: boolean;
+  /**
+   * The roots branch operations on all repositories act on (the current root project's); the
+   * notice and the common branches concern these only. All of `repos` when absent.
+   */
+  scope?: readonly string[];
 }
 
 /**
@@ -164,8 +169,10 @@ export function buildMultiRepoRows({
   showRecent = true,
   showTags = true,
   sync,
+  scope,
 }: MultiRepoInput): RepoRow[] {
   const q = query.trim();
+  const synced = scope ? repos.filter((r) => scope.includes(r.root)) : repos;
   const match = (text: string): number[] | null | false => (q ? (fuzzyMatch(text, q) ?? false) : null);
   const open = (key: string, byDefault: boolean) => !!q || (expanded.get(key) ?? byDefault);
   const blocks: RepoRow[][] = [];
@@ -261,7 +268,7 @@ export function buildMultiRepoRows({
   };
 
   const groups: RepoRow[] = [];
-  if (sync && widgetShowsRepo(repos))
+  if (sync && widgetShowsRepo(synced))
     groups.push({
       type: "notice",
       key: "notice:diverged",
@@ -271,10 +278,10 @@ export function buildMultiRepoRows({
   let shown = new Set<string>();
   const currentRepo = repos.find((r) => r.root === current) ?? repos[0];
   if (sync) {
-    const loaded = repos.every((r) => branches[r.root]);
+    const loaded = synced.every((r) => branches[r.root]);
     const common = loaded
       ? commonBranches(
-          repos.map((r) => branches[r.root]!),
+          synced.map((r) => branches[r.root]!),
           favorites,
         )
       : { local: [], remote: [] };

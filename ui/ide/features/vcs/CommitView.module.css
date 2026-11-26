@@ -413,6 +413,26 @@
   display: inline-flex;
   margin-right: 2px;
 }
+/* A linked worktree under its project in the Branches popup's project list. */
+.projectWorktreeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-left: 20px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.projectWorktreeRow:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
 /* Staging area: Stage / Unstage on the hovered or selected row, as a hover icon at the row's end. */
 .stageButton {
   flex: none;

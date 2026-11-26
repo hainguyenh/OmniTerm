@@ -3,7 +3,7 @@ import { branchesByRepo } from "./multiRoot";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import clsx from "clsx";
 import { create } from "zustand";
-import type { Branch, BranchInfo } from "@/bindings";
+import type { Branch, BranchInfo, Worktree } from "@/bindings";
 import { executeAction } from "@/platform/actions";
 import { call, commands } from "@/platform/ipc";
 import { bindingsFor, normalizeBinding, registerKeyClaim, shortcutLabel, strokeOf } from "@/platform/keymap";
@@ -45,6 +45,8 @@ import { showSyncCommits } from "./SyncCommitsPopup";
 import type { SyncDirection } from "./syncCommits";
 import { chooseBranchProject, setBranchProjectsCollapsed, useBranchProject, useChosenBranchProject } from "./branchProject";
 import { ProjectRadioList } from "./ProjectRadioList";
+import { groupRootProjects, syncScope, worktreesByRoot } from "./rootProjects";
+import type { RepoWorktrees } from "./worktrees";
 import styles from "./BranchWidget.module.css";
 import { tx } from "@/platform/i18n";
 import { useWorkflowSettings } from "@/platform/workflowSettings";
@@ -82,6 +84,32 @@ function useDefaultProjectRepo(): string | null {
   return useVcs((s) => (folder ? rootContaining(folder, s.roots) : null));
 }
 
+/** The active folders of the selected workspace: its root projects (none outside a workspace). */
+function useWorkspaceFolders(): string[] {
+  const joined = useWorkspaceStore((s) => {
+    const selection = decodeWorkspaceSelection(s.selection);
+    const folders = s.workspaces.find((w) => w.id === selection?.workspaceId)?.folders ?? [];
+    return folders
+      .filter((f) => !f.disabled)
+      .map((f) => f.path)
+      .join("\n");
+  });
+  return useMemo(() => (joined ? joined.split("\n") : []), [joined]);
+}
+
+/**
+ * The repositories branch operations on all repositories act on (the current root project's),
+ * and how many root projects the window holds.
+ */
+function useRootProjects(current: string | null): { scope: string[]; projects: number } {
+  const folders = useWorkspaceFolders();
+  const roots = useVcs((s) => s.roots);
+  return useMemo(
+    () => ({ scope: syncScope(roots, folders, current), projects: groupRootProjects(roots, folders).length }),
+    [roots, folders, current],
+  );
+}
+
 /**
  * The default project's repository and the project chosen in the popup (`null`: none). The shown
  * one (the chosen, else the default) is selected, so the title and the branch operations follow
@@ -102,10 +130,13 @@ export function BranchWidget() {
   const selected = useVcs((s) => s.branch);
   const count = useVcs((s) => s.roots.length);
   const { current, chosen } = useCurrentRepo();
-  // Several repositories on different branches: the widget names the current one.
-  const diverged = useVcs((s) => widgetShowsRepo(s.roots.map((r) => ({ head: s.heads[r]?.head ?? null }))));
+  const { scope, projects } = useRootProjects(current);
+  // Several repositories of one root project on different branches, or several root projects
+  // (independent, so their branches differ as a rule): the widget names the current one.
+  const diverged = useVcs((s) => widgetShowsRepo(scope.map((r) => ({ head: s.heads[r]?.head ?? null }))));
+  const named = diverged || projects > 1;
   // The current repository is not the selected one: its HEAD from the last scan (no upstream).
-  const other = useVcs((s) => (diverged && current && current !== s.repo ? (s.heads[current] ?? null) : null));
+  const other = useVcs((s) => (named && current && current !== s.repo ? (s.heads[current] ?? null) : null));
   const otherOp = useVcs((s) => (current ? (s.operations[current] ?? null) : null));
   const open = useBranchesPopup((s) => s.open);
   const extensions = useBranchWidgetExtensions((s) => s.extensions);
@@ -113,7 +144,7 @@ export function BranchWidget() {
   // Another feature presents the current branch (the GitHub pull request on it).
   const presented = other ? null : branchPresentation(extensions);
   // A project chosen in the popup is named too, so the widget says which one it shows.
-  const repo = (diverged || (chosen && count > 1)) && current ? repoName(current) : null;
+  const repo = (named || (chosen && count > 1)) && current ? repoName(current) : null;
   const branch: BranchInfo = other
     ? { head: other.head, headCommit: other.headCommit, upstream: null, ahead: 0, behind: 0, operation: otherOp }
     : selected;
@@ -131,7 +162,7 @@ export function BranchWidget() {
     repo ? tx`Repository: ${repo}` : "",
     tx`Git branch: ${head}`,
     branch.upstream ? tx`Tracking ${branch.upstream}` : "",
-    count > 1 && !repo ? tx`In all ${count} repositories` : "",
+    scope.length > 1 && !repo ? tx`In all ${scope.length} repositories` : "",
     sync,
   ]
     .filter(Boolean)
@@ -591,7 +622,10 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
   const [active, setActive] = useState(0);
   const [expanded, setOpen] = useExpanded("multi");
   const options = usePopupOptions();
-  const sync = useWorkflowSettings((s) => s.vcs.git.syncBranchOperations);
+  const { scope } = useRootProjects(current);
+  // Branch operations act on all repositories of the current root project, not on independent
+  // projects of the workspace.
+  const sync = useWorkflowSettings((s) => s.vcs.git.syncBranchOperations) && scope.length > 1;
   const [all, setAll] = useState<Record<string, Branch[]>>({});
   const [menuFor, setMenuFor] = useState<{ items: MenuItem[]; label: string; el: HTMLElement } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -603,6 +637,22 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
     void branchesByRepo(roots)
       .then((entries) => live && setAll(entries))
       .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [roots, version]);
+  // The linked worktrees listed under their project (refreshed with the branches).
+  const [worktrees, setWorktrees] = useState<Record<string, Worktree[]>>({});
+  useEffect(() => {
+    let live = true;
+    void Promise.all(
+      roots.map((root) =>
+        call(commands.vcsWorktrees(root)).then(
+          (list): RepoWorktrees => ({ root, worktrees: list }),
+          (): RepoWorktrees => ({ root, worktrees: [] }),
+        ),
+      ),
+    ).then((lists) => live && setWorktrees(worktreesByRoot(lists, roots)));
     return () => {
       live = false;
     };
@@ -634,9 +684,9 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
   const actions = useMemo(
     () => [
       ...operationActions(op, conflicts),
-      ...popupActions.map((a) => (a.id === "vcs.newBranch" && sync ? { ...a, arg: { repos: roots } } : a)),
+      ...popupActions.map((a) => (a.id === "vcs.newBranch" && sync ? { ...a, arg: { repos: scope } } : a)),
     ],
-    [op, conflicts, roots, popupActions, sync],
+    [op, conflicts, scope, popupActions, sync],
   );
   const rows = useMemo(
     () =>
@@ -652,8 +702,9 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
         recent,
         tags,
         sync,
+        scope,
       }),
-    [repos, all, query, actions, expanded, favorites, current, recent, tags, options, sync],
+    [repos, all, query, actions, expanded, favorites, current, recent, tags, options, sync, scope],
   );
   const isSection = (r: RepoRow) => r.type === "section" || r.type === "notice";
   const activeIndex = rows[active] && !isSection(rows[active]!) ? active : firstSelectable(rows, isSection);
@@ -669,9 +720,10 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
     const el = rowElement(listRef.current, row.key);
     if (!el) return;
     if (row.type === "common") {
-      const shared = widgetShowsRepo(repos) ? null : (repos[0]?.head ?? null);
+      const synced = repos.filter((r) => scope.includes(r.root));
+      const shared = widgetShowsRepo(synced) ? null : (synced[0]?.head ?? null);
       setMenuFor({
-        items: commonBranchMenu(row.branch, roots, shared, closeAll),
+        items: commonBranchMenu(row.branch, scope, shared, closeAll),
         label: tx`Branch ${row.branch.name}`,
         el,
       });
@@ -699,7 +751,7 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
     if (isNewBranchStroke(strokeOf(e))) {
       e.preventDefault();
       onClose();
-      void executeAction("vcs.newBranch", sync ? { repos: roots } : undefined);
+      void executeAction("vcs.newBranch", sync ? { repos: scope } : undefined);
       return;
     }
     if (e.key === "Enter") {
@@ -760,6 +812,11 @@ function MultiRepoPanel({ onClose, actions: popupActions }: { onClose: () => voi
             name="branches-project"
             label={tx("Project the branch widget shows")}
             branchTestId="branches-project-branch"
+            worktrees={worktrees}
+            onOpenWorktree={(path) => {
+              onClose();
+              void executeAction("file.openProjectPath", path);
+            }}
           />
         </div>
       )}
