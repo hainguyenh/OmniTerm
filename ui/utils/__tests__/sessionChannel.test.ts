@@ -31,7 +31,7 @@ function spyConnect() {
     onSSHReady: subscription<(label?: string) => void>(),
     onSSHData: subscription<(data: Uint8Array) => void>(),
     onSSHError: subscription<(err: string) => void>(),
-    onSSHClosed: subscription<() => void>(),
+    onSSHClosed: subscription<(code: number) => void>(),
   };
   mockOmnitermAPI({ connect });
   return connect;
@@ -135,13 +135,15 @@ describe("createSessionChannel — SSH", () => {
     expect(onReady.mock.calls[0]).toHaveLength(0);
   });
 
-  it("synthesizes a clean exit because SSH reports no status of its own", () => {
+  it("reports ssh.exe's own exit code, so a failed connect is not taken for a clean exit", () => {
+    // Regression: every SSH close was reported as 0, so a connect that failed (ssh exits 255)
+    // closed its tab at once and Connect looked like it only flashed.
     const connect = spyConnect();
     const onClosed = vi.fn();
     createSessionChannel(false, "pane-1", "conn-b").onClosed(onClosed);
 
-    connect.onSSHClosed.mock.calls[0][1]();
+    connect.onSSHClosed.mock.calls[0][1](255);
 
-    expect(onClosed).toHaveBeenCalledWith(0);
+    expect(onClosed).toHaveBeenCalledWith(255);
   });
 });

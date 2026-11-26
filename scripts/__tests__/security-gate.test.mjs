@@ -19,9 +19,6 @@ import {
   DEFAULT_ROOT,
   FORBIDDEN_TOKENS,
   LOCAL_STORAGE_FILES,
-  PERMISSION_FILES,
-  PLUGIN_MANIFEST,
-  RUST_PERMISSIONS,
   SCANNED_FILES,
   VAULT_MODULE,
   auditPasswordPersistence,
@@ -116,45 +113,6 @@ test('a returning credential vault module is reported', async () => {
   await writeFile(path.join(root, VAULT_MODULE), 'pub fn store() {}\n')
 
   assert.ok(auditPasswordPersistence(root).includes(`${VAULT_MODULE} still exists`))
-})
-
-test('a credentials permission is caught in the manifest, the contract, and the Rust registry', async () => {
-  const manifestRoot = await auditableCopy()
-  const manifest = JSON.parse(await readFile(path.join(manifestRoot, PLUGIN_MANIFEST), 'utf8'))
-  manifest.omnitermPlugin.permissions = [...(manifest.omnitermPlugin.permissions ?? []), 'credentials']
-  await writeFile(path.join(manifestRoot, PLUGIN_MANIFEST), JSON.stringify(manifest, null, 2))
-  assert.ok(
-    auditPasswordPersistence(manifestRoot).includes('Full Remote Suite still requests credentials permission'),
-  )
-
-  const contractRoot = await auditableCopy()
-  const permissionFile = PERMISSION_FILES[0]
-  await writeFile(path.join(contractRoot, permissionFile), "export type Permission = 'credentials'\n")
-  assert.ok(
-    auditPasswordPersistence(contractRoot).includes(
-      `${permissionFile}: credential-storage permission still declared`,
-    ),
-  )
-
-  const rustRoot = await auditableCopy()
-  await writeFile(path.join(rustRoot, RUST_PERMISSIONS), 'const KNOWN: &[&str] = &["credentials"];\n')
-  assert.ok(
-    auditPasswordPersistence(rustRoot).includes(
-      `${RUST_PERMISSIONS}: credential-storage permission still declared`,
-    ),
-  )
-})
-
-test('the Rust scan stops at the test module so its own assertions do not trip it', async () => {
-  // plugin_management's tests name the string while proving it is rejected. Counting those would
-  // leave the audit permanently red, and the fix would be to weaken the audit.
-  const root = await auditableCopy()
-  await writeFile(
-    path.join(root, RUST_PERMISSIONS),
-    ['const KNOWN: &[&str] = &["files"];', '', '#[cfg(test)]', 'mod tests {', '  const DENIED: &str = "credentials";', '}', ''].join('\n'),
-  )
-
-  assert.deepEqual(auditPasswordPersistence(root), [])
 })
 
 test('credential logic sitting next to localStorage is reported', async () => {

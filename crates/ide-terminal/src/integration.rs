@@ -1,0 +1,219 @@
+//! Shell integration (Settings › Tools › Terminal › Shell integration): the
+//! shell reports its working directory (OSC 7) at every prompt, so links and
+//! new splits resolve against the directory the user `cd`-ed into, and marks
+//! where a command starts and ends (OSC 133 C / D), so the tab shows the
+//! running program's title only while one runs.
+//!
+//! zsh starts with `ZDOTDIR` pointing at generated startup files that source
+//! the user's own ones first; bash gets an `--init-file` that replays the
+//! login sequence; fish gets an `--init-command`. The generated `.zshrc` hands
+//! `ZDOTDIR` (and, if a startup file resolved it against the generated
+//! directory, `HISTFILE`) back to the user for login shells too, so history
+//! lands in `~/.zsh_history` despite the `zsh -l` start.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+const ZSHENV: &str = r#"# OmniTerm shell integration (generated)
+_omniterm_dir=$ZDOTDIR
+ZDOTDIR=${OMNITERM_USER_ZDOTDIR:-$HOME}
+[[ -f $ZDOTDIR/.zshenv ]] && . $ZDOTDIR/.zshenv
+OMNITERM_USER_ZDOTDIR=$ZDOTDIR
+ZDOTDIR=$_omniterm_dir
+"#;
+
+const ZPROFILE: &str = r#"# OmniTerm shell integration (generated)
+ZDOTDIR=$OMNITERM_USER_ZDOTDIR
+[[ -f $ZDOTDIR/.zprofile ]] && . $ZDOTDIR/.zprofile
+OMNITERM_USER_ZDOTDIR=$ZDOTDIR
+ZDOTDIR=$_omniterm_dir
+"#;
+
+const ZSHRC: &str = r#"# OmniTerm shell integration (generated)
+ZDOTDIR=$OMNITERM_USER_ZDOTDIR
+[[ -f $ZDOTDIR/.zshrc ]] && . $ZDOTDIR/.zshrc
+OMNITERM_USER_ZDOTDIR=$ZDOTDIR
+ZDOTDIR=$_omniterm_dir
+_omniterm_osc7() { printf '\e]133;D\a\e]7;file://%s%s\a' "${HOST}" "${PWD}" }
+_omniterm_preexec() { printf '\e]133;C\a' }
+# First, so the command counts as finished before other hooks set the prompt's title.
+precmd_functions=(_omniterm_osc7 ${precmd_functions:#_omniterm_osc7})
+preexec_functions+=(_omniterm_preexec)
+# Startup files that ran before this one (e.g. /etc/zshrc's
+# HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history) resolved HISTFILE against this
+# generated directory, since OmniTerm starts zsh as a login shell (-l) and the
+# restore below used to be gated on non-login. Hand both back to the user: a
+# HISTFILE they configured themselves is never under $_omniterm_dir and is kept.
+if [[ $HISTFILE == "$_omniterm_dir"/* ]]; then
+  HISTFILE=${OMNITERM_USER_ZDOTDIR:-$HOME}/.zsh_history
+fi
+ZDOTDIR=${OMNITERM_USER_ZDOTDIR:-$HOME}
+unset OMNITERM_USER_ZDOTDIR _omniterm_dir
+"#;
+
+const ZLOGIN: &str = r#"# OmniTerm shell integration (generated)
+ZDOTDIR=${OMNITERM_USER_ZDOTDIR:-$HOME}
+[[ -f $ZDOTDIR/.zlogin ]] && . $ZDOTDIR/.zlogin
+unset OMNITERM_USER_ZDOTDIR _omniterm_dir
+"#;
+
+const BASHRC: &str = r#"# OmniTerm shell integration (generated)
+if [ "${OMNITERM_LOGIN:-}" = 1 ]; then
+  unset OMNITERM_LOGIN
+  [ -f /etc/profile ] && . /etc/profile
+  if [ -f ~/.bash_profile ]; then . ~/.bash_profile
+  elif [ -f ~/.bash_login ]; then . ~/.bash_login
+  elif [ -f ~/.profile ]; then . ~/.profile
+  fi
+else
+  [ -f ~/.bashrc ] && . ~/.bashrc
+fi
+__omniterm_osc7() { printf '\e]133;D\a\e]7;file://%s%s\a' "${HOSTNAME}" "${PWD}"; }
+case ";${PROMPT_COMMAND:-};" in
+  *";__omniterm_osc7;"*) ;;
+  *) PROMPT_COMMAND="__omniterm_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}" ;;
+esac
+# PS0 (bash 4.4+) prints before each command runs.
+case "${PS0:-}" in
+  *'133;C'*) ;;
+  *) PS0="${PS0:-}\e]133;C\a" ;;
+esac
+"#;
+
+const FISH_INIT: &str = concat!(
+    r#"function __omniterm_osc7 --on-event fish_prompt; printf '\e]133;D\a\e]7;file://%s%s\a' (hostname) $PWD; end; "#,
+    r#"function __omniterm_preexec --on-event fish_preexec; printf '\e]133;C\a'; end"#,
+);
+
+/// Directory holding the generated startup files (written on demand).
+fn scripts_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("omniterm-shell-integration-{}", env!("CARGO_PKG_VERSION")))
+}
+
+fn write_if_changed(path: &Path, content: &str) -> std::io::Result<()> {
+    if std::fs::read_to_string(path).is_ok_and(|c| c == content) {
+        return Ok(());
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(path, content)
+}
+
+/// Adjusts how `shell` is started so it reports its cwd. `args` are the
+/// resolved arguments; returns `false` (leaving everything untouched) for
+/// shells without integration or when the scripts cannot be written.
+pub(crate) fn apply(shell_name: &str, args: &mut Vec<String>, env: &mut BTreeMap<String, String>) -> bool {
+    if !cfg!(unix) {
+        return false;
+    }
+    let dir = scripts_dir();
+    let result = match shell_name {
+        "zsh" => (|| -> std::io::Result<()> {
+            let zdir = dir.join("zsh");
+            write_if_changed(&zdir.join(".zshenv"), ZSHENV)?;
+            write_if_changed(&zdir.join(".zprofile"), ZPROFILE)?;
+            write_if_changed(&zdir.join(".zshrc"), ZSHRC)?;
+            write_if_changed(&zdir.join(".zlogin"), ZLOGIN)?;
+            let user = env.get("ZDOTDIR").cloned().or_else(|| std::env::var("ZDOTDIR").ok()).filter(|v| !v.is_empty());
+            if let Some(user) = user {
+                env.insert("OMNITERM_USER_ZDOTDIR".into(), user);
+            }
+            env.insert("ZDOTDIR".into(), zdir.to_string_lossy().into_owned());
+            Ok(())
+        })(),
+        "bash" => {
+            // Only plain interactive starts (`bash` / `bash -l`); explicit scripts keep their arguments.
+            if args.iter().any(|a| a != "-l" && a != "--login" && a != "-i") {
+                return false;
+            }
+            (|| -> std::io::Result<()> {
+                let rc = dir.join("bash").join("omniterm.bashrc");
+                write_if_changed(&rc, BASHRC)?;
+                if args.iter().any(|a| a == "-l" || a == "--login") {
+                    env.insert("OMNITERM_LOGIN".into(), "1".into());
+                }
+                *args = vec!["--init-file".into(), rc.to_string_lossy().into_owned(), "-i".into()];
+                Ok(())
+            })()
+        }
+        "fish" => {
+            args.push("--init-command".into());
+            args.push(FISH_INIT.into());
+            Ok(())
+        }
+        _ => return false,
+    };
+    match result {
+        Ok(()) => true,
+        Err(e) => {
+            tracing::warn!("shell integration unavailable: {e}");
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bash_gets_init_file_and_login_flag() {
+        if cfg!(windows) {
+            return; // Unix paths and shells
+        }
+        let mut args = vec!["-l".to_owned()];
+        let mut env = BTreeMap::new();
+        assert!(apply("bash", &mut args, &mut env));
+        assert_eq!(args[0], "--init-file");
+        assert!(Path::new(&args[1]).is_file());
+        assert_eq!(env.get("OMNITERM_LOGIN").map(String::as_str), Some("1"));
+    }
+
+    #[test]
+    fn scripts_are_left_alone() {
+        let mut args = vec!["-c".to_owned(), "echo hi".to_owned()];
+        let mut env = BTreeMap::new();
+        assert!(!apply("bash", &mut args, &mut env));
+        assert_eq!(args, vec!["-c", "echo hi"]);
+        assert!(!apply("tcsh", &mut args, &mut env));
+    }
+
+    #[test]
+    fn zsh_points_zdotdir_at_generated_files() {
+        if cfg!(windows) {
+            return; // Unix paths and shells
+        }
+        let mut args = vec!["-l".to_owned()];
+        let mut env = BTreeMap::from([("ZDOTDIR".to_owned(), "/home/me/zsh".to_owned())]);
+        assert!(apply("zsh", &mut args, &mut env));
+        let dir = PathBuf::from(&env["ZDOTDIR"]);
+        assert!(dir.join(".zshrc").is_file());
+        assert_eq!(env["OMNITERM_USER_ZDOTDIR"], "/home/me/zsh");
+        assert_eq!(args, vec!["-l"]);
+    }
+
+    #[test]
+    fn zsh_restores_zdotdir_and_histfile_for_login_shells() {
+        // OmniTerm starts zsh as a login shell (`zsh -l`), so the restore at the
+        // end of the generated .zshrc must not be gated on non-login shells,
+        // and HISTFILE resolved against the generated directory (e.g. by
+        // /etc/zshrc's `HISTFILE=${ZDOTDIR:-$HOME}/.zsh_history`) must be
+        // re-pointed at the user's directory.
+        assert!(!ZSHRC.contains("[[ ! -o login ]]"));
+        assert!(ZSHRC.contains("HISTFILE=${OMNITERM_USER_ZDOTDIR:-$HOME}/.zsh_history"));
+        assert!(ZSHRC.contains("ZDOTDIR=${OMNITERM_USER_ZDOTDIR:-$HOME}"));
+        assert!(ZSHRC.contains("unset OMNITERM_USER_ZDOTDIR _omniterm_dir"));
+        // Login shells that never read .zshrc (non-interactive ones) restore via .zlogin.
+        assert!(ZLOGIN.contains("ZDOTDIR=${OMNITERM_USER_ZDOTDIR:-$HOME}"));
+        assert!(ZLOGIN.contains("unset OMNITERM_USER_ZDOTDIR _omniterm_dir"));
+        if cfg!(windows) {
+            return; // apply() only integrates on Unix
+        }
+        let mut args = vec!["-l".to_owned()];
+        let mut env = BTreeMap::from([("ZDOTDIR".to_owned(), "/home/me/zsh".to_owned())]);
+        assert!(apply("zsh", &mut args, &mut env));
+        let zshrc = std::fs::read_to_string(PathBuf::from(&env["ZDOTDIR"]).join(".zshrc")).unwrap();
+        assert!(zshrc.contains("HISTFILE=${OMNITERM_USER_ZDOTDIR:-$HOME}/.zsh_history"));
+    }
+}

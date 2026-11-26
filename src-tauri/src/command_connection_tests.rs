@@ -6,9 +6,8 @@ use serde_json::json;
 fn global_connection_commands_round_trip_validate_and_scrub_legacy_secrets() {
     let fixture = MockApp::new();
     let app = fixture.handle();
-    let host = fixture.app.state::<PluginHost>();
 
-    let empty = block_on(connections::load_connections(app.clone(), host.clone())).unwrap();
+    let empty = block_on(connections::load_connections(app.clone())).unwrap();
     assert!(empty.connections.is_empty());
     assert!(empty.folders.is_empty());
 
@@ -23,13 +22,8 @@ fn global_connection_commands_round_trip_validate_and_scrub_legacy_secrets() {
             ..connection("ssh-main")
         }],
     };
-    block_on(connections::save_connections(
-        app.clone(),
-        host.clone(),
-        tree,
-    ))
-    .unwrap();
-    let loaded = block_on(connections::load_connections(app.clone(), host.clone())).unwrap();
+    block_on(connections::save_connections(app.clone(), tree)).unwrap();
+    let loaded = block_on(connections::load_connections(app.clone())).unwrap();
     assert_eq!(loaded.folders.len(), 1);
     assert_eq!(loaded.connections[0].id, "ssh-main");
 
@@ -40,12 +34,7 @@ fn global_connection_commands_round_trip_validate_and_scrub_legacy_secrets() {
             ..connection("bad")
         }],
     };
-    assert!(block_on(connections::save_connections(
-        app.clone(),
-        host.clone(),
-        invalid,
-    ))
-    .is_err());
+    assert!(block_on(connections::save_connections(app.clone(), invalid,)).is_err());
 
     let path = connections::connections_path(&app).unwrap();
     write_file(

@@ -64,7 +64,7 @@ test('findOrphanModules reports production files with no importer', () => {
 
 test('findNoopTauriCommands reports registered commands whose body only returns a constant', () => {
   const root = fixture({
-    'src-tauri/src/lib.rs': `
+    'src-tauri/src/invoke_handlers.rs': `
       #[tauri::command]
       async fn empty_unit() -> Result<(), String> { Ok(()) }
 
@@ -90,9 +90,9 @@ test('findNoopTauriCommands reports registered commands whose body only returns 
   })
   try {
     assert.deepEqual(findNoopTauriCommands({ root, sourceRoots: ['src-tauri/src'] }), [
-      'src-tauri/src/lib.rs:empty_bool',
-      'src-tauri/src/lib.rs:empty_json',
-      'src-tauri/src/lib.rs:empty_unit',
+      'src-tauri/src/invoke_handlers.rs:empty_bool',
+      'src-tauri/src/invoke_handlers.rs:empty_json',
+      'src-tauri/src/invoke_handlers.rs:empty_unit',
     ])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
@@ -119,7 +119,7 @@ test('findNoopTauriCommands accepts commands with real validation or side effect
 
 test('findUnreferencedTauriCommands reports handlers the production bridge never invokes', () => {
   const root = fixture({
-    'src-tauri/src/lib.rs': `
+    'src-tauri/src/invoke_handlers.rs': `
       fn run() {
         tauri::Builder::default().invoke_handler(tauri::generate_handler![
           commands::used,
@@ -134,7 +134,30 @@ test('findUnreferencedTauriCommands reports handlers the production bridge never
     'ui/bridge.test.ts': `invoke('dead')`,
   })
   try {
-    assert.deepEqual(findUnreferencedTauriCommands({ root }), ['src-tauri/src/lib.rs:dead'])
+    assert.deepEqual(findUnreferencedTauriCommands({ root }), ['src-tauri/src/invoke_handlers.rs:dead'])
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('findUnreferencedTauriCommands counts calls made by the generated workbench bindings', () => {
+  const root = fixture({
+    'src-tauri/src/invoke_handlers.rs': `
+      fn run() {
+        tauri::Builder::default().invoke_handler(tauri::generate_handler![
+          ide::fs_read_dir,
+          ide::fs_never_bound,
+          ide::cancel_request,
+        ]);
+      }
+    `,
+    'ui/ide/bindings.ts': [
+      'fsReadDir: (path: string) => typedError(__TAURI_INVOKE("fs_read_dir", { path })),',
+      'cancelRequest: (id: RequestId) => __TAURI_INVOKE<void>("cancel_request", { id }),',
+    ].join('\n'),
+  })
+  try {
+    assert.deepEqual(findUnreferencedTauriCommands({ root }), ['src-tauri/src/invoke_handlers.rs:fs_never_bound'])
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

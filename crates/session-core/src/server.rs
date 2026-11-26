@@ -4,7 +4,7 @@ use std::sync::Arc;
 use session_protocol::{ClientRequest, ServerMessage, PROTOCOL_VERSION};
 #[cfg(test)]
 use tokio::sync::watch;
-use tokio::sync::{broadcast, Notify};
+use tokio::sync::Notify;
 
 use crate::activity;
 use crate::manager::SessionManager;
@@ -98,14 +98,22 @@ async fn handle_connection_inner<S>(
             policy,
             launch,
         } => {
-            let response = match manager.create(
-                &client_id,
-                &request_id,
-                &session_id,
-                generation,
-                policy,
-                launch,
-            ) {
+            // Opening the PTY, spawning the shell and writing its manifest block: off the async
+            // workers, which meanwhile keep streaming every other session's output.
+            let creator = manager.clone();
+            let created = tokio::task::spawn_blocking(move || {
+                creator.create(
+                    &client_id,
+                    &request_id,
+                    &session_id,
+                    generation,
+                    policy,
+                    launch,
+                )
+            })
+            .await
+            .unwrap_or_else(|error| Err(format!("Session creation failed: {error}")));
+            let response = match created {
                 Ok(session) => ServerMessage::Created { session },
                 Err(message) => ServerMessage::Error { message },
             };
@@ -114,8 +122,9 @@ async fn handle_connection_inner<S>(
         ClientRequest::Attach {
             client_id,
             session_id,
+            binary_data,
         } => match manager.attach(&client_id, &session_id) {
-            Ok(mut attached) => {
+            Ok(attached) => {
                 if write_frame(
                     &mut stream,
                     &ServerMessage::Attached {
@@ -128,27 +137,7 @@ async fn handle_connection_inner<S>(
                 {
                     return;
                 }
-                loop {
-                    match attached.receiver.recv().await {
-                        Ok(message) => {
-                            if write_frame(&mut stream, &message).await.is_err() {
-                                return;
-                            }
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            let _ = write_frame(
-                                &mut stream,
-                                &ServerMessage::Error {
-                                    message: "Session stream fell behind; reattach to replay buffered output."
-                                        .to_string(),
-                                },
-                            )
-                            .await;
-                            return;
-                        }
-                        Err(broadcast::error::RecvError::Closed) => return,
-                    }
-                }
+                crate::forward::forward(&mut stream, attached.receiver, binary_data).await;
             }
             Err(message) => {
                 let _ = write_frame(&mut stream, &ServerMessage::Error { message }).await;
@@ -278,3 +267,7 @@ async fn run_platform_server(
 #[cfg(test)]
 #[path = "server_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "server_lease_tests.rs"]
+mod lease_tests;

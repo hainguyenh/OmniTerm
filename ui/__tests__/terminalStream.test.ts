@@ -157,6 +157,21 @@ describe("attachTerminalStream — output", () => {
     expect(written(term)).not.toBe(plain);
   });
 
+  it("colors only links while smart colors are off and link colors are on", () => {
+    let links = true;
+    const { term, fire } = attach({ smartColors: () => false, linkColors: () => links });
+
+    fire.data?.(bytes("error at https://example.com/x\n"));
+    const linked = written(term);
+    links = false;
+    term.write.mockClear();
+    fire.data?.(bytes("error at https://example.com/x\n"));
+
+    expect(linked).toContain("\x1b[4;96mhttps://example.com/x\x1b[24;39m");
+    expect(linked).not.toContain("\x1b[91merror");
+    expect(written(term)).toBe("error at https://example.com/x\n");
+  });
+
   it("reports an error without ending the session", () => {
     const { term, fire, onStatus, onExit } = attach();
     fire.error?.("host unreachable");

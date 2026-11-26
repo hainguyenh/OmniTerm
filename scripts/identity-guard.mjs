@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 
 import {
   IdentityError,
@@ -156,9 +156,22 @@ export function runPreCommit({ runner = runCommand, cwd = process.cwd() } = {}) 
   validateEffectiveIdentities({ author, committer }, lock)
 }
 
+// Co-author trailers are dropped rather than rejected so tools that append them by default
+// (assistants, IDE integrations) still produce a single-author history without a failed commit.
+export function stripCoAuthorTrailers(message) {
+  const text = String(message ?? '')
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const lines = text.split(/\r?\n/).filter((line) => !/^\s*co-authored-by\s*:/i.test(line))
+  while (lines.length > 1 && lines.at(-1) === '' && lines.at(-2) === '') lines.pop()
+  return lines.join(eol)
+}
+
 export function runCommitMsg(messagePath) {
   if (!messagePath) throw new IdentityError('commit-msg hook did not receive a message file path.')
-  validateCommitMessage(readFileSync(messagePath, 'utf8'))
+  const original = readFileSync(messagePath, 'utf8')
+  const message = stripCoAuthorTrailers(original)
+  if (message !== original) writeFileSync(messagePath, message, 'utf8')
+  validateCommitMessage(message)
 }
 
 export function runPrePush(remoteName, remoteUrl, input, {

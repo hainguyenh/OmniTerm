@@ -21,9 +21,6 @@ test('workspace wire contract always emits pins and normalizes legacy omitted pi
   const api = await source('ui/workspaceAPI.ts')
   assert.match(api, /function normalizeWorkspace\(/, 'the Tauri boundary must normalize versioned workspace payloads')
   assert.match(api, /pins:\s*workspace\.pins\s*\?\?\s*\[\]/, 'legacy payloads without pins must normalize to []')
-
-  const mutations = await source('ui/hooks/useWorkspaceMutations.ts')
-  assert.match(mutations, /\(workspace\.pins \?\? \[\]\)\.some/, 'pin checks must stay safe if a stale payload bypasses the normalizer')
 })
 
 test('workspaces_file is not re-exported into non-test Tauri builds', async () => {

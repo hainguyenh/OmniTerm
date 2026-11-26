@@ -6,8 +6,9 @@ import type { Connection, SessionStatus } from './MainLayout'
 import type { AppTheme, TerminalTheme } from '../themes'
 import { detachTitle } from '../detachControl'
 import { closesOnExit } from '../sessionExit'
+import { recentlyInterrupted } from '../terminal/ctrlCGuard'
+import { resolveTerminalLook } from '../terminal/terminalLook'
 import { resolveEnterModes } from '../utils/enterKeys'
-import { useBlurPlugin } from '../hooks/useBlurPlugin'
 import { useWindowRounding } from '../hooks/useWindowRounding'
 
 interface DetachedTerminalWindowProps {
@@ -50,19 +51,16 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const [status, setStatus] = useState<SessionStatus>('connecting')
   const [missing, setMissing] = useState(false)
   const [restartKey, setRestartKey] = useState(0)
-  const [windowActive, setWindowActive] = useState(true)
   const lastReportedCwd = useRef<string | undefined>(undefined)
   const lastReportedTitle = useRef<string | undefined>(undefined)
-  const { available: blurAvailable } = useBlurPlugin()
+  // Double Ctrl+C in the terminal asks to close its session; here the session is the whole window.
+  useEffect(() => {
+    const close = () => { void window.omnitermAPI.windowControl.close() }
+    window.addEventListener('omniterm:close-tab', close)
+    return () => window.removeEventListener('omniterm:close-tab', close)
+  }, [])
   const windowRounded = useWindowRounding()
 
-  useEffect(() => {
-    const onFocus = () => setWindowActive(true)
-    const onBlur = () => setWindowActive(false)
-    window.addEventListener('focus', onFocus)
-    window.addEventListener('blur', onBlur)
-    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener('blur', onBlur) }
-  }, [])
   useEffect(() => {
     window.omnitermAPI.terminalWindow.bootstrap().then((m) => {
       if (m?.sessionId) {
@@ -85,6 +83,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   const terminalTheme: TerminalTheme | undefined = theme
     ? (appSettings.darkMode ? theme.terminal.dark : theme.terminal.light)
     : undefined
+  const look = resolveTerminalLook(appSettings.terminalLook, terminalTheme, appSettings.darkMode)
   const fontFamilyMono = theme
     ? (appSettings.darkMode ? theme.ui.dark.fontFamilyMono : theme.ui.light.fontFamilyMono)
     : undefined
@@ -123,7 +122,7 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
   }
 
   return (
-    <div className={`terminal-paper-surface detach-window-enter h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
+    <div className={`detach-window-enter h-screen w-screen flex flex-col overflow-hidden bg-[var(--theme-bg)]${windowRounded ? ' app-window-rounded' : ''}`}>
       {/* The window is built with decorations off, so this strip is the title bar; the drag region
           is Tauri's, declared on the element rather than via a CSS property. */}
       <div
@@ -168,20 +167,12 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
           </button>
           {/* Closing does not always end the session: an idle shell is reaped, a busy one folds back
               into the main window rather than losing running work to a mis-click. */}
-          <button type="button" onClick={() => window.omnitermAPI.windowControl.close()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-theme-error hover:text-white transition-colors" aria-label="Close">
+          <button type="button" onClick={() => window.omnitermAPI.windowControl.close()} className="inline-flex items-center justify-center w-7 h-6 rounded text-theme-fg hover:bg-theme-error hover:text-theme-accent transition-colors" aria-label="Close">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
-      <div
-        className="flex-1 min-h-0 relative"
-        style={{
-          filter: blurAvailable && !windowActive && (appSettings.blurEnabled ?? true) && (appSettings.blurInactiveWindow ?? 0) > 0
-            ? `blur(${appSettings.blurInactiveWindow}px)`
-            : 'none',
-          transition: 'filter 120ms ease-out',
-        }}
-      >
+      <div className="flex-1 min-h-0 relative">
         {missing ? (
           <div className="h-full w-full flex items-center justify-center text-sm text-theme-error select-none">
             This session is no longer available.
@@ -205,13 +196,14 @@ const DetachedTerminalWindow: React.FC<DetachedTerminalWindowProps> = ({ appSett
             }}
             onCwdChange={(cwd) => reportContext({ cwd })}
             darkMode={appSettings.darkMode}
-            theme={terminalTheme}
+            theme={look.theme}
+            look={look}
             fontSize={fontSize}
             smartColors={smartColors}
             fontFamilyMono={fontFamilyMono}
             shortcuts={appSettings.shortcuts}
             enterModes={resolveEnterModes(appSettings)}
-            onExit={(code) => { if (closesOnExit(meta.connection, code)) window.omnitermAPI.windowControl.close() }}
+            onExit={(code) => { if (closesOnExit(meta.connection, code, recentlyInterrupted(meta.sessionId, Date.now()))) window.omnitermAPI.windowControl.close() }}
             onFontSizeChange={(size) => saveAppearance({ fontSize: size })}
           />
         ) : (

@@ -121,6 +121,103 @@ describe('installTextReplacementInput', () => {
     expect(xtermInput).toHaveBeenCalledOnce()
   })
 
+  it('deletes a selected run with one Backspace per code point', () => {
+    const terminal = createTerminal()
+    installTextReplacementInput(terminal, true)
+    terminal.textarea.value = 'tiếng'
+    terminal.textarea.setSelectionRange(2, 5)
+
+    dispatchBeforeInput(terminal.textarea, { inputType: 'deleteContentBackward' })
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('\x7f\x7f\x7f')
+  })
+
+  it('bridges text typed over a selection but leaves plain typing to xterm', () => {
+    const terminal = createTerminal()
+    installTextReplacementInput(terminal, true)
+    terminal.textarea.value = 'ab'
+    terminal.textarea.setSelectionRange(2, 2)
+
+    dispatchBeforeInput(terminal.textarea, { inputType: 'insertText', data: 'c' })
+    expect(terminal.input).not.toHaveBeenCalled()
+
+    terminal.textarea.setSelectionRange(0, 2)
+    dispatchBeforeInput(terminal.textarea, { inputType: 'insertText', data: 'x' })
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('\x7f\x7fx')
+  })
+
+  it('sends only the deletions when a replacement carries no data', () => {
+    const terminal = createTerminal()
+    installTextReplacementInput(terminal, true)
+    terminal.textarea.value = 'ab'
+    terminal.textarea.setSelectionRange(0, 1)
+
+    dispatchBeforeInput(terminal.textarea, { inputType: 'insertReplacementText' })
+
+    expect(terminal.input).toHaveBeenCalledExactlyOnceWith('\x7f')
+  })
+
+  it('ignores events from other elements inside the terminal', () => {
+    const terminal = createTerminal()
+    installTextReplacementInput(terminal, true)
+    const other = document.createElement('textarea')
+    terminal.element.appendChild(other)
+    other.value = 'ab'
+    other.setSelectionRange(0, 2)
+
+    other.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Backspace' }))
+    dispatchBeforeInput(other, { inputType: 'insertReplacementText', data: 'x' })
+    dispatchInput(other)
+
+    expect(terminal.input).not.toHaveBeenCalled()
+  })
+
+  it('treats a Delete key press like Backspace and re-arms on repeated presses', () => {
+    vi.useFakeTimers()
+    try {
+      const terminal = createTerminal()
+      installTextReplacementInput(terminal, true)
+      terminal.textarea.value = 'ab'
+      terminal.textarea.setSelectionRange(1, 1)
+      terminal.textarea.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Delete' }))
+      terminal.textarea.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Delete' }))
+
+      dispatchBeforeInput(terminal.textarea, { inputType: 'deleteContentBackward' })
+      expect(terminal.input).not.toHaveBeenCalled()
+
+      vi.runAllTimers()
+      dispatchBeforeInput(terminal.textarea, { inputType: 'deleteContentBackward' })
+      expect(terminal.input).toHaveBeenCalledExactlyOnceWith('\x7f')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops listening after dispose', () => {
+    const terminal = createTerminal()
+    const workaround = installTextReplacementInput(terminal, true)
+    terminal.textarea.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Backspace' }))
+    workaround.dispose()
+    terminal.textarea.value = 'tieng'
+    terminal.textarea.setSelectionRange(0, 5)
+
+    dispatchBeforeInput(terminal.textarea, { inputType: 'insertReplacementText', data: 'tiếng' })
+
+    expect(terminal.input).not.toHaveBeenCalled()
+  })
+
+  it('does nothing without a textarea', () => {
+    const terminal = createTerminal()
+    const workaround = installTextReplacementInput({ ...terminal, textarea: undefined }, true)
+    terminal.textarea.value = 'tieng'
+    terminal.textarea.setSelectionRange(0, 5)
+
+    dispatchBeforeInput(terminal.textarea, { inputType: 'insertReplacementText', data: 'tiếng' })
+
+    expect(terminal.input).not.toHaveBeenCalled()
+    workaround.dispose()
+  })
+
   it('does nothing when disabled', () => {
     const terminal = createTerminal()
     installTextReplacementInput(terminal, false)

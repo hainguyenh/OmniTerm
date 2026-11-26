@@ -1,22 +1,13 @@
 /**
  * @vitest-environment jsdom
  */
-import { useState } from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ActivityBar from '../ActivityBar'
 import CloseConfirmModal from '../CloseConfirmModal'
 import ConnectingOverlay from '../ConnectingOverlay'
 import DetachedPlaceholder from '../DetachedPlaceholder'
-import { PaneResizers } from '../PaneResizers'
-import WaitingPane from '../WaitingPane'
-import type { SplitRatios } from '../../paneLayout'
-import {
-  getLaunchState,
-  resetLaunchStore,
-  setLaunchAvailable,
-  setRunsSnapshot,
-} from '../../../plugins/vscode-launch/app/launchStore'
 
 describe('navigation and empty-session shell', () => {
   beforeEach(() => {
@@ -82,78 +73,13 @@ describe('navigation and empty-session shell', () => {
     )
     const gitBtn = screen.getByRole('button', { name: 'Git' })
     expect(gitBtn).toBeInTheDocument()
+    const opened = vi.fn()
+    window.addEventListener('omniterm:open-git', opened)
     fireEvent.click(gitBtn)
-    expect(onViewChange).toHaveBeenCalledWith('git')
-  })
-
-  it('renders Launch Consoles Play icon when plugin is available and shows active count badge', () => {
-    resetLaunchStore()
-    const { rerender } = render(
-      <ActivityBar
-        activeView={null}
-        filesEnabled
-        onViewChange={vi.fn()}
-        onSettingsClick={vi.fn()}
-      />,
-    )
-    expect(screen.queryByRole('button', { name: /Launch Consoles/i })).not.toBeInTheDocument()
-
-    act(() => {
-      setLaunchAvailable(true)
-      setRunsSnapshot([
-        {
-          runId: 'r-1',
-          configId: '.::App',
-          name: 'App',
-          type: 'node',
-          mode: 'run',
-          status: 'running',
-          rootDir: '/repo',
-          workspaceFolder: '/repo',
-          relativeFolder: '.',
-          cwd: '/repo',
-          terminalCommand: 'node app.js',
-          startedAt: 100,
-          listeningUrls: [],
-        },
-        {
-          runId: 'r-2',
-          configId: '.::Worker',
-          name: 'Worker',
-          type: 'node',
-          mode: 'run',
-          status: 'starting',
-          rootDir: '/repo',
-          workspaceFolder: '/repo',
-          relativeFolder: '.',
-          cwd: '/repo',
-          terminalCommand: 'node worker.js',
-          startedAt: 101,
-          listeningUrls: [],
-        },
-      ])
-    })
-
-    rerender(
-      <ActivityBar
-        activeView={null}
-        filesEnabled
-        onViewChange={vi.fn()}
-        onSettingsClick={vi.fn()}
-      />,
-    )
-
-    const launchBtn = screen.getByRole('button', { name: 'Launch Consoles (2 active)' })
-    expect(launchBtn).toBeInTheDocument()
-    expect(screen.getByText('2')).toBeInTheDocument()
-
-    // Click to open console drawer
-    fireEvent.click(launchBtn)
-    expect(getLaunchState().consoleOpen).toBe(true)
-
-    // Click again to toggle/close console drawer
-    fireEvent.click(launchBtn)
-    expect(getLaunchState().consoleOpen).toBe(false)
+    window.removeEventListener('omniterm:open-git', opened)
+    // The Git button opens the workbench Git window; it is not a side panel view any more.
+    expect(opened).toHaveBeenCalledTimes(1)
+    expect(onViewChange).not.toHaveBeenCalled()
   })
 
   it('confirms one or many connected terminal closes and supports every cancel route', () => {
@@ -210,129 +136,5 @@ describe('navigation and empty-session shell', () => {
     expect(screen.getByText('Production SSH')).toBeInTheDocument()
   })
 
-  it('keeps full waiting-pane controls clickable around scaled idle art', () => {
-    const onNewSession = vi.fn()
-    const onChooseSession = vi.fn()
-    const onPickShell = vi.fn()
-    const { container, rerender } = render(
-      <WaitingPane
-        dark
-        onNewSession={onNewSession}
-        onPickShell={onPickShell}
-      />,
-    )
-    expect(screen.getByText('Ctrl+N')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Select Shell' }))
-    expect(onNewSession).toHaveBeenCalledOnce()
-    expect(onPickShell).toHaveBeenCalledWith(expect.objectContaining({ width: expect.any(Number) }))
-    expect(screen.queryByRole('button', { name: 'Terminal workspace' })).not.toBeInTheDocument()
-    expect(container.querySelector('img')).toBeNull()
-    expect(screen.getByTestId('idle-art').parentElement).toHaveClass('pointer-events-none')
-
-    rerender(
-      <WaitingPane
-        dark={false}
-        compact
-        paneIndex={2}
-        customArtUrl="asset://idle.png"
-        openSessionCount={3}
-        onNewSession={onNewSession}
-        onPickShell={onPickShell}
-        onChooseSession={onChooseSession}
-      />,
-    )
-    expect(screen.queryByText('Open a terminal')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Terminal workspace' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Ctrl+N')).not.toBeInTheDocument()
-    expect(container.querySelector('img')).toHaveAttribute('src', 'asset://idle.png')
-    expect(screen.getByTestId('idle-art')).toHaveStyle({ transform: 'scale(2)' })
-    expect(screen.getByTestId('idle-art').parentElement).toHaveClass('pointer-events-none')
-    fireEvent.click(screen.getByText('New Terminal'))
-    fireEvent.click(screen.getByRole('button', { name: 'Choose open session (3)' }))
-    fireEvent.click(screen.getByText('Choose open session (3)'))
-    expect(onNewSession).toHaveBeenCalledTimes(2)
-    expect(onChooseSession).toHaveBeenCalledTimes(2)
-  })
 })
 
-describe('PaneResizers', () => {
-  function Harness({
-    mode = 2,
-    split3Style = 'left',
-    split2Style = 'columns',
-    onCommit = vi.fn(),
-  }: {
-    mode?: 1 | 2 | 3 | 4 | 6 | 8
-    split3Style?: 'left' | 'right' | 'top'
-    split2Style?: 'columns' | 'rows'
-    onCommit?: (ratios: SplitRatios) => void
-  }) {
-    const [ratios, setRatios] = useState<SplitRatios>({ main: 0.5, cross: 0.5 })
-    return (
-      <PaneResizers
-        mode={mode}
-        split3Style={split3Style}
-        split2Style={split2Style}
-        ratios={ratios}
-        onChange={setRatios}
-        onCommit={onCommit}
-      />
-    )
-  }
-
-  it('renders no divider for a single pane and all dividers for a grid', () => {
-    const { rerender } = render(<Harness mode={1} />)
-    expect(screen.queryByRole('separator')).not.toBeInTheDocument()
-    rerender(<Harness mode={4} />)
-    expect(screen.getAllByRole('separator')).toHaveLength(2)
-  })
-
-  it('drags a vertical divider and commits the latest ratio', () => {
-    const onCommit = vi.fn()
-    const { container } = render(<Harness onCommit={onCommit} />)
-    const area = container.firstElementChild?.parentElement ?? container
-    vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, width: 1000, height: 600,
-      right: 1000, bottom: 600, toJSON: () => ({}),
-    })
-    const divider = screen.getByRole('separator', { name: 'Resize panes' })
-    fireEvent.pointerDown(divider, { pointerId: 7, clientX: 500 })
-    fireEvent.pointerMove(divider, { pointerId: 7, clientX: 700 })
-    fireEvent.pointerUp(divider, { pointerId: 7, clientX: 700 })
-    expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ main: 0.7 }))
-  })
-
-  it('drags a grid divider and persists its cumulative boundary', () => {
-    const onCommit = vi.fn()
-    const { container } = render(<Harness mode={4} onCommit={onCommit} />)
-    const area = container.firstElementChild?.parentElement ?? container
-    vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, width: 1000, height: 600,
-      right: 1000, bottom: 600, toJSON: () => ({}),
-    })
-    const divider = screen.getByRole('separator', { name: 'Resize columns' })
-    fireEvent.pointerDown(divider, { pointerId: 9, clientX: 500 })
-    fireEvent.pointerMove(divider, { pointerId: 9, clientX: 700 })
-    fireEvent.pointerUp(divider, { pointerId: 9, clientX: 700 })
-    expect(onCommit).toHaveBeenCalledWith(expect.objectContaining({ columns: [0.7] }))
-  })
-
-  it('handles horizontal and mirrored three-pane dividers', () => {
-    const onCommit = vi.fn()
-    const { container, rerender } = render(
-      <Harness mode={2} split2Style="rows" onCommit={onCommit} />,
-    )
-    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
-      x: 0, y: 0, left: 0, top: 0, width: 800, height: 800,
-      right: 800, bottom: 800, toJSON: () => ({}),
-    })
-    const horizontal = screen.getByRole('separator', { name: 'Resize panes' })
-    fireEvent.pointerDown(horizontal, { pointerId: 8, clientY: 400 })
-    fireEvent.pointerCancel(horizontal, { pointerId: 8, clientY: 600 })
-    expect(onCommit).toHaveBeenCalled()
-
-    rerender(<Harness mode={3} split3Style="right" onCommit={onCommit} />)
-    expect(screen.getAllByRole('separator')).toHaveLength(2)
-  })
-})

@@ -1,6 +1,6 @@
 # Rust Rule Index
 
-Vendored from `leonardomso/rust-skills` v1.5.1: 265 detailed rule files, MIT licensed. See `UPSTREAM-RUST-SKILLS-LICENSE`.
+265 detailed rule files.
 
 Read only category needed, then `rust-rules/<rule-id>.md`. Priority: CRITICAL > HIGH > MEDIUM > LOW > REFERENCE.
 

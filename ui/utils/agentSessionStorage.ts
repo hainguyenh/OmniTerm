@@ -12,11 +12,11 @@
 import { useSyncExternalStore } from 'react'
 import { isValidLauncher, isValidSessionId } from './agentSessionDetector'
 import { registerDurableSlice, scheduleDurableSave } from './agentSessionDurable'
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export type StoredSessionState = 'active' | 'interrupted' | 'saved'
 
-const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot', 'gemini'])
+const VALID_AGENTS = new Set<string>(['claude', 'codex', 'agy', 'opencode', 'copilot'])
 
 export interface StoredAgentSession {
   /** `<agent>:<sessionId>` — stable across restarts, and naturally dedupes by session. */
@@ -234,6 +234,15 @@ export function clearActiveForTab(tabId: string): void {
   const current = loadStoredSessions()
   const ids = new Set(current.filter(item => item.tabId === tabId && item.state === 'active').map(item => item.id))
   if (ids.size > 0) persist(releaseEntries(current, ids))
+}
+
+/**
+ * Whether another open pane already runs this session. Claude's session file is found by "newest
+ * in the folder", so two panes in one folder can each see the other's file as newest; the poll
+ * keeps a pane's own id instead of taking one another pane holds.
+ */
+export function isSessionBoundToOtherTab(id: string, tabId: string): boolean {
+  return loadStoredSessions().some(item => item.id === id && item.state === 'active' && item.tabId !== undefined && item.tabId !== tabId)
 }
 
 export function findSessionByTabId(tabId: string): StoredAgentSession | undefined {

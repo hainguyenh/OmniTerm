@@ -5,7 +5,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { mockOmnitermAPI } from '../../testUtils'
 import { useAppShortcuts } from '../useAppShortcuts'
+import { toggleThemeMode } from '../../platform/theme/unifiedTheme'
 import { resolveShortcuts } from '../../utils/shortcuts'
+import { openSettingsWindow } from '../../workbench/settings/openSettingsWindow'
+
+vi.mock('../../platform/theme/unifiedTheme', () => ({ toggleThemeMode: vi.fn() }))
+vi.mock('../../workbench/settings/openSettingsWindow', () => ({ openSettingsWindow: vi.fn() }))
 
 const appSettings: AppSettings = {
   themeId: 't', fontSize: 14, smartColors: true, checkUpdatesOnStartup: true, darkMode: true,
@@ -27,7 +32,7 @@ function setup(target: 'xterm' | 'chrome', overrides: Partial<Parameters<typeof 
   focusable.focus()
 
   renderHook(() => useAppShortcuts({
-    appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+    appSettings, setAppSettings,
     changeFontSize, resetFontSize, persistZoom, isDetached: false,
     onToggleFullscreen,
     ...overrides,
@@ -47,6 +52,7 @@ describe('useAppShortcuts', () => {
   let getZoomFactor: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
+    vi.mocked(toggleThemeMode).mockClear()
     setZoomFactor = vi.fn()
     getZoomFactor = vi.fn(() => 1)
     mockOmnitermAPI({ app: { setZoomFactor, getZoomFactor } })
@@ -92,7 +98,7 @@ describe('useAppShortcuts', () => {
   it('never dispatches a layout change from a detached window', () => {
     const changeFontSize = vi.fn()
     renderHook(() => useAppShortcuts({
-      appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
+      appSettings, setAppSettings: vi.fn(),
       changeFontSize, resetFontSize: vi.fn(), persistZoom: vi.fn(), isDetached: true,
       onToggleFullscreen: vi.fn(),
     }))
@@ -135,7 +141,7 @@ describe('useAppShortcuts', () => {
     document.body.appendChild(input)
     input.focus()
     renderHook(() => useAppShortcuts({
-      appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
+      appSettings, setAppSettings: vi.fn(),
       changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
       isDetached: false, onToggleFullscreen,
     }))
@@ -153,14 +159,14 @@ describe('useAppShortcuts', () => {
       document.body.appendChild(host)
       btn.focus()
       renderHook(() => useAppShortcuts({
-        appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+        appSettings, setAppSettings,
         changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
         isDetached: false, onToggleFullscreen: vi.fn(),
       }))
       return { cleanup: () => host.remove() }
     })()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
-    expect(setAppSettings).toHaveBeenCalledWith({ ...appSettings, darkMode: false })
+    expect(toggleThemeMode).toHaveBeenCalledOnce()
     cleanup()
   })
   it('leaves a key the code editor handled to the editor, but not one it ignored', () => {
@@ -173,16 +179,16 @@ describe('useAppShortcuts', () => {
     document.body.appendChild(host)
     content.focus()
     renderHook(() => useAppShortcuts({
-      appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+      appSettings, setAppSettings,
       changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
       isDetached: false, onToggleFullscreen: vi.fn(),
     }))
     const handled = new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true })
     handled.preventDefault()
     window.dispatchEvent(handled)
-    expect(setAppSettings).not.toHaveBeenCalled()
+    expect(toggleThemeMode).not.toHaveBeenCalled()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true, bubbles: true, cancelable: true }))
-    expect(setAppSettings).toHaveBeenCalledTimes(1)
+    expect(toggleThemeMode).toHaveBeenCalledTimes(1)
     host.remove()
   })
 
@@ -206,7 +212,7 @@ describe('useAppShortcuts', () => {
     document.body.appendChild(input)
     input.focus()
     renderHook(() => useAppShortcuts({
-      appSettings, setAppSettings: vi.fn(), setSettingsOpen: vi.fn(),
+      appSettings, setAppSettings: vi.fn(),
       changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
       isDetached: false, onToggleFullscreen: vi.fn(),
     }))
@@ -219,17 +225,16 @@ describe('useAppShortcuts', () => {
   })
 
   it('opens settings on Ctrl+,', () => {
-    const setSettingsOpen = vi.fn()
     const btn = document.createElement('button')
     document.body.appendChild(btn)
     btn.focus()
     renderHook(() => useAppShortcuts({
-      appSettings, setAppSettings: vi.fn(), setSettingsOpen,
+      appSettings, setAppSettings: vi.fn(),
       changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
       isDetached: false, onToggleFullscreen: vi.fn(),
     }))
     window.dispatchEvent(ctrlKey(','))
-    expect(setSettingsOpen).toHaveBeenCalledWith(true)
+    expect(openSettingsWindow).toHaveBeenCalledTimes(1)
     btn.remove()
   })
 
@@ -322,6 +327,29 @@ describe('useAppShortcuts', () => {
     cleanup()
   })
 
+  // Regression: Ctrl+wheel over the editor or the terminal dock zoomed the whole app.
+  it('Ctrl+wheel inside an editor pane zooms that pane, not the app', () => {
+    const { persistZoom, cleanup } = setup('chrome')
+    const pane = document.createElement('section')
+    pane.setAttribute('data-pane-id', 'p1')
+    const inner = document.createElement('div')
+    pane.appendChild(inner)
+    document.body.appendChild(pane)
+    inner.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true, bubbles: true }))
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    expect(persistZoom).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('leaves a Ctrl+wheel a surface already handled alone', () => {
+    const { cleanup } = setup('chrome')
+    const event = new WheelEvent('wheel', { deltaY: -1, ctrlKey: true, cancelable: true })
+    event.preventDefault()
+    window.dispatchEvent(event)
+    expect(setZoomFactor).not.toHaveBeenCalled()
+    cleanup()
+  })
+
   it('wheel without Ctrl is ignored', () => {
     const { persistZoom, cleanup } = setup('chrome')
     window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1, cancelable: true }))
@@ -384,7 +412,7 @@ describe('useAppShortcuts', () => {
       document.body.appendChild(host)
       btn.focus()
       renderHook(() => useAppShortcuts({
-        appSettings, setAppSettings, setSettingsOpen: vi.fn(),
+        appSettings, setAppSettings,
         changeFontSize: vi.fn(), resetFontSize: vi.fn(), persistZoom: vi.fn(),
         isDetached: false, onToggleFullscreen: vi.fn(),
       }))
@@ -415,26 +443,6 @@ describe('useAppShortcuts', () => {
       window.removeEventListener('omniterm:new-folder', onFolder)
       cleanup()
     })
-    it('opens a current-directory pane on Ctrl+Alt+N only with pane focus', () => {
-      const { cleanup } = setup('xterm')
-      const onPane = vi.fn()
-      const onFolder = vi.fn()
-      window.addEventListener('omniterm:new-pane-current-directory', onPane)
-      window.addEventListener('omniterm:new-folder', onFolder)
-      const shortcut = ctrlKey('n', { altKey: true })
-      window.dispatchEvent(shortcut)
-      expect(shortcut.defaultPrevented).toBe(true)
-      expect(onPane).toHaveBeenCalledOnce()
-      expect(onFolder).not.toHaveBeenCalled()
-
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
-      window.dispatchEvent(ctrlKey('n', { altKey: true }))
-      expect(onPane).toHaveBeenCalledOnce()
-      window.removeEventListener('omniterm:new-pane-current-directory', onPane)
-      window.removeEventListener('omniterm:new-folder', onFolder)
-      cleanup()
-    })
-
     it('keeps Ctrl+Shift+N fixed for panes even when New Folder is rebound', () => {
       const rebound = {
         ...appSettings,

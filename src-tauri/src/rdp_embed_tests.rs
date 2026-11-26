@@ -157,16 +157,13 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
 
     let _guard = lock();
     let app = test_support::mock_app();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
     assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
     assert!(app.manage(RdpSessionManager::new()));
     let handle = app.handle().clone();
 
     {
-        let host = handle.state::<crate::plugin_host::PluginHost>();
         tauri::async_runtime::block_on(crate::connections::save_connections(
             handle.clone(),
-            host.clone(),
             crate::connections::ConnectionTree {
                 connections: vec![rdp_conn()],
                 folders: vec![],
@@ -175,7 +172,7 @@ fn connect_rdp_on_linux_cleans_up_the_temp_file_when_the_platform_has_no_client(
         .unwrap();
     }
 
-    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string()))
+    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string(), None))
         .expect_err("Linux has no built-in RDP client");
     assert!(error.contains("No Remote Desktop client"), "got {error:?}");
 
@@ -272,7 +269,6 @@ fn connect_rdp_rejects_non_rdp_connections() {
     use tauri::Manager;
     let _guard = test_support::lock();
     let app = test_support::mock_app();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
     assert!(app.manage(crate::adhoc::AdhocRegistry::new()));
     let handle = app.handle().clone();
 
@@ -281,7 +277,6 @@ fn connect_rdp_rejects_non_rdp_connections() {
 
     tauri::async_runtime::block_on(crate::connections::save_connections(
         handle.clone(),
-        app.state::<crate::plugin_host::PluginHost>().clone(),
         crate::connections::ConnectionTree {
             connections: vec![conn],
             folders: vec![],
@@ -289,7 +284,7 @@ fn connect_rdp_rejects_non_rdp_connections() {
     ))
     .unwrap();
 
-    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string()))
+    let error = tauri::async_runtime::block_on(connect_rdp(handle.clone(), "c1".to_string(), None))
         .expect_err("Should reject non-RDP");
     assert!(error.contains("Not an RDP connection"));
 }
@@ -315,4 +310,26 @@ fn rdp_disconnect_removes_session_and_cleans_up() {
     // The file should be removed.
     assert!(!temp_file.exists());
     let _ = fs::remove_dir_all(&cache);
+}
+
+/// Windows starts the system client by address, so no `.rdp` file reaches its Jump List; only drive
+/// redirection (which has no command-line switch) and other platforms still need a file.
+#[test]
+fn windows_launches_by_address_unless_drives_are_redirected() {
+    let mut conn = rdp_conn();
+    conn.redirect_drives = None;
+    assert!(launches_by_address(&conn, "windows"));
+    conn.redirect_drives = Some(false);
+    assert!(launches_by_address(&conn, "windows"));
+    conn.redirect_drives = Some(true);
+    assert!(!launches_by_address(&conn, "windows"));
+    conn.redirect_drives = None;
+    assert!(!launches_by_address(&conn, "macos"));
+}
+
+/// A user name that cannot be a safe hint is skipped without running anything.
+#[test]
+fn an_unusable_username_hint_is_skipped() {
+    set_username_hint("desk", "");
+    set_username_hint("desk", "/f");
 }

@@ -20,6 +20,7 @@
 
 import { Channel, invoke } from '@tauri-apps/api/core'
 import { diag } from './diag'
+import { ackSessionOutput } from './sessionOutputAck'
 
 /** Status messages from the backend's `SessionStatus` enum (serde tag = "kind"). */
 export type ReplayMetadata = { available?: boolean; bytes: number; generation: number }
@@ -30,9 +31,16 @@ type SessionStatus =
   | { kind: 'closed'; code: number }
   | { kind: 'activity'; busy: boolean }
 
+/**
+ * Returned by a `data` handler that writes the bytes to a terminal asynchronously and acknowledges
+ * them itself through `ackSessionOutput` once written. Any other handler's bytes are acknowledged as
+ * soon as it returns.
+ */
+export const ACK_LATER = 'ack-later'
+
 type SessionHandlers = {
   ready: (label?: string, replay?: ReplayMetadata) => void
-  data: (bytes: Uint8Array) => void
+  data: (bytes: Uint8Array) => typeof ACK_LATER | void
   error: (message: string) => void
   closed: (code: number) => void
   /** The shell started/stopped running something. Sent on change only, so it is a plain flag. */
@@ -123,9 +131,14 @@ function sessionChannels(id: string) {
 
   const onData = new Channel<ArrayBuffer | number[]>()
   onData.onmessage = (message) => {
+    // An older generation is not acknowledged: the backend ended its stream when this id was opened
+    // again, and the bytes would be credited to the newer one.
     if (!current()) return
     const bytes = toBytes(message)
-    handlers.get(id)?.data?.(bytes)
+    // Output no pane is listening to is acknowledged as well: the backend stops reading a session
+    // whose output this window never reports as written.
+    const disposition = handlers.get(id)?.data?.(bytes)
+    if (disposition !== ACK_LATER) ackSessionOutput(id, bytes.byteLength)
     taps.get(id)?.forEach(tap => tap(bytes))
   }
 

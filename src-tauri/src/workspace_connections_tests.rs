@@ -1,11 +1,11 @@
 //! Tests for workspace-scoped connection profiles.
 //!
-//! The command wrappers need a running app, so these exercise the parts that do not: the file format,
-//! the reader's tolerance of a workspace that has none, and the ordering that keeps a rejected write
-//! from leaving a directory behind.
+//! The command wrappers need a running app, so these exercise the parts that do not: the file format
+//! and the reader's tolerance of a workspace that has none.
 
 use super::*;
 use crate::connections::Connection;
+use crate::workspace::Workspace;
 
 fn conn(id: &str, conn_type: &str) -> Connection {
     Connection {
@@ -30,6 +30,14 @@ fn temp_workspace() -> PathBuf {
     let dir = std::env::temp_dir().join(format!("omniterm-wsconn-{}", uuid::Uuid::new_v4()));
     fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+/// Writes `<dir>/.omniterm/connections.json` the way a user or an external tool would.
+fn write_file(dir: &std::path::Path, connections: Vec<Connection>) {
+    let omniterm = dir.join(".omniterm");
+    fs::create_dir_all(&omniterm).unwrap();
+    let json = serde_json::to_string_pretty(&WorkspaceConnectionsFile { connections }).unwrap();
+    fs::write(omniterm.join("connections.json"), json).unwrap();
 }
 
 #[test]
@@ -119,159 +127,11 @@ fn reading_creates_no_directory() {
 }
 
 #[test]
-fn the_size_cap_is_enforced_before_the_directory_is_created() {
-    let dir = temp_workspace();
-    // One connection per 100-odd bytes; 20k of them comfortably clears 1 MB.
-    let many: Vec<Connection> = (0..20_000)
-        .map(|i| conn(&format!("c{i}"), "LOCAL"))
-        .collect();
-    let json =
-        serde_json::to_string_pretty(&WorkspaceConnectionsFile { connections: many }).unwrap();
-    assert!(json.len() > MAX_BYTES, "fixture should exceed the cap");
-
-    // The cap is checked against the serialized payload, before `connections_path(.., true)` runs.
-    assert!(!dir.join(".omniterm").exists());
-    fs::remove_dir_all(&dir).ok();
-}
-
-#[test]
-fn composite_workspace_rejects_connections_targeting_an_unknown_folder() {
-    let workspace = Workspace {
-        id: "ws#1".to_string(),
-        name: "Composite".to_string(),
-        folders: vec![
-            WorkspaceFolder {
-                id: "folder#1".to_string(),
-                name: "One".to_string(),
-                path: "/one".to_string(),
-                color: None,
-            },
-            WorkspaceFolder {
-                id: "folder#2".to_string(),
-                name: "Two".to_string(),
-                path: "/two".to_string(),
-                color: None,
-            },
-        ],
-        parent_id: None,
-        order: 0,
-        pins: Vec::new(),
-        color: None,
-        icon: None,
-    };
-    let mut connection = conn("c1", "SSH");
-    connection.parent_id = Some("folder#missing/src".to_string());
-    let error = validate_connection_targets(&workspace, &[connection])
-        .expect_err("unknown folder must fail");
-    assert!(error.contains("unknown workspace folder"), "{error}");
-
-    let mut unparented = conn("c2", "SSH");
-    unparented.parent_id = None;
-    let err2 = validate_connection_targets(&workspace, &[unparented])
-        .expect_err("multi-root requires folder");
-    assert!(err2.contains("Choose a workspace folder"));
-
-    let single_ws = Workspace {
-        id: "ws#s".to_string(),
-        name: "Single".to_string(),
-        folders: vec![WorkspaceFolder {
-            id: "f1".to_string(),
-            name: "F1".to_string(),
-            path: "/one".to_string(),
-            color: None,
-        }],
-        parent_id: None,
-        order: 0,
-        pins: Vec::new(),
-        color: None,
-        icon: None,
-    };
-    assert!(validate_connection_targets(&single_ws, &[conn("c3", "SSH")]).is_ok());
-}
-
-#[test]
-fn local_connection_strips_folder_prefix_and_filters_unrelated_folders() {
-    let folder1 = WorkspaceFolder {
-        id: "f1".to_string(),
-        name: "One".to_string(),
-        path: "/one".to_string(),
-        color: None,
-    };
-    let folder2 = WorkspaceFolder {
-        id: "f2".to_string(),
-        name: "Two".to_string(),
-        path: "/two".to_string(),
-        color: None,
-    };
-    let ws_multi = Workspace {
-        id: "ws#m".to_string(),
-        name: "Multi".to_string(),
-        folders: vec![folder1.clone(), folder2.clone()],
-        parent_id: None,
-        order: 0,
-        pins: Vec::new(),
-        color: None,
-        icon: None,
-    };
-
-    let mut c_f1_direct = conn("c1", "SSH");
-    c_f1_direct.parent_id = Some("f1".to_string());
-    let res1 = local_connection(&ws_multi, &folder1, c_f1_direct)
-        .unwrap()
-        .unwrap();
-    assert_eq!(res1.parent_id, None);
-
-    let mut c_f1_nested = conn("c2", "SSH");
-    c_f1_nested.parent_id = Some("f1/servers".to_string());
-    let res2 = local_connection(&ws_multi, &folder1, c_f1_nested)
-        .unwrap()
-        .unwrap();
-    assert_eq!(res2.parent_id, Some("servers".to_string()));
-
-    let mut c_f1_slash = conn("c3", "SSH");
-    c_f1_slash.parent_id = Some("f1/".to_string());
-    let res3 = local_connection(&ws_multi, &folder1, c_f1_slash)
-        .unwrap()
-        .unwrap();
-    assert_eq!(res3.parent_id, None);
-
-    let mut c_f2 = conn("c4", "SSH");
-    c_f2.parent_id = Some("f2/nested".to_string());
-    assert!(local_connection(&ws_multi, &folder1, c_f2)
-        .unwrap()
-        .is_none());
-
-    let mut c_none = conn("c5", "SSH");
-    c_none.parent_id = None;
-    assert!(local_connection(&ws_multi, &folder1, c_none)
-        .unwrap()
-        .is_none());
-
-    let ws_single = Workspace {
-        id: "ws#s".to_string(),
-        name: "Single".to_string(),
-        folders: vec![folder1.clone()],
-        parent_id: None,
-        order: 0,
-        pins: Vec::new(),
-        color: None,
-        icon: None,
-    };
-    let c_single_none = conn("c6", "SSH");
-    let res_single = local_connection(&ws_single, &folder1, c_single_none.clone())
-        .unwrap()
-        .unwrap();
-    assert_eq!(res_single.parent_id, None);
-    let res_other = local_connection(&ws_single, &folder2, c_single_none).unwrap();
-    assert!(res_other.is_none());
-}
-
-#[test]
-fn write_at_writes_valid_connections_and_find_by_id_locates_them() {
+fn read_at_reads_saved_connections_and_find_by_id_locates_them() {
     let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let dir = temp_workspace();
-    write_at(dir.to_str().unwrap(), vec![conn("ws-target-1", "SSH")]).expect("write_at");
+    write_file(&dir, vec![conn("ws-target-1", "SSH")]);
     let back = read_at(dir.to_str().unwrap()).expect("read_at");
     assert_eq!(back.len(), 1);
     assert_eq!(back[0].id, "ws-target-1");
@@ -284,6 +144,7 @@ fn write_at_writes_valid_connections_and_find_by_id_locates_them() {
             name: "Lookup".to_string(),
             path: dir.to_str().unwrap().to_string(),
             color: None,
+            disabled: false,
         }],
         parent_id: None,
         order: 0,
@@ -301,4 +162,24 @@ fn write_at_writes_valid_connections_and_find_by_id_locates_them() {
         let _ = std::fs::remove_file(path);
     }
     fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn an_omniterm_folder_without_a_connections_file_reads_as_empty() {
+    let dir = temp_workspace();
+    fs::create_dir_all(dir.join(".omniterm")).expect("create .omniterm");
+    assert!(read_at(dir.to_str().expect("utf-8 temp path"))
+        .expect("an absent file is not an error")
+        .is_empty());
+    fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_corrupt_workspace_catalog_resolves_no_connection() {
+    let _guard = crate::test_support::lock();
+    let app = crate::test_support::mock_app();
+    let path = crate::workspace_persistence::workspaces_file(app.handle()).expect("store path");
+    fs::write(&path, "{ not json").expect("write a corrupt catalog");
+    assert!(find_by_id(app.handle(), "anything").is_none());
+    fs::remove_file(path).ok();
 }

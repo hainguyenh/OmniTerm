@@ -14,7 +14,7 @@ import { diag } from './diag'
 
 export type ShellOption = { id: string; label: string }
 
-/** Fallback for hosts without the probe command. Mirrors the backend's ordering. */
+/** Fallback for hosts without the probe command. Matches the backend's ordering. */
 export function staticShellOptions(platform: string): ShellOption[] {
   if (platform === 'win32') {
     return [

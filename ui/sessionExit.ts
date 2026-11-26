@@ -19,8 +19,15 @@ export interface ExitPolicyConn {
   localKeepOpen?: boolean
 }
 
-export function closesOnExit(conn: ExitPolicyConn | null | undefined, exitCode: number): boolean {
+export function closesOnExit(
+  conn: ExitPolicyConn | null | undefined,
+  exitCode: number,
+  interruptedRecently = false,
+): boolean {
   if (!conn) return false
+  // The user pressed Ctrl+C once and the process died: keep the tab so one stray interrupt does not
+  // discard the session. A second quick Ctrl+C is the explicit way to close it.
+  if (interruptedRecently) return false
   if (conn.type === 'RDP') return false
   // A plain interactive shell must close when the user types `exit`; keep-open only applies to
   // panes launched with a command that has finished.

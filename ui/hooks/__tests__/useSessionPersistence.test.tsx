@@ -72,8 +72,6 @@ describe('useSessionPersistence', () => {
       activeTabs: [],
       ephemeralConns: [],
       viewGroups: [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 1,
     }))
     const first = result.current.initialSnapshot
@@ -87,8 +85,6 @@ describe('useSessionPersistence', () => {
       activeTabs: [baseTab],
       ephemeralConns: [baseConn],
       viewGroups: [baseGroup],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 1,
       sessionCwds: { 'tab-1': 'F:/current' },
     }))
@@ -109,8 +105,6 @@ describe('useSessionPersistence', () => {
       activeTabs: [baseTab],
       ephemeralConns: [baseConn],
       viewGroups: [baseGroup],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 1,
       sessionCwds: cwd ? { 'tab-1': cwd } : {},
     }), { initialProps: {} as { cwd?: string } })
@@ -125,8 +119,6 @@ describe('useSessionPersistence', () => {
       activeTabs: tabs,
       ephemeralConns: tabs.length ? [baseConn] : [],
       viewGroups: tabs.length ? [baseGroup] : [],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 1,
     }), { initialProps: [baseTab] })
 
@@ -157,8 +149,6 @@ describe('useSessionPersistence', () => {
       activeTabs: [baseTab],
       ephemeralConns: [baseConn],
       viewGroups: [baseGroup],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 2,
       pendingSnapshot: pending,
     }))
@@ -172,8 +162,6 @@ describe('useSessionPersistence', () => {
       activeTabs: [baseTab],
       ephemeralConns: [baseConn],
       viewGroups: [group],
-      tabGroups: {},
-      activeGroupId: 'ungrouped',
       layoutMode: 1,
     }), { initialProps: baseGroup })
 
@@ -192,8 +180,6 @@ describe('useSessionPersistence', () => {
       ],
       ephemeralConns: [sshConn, rdpConn],
       viewGroups: [{ ...baseGroup, panes: ['ssh-tab', 'rdp-tab', null, null, null, null, null, null] }],
-      tabGroups: { 'ssh-tab': 'ungrouped' },
-      activeGroupId: 'ungrouped',
       layoutMode: 2,
     }))
 

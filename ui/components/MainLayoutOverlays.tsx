@@ -5,21 +5,21 @@ import { CommandPalette } from './CommandPalette'
 import { ProjectSearchModal } from './editor/ProjectSearchModal'
 import DialogHost from './DialogHost'
 import NewTerminalMenu from './NewTerminalMenu'
-import SettingsModal from './SettingsModal'
 import RenewSessionModal from './RenewSessionModal'
 import LargeTextPasteModalHost from './LargeTextPasteModalHost'
 import { StickyNoteHost } from './StickyNoteHost'
 // Plugin contribution: split out of the entry chunk so a build without the Always Awake plugin never
-// parses it — the overlay is only ever mounted once the plugin has answered `alwaysAwake.info`.
-const AlwaysAwakeModal = lazy(() => import('../../plugins/always-awake/app/AlwaysAwakeModal'))
-import { AgentQuotaRoot } from '../../plugins/agent-quota/app/AgentQuotaRoot'
+// parses it — the overlay is only ever mounted once `alwaysAwake.info()` says the feature is on.
+const AlwaysAwakeModal = lazy(() => import('../features/always-awake/AlwaysAwakeModal'))
+import { AgentQuotaRoot } from '../features/agent-quota/AgentQuotaRoot'
 import { CtxItem } from './mainLayoutShared'
 import { pickShell } from '../shellOptions'
+import { openSettingsWindow } from '../workbench/settings/openSettingsWindow'
 import { useEditorShortcuts } from '../hooks/useEditorShortcuts'
 import type { MainLayoutModel } from './useMainLayoutController'
 
 export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }) {
-  const { appSettings, setAppSettings, updateState, hasConnectionProvider, setHasConnectionProvider, setConnectionCapabilities, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, recordingAction, setRecordingAction, dialogState, showAlert, showConfirm, commandPaletteOpen, setCommandPaletteOpen, aboutOpen, setAboutOpen, updateChecking, installerChoiceOpen, setInstallerChoiceOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, checkForUpdates, handleDownloadPortable, handleDownloadInstaller, skipThisVersion, clearSkippedVersion, handleConnect, closeTabs, closeTab, refreshCustomArt, idleArtUrlLight, idleArtUrlDark, loadingArtUrlLight, loadingArtUrlDark, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, activity = {} } = model
+  const { appSettings, setAppSettings, activeTabs, savedConnections, tabMenu, setTabMenu, shellMenu, setShellMenu, pendingCloseTabIds, setPendingCloseTabIds, skipCloseConfirmRef, dialogState, commandPaletteOpen, setCommandPaletteOpen, shellOptions, workspaces = [], selectedWorkspaceId = null, setSelectedWorkspaceId = () => {}, requestNewSession, handleConnect, closeTabs, closeTab, alwaysAwake, setAlwaysAwake, alwaysAwakeOpen, setAlwaysAwakeOpen, activity = {} } = model
   const sessionIds = useMemo(() => activeTabs.map((tab) => tab.id), [activeTabs])
   const [projectSearchOpen, setProjectSearchOpen] = useState(false)
 
@@ -46,7 +46,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             setAppSettings={setAppSettings}
             sessionIds={sessionIds}
             busy={activity}
-            openSettings={() => setAboutOpen(true)}
+            openSettings={() => openSettingsWindow()}
           />
           {alwaysAwakeOpen && (
             <Suspense fallback={null}>
@@ -58,36 +58,6 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             </Suspense>
           )}
 
-          <SettingsModal
-            isOpen={aboutOpen}
-            onClose={() => setAboutOpen(false)}
-            appSettings={appSettings}
-            setAppSettings={setAppSettings}
-            shellOptions={shellOptions}
-            workspaces={workspaces}
-            activeSessionCount={activeTabs.length}
-            hasConnectionProvider={hasConnectionProvider}
-            setHasConnectionProvider={setHasConnectionProvider}
-            setConnectionCapabilities={setConnectionCapabilities}
-            showAlert={showAlert}
-            showConfirm={showConfirm}
-            updateState={updateState}
-            updateChecking={updateChecking}
-            installerChoiceOpen={installerChoiceOpen}
-            setInstallerChoiceOpen={setInstallerChoiceOpen}
-            checkForUpdates={checkForUpdates}
-            skipThisVersion={skipThisVersion}
-            clearSkippedVersion={clearSkippedVersion}
-            handleDownloadPortable={handleDownloadPortable}
-            handleDownloadInstaller={handleDownloadInstaller}
-            recordingAction={recordingAction}
-            setRecordingAction={setRecordingAction}
-            idleArtUrlLight={idleArtUrlLight}
-            idleArtUrlDark={idleArtUrlDark}
-            loadingArtUrlLight={loadingArtUrlLight}
-            loadingArtUrlDark={loadingArtUrlDark}
-            refreshCustomArt={refreshCustomArt}
-          />
     
     
     
@@ -166,14 +136,7 @@ export default function MainLayoutOverlays({ model }: { model: MainLayoutModel }
             <RenewSessionModal
               strategy={model.appSettings.agentRenewStrategy ?? 'reopen'}
               sessionName={model.pendingRenewSessionName}
-              onConfirm={(remember) => {
-                if (remember) {
-                  const next = { ...model.appSettings, skipTerminalRenewConfirm: true }
-                  model.setAppSettings(next)
-                  void window.omnitermAPI?.settings?.save?.({ skipTerminalRenewConfirm: true })
-                }
-                void model.confirmRenew(remember)
-              }}
+              onConfirm={model.confirmRenew}
               onCancel={model.cancelRenew}
             />
           )}

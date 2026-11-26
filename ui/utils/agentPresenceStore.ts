@@ -8,7 +8,7 @@
  * spawned yet when the first poll runs, and that empty first answer must not end their tracking.
  */
 import { useSyncExternalStore } from 'react'
-import type { AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import type { AgentBrand } from '../features/agent-quota/agentBrand'
 
 export interface AgentModelSummary {
   model: string
@@ -28,6 +28,11 @@ export interface PanePresence {
   agentSessionId?: string
   /** The resolved AI agent model and effort. */
   modelInfo?: AgentModelSummary
+  /**
+   * The folder the pane was in when this agent process was first seen, kept while the same process
+   * runs. The shell may `cd` elsewhere afterwards; the agent still belongs to the project it started in.
+   */
+  launchCwd?: string
 }
 
 /** How long a restored pane is given for its resumed agent to appear before it is untracked. */
@@ -47,6 +52,7 @@ function samePresence(a: PanePresence | undefined, b: PanePresence | undefined):
   return a.agent === b.agent && a.profileName === b.profileName && a.launcher === b.launcher
     && a.pid === b.pid && a.startTime === b.startTime && a.claudeSessionId === b.claudeSessionId
     && a.agentSessionId === b.agentSessionId && a.modelInfo?.display === b.modelInfo?.display
+    && a.launchCwd === b.launchCwd
 }
 
 /** Replace every pane's presence in one step; unchanged panes keep their object identity. */
@@ -89,16 +95,16 @@ export function resetPanePresenceForTests(): void {
   emit()
 }
 
-function subscribe(listener: () => void): () => void {
+export function subscribePanePresence(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)
 }
 
 export function usePanePresence(tabId: string | null | undefined): PanePresence | undefined {
-  return useSyncExternalStore(subscribe, () => getPanePresence(tabId), () => undefined)
+  return useSyncExternalStore(subscribePanePresence, () => getPanePresence(tabId), () => undefined)
 }
 
 /** Every pane's presence at once — for lists (the tab strip) that cannot call a hook per item. */
 export function useAllPanePresence(): Readonly<Record<string, PanePresence>> {
-  return useSyncExternalStore(subscribe, () => presence, () => presence)
+  return useSyncExternalStore(subscribePanePresence, () => presence, () => presence)
 }

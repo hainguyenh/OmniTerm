@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { diag } from '../../diag'
 import { mockOmnitermAPI } from '../../testUtils'
 import RDPView from '../RDPView'
+import { rdpPlaceholderText } from '../rdpPlaceholder'
 
 const connection = {
   id: 'rdp', name: 'Desktop', type: 'RDP' as const, host: 'desktop.test', port: '3389', user: 'operator',
@@ -134,5 +135,31 @@ describe('RDPView remaining lifecycle', () => {
     await act(async () => {})
     expect(onStatus).toHaveBeenCalledWith('error')
     expect(error).toHaveBeenCalledWith('RDP connect error:', failure)
+  })
+
+  /** Regression: the pane stayed an empty black box while the client ran in its own window. */
+  it('launches with the pane size and shows sign-in text until the client window docks', async () => {
+    let dockedHandler: (() => void) | undefined
+    const rdp = vi.fn(async () => ({ ok: true }))
+    mockOmnitermAPI({
+      connect: {
+        rdp,
+        onRDPDocked: vi.fn((_id: string, callback: () => void) => { dockedHandler = callback; return () => {} }),
+      },
+    })
+    const view = render(<RDPView id="session" connection={connection} active overlayActive={false} />)
+    expect(rdp).toHaveBeenCalledWith('session', {
+      x: 11, y: 22, width: 640, height: 480, dpr: window.devicePixelRatio,
+    })
+    expect(view.container.textContent).toContain('Starting Remote Desktop for desktop.test')
+    await act(async () => {})
+    expect(view.container.textContent).toContain('Sign in from the Remote Desktop prompt')
+    act(() => dockedHandler?.())
+    expect(view.container.textContent).toBe('')
+  })
+
+  it('names an ended or failed session in the pane', () => {
+    expect(rdpPlaceholderText('closed', 'desktop.test')).toBe('The Remote Desktop session has ended.')
+    expect(rdpPlaceholderText('error', 'desktop.test')).toBe('Remote Desktop could not connect to desktop.test.')
   })
 })

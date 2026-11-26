@@ -1,4 +1,4 @@
-//! Logging and plugin URL validation tests.
+//! Logging and version tests.
 
 use super::*;
 
@@ -14,78 +14,6 @@ fn logging_follows_debug_assertions_only() {
         !logging_enabled(),
         "a release/portable build must log nothing"
     );
-}
-
-/// A provider may open an HTTPS authentication-help page before the native client prompts. Arbitrary HTTPS hosts are
-/// allowed, while executable and local-file schemes remain blocked.
-#[test]
-fn plugin_urls_allow_localhost_http() {
-    for url in [
-        "http://localhost:5173",
-        "http://localhost:3000/app",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8080/test?foo=bar",
-        "http://[::1]:9222",
-    ] {
-        assert!(is_allowed_plugin_url(url), "{url} should be allowed");
-    }
-}
-
-#[test]
-fn plugin_urls_allow_any_https_host() {
-    for url in [
-        "https://vault.example/items/1",
-        "https://my.1password.com",
-        "https://bitwarden.example.test:8443/#/vault?itemId=abc",
-        "https://internal-vault/x",
-    ] {
-        assert!(is_allowed_plugin_url(url), "{url} should be allowed");
-    }
-}
-
-/// What made the unguarded version arbitrary program execution: `opener::open` launches whatever the
-/// OS associates with the string, so a non-https scheme or a bare path is a program launch.
-#[test]
-fn plugin_urls_refuse_anything_that_is_not_https() {
-    for url in [
-        "http://vault.example/x",
-        "file:///C:/Windows/System32/cmd.exe",
-        r"C:\evil.exe",
-        r"\\server\share\evil.exe",
-        "javascript:alert(1)",
-        "ms-settings:",
-        "data:text/html,<script>1</script>",
-        "HTTPS://vault.example/x", // scheme match is exact; no case-folding shortcut
-        "",
-    ] {
-        assert!(!is_allowed_plugin_url(url), "{url} should be refused");
-    }
-}
-
-/// `https://vault.example@evil.test/x` reads as `vault.example` to a human and resolves to
-/// `evil.test`; the whole authority must stay unambiguous.
-#[test]
-fn plugin_urls_refuse_an_authority_that_lies() {
-    for url in [
-        "https://vault.example@evil.test/x",
-        "https://user:pass@evil.test/x",
-        "https://@evil.test/",
-        "https:///no-authority",
-        "https://vault example/x",
-        "https://vault\texample/x",
-        "https://vault\nexample/x",
-    ] {
-        assert!(!is_allowed_plugin_url(url), "{url} should be refused");
-    }
-}
-
-/// A URL with no path is legitimate because this validator has no repository-path prefix to match.
-#[test]
-fn plugin_urls_accept_a_bare_origin() {
-    assert!(is_allowed_plugin_url("https://vault.example"));
-    assert!(is_allowed_plugin_url("https://vault.example/"));
-    assert!(is_allowed_plugin_url("https://vault.example?a=1"));
-    assert!(is_allowed_plugin_url("https://vault.example#frag"));
 }
 
 #[test]
@@ -359,33 +287,4 @@ fn validate_path_for_open_refuses_empty_and_control_chars() {
 #[test]
 fn validate_path_for_open_trims_surrounding_whitespace() {
     assert_eq!(validate_path_for_open("  ./foo.txt  "), Ok("./foo.txt"));
-}
-
-#[test]
-fn validate_url_for_open_accepts_valid_http_and_https_urls() {
-    assert_eq!(
-        validate_url_for_open("https://github.com/hainguyenh/OmniTerm"),
-        Ok("https://github.com/hainguyenh/OmniTerm".to_string())
-    );
-    assert_eq!(
-        validate_url_for_open("http://localhost:5173/"),
-        Ok("http://localhost:5173/".to_string())
-    );
-    assert_eq!(
-        validate_url_for_open("http://127.0.0.1:3000/api"),
-        Ok("http://127.0.0.1:3000/api".to_string())
-    );
-    assert_eq!(
-        validate_url_for_open("http://0.0.0.0:8080/"),
-        Ok("http://localhost:8080/".to_string())
-    );
-}
-
-#[test]
-fn validate_url_for_open_refuses_unsafe_schemes_and_credentials() {
-    assert!(validate_url_for_open("javascript:alert(1)").is_err());
-    assert!(validate_url_for_open("file:///etc/passwd").is_err());
-    assert!(validate_url_for_open("https://user:pass@evil.test/").is_err());
-    assert!(validate_url_for_open("").is_err());
-    assert!(validate_url_for_open("http://").is_err());
 }

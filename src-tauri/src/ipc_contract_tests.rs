@@ -6,28 +6,34 @@
 //! serialization are all exercised together.
 
 use super::with_invoke_handler;
-use crate::{
-    adhoc::AdhocRegistry, plugin_host::PluginHost, pty::PtyManager, rdp_embed::RdpSessionManager,
-    terminal_window::DetachRegistry,
-};
 use serde_json::Value;
 use std::{fs, path::PathBuf, sync::MutexGuard};
 use tauri::{test::MockRuntime, Manager};
 
+#[path = "ipc_agent_tests.rs"]
+mod agent_ipc;
+#[path = "ipc_attachment_tests.rs"]
+mod attachment_ipc;
 #[cfg(target_os = "linux")]
 #[path = "ipc_dialog_tests.rs"]
 mod dialogs;
-#[path = "ipc_git_tests.rs"]
-mod git_ipc;
+#[path = "ipc_ide_tests.rs"]
+mod ide_ipc;
+#[path = "ipc_malformed_tests.rs"]
+mod malformed_ipc;
 #[path = "ipc_persistence_tests.rs"]
 mod persistence;
+#[path = "ipc_quick_shell_tests.rs"]
+mod quick_shell_ipc;
 #[path = "ipc_runtime_tests.rs"]
 mod runtime;
 #[path = "ipc_temp_note_tests.rs"]
 mod temp_note_ipc;
-#[path = "ipc_text_file_tests.rs"]
-mod text_file_ipc;
+#[path = "ipc_transfer_tests.rs"]
+mod transfer_ipc;
 
+#[path = "ipc_workspace_connection_tests.rs"]
+mod workspace_connection_ipc;
 #[path = "ipc_workspace_edge_tests.rs"]
 mod workspace_edges;
 #[path = "ipc_workspace_tests.rs"]
@@ -48,12 +54,7 @@ impl IpcApp {
         context.config_mut().identifier = "com.omniterm.ipc-tests".to_string();
 
         let app = with_invoke_handler(
-            tauri::test::mock_builder()
-                .manage(PtyManager::new())
-                .manage(AdhocRegistry::new())
-                .manage(DetachRegistry::new())
-                .manage(PluginHost::new())
-                .manage(RdpSessionManager::new())
+            crate::app_state::manage_state(tauri::test::mock_builder())
                 .manage(crate::os_actions::ExternalLauncherState::test()),
         )
         .build(context)
@@ -76,6 +77,20 @@ impl IpcApp {
     }
 
     fn invoke(&self, command: &str, body: Value) -> Result<Value, Value> {
+        self.invoke_with(
+            command,
+            tauri::ipc::InvokeBody::Json(body),
+            Default::default(),
+        )
+    }
+
+    /// Sends a request the way the webview does for a raw-body upload: bytes plus headers.
+    fn invoke_with(
+        &self,
+        command: &str,
+        body: tauri::ipc::InvokeBody,
+        headers: tauri::http::HeaderMap,
+    ) -> Result<Value, Value> {
         tauri::test::get_ipc_response(
             &self.window,
             tauri::webview::InvokeRequest {
@@ -89,8 +104,8 @@ impl IpcApp {
                 }
                 .parse()
                 .expect("valid IPC URL"),
-                body: tauri::ipc::InvokeBody::Json(body),
-                headers: Default::default(),
+                body,
+                headers,
                 invoke_key: tauri::test::INVOKE_KEY.to_string(),
             },
         )

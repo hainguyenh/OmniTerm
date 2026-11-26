@@ -38,7 +38,6 @@ interface ShortcutBindings {
 interface TerminalAppearance {
   fontSize?: number
   themeId?: string
-  toolbarActions?: import('./terminalToolbar').TerminalToolbarActions
 }
 
 /** Versioned backup envelope produced by `export_settings`; see settings_transfer.rs. */
@@ -49,26 +48,24 @@ interface SettingsTransferEnvelope {
     appSettings?: Partial<AppSettings>
     connections?: { connections?: unknown[]; folders?: unknown[] }
     themes?: Array<Record<string, unknown>>
-    workspaces?: import('@omniterm/contract').Workspace[]
+    workspaces?: import('./domain').Workspace[]
   }
 }
 
 interface AppSettings {
   themeId: string
+  /** The workbench theme picker value in effect (`light`, `solarized-dark`, `plugin:omniterm/<id>@dark`, ...); a copy of the workbench's `appearance.theme`, which is the source of truth. */
+  themeChoice?: string
   fontSize: number
   smartColors: boolean
   checkUpdatesOnStartup: boolean
   darkMode: boolean
-  differentPaneColors?: boolean
   /** Skip the connected-terminal close confirmation dialog until the user turns it back off. */
   skipTerminalCloseConfirm?: boolean
-  /** Skip the terminal pane renew confirmation dialog until the user turns it back off. */
-  skipTerminalRenewConfirm?: boolean
   /** Shell inline prediction (PowerShell's PSReadLine). Applies to new panes; on by default. */
   commandCompletion?: boolean
   /** Per-connection appearance defaults (font size + theme), keyed by connection id. */
   perConn?: Record<string, TerminalAppearance>
-  toolbarActions?: import('./terminalToolbar').TerminalToolbarActions
   /** Any id from `shells.list` — validated against that list before use, never assumed. */
   defaultShell?: string
   /** Where new terminals land when the launch site does not name a workspace itself. */
@@ -88,22 +85,23 @@ interface AppSettings {
   excludedViewableExts?: string[]
   /** App-wide UI zoom (0.5–2.0), so it survives restart and every window converges on one factor. */
   zoomFactor?: number
-  blurInactiveWindow?: number
-  blurInactiveDock?: boolean
-  blurEnabled?: boolean
   /** What Shift+Enter / Ctrl+Enter send: 'esc-cr' (ESC+CR for AI agents), 'lf' or 'off'. */
   shiftEnter?: 'esc-cr' | 'lf' | 'off'
   ctrlEnter?: 'esc-cr' | 'lf' | 'off'
   /** AI agent session renewal: 'reopen' (restart profile in folder) or 'new-command' (send /new). */
   agentRenewStrategy?: 'reopen' | 'new-command'
-  /** Agent Quota plugin settings; validated by plugins/agent-quota/app/quotaConfig.ts. */
+  /** Agent Quota plugin settings; validated by ui/features/agent-quota/quotaConfig.ts. */
   agentQuota?: unknown
+  /** Bumped by the Settings window when custom artwork changes, so other windows re-read it. */
+  customArtRevision?: number
   /** Large text paste into agent panes: ask from `promptChars`, attach above `attachChars` (utils/largeTextPaste.ts). */
   largePaste?: { promptChars?: number; attachChars?: number }
-  /** Whether the Git integration utility is enabled (Activity bar tab and status bar branch indicator). */
+  /** Whether the Git integration utility is enabled (Activity bar Git button and the session footer branch chip). */
   gitUtilEnabled?: boolean
-  /** Whether the Git Graph tab is enabled in Git Workspace view. */
-  gitGraphEnabled?: boolean
+  /** Terminal Ctrl+C rules; validated by ui/terminal/ctrlCSettings.ts. */
+  terminalCtrlC?: unknown
+  /** Terminal color scheme, contrast, bold and link colors; validated by ui/terminal/terminalLook.ts. */
+  terminalLook?: unknown
   // Editor Shortcuts settings are declared alongside, in editorSettings.d.ts (interface merging).
 }
 
@@ -121,20 +119,13 @@ interface PluginDescriptor {
   name: string
   description?: string
   version: string
-  apiVersion: number
-  hostVersion: string
-  permissions: Array<'connections' | 'auth' | 'renderer' | 'openExternal' | 'clipboard' | 'workspace'>
+  permissions: string[]
   source: 'bundled' | 'user'
   enabled: boolean
   status: 'disabled' | 'loaded' | 'error' | 'incompatible'
   error?: string
-  activeConnectionProvider: boolean
-  selectedConnectionProvider: boolean
-  activeAuthProvider: boolean
-  activeInvokeHandler: boolean
 }
 
-type ConnectionProviderCapabilities = import('@omniterm/contract').ConnectionProviderCapabilities
 /** Update-checker state pushed from main via 'updates:state'. */
 interface UpdateState {
   current: string
@@ -159,6 +150,14 @@ interface UpdateState {
 
 type AlwaysAwakeMode = 'always' | 'activeOnly'
 
+interface LocalSshSession {
+  sessionId: string
+  pid: number
+  user?: string
+  host: string
+  port?: string
+}
+
 interface AlwaysAwakeStatus {
   enabled: boolean
   mode: AlwaysAwakeMode
@@ -174,21 +173,17 @@ interface Window {
     connections: {
       load: () => Promise<{ folders: any[]; connections: Array<{ id: string; name: string; type: 'SSH' | 'RDP' | 'LOCAL'; host: string; port: string; user: string; passwordHelpUrl?: string; parentId?: string; redirectDrives?: boolean; shell?: 'wsl' | 'powershell' | 'cmd'; localArgs?: string; localCwd?: string; localCommand?: string; localKeepOpen?: boolean }> }>
       save: (data: any) => Promise<void>
+      /** `ssh` clients running under local terminals: where each connects, never its other arguments. */
+      localSshSessions: () => Promise<LocalSshSession[]>
     }
     plugin: {
-      available: () => Promise<boolean>
       list: () => Promise<PluginDescriptor[]>
+      builtinIds: () => Promise<string[]>
       setEnabled: (id: string, enabled: boolean) => Promise<PluginDescriptor>
-      selectConnectionProvider: (id: string | null) => Promise<PluginDescriptor[]>
-      connectionCapabilities: () => Promise<import('@omniterm/contract').ConnectionProviderCapabilities | null>
-      invoke: (method: string, ...args: any[]) => Promise<any>
-      authGate: () => Promise<boolean>
-      installPackage: (data?: number[] | Uint8Array) => Promise<null | { installed: boolean; id: string; name: string; version: string; restartRequired: boolean }>
-      remove: (id: string) => Promise<boolean>
-      restartApp: () => Promise<void>
+      onChanged: (callback: () => void) => () => void
     }
     connect: {
-      rdp: (id: string) => Promise<{ ok: boolean; error?: string }>
+      rdp: (id: string, bounds?: { x: number; y: number; width: number; height: number; dpr: number }) => Promise<{ ok: boolean; error?: string }>
       rdpDisconnect: (id: string) => void
       rdpSetBounds: (id: string, bounds: { x: number; y: number; width: number; height: number; dpr: number }) => void
       rdpSetVisible: (id: string, visible: boolean) => void
@@ -199,6 +194,7 @@ interface Window {
       overlayInit: () => Promise<{ id: string; name: string } | null>
       onRDPLatency: (id: string, cb: (ms: number | null) => void) => () => void
       onRDPReady: (id: string, cb: () => void) => () => void
+      onRDPDocked: (id: string, cb: () => void) => () => void
       onRDPError: (id: string, cb: (err: string) => void) => () => void
       onRDPClosed: (id: string, cb: () => void) => () => void
       ssh: (id: string, darkMode?: boolean) => void
@@ -206,9 +202,9 @@ interface Window {
       sshInput: (id: string, data: string) => void
       sshResize: (id: string, size: { cols: number, rows: number }) => void
       onSSHReady: (id: string, cb: () => void) => () => void
-      onSSHData: (id: string, cb: (data: Uint8Array) => void) => () => void
+      onSSHData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => () => void
       onSSHError: (id: string, cb: (err: string) => void) => () => void
-      onSSHClosed: (id: string, cb: () => void) => () => void
+      onSSHClosed: (id: string, cb: (code: number) => void) => () => void
       onSessionMetrics: (id: string, cb: (m: SessionMetrics) => void) => () => void
       // ── LOCAL (ConPTY) ──────────────────────────────────────────────────────
       // sessionId is this instance's unique key (IPC channels + PTY); connId is the saved
@@ -220,8 +216,10 @@ interface Window {
       localInput: (id: string, data: string) => void
       localResize: (id: string, size: { cols: number, rows: number }) => void
       onLocalReady: (id: string, cb: (label?: string, replay?: { available: boolean; bytes: number; generation: number }) => void) => () => void
-      onLocalData: (id: string, cb: (data: Uint8Array) => void) => () => void
+      onLocalData: (id: string, cb: (data: Uint8Array) => 'ack-later' | void) => () => void
       onLocalError: (id: string, cb: (err: string) => void) => () => void
+      /** Bytes of a session's output a pane wrote to its terminal, for a data handler that returned 'ack-later'. */
+      ackOutput: (id: string, bytes: number) => void
       // The shell's exit code. Absent under Electron, whose closed event carries no status.
       onLocalClosed: (id: string, cb: (code?: number) => void) => () => void
       /**
@@ -275,7 +273,6 @@ interface Window {
       clearLog: () => Promise<boolean>
       /** Open a local file or directory with the OS's default handler. URLs refused by the backend. */
       openInSystem: (path: string) => Promise<void>
-      openUrl: (url: string) => Promise<void>
       setZoomFactor: (factor: number) => void
       getZoomFactor: () => number
     }
@@ -283,7 +280,8 @@ interface Window {
       exportJson: (opts: { suggestedName: string; content: string }) => Promise<boolean>
       exportText: (opts: { suggestedName: string; content: string }) => Promise<boolean>
       importJson: () => Promise<string | null>
-      // One shape only; backend rejects encrypted files from older builds with a migration hint.
+      // One shape only. There is no encrypted-backup variant, because there is no credential to
+      // protect; the backend rejects an encrypted file from an older build with a migration hint.
       importFile: () => Promise<null | { folders: any[]; connections: any[] }>
       getHomeDir: () => Promise<string>
       pickDirectory: (defaultPath?: string) => Promise<string | null>
@@ -307,35 +305,34 @@ interface Window {
     }
     // Workspace view: composite containers of real folder roots, nested by stable workspace id.
     workspace: import('./workspaceAPI').WorkspaceTreeEditAPI & {
-      list: () => Promise<import('@omniterm/contract').Workspace[]>
-      create: (name: string) => Promise<import('@omniterm/contract').Workspace>
-      add: () => Promise<import('@omniterm/contract').Workspace | null>
-      addFolder: (workspaceId: string) => Promise<import('@omniterm/contract').Workspace | null>
-      removeFolder: (workspaceId: string, folderId: string) => Promise<import('@omniterm/contract').Workspace>
-      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
-      importFile: () => Promise<import('@omniterm/contract').Workspace | null>
+      list: () => Promise<import('./domain').Workspace[]>
+      create: (name: string) => Promise<import('./domain').Workspace>
+      add: () => Promise<import('./domain').Workspace | null>
+      addFolder: (workspaceId: string) => Promise<import('./domain').Workspace | null>
+      removeFolder: (workspaceId: string, folderId: string) => Promise<import('./domain').Workspace>
+      renameFolder: (workspaceId: string, folderId: string, name: string) => Promise<import('./domain').Workspace>
+      setFolderDisabled: (workspaceId: string, folderId: string, disabled: boolean) => Promise<import('./domain').Workspace>
+      importFile: () => Promise<import('./domain').Workspace | null>
+      /** Asks where to save, writes a `.code-workspace` and resolves its path (null when cancelled). */
+      exportFile: (workspaceId: string, defaultName: string) => Promise<string | null>
       remove: (id: string) => Promise<void>
-      rename: (workspaceId: string, name: string) => Promise<import('@omniterm/contract').Workspace>
-      setAppearance: (workspaceId: string, color?: import('@omniterm/contract').Workspace['color'], icon?: import('@omniterm/contract').Workspace['icon']) => Promise<import('@omniterm/contract').Workspace>
-      setFolderColor: (workspaceId: string, folderId: string, color?: import('@omniterm/contract').WorkspaceFolder['color']) => Promise<import('@omniterm/contract').Workspace>
-      move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('@omniterm/contract').Workspace[]>
-      setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('@omniterm/contract').Workspace>
-      scanScripts: (id: string) => Promise<import('@omniterm/contract').WorkspaceScript[]>
+      rename: (workspaceId: string, name: string) => Promise<import('./domain').Workspace>
+      setAppearance: (workspaceId: string, color?: import('./domain').Workspace['color'], icon?: import('./domain').Workspace['icon']) => Promise<import('./domain').Workspace>
+      setFolderColor: (workspaceId: string, folderId: string, color?: import('./domain').WorkspaceFolder['color']) => Promise<import('./domain').Workspace>
+      move: (workspaceId: string, parentId: string | null, index: number) => Promise<import('./domain').Workspace[]>
+      setPinned: (workspaceId: string, folderId: string, path: string, pinned: boolean) => Promise<import('./domain').Workspace>
+      scanScripts: (id: string) => Promise<import('./domain').WorkspaceScript[]>
       // The whole directory skeleton of a workspace — every folder, no files — shown up front.
-      scanFolders: (id: string) => Promise<import('@omniterm/contract').WorkspaceEntry[]>
+      scanFolders: (id: string) => Promise<import('./domain').WorkspaceEntry[]>
       // One page directly under a logical `<folderId>/<relativePath>` location. An empty folder
       // addresses the composite virtual root and therefore contains no filesystem entries.
-      scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('@omniterm/contract').WorkspaceEntryPage>
-      run: (payload: { workspaceId: string; script?: import('@omniterm/contract').WorkspaceScript; subPath?: string }) => Promise<boolean>
+      scanFolderEntries: (id: string, folder?: string, offset?: number, limit?: number) => Promise<import('./domain').WorkspaceEntryPage>
+      run: (payload: { workspaceId: string; script?: import('./domain').WorkspaceScript; subPath?: string }) => Promise<boolean>
       readScript: (workspaceId: string, scriptPath: string) => Promise<string>
       writeScript: (workspaceId: string, scriptPath: string, content: string) => Promise<void>
-      openTextFile: (workspaceId: string, path: string) => Promise<import('./utils/textFileWire').TextFileContent>
-      saveTextFile: (workspaceId: string, path: string, request: import('./utils/textFileWire').TextFileSaveRequest) => Promise<import('./utils/textFileWire').TextFileSaveOutcome>
-      createTextFile: (workspaceId: string, path: string) => Promise<string>
-      openImageFile: (workspaceId: string, path: string) => Promise<Uint8Array>
-      loadConnections: (workspaceId: string) => Promise<import('@omniterm/contract').Connection[]>
-      saveConnections: (workspaceId: string, connections: import('@omniterm/contract').Connection[]) => Promise<void>
-      deleteConnection: (workspaceId: string, connectionId: string) => Promise<void>
+      loadConnections: (workspaceId: string) => Promise<import('./domain').Connection[]>
+      saveConnection: (workspaceId: string, connection: import('./domain').Connection) => Promise<import('./domain').Connection>
+      deleteConnection: (workspaceId: string, connectionId: string) => Promise<boolean>
     }
     tempNotes: import('./tempNotesAPI').TempNotesAPI
     updates: {
@@ -344,8 +341,7 @@ interface Window {
       skip: (version: string | null) => Promise<UpdateState>
       getVersion: () => Promise<string>
       showSaveDialog: (defaultName: string) => Promise<string | null>
-      downloadPortable: () => Promise<void>
-      openReleasePage: () => Promise<void>
+      downloadPortable: (savePath: string) => Promise<void>
       downloadInstaller: (installNow: boolean) => Promise<void>
       onState: (cb: (s: UpdateState) => void) => () => void
       /** Native signed-update path; unavailable in unsigned dev builds. */
@@ -358,8 +354,9 @@ interface Window {
       save: (theme: import('./themes').AppTheme) => Promise<void>
       delete: (id: string) => Promise<void>
     }
-    agentQuota: import('../plugins/agent-quota/app/agentQuotaAPI').AgentQuotaAPI
+    agentQuota: import('./features/agent-quota/agentQuotaAPI').AgentQuotaAPI
     alwaysAwake: {
+      info: () => Promise<boolean>
       getState: () => Promise<AlwaysAwakeStatus>
       setState: (payload: { enabled: boolean; mode: AlwaysAwakeMode; expiresAtMs: number }) => Promise<AlwaysAwakeStatus>
       disable: () => Promise<AlwaysAwakeStatus>
@@ -387,7 +384,10 @@ interface Window {
       list: () => Promise<Array<{ id: string; label: string }>>
       onOpen: (cb: (conn: { id: string; name: string; type: 'LOCAL'; host: string; port: string; user: string; shell: 'wsl' | 'powershell' | 'cmd'; localCwd?: string; localCommand?: string; localArgs?: string; localKeepOpen?: boolean }) => void) => () => void
     }
-    /** AI agent running under each local pane's shell process tree and its Claude session id. */
+    /**
+     * Which AI agent (if any) runs under each local pane's shell process tree, and its resumable
+     * Claude session id — never derived from terminal output or a renderer-supplied guess.
+     */
     agentSessions?: {
       detect: () => Promise<Array<{ sessionId: string; agent: 'claude' | 'codex' | 'agy'; pid: number; startTime: number; profileDir?: string; profileName: string; launcher?: string; subAgentCount: number }>>
       resolveClaudeSession: (profileDir: string, cwd: string, sinceEpochSecs?: number) => Promise<string | null>

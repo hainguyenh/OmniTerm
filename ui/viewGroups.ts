@@ -1,5 +1,10 @@
 import type { LayoutMode } from './themes'
 
+/**
+ * A workspace has one pane grid. Session snapshots still store their layout as a list of "view
+ * groups" so older and newer builds can read each other's files; the app now writes exactly one
+ * group, the default one, and `migrateSnapshotLayout` (sessionStore.ts) folds older snapshots into it.
+ */
 export const VIEW_GROUP_MAX_PLANES = 8
 export const DEFAULT_VIEW_GROUP_ID = 'ungrouped'
 
@@ -13,62 +18,15 @@ export interface ViewGroup {
   focusedPane: number
 }
 
-export type ViewGroupPatch = { label?: string; color?: string; persistent?: boolean }
-
-export function notifyViewGroupUpdate(groupId: string, patch: ViewGroupPatch): void {
-  window.dispatchEvent(new CustomEvent('omniterm:update-view-group', { detail: { groupId, patch } }))
-}
-
-export function notifyViewGroupReorder(sourceId: string, targetId: string, before: boolean): void {
-  window.dispatchEvent(new CustomEvent('omniterm:reorder-view-groups', { detail: { sourceId, targetId, before } }))
-}
-
-export function notifyViewGroupUngroup(groupId: string): void {
-  window.dispatchEvent(new CustomEvent('omniterm:ungroup-view-group', { detail: { groupId } }))
-}
-
-export function notifyMoveTabToGroup(tabId: string, groupId: string, sourcePaneIndex?: number): void {
-  window.dispatchEvent(new CustomEvent('omniterm:move-tab-to-group', { detail: { tabId, groupId, sourcePaneIndex } }))
-}
-
-export function notifyCreateViewGroup(): void {
-  window.dispatchEvent(new CustomEvent('omniterm:create-view-group'))
-}
-
-export function createViewGroup(id: string, index: number, layoutMode: LayoutMode = 1): ViewGroup {
+/** The one group a snapshot carries: the live pane grid. */
+export function singleViewGroup(layoutMode: LayoutMode, panes: (string | null)[], focusedPane: number): ViewGroup {
   return {
-    id,
-    label: `Desktop ${index}`,
-    layoutMode,
-    panes: Array(VIEW_GROUP_MAX_PLANES).fill(null),
-    focusedPane: 0,
-  }
-}
-
-export function createDefaultViewGroup(layoutMode: LayoutMode = 1): ViewGroup {
-  return {
-    ...createViewGroup(DEFAULT_VIEW_GROUP_ID, 0, layoutMode),
+    id: DEFAULT_VIEW_GROUP_ID,
     label: 'Ungrouped',
     color: '#6b7280',
     persistent: true,
+    layoutMode,
+    panes: Array.from({ length: VIEW_GROUP_MAX_PLANES }, (_, index) => panes[index] ?? null),
+    focusedPane,
   }
-}
-
-export function groupTabIds(group: ViewGroup): string[] {
-  return group.panes.filter((id): id is string => id !== null)
-}
-
-export function groupUsedPaneCount(group: ViewGroup): number {
-  return groupTabIds(group).length
-}
-
-export function visibleTabsForGroup<T extends { id: string }>(
-  tabs: T[],
-  tabGroups: Record<string, string>,
-  activeGroupId: string,
-): T[] {
-  if (activeGroupId === DEFAULT_VIEW_GROUP_ID || !activeGroupId) {
-    return tabs.filter(tab => !tabGroups[tab.id])
-  }
-  return tabs.filter(tab => tabGroups[tab.id] === activeGroupId)
 }

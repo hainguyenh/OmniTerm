@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 
+import { splitCoverageReport } from './rust-coverage-summary.mjs'
+
 const root = process.cwd()
 const outputDir = path.join(root, 'coverage-rust')
 const cargoEnv = process.env.CARGO_TARGET_DIR
@@ -27,7 +29,7 @@ const cargoEnv = process.env.CARGO_TARGET_DIR
 // plugin with real signing keys and GitHub endpoints; in coverage builds the plugin never
 // registers (no injected conf), so only the typed "disabled" degradation paths can execute.
 //
-// always-awake native module: shipped as its own plugin artifact. Its uncovered remainder is
+// always-awake native module (src-tauri/src/always_awake). Its uncovered remainder is
 // Wry-runtime generic instantiations of the command/state helpers that can never execute under
 // the mock runtime the coverage job uses; the module's actual logic is fully exercised by its
 // own dedicated test suite, which runs in the normal workspace test job. The agent-quota native
@@ -46,17 +48,17 @@ const cargoEnv = process.env.CARGO_TARGET_DIR
 // Windows build does not; a test could not take the other arm without cross-compiling.
 const IGNORED_FILENAME_REGEX = [
   '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\](?:win_job|pty|workspace_appearance|window_control|os_actions|app_utils|connections|update_manager|lib|main|test_support)\\.rs$',
-  '(?:^|[/\\\\])plugins[/\\\\]always-awake[/\\\\]native[/\\\\]always_awake\\.rs$',
-  '(?:^|[/\\\\])plugins[/\\\\]agent-quota[/\\\\]native[/\\\\](?:agent_quota|process_suspend)\\.rs$',
+  '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\]always_awake[/\\\\]always_awake\\.rs$',
+  '(?:^|[/\\\\])src-tauri[/\\\\]src[/\\\\]agent_quota[/\\\\](?:agent_quota|process_suspend)\\.rs$',
   '(?:^|[/\\\\])src-tauri[/\\\\]build\\.rs$',
-  '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]src[/\\\\](?:lib|main)\\.rs$',
-  '(?:^|[/\\\\])plugins[/\\\\]markdown-explorer[/\\\\]tauri[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])crates[/\\\\]session-core[/\\\\]build\\.rs$',
   '(?:^|[/\\\\])crates[/\\\\](?:app-core|app-protocol)[/\\\\]src[/\\\\]test_support\\.rs$',
 ].join('|')
 const NON_PRODUCT_FILENAME_REGEX = [
   '(?:^|[/\\\\])(?:tests?[/\\\\]|[^/\\\\]+_tests?\\.rs$)',
   'cargo[/\\\\]registry',
+  // Standard-library code inlined from the toolchain (`/rustc/<hash>/library/...`).
+  '^[/\\\\]rustc[/\\\\]',
 ].join('|')
 const COVERAGE_FILENAME_REGEX = new RegExp(
   `${IGNORED_FILENAME_REGEX}|${NON_PRODUCT_FILENAME_REGEX}`,
@@ -97,34 +99,6 @@ function run(args) {
   if (result.status !== 0) throw new Error(`cargo ${args.join(' ')} failed with exit code ${result.status}`)
 }
 
-function filterCoverageReport(report) {
-  const data = report.data?.[0]
-  if (!data || !Array.isArray(data.files)) return report
-
-  const files = data.files.filter((file) => !COVERAGE_FILENAME_REGEX.test(file.filename))
-  const totals = {}
-  for (const metric of ['branches', 'functions', 'instantiations', 'lines', 'mcdc', 'regions']) {
-    const summaries = files
-      .map((file) => file.summary?.[metric])
-      .filter((summary) => summary !== undefined)
-    const count = summaries.reduce((total, summary) => total + summary.count, 0)
-    const covered = summaries.reduce((total, summary) => total + summary.covered, 0)
-    const total = {
-      count,
-      covered,
-      percent: count === 0 ? 100 : (covered * 100) / count,
-    }
-    if (summaries.some((summary) => 'notcovered' in summary)) {
-      total.notcovered = count - covered
-    }
-    totals[metric] = total
-  }
-
-  data.files = files
-  data.totals = totals
-  return report
-}
-
 try {
   fs.rmSync(outputDir, { recursive: true, force: true })
   fs.mkdirSync(outputDir, { recursive: true })
@@ -132,15 +106,25 @@ try {
   run(['llvm-cov', ...COVERAGE_BUILD_FLAGS, '--no-report', '--workspace'])
   // Boot the real binary once under instrumentation so the JSON function metric covers the
   // binary-only Wry instantiations (main, run(), with_invoke_handler, and the generated wrapper of
-  // every #[tauri::command]). --coverage-smoke makes run() exit 0 after setup. --no-clean keeps the
+  // every #[tauri::command]). --coverage-smoke makes run() request an event-loop exit after setup,
+  // so the process leaves with code 0 from the main thread and the profile is flushed at exit. --no-clean keeps the
   // test run's profraws so the final report merges both; llvm-cov run requires a report when
   // --no-clean is set, so its stdout table is just discarded -- only coverage data is collected.
   run(['llvm-cov', 'run', ...COVERAGE_BUILD_FLAGS, '--no-clean', '--bin', 'omniterm', '--', '--coverage-smoke'])
   const jsonPath = path.join(outputDir, 'coverage-summary.json')
   run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--json', '--summary-only', '--output-path', jsonPath])
   const report = JSON.parse(fs.readFileSync(jsonPath, 'utf8'))
-  fs.writeFileSync(jsonPath, `${JSON.stringify(filterCoverageReport(report))}\n`)
-  run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--lcov', '--output-path', path.join(outputDir, 'lcov.info')])
+  const { gated, ide } = splitCoverageReport(report, root, COVERAGE_FILENAME_REGEX)
+  fs.writeFileSync(jsonPath, `${JSON.stringify(gated)}\n`)
+  fs.writeFileSync(path.join(outputDir, 'coverage-ide-summary.json'), `${JSON.stringify(ide)}\n`)
+  // lcov.info is a convenience artifact for editors and viewers; the gate reads only the JSON
+  // summary above. llvm-cov from nightly 2026-11-16 (LLVM 23.1) crashes in `export -format=lcov`
+  // on this workspace after the JSON report succeeds, so a failed export must not fail the job.
+  try {
+    run(['llvm-cov', 'report', '--branch', '--ignore-filename-regex', IGNORED_FILENAME_REGEX, '--lcov', '--output-path', path.join(outputDir, 'lcov.info')])
+  } catch (error) {
+    console.warn(`lcov export skipped: ${error instanceof Error ? error.message : String(error)}`)
+  }
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error))
   process.exitCode = 1

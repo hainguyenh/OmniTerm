@@ -1,28 +1,23 @@
 import { useCallback, useState, useEffect } from 'react'
-import type { Workspace } from '@omniterm/contract'
-import { normalizeWorkspaceSelection } from '../utils/workspaceSelection'
+
+import { useWorkspaceStore } from '../platform/workspaceStore'
 
 /**
  * Workspace catalog plus live shell working directories.
  *
- * The catalog feeds workspace-scoped UI (panel, launch menus, alias lookup);
- * the cwd map is the OSC-fed "where is this shell now" signal that pane
- * headers render in real time.
+ * The catalog and the selected workspace live in the shared workspace store, so the title bar and
+ * this layout always agree on them. The cwd map is the OSC-fed "where is this shell now" signal
+ * that pane headers render in real time.
  */
 export function useWorkspaceCatalog() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const setWorkspaces = useWorkspaceStore((s) => s.setWorkspaces)
+  const selectedWorkspaceId = useWorkspaceStore((s) => s.selection)
+  const setSelectedWorkspaceId = useWorkspaceStore((s) => s.setSelection)
+  const refreshWorkspaces = useWorkspaceStore((s) => s.refresh)
   // Live shell working directories (OSC 7 / OSC 9;9), keyed by session id.
   const [sessionCwds, setSessionCwds] = useState<Record<string, string>>({})
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => {
-      try { return localStorage.getItem('omniterm:last-workspace') } catch { return null }
-  })
   const [homeDir, setHomeDir] = useState('')
-  const refreshWorkspaces = useCallback(async () => {
-      await window.omnitermAPI.workspace.list().then(list => {
-          setWorkspaces(list)
-          setSelectedWorkspaceId(current => normalizeWorkspaceSelection(list, current))
-      }).catch(() => setWorkspaces([]))
-  }, [])
   const setSessionCwd = useCallback((id: string, cwd: string) => {
       setSessionCwds(prev => (prev[id] === cwd ? prev : { ...prev, [id]: cwd }))
   }, [])

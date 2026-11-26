@@ -6,6 +6,7 @@ import {
   cullEdges, cullNodes, fitTransform, TEXT_ZOOM, worldRect, zoomAt, type Transform,
 } from './jsonGraphViewport'
 import { useScrollViewport } from './useScrollViewport'
+import './preview.css'
 
 interface JsonGraphCanvasProps {
   layout: GraphLayout

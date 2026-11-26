@@ -1,5 +1,5 @@
 /** Name and brand of an AI agent, shared by every surface that shows one (see AgentBadge). */
-import { agentBrandFromName, type AgentBrand } from '../../plugins/agent-quota/app/agentBrand'
+import { agentBrandFromName, type AgentBrand } from '../features/agent-quota/agentBrand'
 
 const AGENT_LABELS: Record<AgentBrand, string> = {
   claude: 'Claude Code',
@@ -7,7 +7,6 @@ const AGENT_LABELS: Record<AgentBrand, string> = {
   opencode: 'OpenCode',
   copilot: 'Copilot CLI',
   agy: 'Antigravity CLI',
-  gemini: 'Gemini CLI',
 }
 
 function isBrand(value: string): value is AgentBrand {
@@ -21,6 +20,11 @@ export function agentBrandFor(agent?: string | null): AgentBrand | null {
 }
 
 /** "Claude Code · profile claude-work" — the tooltip text that stands in for a visible name. */
+/** "Claude Code": the display name of a brand. */
+export function agentLabel(brand: AgentBrand): string {
+  return AGENT_LABELS[brand]
+}
+
 export function agentTooltip(brand: AgentBrand, profileName?: string): string {
   const label = AGENT_LABELS[brand]
   return profileName && profileName.toLowerCase() !== brand ? `${label} · profile ${profileName}` : label

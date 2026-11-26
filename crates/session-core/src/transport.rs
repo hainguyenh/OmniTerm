@@ -6,6 +6,7 @@ use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use session_protocol::ServerMessage;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
@@ -21,14 +22,19 @@ impl<T> AsyncStream for T where T: AsyncRead + AsyncWrite + Unpin + Send {}
 
 pub(crate) type BoxedStream = Box<dyn AsyncStream>;
 
-pub(crate) async fn read_frame<T: DeserializeOwned>(
-    stream: &mut dyn AsyncStream,
-) -> Result<T, String> {
-    let len = stream
+/// Set in a frame's length word for a raw terminal-output frame: the body is the output bytes
+/// themselves, not JSON (a JSON number array costs about four bytes per output byte). JSON frames
+/// never reach this bit, since their length is capped at [`MAX_FRAME_BYTES`].
+const BINARY_DATA_FLAG: u32 = 0x8000_0000;
+
+async fn read_header(stream: &mut dyn AsyncStream) -> Result<u32, String> {
+    stream
         .read_u32()
         .await
-        .map_err(|error| format!("Could not read daemon frame length: {error}"))?
-        as usize;
+        .map_err(|error| format!("Could not read daemon frame length: {error}"))
+}
+
+async fn read_body(stream: &mut dyn AsyncStream, len: usize) -> Result<Vec<u8>, String> {
     if len == 0 || len > MAX_FRAME_BYTES {
         return Err(format!("Invalid daemon frame length: {len}"));
     }
@@ -37,7 +43,50 @@ pub(crate) async fn read_frame<T: DeserializeOwned>(
         .read_exact(&mut bytes)
         .await
         .map_err(|error| format!("Could not read daemon frame: {error}"))?;
+    Ok(bytes)
+}
+
+pub(crate) async fn read_frame<T: DeserializeOwned>(
+    stream: &mut dyn AsyncStream,
+) -> Result<T, String> {
+    let len = read_header(stream).await? as usize;
+    let bytes = read_body(stream, len).await?;
     serde_json::from_slice(&bytes).map_err(|error| format!("Invalid daemon message: {error}"))
+}
+
+/// The next message of an attached session's stream, as JSON or as a raw output frame.
+pub(crate) async fn read_server_message(
+    stream: &mut dyn AsyncStream,
+) -> Result<ServerMessage, String> {
+    let header = read_header(stream).await?;
+    if header & BINARY_DATA_FLAG != 0 {
+        let data = read_body(stream, (header & !BINARY_DATA_FLAG) as usize).await?;
+        return Ok(ServerMessage::Data { data });
+    }
+    let bytes = read_body(stream, header as usize).await?;
+    serde_json::from_slice(&bytes).map_err(|error| format!("Invalid daemon message: {error}"))
+}
+
+/// Terminal output as one raw frame, for a client that asked for binary data.
+pub(crate) async fn write_data_frame(
+    stream: &mut dyn AsyncStream,
+    data: &[u8],
+) -> Result<(), String> {
+    if data.is_empty() || data.len() > MAX_FRAME_BYTES {
+        return Err(format!("Invalid output frame: {} bytes", data.len()));
+    }
+    stream
+        .write_u32(BINARY_DATA_FLAG | data.len() as u32)
+        .await
+        .map_err(|error| format!("Could not write daemon frame length: {error}"))?;
+    stream
+        .write_all(data)
+        .await
+        .map_err(|error| format!("Could not write daemon frame: {error}"))?;
+    stream
+        .flush()
+        .await
+        .map_err(|error| format!("Could not flush daemon frame: {error}"))
 }
 
 pub(crate) async fn write_frame<T: Serialize>(

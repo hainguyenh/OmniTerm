@@ -2,35 +2,27 @@
 //!
 //! # Ownership
 //!
-//! RDP belongs to a plugin, not to the host. A plugin that registers a `ConnectionProvider` runs in the
-//! sidecar and can spawn whatever client it likes (`mstsc`, `freerdp`, `vncviewer`), with whatever
-//! credential policy that deployment wants. What remains here is the no-plugin fallback: the
-//! pre-existing, credential-free `mstsc` launch, so RDP still works on a stock install.
-//!
-//! This module deliberately does **not** embed the client window into a pane. It used to advertise that
-//! it did — `rdp_set_bounds` and `rdp_set_visible` were registered commands whose bodies were empty, so
-//! the renderer positioned a window that was never reparented and got no error telling it so. They are
-//! gone; a command that silently succeeds while doing nothing is worse than one that is absent.
-//!
-//! If docking is built later, it should stay plugin-owned: the host would expose a *generic* reverse RPC
-//! (`host.embedWindow({ paneId, pid })` / `host.setEmbedBounds` / `host.releaseWindow`) that reparents
-//! any external process's top-level window into a pane rect. The plugin spawns the client and hands over
-//! a pid; the host learns nothing about RDP and touches no credential. Do not re-add RDP-specific
-//! commands to the host to get there.
+//! The host launches a credential-free `mstsc` for a saved RDP connection. On Windows its session
+//! window is then docked into the pane (`rdp_dock`): `rdp_set_bounds` / `rdp_set_visible` report
+//! the pane and the session's watcher thread keeps the client window on it. Closing the pane closes
+//! the client, since its window lives inside the app.
 //!
 //! # Credentials
 //!
-//! The generated `.rdp` file carries host, port and username only. No `password 51:b:` blob, no
+//! On Windows the client is started by address (`mstsc /v:host[:port]`) and writes no file; see
+//! `launches_by_address`. The `.rdp` file generated otherwise carries host, port and username only. No `password 51:b:` blob, no
 //! `prompt for credentials`, no `cmdkey`, and nothing on the command line — the client prompts the user.
 //! Keep it that way: a password on argv is readable by any process on the machine, and one in the file
 //! is a password OmniTerm wrote to disk.
 
 use crate::connections::Connection;
+use crate::rdp_dock::{physical_rect, window_size_args, DockRegistry};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 #[cfg(test)]
@@ -39,6 +31,9 @@ mod tests;
 
 /// Prefix for the temporary `.rdp` files this module writes, and the startup sweep that removes them.
 const TEMP_PREFIX: &str = "omniterm_rdp_";
+
+/// How often a session's watcher checks the client: exit, a close request, and its docked window.
+const WATCH_INTERVAL: Duration = Duration::from_millis(150);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RdpBounds {
@@ -54,6 +49,8 @@ pub struct RdpSessionManager {
     /// Makes each launch's temp file unique. Two panes on one connection shared a single path, so
     /// disconnecting either deleted the file the other was still identified by.
     seq: AtomicU64,
+    /// Where each session's pane is, so its client window can be docked there.
+    pub(crate) dock: DockRegistry,
 }
 
 struct RdpSession {
@@ -71,6 +68,7 @@ impl RdpSessionManager {
         Self {
             sessions: Mutex::new(std::collections::HashMap::new()),
             seq: AtomicU64::new(0),
+            dock: DockRegistry::default(),
         }
     }
 
@@ -167,6 +165,33 @@ fn create_temp_rdp_file<R: Runtime>(
     Ok(temp_file)
 }
 
+/// Whether the system client is started by address (`mstsc /v:`) instead of from a temp `.rdp`.
+///
+/// Every `.rdp` file `mstsc` opens is added to its Jump List, so a temp file per launch filled the
+/// Recent list with one `omniterm_rdp_…` entry per connect — and a file deleted while the client was
+/// still starting could leave it with nothing to open. By address there is no file at all. Drive
+/// redirection has no command-line switch, so a profile that asks for it still goes through a file.
+fn launches_by_address(conn: &Connection, os: &str) -> bool {
+    os == "windows" && !conn.redirect_drives.unwrap_or(false)
+}
+
+/// Pre-fills the user name the system client suggests for `address`. Best-effort: without it the
+/// client simply asks for the user name as well.
+fn set_username_hint(address: &str, user: &str) {
+    let Some(args) = crate::rdp_launch::username_hint_args(address, user) else {
+        return;
+    };
+    let mut command = std::process::Command::new("reg.exe");
+    command.args(&args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let _ = command.status();
+}
+
 /// Remove a session's temp file and tell the renderer the session is over.
 fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&Path>) {
     if let Some(path) = temp_file {
@@ -179,51 +204,37 @@ fn finish_session<R: Runtime>(app: &AppHandle<R>, id: &str, temp_file: Option<&P
 pub async fn connect_rdp<R: Runtime>(
     app: AppHandle<R>,
     id: String,
+    bounds: Option<RdpBounds>,
 ) -> Result<serde_json::Value, String> {
-    // Resolves through the ad-hoc registry, the global tree, workspace profiles, then a plugin's
-    // `ConnectionProvider`. A plugin owning the tree therefore also owns what gets launched from it.
+    // Resolves through the ad-hoc registry, the global tree, then workspace profiles.
     let conn = crate::pty_resolve::resolve_connection_by_id(&app, &id).await?;
     if conn.conn_type != "RDP" {
         return Err("Not an RDP connection.".to_string());
     }
 
-    if let Some(batch) = crate::pty_resolve::native_batch_launch(&app, &id, "detached").await? {
-        crate::pty_resolve::require_windows_client(
-            "mstsc.exe",
-            "Remote Desktop Connection is not installed. Contact your administrator or enable it in Windows optional features.",
-        )?;
-        let mut launcher = std::process::Command::new("cmd.exe");
-        launcher.args(["/d", "/c", "call", &batch]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            launcher.creation_flags(0x0800_0000); // CREATE_NO_WINDOW; mstsc owns the visible window.
-        }
-        let mut child = launcher
-            .spawn()
-            .map_err(|error| format!("Failed to launch the generated RDP launcher: {error}"))?;
-        let _ = app.emit(&format!("rdp-ready-{id}"), ());
-        let watcher = app.clone();
-        let watch_id = id.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            let _ = child.wait();
-            let _ = watcher.emit(&format!("rdp-closed-{watch_id}"), ());
-        });
-        return Ok(serde_json::json!({ "ok": true }));
+    let pane = bounds.as_ref().and_then(physical_rect);
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_bounds(&id, pane, 0);
     }
-
-    let seq = app
-        .try_state::<RdpSessionManager>()
-        .map(|m| m.next_seq())
-        .unwrap_or(0);
-    let temp_file = create_temp_rdp_file(&app, &conn, seq)?;
-    let path_str = temp_file.to_string_lossy().to_string();
-
-    let (exe, args) = match crate::rdp_launch::rdp_command(&path_str, std::env::consts::OS) {
-        Ok(cmd) => cmd,
-        Err(e) => {
-            let _ = fs::remove_file(&temp_file);
-            return Err(e);
+    let (exe, args, temp_file) = if launches_by_address(&conn, std::env::consts::OS) {
+        let address = crate::rdp_launch::rdp_address(&conn.host, &conn.port)?;
+        set_username_hint(&address, &conn.user);
+        let mut args = vec![format!("/v:{address}")];
+        args.extend(window_size_args(pane));
+        ("mstsc.exe".to_string(), args, None)
+    } else {
+        let seq = app
+            .try_state::<RdpSessionManager>()
+            .map(|m| m.next_seq())
+            .unwrap_or(0);
+        let temp_file = create_temp_rdp_file(&app, &conn, seq)?;
+        let path_str = temp_file.to_string_lossy().to_string();
+        match crate::rdp_launch::rdp_command(&path_str, std::env::consts::OS) {
+            Ok((exe, args)) => (exe, args, Some(temp_file)),
+            Err(e) => {
+                let _ = fs::remove_file(&temp_file);
+                return Err(e);
+            }
         }
     };
 
@@ -231,7 +242,9 @@ pub async fn connect_rdp<R: Runtime>(
         Ok(child) => child,
         Err(e) => {
             // Do not leave a file naming a host behind for a session that never started.
-            let _ = fs::remove_file(&temp_file);
+            if let Some(path) = &temp_file {
+                let _ = fs::remove_file(path);
+            }
             let message = format!("Failed to launch RDP client: {e}");
             let _ = app.emit(&format!("rdp-error-{id}"), message.clone());
             return Err(message);
@@ -239,7 +252,10 @@ pub async fn connect_rdp<R: Runtime>(
     };
 
     if let Some(mgr) = app.try_state::<RdpSessionManager>() {
-        mgr.register(id.clone(), temp_file.clone());
+        if let Some(path) = &temp_file {
+            mgr.register(id.clone(), path.clone());
+        }
+        mgr.dock.begin(&id);
     }
     let _ = app.emit(&format!("rdp-ready-{id}"), ());
 
@@ -249,22 +265,77 @@ pub async fn connect_rdp<R: Runtime>(
     let watcher = app.clone();
     let watch_id = id.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = child;
-        let _ = child.wait();
-        let temp = watcher
-            .try_state::<RdpSessionManager>()
-            .and_then(|m| m.remove(&watch_id));
+        watch_client(&watcher, &watch_id, child);
+        let temp = watcher.try_state::<RdpSessionManager>().and_then(|m| {
+            m.dock.end(&watch_id);
+            m.remove(&watch_id)
+        });
         finish_session(&watcher, &watch_id, temp.as_deref());
     });
 
     Ok(serde_json::json!({ "ok": true }))
 }
 
+/// Waits for the client to exit, closing it when its pane asks to and keeping its session window
+/// docked on the pane meanwhile.
+fn watch_client<R: Runtime>(app: &AppHandle<R>, id: &str, mut child: std::process::Child) {
+    #[cfg(windows)]
+    let mut docker = crate::rdp_dock::Docker::new(child.id());
+    loop {
+        if !matches!(child.try_wait(), Ok(None)) {
+            return;
+        }
+        let manager = app.try_state::<RdpSessionManager>();
+        if manager.as_ref().is_some_and(|m| m.dock.should_stop(id)) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(pane) = manager.and_then(|m| m.dock.snapshot(id)) {
+            if docker.tick(&pane) {
+                let _ = app.emit(&format!("rdp-docked-{id}"), ());
+            }
+        }
+        std::thread::sleep(WATCH_INTERVAL);
+    }
+}
+
 #[tauri::command]
 pub async fn rdp_disconnect<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), String> {
-    let temp = app
-        .try_state::<RdpSessionManager>()
-        .and_then(|m| m.remove(&id));
+    let temp = app.try_state::<RdpSessionManager>().and_then(|m| {
+        m.dock.request_stop(&id);
+        m.remove(&id)
+    });
     finish_session(&app, &id, temp.as_deref());
     Ok(())
+}
+
+/// The pane of session `id` moved or resized. `window` is the app window showing it, the one the
+/// client's session window is docked into.
+#[tauri::command]
+pub fn rdp_set_bounds<R: Runtime>(
+    window: tauri::Window<R>,
+    app: AppHandle<R>,
+    id: String,
+    bounds: RdpBounds,
+) {
+    #[cfg(windows)]
+    let parent = window.hwnd().map_or(0, |handle| handle.0 as isize);
+    #[cfg(not(windows))]
+    let parent = {
+        drop(window);
+        0
+    };
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_bounds(&id, physical_rect(&bounds), parent);
+    }
+}
+
+/// Shows or hides the docked client of session `id` with its pane (tab switches, modal overlays).
+#[tauri::command]
+pub fn rdp_set_visible<R: Runtime>(app: AppHandle<R>, id: String, visible: bool) {
+    if let Some(mgr) = app.try_state::<RdpSessionManager>() {
+        mgr.dock.set_visible(&id, visible);
+    }
 }

@@ -99,7 +99,9 @@ impl ProcTable {
 
     /// True if `root` has at least one live descendant. This is the busy signal.
     pub fn has_descendant(&self, root: u32) -> bool {
-        self.children.get(&root).is_some_and(|kids| !kids.is_empty())
+        self.children
+            .get(&root)
+            .is_some_and(|kids| !kids.is_empty())
     }
 
     /// Every transitive descendant of `root`, breadth-first.
@@ -120,7 +122,6 @@ impl ProcTable {
         }
         out
     }
-
 }
 
 #[cfg(test)]

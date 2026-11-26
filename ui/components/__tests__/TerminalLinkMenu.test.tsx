@@ -14,7 +14,7 @@ describe('TerminalLinkMenu — URL', () => {
     render(
       <TerminalLinkMenu
         x={100} y={100} kind="url" text="https://example.test/x" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={vi.fn()}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={vi.fn()}
       />,
     )
     expect(screen.getByText('Copy Link')).toBeInTheDocument()
@@ -29,7 +29,7 @@ describe('TerminalLinkMenu — URL', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="url" text="https://example.test/x" isLocal
-        onCopyText={onCopyText} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={onClose}
+        onCopyText={onCopyText} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.click(screen.getByText('Copy Link'))
@@ -43,7 +43,7 @@ describe('TerminalLinkMenu — URL', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="url" text="https://example.test/x" isLocal
-        onCopyText={vi.fn()} onOpenUrl={onOpenUrl} onOpenPath={vi.fn()} onClose={onClose}
+        onCopyText={vi.fn()} onOpenUrl={onOpenUrl} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.click(screen.getByText('Open Link'))
@@ -53,11 +53,45 @@ describe('TerminalLinkMenu — URL', () => {
 })
 
 describe('TerminalLinkMenu — Path', () => {
+  it('offers Open in Editor first in a local pane, and opens the path with it', () => {
+    const onOpenInEditor = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <TerminalLinkMenu
+        x={0} y={0} kind="path" text=".bizreq/outbox/task.md" isLocal
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={onOpenInEditor} onClose={onClose}
+      />,
+    )
+    expect(screen.getAllByRole('menuitem')[0]).toHaveTextContent('Open in Editor')
+    fireEvent.click(screen.getByText('Open in Editor'))
+    expect(onOpenInEditor).toHaveBeenCalledWith('.bizreq/outbox/task.md')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Paste only for a menu a right-click opened', () => {
+    const onPaste = vi.fn()
+    const { rerender } = render(
+      <TerminalLinkMenu
+        x={0} y={0} kind="url" text="https://example.test/x" isLocal
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText('Paste')).toBeNull()
+    rerender(
+      <TerminalLinkMenu
+        x={0} y={0} kind="url" text="https://example.test/x" isLocal
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onPaste={onPaste} onClose={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByText('Paste'))
+    expect(onPaste).toHaveBeenCalledTimes(1)
+  })
+
   it('renders both Copy Path and Open in OS when isLocal is true', () => {
     render(
       <TerminalLinkMenu
         x={100} y={100} kind="path" text="/home/me/file.txt" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={vi.fn()}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={vi.fn()}
       />,
     )
     expect(screen.getByText('Copy Path')).toBeInTheDocument()
@@ -68,11 +102,12 @@ describe('TerminalLinkMenu — Path', () => {
     render(
       <TerminalLinkMenu
         x={100} y={100} kind="path" text="/home/me/file.txt" isLocal={false}
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={vi.fn()}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={vi.fn()}
       />,
     )
     expect(screen.getByText('Copy Path')).toBeInTheDocument()
     expect(screen.queryByText('Open in OS')).toBeNull()
+    expect(screen.queryByText('Open in Editor')).toBeNull()
   })
 
   it('Open in OS calls onOpenPath and closes', () => {
@@ -81,7 +116,7 @@ describe('TerminalLinkMenu — Path', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="path" text="C:/Users/me/file.txt" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={onOpenPath} onClose={onClose}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={onOpenPath} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.click(screen.getByText('Open in OS'))
@@ -96,7 +131,7 @@ describe('TerminalLinkMenu — close behaviour', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="url" text="https://example.test/x" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={onClose}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -108,7 +143,7 @@ describe('TerminalLinkMenu — close behaviour', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="url" text="https://example.test/x" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={onClose}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.mouseDown(document.body, { clientX: 999, clientY: 999 })
@@ -120,7 +155,7 @@ describe('TerminalLinkMenu — close behaviour', () => {
     render(
       <TerminalLinkMenu
         x={0} y={0} kind="url" text="https://example.test/x" isLocal
-        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onClose={onClose}
+        onCopyText={vi.fn()} onOpenUrl={vi.fn()} onOpenPath={vi.fn()} onOpenInEditor={vi.fn()} onClose={onClose}
       />,
     )
     fireEvent.mouseDown(screen.getByRole('menu'))

@@ -179,7 +179,7 @@ describe('workspace pins', () => {
 })
 
 describe('multi-agent bookmarks and resume commands', () => {
-  it('bookmarks and resumes sessions for Codex, Antigravity CLI, Gemini CLI, and OpenCode', () => {
+  it('bookmarks and resumes sessions for Codex, Antigravity CLI, and OpenCode', () => {
     const agySession = session({
       id: `agy:${UUID}`,
       agent: 'agy',
@@ -208,34 +208,24 @@ describe('multi-agent bookmarks and resume commands', () => {
       profileName: 'opencode',
       sessionId: 'ses_abc123xyz',
     })
-    const geminiSession = session({
-      id: `gemini:${UUID}`,
-      agent: 'gemini',
-      launcher: undefined,
-      profileName: 'gemini',
-      sessionId: UUID,
-    })
 
     upsertSession(agySession)
     upsertSession(agyDefaultSession)
     upsertSession(codexSession)
     upsertSession(opencodeSession)
-    upsertSession(geminiSession)
 
     setSessionBookmarked(`agy:${UUID}`, true)
     setSessionBookmarked(`agy:default-${UUID}`, true)
     setSessionBookmarked(`codex:${UUID}`, true)
     setSessionBookmarked('opencode:ses_abc123xyz', true)
-    setSessionBookmarked(`gemini:${UUID}`, true)
 
     const stored = loadStoredSessions()
-    expect(stored.filter(s => s.bookmarked)).toHaveLength(5)
+    expect(stored.filter(s => s.bookmarked)).toHaveLength(4)
 
     expect(resumeCommandFor(agySession)).toBe(`agy-work --conversation ${UUID}`)
     expect(resumeCommandFor(agyDefaultSession)).toBe(`agy --conversation ${UUID}`)
     expect(resumeCommandFor(codexSession)).toBe(`codex-team resume ${UUID}`)
     expect(resumeCommandFor(opencodeSession)).toBe('opencode --session ses_abc123xyz')
-    expect(resumeCommandFor(geminiSession)).toBe(`gemini --resume ${UUID}`)
   })
 })
 

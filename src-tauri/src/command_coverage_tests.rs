@@ -24,7 +24,6 @@ impl MockApp {
         let guard = test_support::lock();
         let app = test_support::mock_app();
         assert!(app.manage(AdhocRegistry::new()));
-        assert!(app.manage(PluginHost::new()));
         assert!(app.manage(terminal_window::DetachRegistry::new()));
         assert!(app.manage(rdp_embed::RdpSessionManager::new()));
         assert!(app.manage(PtyManager::new()));
@@ -85,18 +84,11 @@ mod app_commands;
 mod connection_commands;
 #[path = "command_edge_tests.rs"]
 mod edge_commands;
-#[path = "command_file_view_tests.rs"]
-mod file_view_command_tests;
 #[path = "command_persistence_tests.rs"]
 mod persistence;
 #[path = "command_temp_note_tests.rs"]
 mod temp_note_commands;
-#[path = "command_text_file_tests.rs"]
-mod text_file_command_tests;
 #[path = "command_workspace_tests.rs"]
 mod workspace_commands;
 #[path = "command_workspace_file_tests.rs"]
 mod workspace_file_commands;
-
-#[path = "command_plugin_tests.rs"]
-mod plugin_commands;

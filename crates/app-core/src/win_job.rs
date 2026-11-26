@@ -82,4 +82,3 @@ mod tests {
         let _ = child.wait();
     }
 }
-

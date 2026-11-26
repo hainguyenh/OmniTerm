@@ -160,29 +160,6 @@ describe('workspace', () => {
     ])
   })
 
-  it('opens and saves editor files scoped by workspace id and validates the replies', async () => {
-    invokeMock.mockResolvedValueOnce({
-      content: 'a', size: 1, mtimeMs: 5, lineCount: 1, maxLineLen: 1, eol: 'crlf',
-      mixedEol: false, hasBom: true, readOnly: false,
-    })
-    await expect(api.workspace.openTextFile('ws#1', 'folder#1/app.ts')).resolves.toMatchObject({
-      content: 'a', eol: 'crlf', hasBom: true,
-    })
-    expect(lastInvoke()).toEqual(['open_text_file', { workspaceId: 'ws#1', path: 'folder#1/app.ts' }])
-
-    invokeMock.mockResolvedValueOnce({ status: 'conflict', reason: 'modified', diskMtimeMs: 9 })
-    const request = { content: 'b', bom: false, expectedMtimeMs: 5, expectedSize: 1 }
-    await expect(api.workspace.saveTextFile('ws#1', 'folder#1/app.ts', request)).resolves.toEqual({
-      status: 'conflict', reason: 'modified', diskMtimeMs: 9,
-    })
-    expect(lastInvoke()).toEqual([
-      'save_text_file', { workspaceId: 'ws#1', path: 'folder#1/app.ts', request },
-    ])
-
-    invokeMock.mockResolvedValueOnce({ content: 1 })
-    await expect(api.workspace.openTextFile('ws#1', 'folder#1/app.ts')).rejects.toThrow('Invalid text file reply')
-  })
-
   it('sends tree edits scoped by workspace id and validates the returned paths', async () => {
     invokeMock.mockResolvedValueOnce('folder#1/docs')
     await expect(api.workspace.createDirectory('ws#1', 'folder#1/docs')).resolves.toBe('folder#1/docs')
@@ -200,19 +177,6 @@ describe('workspace', () => {
 
     invokeMock.mockResolvedValueOnce(42)
     await expect(api.workspace.moveFile('ws#1', 'folder#1/a.txt', 'folder#1/c.txt')).rejects.toThrow('unexpected response')
-  })
-
-  it('reads image bytes as a binary reply and refuses anything else', async () => {
-    invokeMock.mockResolvedValueOnce(new Uint8Array([1, 2]).buffer)
-    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).resolves.toEqual(new Uint8Array([1, 2]))
-    expect(lastInvoke()).toEqual(['open_image_file', { workspaceId: 'ws#1', path: 'folder#1/logo.png' }])
-
-    const view = new Uint8Array([3])
-    invokeMock.mockResolvedValueOnce(view)
-    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).resolves.toBe(view)
-
-    invokeMock.mockResolvedValueOnce([1, 2])
-    await expect(api.workspace.openImageFile('ws#1', 'folder#1/logo.png')).rejects.toThrow('could not be read')
   })
 
   it('normalizes workspaces whose older wire payload omits empty pins', async () => {
@@ -331,18 +295,10 @@ describe('settings and plugins', () => {
     expect(lastInvoke()).toEqual(['save_settings', { settings: { fontSize: 18 } }])
   })
 
-  it('invokes a plugin method with its args collected into an array', async () => {
-    invokeMock.mockResolvedValueOnce(null)
-    await api.plugin.invoke('vault.list', 'a', 2)
-    expect(lastInvoke()).toEqual(['plugin_invoke', { method: 'vault.list', args: ['a', 2] }])
-  })
-
   it('degrades to safe values when a plugin command fails', async () => {
     invokeMock.mockRejectedValue('no host')
-    await expect(api.plugin.available()).resolves.toBe(false)
     await expect(api.plugin.list()).resolves.toEqual([])
-    await expect(api.plugin.authGate()).resolves.toBe(true)
-    await expect(api.plugin.invoke('x')).resolves.toBeNull()
+    await expect(api.plugin.builtinIds()).resolves.toEqual([])
   })
 
   it('forwards theme and window-control calls with matching argument names', async () => {

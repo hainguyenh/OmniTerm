@@ -175,5 +175,32 @@ describe('Tooltip', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
+  it('keeps the title out of data-tooltip, which would make the IDE tooltip host show a second tooltip', () => {
+    render(
+      <>
+        <GlobalButtonTooltips />
+        <button type="button" title="Native browser help">Fallback action</button>
+      </>,
+    )
 
+    const button = screen.getByRole('button', { name: 'Fallback action' })
+    expect(button).not.toHaveAttribute('data-tooltip')
+  })
+
+  it('leaves a button that the IDE tooltip host already covers alone', () => {
+    render(
+      <>
+        <GlobalButtonTooltips />
+        <button type="button" aria-label="Run" data-tooltip="Run" title="Run">Run</button>
+        <button type="button" aria-label="Wrapped"><span data-tooltip="Wrapped help">icon</span></button>
+      </>,
+    )
+
+    const run = screen.getByRole('button', { name: 'Run' })
+    expect(run).not.toHaveAttribute('title')
+    fireEvent.mouseOver(run)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    fireEvent.mouseOver(screen.getByText('icon'))
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
 })

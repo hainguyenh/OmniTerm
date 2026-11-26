@@ -1,5 +1,6 @@
 /** Durable renderer metadata for pane layout and terminal working directories. */
 import { LAYOUT_MODES, type LayoutMode } from '../themes'
+import { DEFAULT_VIEW_GROUP_ID } from '../viewGroups'
 import type { PaneRecoveryContext } from './sessionRecoveryTypes'
 
 export const SNAPSHOT_KEY = 'omniterm:session-snapshot'
@@ -138,7 +139,42 @@ function recoveryFromLegacy(tab: Record<string, unknown>, conn: PersistedConn | 
   }
 }
 
+/**
+ * Folds a snapshot written while desktops existed into the single pane grid: the active group's
+ * layout wins, every other group's sessions stay open as background tabs.
+ */
+function migrateSnapshotLayout(snapshot: SessionSnapshot): SessionSnapshot {
+  const groups = snapshot.viewGroups
+  if (groups.length === 1 && groups[0]?.id === DEFAULT_VIEW_GROUP_ID && Object.keys(snapshot.tabGroups).length === 0) {
+    return snapshot
+  }
+  const active = groups.find(group => group.id === snapshot.activeGroupId)
+    ?? groups.find(group => group.id !== DEFAULT_VIEW_GROUP_ID && group.panes.some(Boolean))
+    ?? groups.find(group => group.id === DEFAULT_VIEW_GROUP_ID)
+  const layoutMode = active?.layoutMode ?? snapshot.layoutMode
+  return {
+    ...snapshot,
+    layoutMode,
+    activeGroupId: DEFAULT_VIEW_GROUP_ID,
+    tabGroups: {},
+    viewGroups: [{
+      id: DEFAULT_VIEW_GROUP_ID,
+      label: 'Ungrouped',
+      color: '#6b7280',
+      persistent: true,
+      layoutMode,
+      panes: active ? [...active.panes] : Array(8).fill(null),
+      focusedPane: Math.min(active?.focusedPane ?? 0, layoutMode - 1),
+    }],
+  }
+}
+
 function parseSnapshot(value: unknown): SessionSnapshot | null {
+  const parsed = parseRawSnapshot(value)
+  return parsed ? migrateSnapshotLayout(parsed) : null
+}
+
+function parseRawSnapshot(value: unknown): SessionSnapshot | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const raw = value as Record<string, unknown>
   const version = raw['version']

@@ -161,7 +161,6 @@ async fn client_full_lifecycle_against_a_running_daemon() {
     let _ = tokio::time::timeout(Duration::from_millis(500), subscription.next()).await;
     drop(subscription);
 
-
     // create() with an unresolvable working directory fails on the daemon,
     // exercising the server's Create error arm and the client's
     // `ServerMessage::Error` handling in `create`.

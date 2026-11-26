@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import type { Connection, SessionStatus } from '@omniterm/contract'
+import type { Connection, SessionStatus } from '../domain'
 import { detachAction, type DetachAction } from '../detachControl'
 
 interface TabRef {

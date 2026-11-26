@@ -12,23 +12,6 @@ beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
 })
 
-vi.mock('../SettingsModal', () => ({
-  default: (p: any) => p.isOpen ? (
-    <div data-testid="settings-modal">
-      <button onClick={p.onClose}>close-settings</button>
-      <button onClick={() => p.setHasConnectionProvider(true)}>provider-on</button>
-      <button onClick={p.refreshCustomArt}>refresh-art</button>
-      <button onClick={p.checkForUpdates}>check-update</button>
-      <button onClick={p.skipThisVersion}>skip-update</button>
-      <button onClick={p.clearSkippedVersion}>clear-skip</button>
-      <button onClick={p.handleDownloadPortable}>portable</button>
-      <button onClick={p.handleDownloadInstaller}>installer</button>
-      <button onClick={() => p.setRecordingAction(p.recordingAction ? null : 'zoomIn')}>
-        {p.recordingAction ? 'Record…' : 'toggle-recording'}
-      </button>
-    </div>
-  ) : null,
-}))
 vi.mock('../CloseConfirmModal', () => ({ default: (p: any) => <div data-testid="close-confirm">
   <button onClick={p.onCancel}>cancel-close</button><button onClick={() => p.onConfirm(false)}>confirm-one</button>
   <button onClick={() => p.onConfirm(true)}>confirm-all</button><span>{String(p.isMultiple)}</span>
@@ -41,8 +24,7 @@ const connection = { id: 'ssh', name: 'Server', type: 'SSH', host: 'server', por
 function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
   return {
     appSettings: { themeId: 'tokyo-night', fontSize: 14, smartColors: true, darkMode: true, shortcuts: {} },
-    setAppSettings: vi.fn(), updateState: { current: '1.2.3' }, hasConnectionProvider: true,
-    setHasConnectionProvider: vi.fn(), setConnectionCapabilities: vi.fn(), activeTabs: [
+    setAppSettings: vi.fn(), updateState: { current: '1.2.3' }, activeTabs: [
       { id: 'a', connId: 'ssh', name: 'A' }, { id: 'b', connId: 'ssh', name: 'B' }, { id: 'c', connId: 'ssh', name: 'C' },
     ], savedConnections: [connection], tabMenu: null, setTabMenu: vi.fn(), shellMenu: null, setShellMenu: vi.fn(),
     pendingCloseTabIds: null, setPendingCloseTabIds: vi.fn(), skipCloseConfirmRef: { current: false },
@@ -60,41 +42,12 @@ function model(overrides: Record<string, unknown> = {}): MainLayoutModel {
 
 beforeEach(() => {
   mockOmnitermAPI({
-    plugin: { connectionCapabilities: vi.fn(async () => ({ sftp: true })) },
     settings: { save: vi.fn(async () => {}) },
   })
 })
 
 describe('MainLayoutOverlays', () => {
-  it('covers settings modal integration and actions', async () => {
-    const m = model({ aboutOpen: true })
-    render(<MainLayoutOverlays model={m} />)
-    expect(screen.getByTestId('settings-modal')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('provider-on'))
-    expect(m.setHasConnectionProvider).toHaveBeenCalledWith(true)
-    fireEvent.click(screen.getByText('close-settings'))
-    expect(m.setAboutOpen).toHaveBeenCalledWith(false)
-    fireEvent.click(screen.getByText('refresh-art'))
-    expect(m.refreshCustomArt).toHaveBeenCalled()
-    for (const label of ['check-update', 'skip-update', 'clear-skip', 'portable', 'installer']) {
-      fireEvent.click(screen.getByText(label))
-    }
-    expect(m.checkForUpdates).toHaveBeenCalled()
-    expect(m.skipThisVersion).toHaveBeenCalled()
-    expect(m.clearSkippedVersion).toHaveBeenCalled()
-    expect(m.handleDownloadPortable).toHaveBeenCalled()
-    expect(m.handleDownloadInstaller).toHaveBeenCalled()
-    fireEvent.click(screen.getByText('toggle-recording'))
-    expect(m.setRecordingAction).toHaveBeenCalledWith('zoomIn')
-  })
 
-  it('toggles a recording shortcut off', async () => {
-    const m = model({ aboutOpen: true, recordingAction: 'zoomIn' })
-    render(<MainLayoutOverlays model={m} />)
-    expect(screen.getByText('Record…')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Record…'))
-    expect(m.setRecordingAction).toHaveBeenCalledWith(null)
-  })
 
   it.each([
     ['Close', 'closeTab', ['b']],

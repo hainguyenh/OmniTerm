@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { detachAction, detachTitle } from '../detachControl'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../domain'
 
 const local = { id: 'c1', name: 'shell', type: 'LOCAL' } as Connection
 const ssh = { id: 'c2', name: 'box', type: 'SSH' } as Connection

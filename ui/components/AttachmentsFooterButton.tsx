@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ExternalLink, FileText, FolderOpen, Image as ImageIcon, Paperclip, Plus } from 'lucide-react'
 
 import { usePanePresence } from '../utils/agentPresenceStore'
+import { attachmentFolderFor, moveToSessionFolder } from '../utils/attachmentFolder'
 import { formatAttachmentPaths, saveAttachmentFiles } from '../utils/attachmentInput'
 import { canOpenAttachment, formatBytes } from '../utils/attachmentTypes'
 import { getPastedImages, requestOpen, subscribePastedImage } from '../utils/pastedImageStore'
@@ -9,7 +10,7 @@ import { getSessionAttachments, recordSavedAttachments, subscribeSessionAttachme
 import { formatTimeAgo } from '../utils/storedSessionResume'
 import { Tooltip } from './Tooltip'
 
-const ITEM_BTN = 'w-5 h-5 flex items-center justify-center rounded text-theme-dim hover:bg-[#414868] hover:text-theme-accent'
+const ITEM_BTN = 'w-5 h-5 flex items-center justify-center rounded text-theme-dim hover:bg-theme-hover hover:text-theme-accent'
 
 const openFolder = async (sessionId?: string) => {
   const { dir } = await window.omnitermAPI.attachments.list(sessionId)
@@ -46,7 +47,7 @@ function AttachmentRow({ sessionId, item, thumbnail, now }: {
 }
 
 /**
- * The footer's paperclip: what this pane attached (pasted or dropped images and files), each one
+ * The pane footer's paperclip: what this pane attached (pasted or dropped images and files), each one
  * viewable or openable, and a way to the attachment folder in Explorer. Shown on agent panes and on
  * any pane that has attached something.
  */
@@ -77,6 +78,13 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
     }
   }
 
+  // The agent's session id shows up after the first prompts: until then files wait in the pane's
+  // temporary folder, and they are merged into the session's folder the moment it does.
+  const agentSessionId = agent?.agentSessionId ?? agent?.claudeSessionId
+  useEffect(() => {
+    if (agentSessionId && agentSessionId !== 'latest') void moveToSessionFolder(sessionId, agentSessionId)
+  }, [sessionId, agentSessionId])
+
   useEffect(() => {
     if (!open) return
     const onDown = (event: MouseEvent) => {
@@ -106,10 +114,10 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
           aria-label={label}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className={`inline-flex items-center justify-center gap-0.5 h-4 px-1 rounded text-[10px] leading-none transition-colors ${open ? 'text-theme-accent bg-[#414868]' : 'text-theme-dim hover:text-theme-accent hover:bg-[#414868]'}`}
+          className={`inline-flex items-center gap-0.5 h-5 px-1 rounded text-[10px] transition-colors ${open ? 'text-theme-accent bg-theme-border' : 'text-theme-dim hover:text-theme-accent hover:bg-theme-hover'}`}
         >
-          <Paperclip className="w-3 h-3 flex-shrink-0" />
-          {items.length > 0 && <span className="tabular-nums leading-none inline-flex items-center">{items.length}</span>}
+          <Paperclip className="w-3 h-3" />
+          {items.length > 0 && <span className="tabular-nums">{items.length}</span>}
         </button>
       </Tooltip>
       {open && (
@@ -119,7 +127,7 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-2 border-b border-theme-border text-[11px] font-medium text-theme-accent hover:bg-white/5 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 border-b border-theme-border text-[11px] font-medium text-theme-accent hover:bg-theme-hover transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Attach files...
           </button>
@@ -140,7 +148,7 @@ export function AttachmentsFooterButton({ sessionId }: { sessionId: string }) {
                 ))}
               </ul>
             )}
-          <button type="button" onClick={() => void openFolder(sessionId)}
+          <button type="button" onClick={() => void openFolder(attachmentFolderFor(sessionId))}
             className="flex items-center gap-1.5 px-3 py-2 border-t border-theme-border text-[11px] text-theme-dim hover:text-theme-accent"
           >
             <FolderOpen className="w-3.5 h-3.5" /> Open attachments folder

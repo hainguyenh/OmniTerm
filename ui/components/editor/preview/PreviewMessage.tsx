@@ -1,3 +1,5 @@
+import './preview.css'
+
 interface PreviewMessageProps {
   text: string
   onAction?: () => void

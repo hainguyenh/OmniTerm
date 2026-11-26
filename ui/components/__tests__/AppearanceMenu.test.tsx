@@ -27,25 +27,6 @@ function renderMenu(props: Partial<React.ComponentProps<typeof AppearanceMenu>> 
 }
 
 describe('AppearanceMenu', () => {
-  it('uses a 24px font-size rail only when mounted in the native title bar', () => {
-    renderMenu({ titleBar: true })
-    const rail = screen.getByLabelText('active terminal').parentElement
-    expect(rail).toHaveClass('h-6', 'items-center')
-    const picker = screen.getByRole('button', { name: 'Appearance — theme & font size' })
-    expect(picker).toHaveClass('h-6')
-    // A block wrapper around an inline-flex button creates a line box with descender space.
-    // At 80% zoom that made the palette border 1px higher than the zoom and font rails.
-    expect(picker.parentElement).toHaveClass('flex', 'h-6', 'items-center')
-  })
-
-  it('aligns compactly with surrounding header buttons', () => {
-    renderMenu({ compact: true, hideFontSize: true })
-    const picker = screen.getByRole('button', { name: 'Appearance — theme & font size' })
-    expect(picker).toHaveClass('w-4', 'h-4', 'flex', 'items-center', 'justify-center')
-    expect(picker.parentElement).toHaveClass('flex', 'h-4', 'w-4', 'items-center', 'justify-center')
-    expect(picker.querySelector('svg')).not.toHaveClass('translate-y-[1px]')
-  })
-
   it('shows the current font size and shifts it by one step per click', () => {
     const { onFontSizeChange } = renderMenu()
     fireEvent.click(screen.getByRole('button', { name: '+' }))

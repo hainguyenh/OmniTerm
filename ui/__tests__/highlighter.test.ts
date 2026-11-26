@@ -182,4 +182,35 @@ describe('OutputHighlighter parser branches', () => {
       }
     })
   })
+
+  describe('links scope', () => {
+    const PATH = (p: string) => `\x1b[94m${p}\x1b[39m`
+
+    it('colors URLs and file paths but no other token', () => {
+      const out = new OutputHighlighter().transform('error 42 at https://x.dev/a and /var/log/app.log', 'links')
+      expect(out).toContain('\x1b[4;96mhttps://x.dev/a\x1b[24;39m')
+      expect(out).toContain(PATH('/var/log/app.log'))
+      expect(out).not.toContain('\x1b[91merror')
+      expect(out).not.toContain('\x1b[95m42')
+    })
+
+    it('recognizes Windows, home, relative and file:line paths', () => {
+      const h = new OutputHighlighter()
+      expect(h.transform(String.raw`open C:\Users\me\app.ts now`, 'links')).toContain(PATH(String.raw`C:\Users\me\app.ts`))
+      expect(h.transform('see ~/notes/todo.md', 'links')).toContain(PATH('~/notes/todo.md'))
+      expect(h.transform('in ./src/main.rs:10:5', 'links')).toContain(PATH('./src/main.rs:10:5'))
+      expect(h.transform('at src/app.tsx:12 (x)', 'links')).toContain(PATH('src/app.tsx:12'))
+      expect(h.transform('at main.go:7', 'links')).toContain(PATH('main.go:7'))
+    })
+
+    it('leaves prose with slashes alone', () => {
+      const h = new OutputHighlighter()
+      expect(h.transform('read and/or write', 'links')).toBe('read and/or write')
+      expect(h.transform('version 1.2.3 at 12:30', 'links')).toBe('version 1.2.3 at 12:30')
+    })
+
+    it('colors nothing with the none scope', () => {
+      expect(new OutputHighlighter().transform('https://x.dev error', 'none')).toBe('https://x.dev error')
+    })
+  })
 })

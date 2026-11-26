@@ -2,12 +2,9 @@
 use super::*;
 #[test]
 fn test_save_and_load_connections() {
-    use tauri::Manager;
     let _guard = crate::test_support::lock();
     let app = crate::test_support::mock_app();
     let handle = app.handle().clone();
-    assert!(app.manage(crate::plugin_host::PluginHost::new()));
-    let host = app.state::<crate::plugin_host::PluginHost>();
 
     let tree = ConnectionTree {
         folders: vec![Folder {
@@ -33,11 +30,10 @@ fn test_save_and_load_connections() {
         }],
     };
 
-    let save_res = tauri::async_runtime::block_on(save_connections(handle.clone(), host, tree));
+    let save_res = tauri::async_runtime::block_on(save_connections(handle.clone(), tree));
     assert!(save_res.is_ok());
 
-    let host2 = app.state::<crate::plugin_host::PluginHost>();
-    let loaded = tauri::async_runtime::block_on(load_connections(handle.clone(), host2)).unwrap();
+    let loaded = tauri::async_runtime::block_on(load_connections(handle.clone())).unwrap();
     assert_eq!(loaded.connections.len(), 1);
     assert_eq!(loaded.folders.len(), 1);
 

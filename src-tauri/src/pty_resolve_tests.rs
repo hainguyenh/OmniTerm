@@ -5,7 +5,6 @@
 
 use super::*;
 use crate::connections::{Connection, ConnectionTree};
-use crate::plugin_host::PluginHost;
 use crate::test_support;
 use std::fs;
 use std::path::PathBuf;
@@ -21,13 +20,10 @@ struct Fixture {
 }
 
 impl Fixture {
-    fn new(with_host: bool) -> Self {
+    fn new() -> Self {
         let guard = test_support::lock();
         let app = test_support::mock_app();
         assert!(app.manage(AdhocRegistry::new()));
-        if with_host {
-            assert!(app.manage(PluginHost::new()));
-        }
         let data_dir = app.path().app_data_dir().expect("mock app data directory");
         let _ = fs::remove_dir_all(&data_dir);
         Self {
@@ -170,7 +166,7 @@ fn windows_native_clients_fail_explicitly_on_other_platforms() {
 
 #[test]
 fn resolves_ad_hoc_and_persisted_connections_through_the_real_mock_app() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
     app.state::<AdhocRegistry>().insert_named(
         "adhoc-test".to_string(),
@@ -191,10 +187,8 @@ fn resolves_ad_hoc_and_persisted_connections_through_the_real_mock_app() {
     assert_eq!(launch.cwd.as_deref(), Some("/tmp"));
     assert_eq!(launch.args.as_deref(), Some("--flag"));
 
-    let host = fixture.app.state::<PluginHost>();
     block_on(connections::save_connections(
         app.clone(),
-        host,
         ConnectionTree {
             connections: vec![local_connection("saved-local")],
             folders: vec![],
@@ -219,20 +213,23 @@ fn resolves_ad_hoc_and_persisted_connections_through_the_real_mock_app() {
 
 #[test]
 fn workspace_connections_are_launchable_and_non_ssh_prepare_is_rejected() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
     let root = TempDir::new().unwrap();
-    let workspace = block_on(crate::workspace::add_workspace(
+    block_on(crate::workspace::add_workspace(
         app.clone(),
         root.path().to_string_lossy().into_owned(),
     ))
     .unwrap();
-    block_on(crate::workspace_connections::save_workspace_connections(
-        app.clone(),
-        fixture.app.state::<PluginHost>(),
-        workspace.id,
-        vec![local_connection("workspace-local")],
-    ))
+    let config_dir = root.path().join(".omniterm");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    let file = crate::workspace_connections::WorkspaceConnectionsFile {
+        connections: vec![local_connection("workspace-local")],
+    };
+    std::fs::write(
+        config_dir.join("connections.json"),
+        serde_json::to_string(&file).unwrap(),
+    )
     .unwrap();
 
     let found = block_on(resolve_connection_by_id(&app, "workspace-local")).unwrap();
@@ -243,37 +240,11 @@ fn workspace_connections_are_launchable_and_non_ssh_prepare_is_rejected() {
     );
 }
 
-#[test]
-fn native_batch_provider_is_optional() {
-    let fixture = Fixture::new(false);
-    assert_eq!(
-        block_on(native_batch_launch(
-            &fixture.handle(),
-            "missing",
-            "terminal"
-        ))
-        .unwrap(),
-        None
-    );
-
-    drop(fixture);
-    let fixture = Fixture::new(true);
-    assert_eq!(
-        block_on(native_batch_launch(
-            &fixture.handle(),
-            "missing",
-            "terminal"
-        ))
-        .unwrap(),
-        None
-    );
-}
-
 /// `prepare_ssh_session` rejects anything the `safe_ssh_value` check stops: a host carrying a shell
 /// metacharacter (`;`) would otherwise reach `ssh.exe` as an extra argv element.
 #[test]
 fn prepare_ssh_session_rejects_an_unsafe_host_or_user() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
 
     let mut bad_host = ssh_connection("ssh-bad-host");
@@ -292,7 +263,7 @@ fn prepare_ssh_session_rejects_an_unsafe_host_or_user() {
 /// session before `ssh.exe` is ever consulted.
 #[test]
 fn prepare_ssh_session_rejects_an_unparseable_or_zero_port() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
 
     for (id, port) in [("ssh-bad-port", "99999"), ("ssh-zero-port", "0")] {
@@ -308,7 +279,7 @@ fn prepare_ssh_session_rejects_an_unparseable_or_zero_port() {
 /// the type check not silently accepting any record with a host string.
 #[test]
 fn prepare_ssh_session_refuses_an_rdp_connection() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
     let mut rdp = ssh_connection("rdp-prepare-check");
     rdp.conn_type = "RDP".to_string();
@@ -334,7 +305,6 @@ fn ssh_connection(id: &str) -> Connection {
 fn save_one(app: &AppHandle<MockRuntime>, conn: Connection) {
     block_on(connections::save_connections(
         app.clone(),
-        app.state::<PluginHost>(),
         ConnectionTree {
             connections: vec![conn],
             folders: vec![],
@@ -345,7 +315,7 @@ fn save_one(app: &AppHandle<MockRuntime>, conn: Connection) {
 
 #[test]
 fn prepare_ssh_session_defaults_user_and_port() {
-    let fixture = Fixture::new(true);
+    let fixture = Fixture::new();
     let app = fixture.handle();
     let mut conn = ssh_connection("ssh-default-user-port");
     conn.user = "".to_string();
@@ -366,6 +336,48 @@ fn prepare_ssh_session_defaults_user_and_port() {
         assert!(adhoc
             .command
             .unwrap()
-            .contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
+            .contains("ssh.exe -o BatchMode=no -p 22 -- ssh.example.test"));
     }
+}
+
+/// Regression: connecting a saved SSH profile again (Reconnect, or Connect on a session that ended)
+/// must not read the `ssh.exe` launch the first connect left in the ad-hoc registry under the same
+/// id: that entry is a LOCAL shell, so the second connect failed with "Not an SSH connection.".
+#[test]
+fn prepare_ssh_session_reads_the_saved_profile_on_a_reconnect() {
+    let fixture = Fixture::new();
+    let app = fixture.handle();
+    let mut conn = ssh_connection("ssh-reconnect");
+    conn.host = "bad;host".to_string();
+    save_one(&app, conn);
+    // What the first connect left behind.
+    app.state::<AdhocRegistry>().insert_named(
+        "ssh-reconnect".to_string(),
+        crate::adhoc::quick_shell_request(None).expect("a default shell request"),
+    );
+
+    // The saved SSH profile is checked (its unsafe host is refused), not the LOCAL ad-hoc entry.
+    let err = block_on(prepare_ssh_session(app, "ssh-reconnect".to_string())).unwrap_err();
+    assert!(err.contains("unsupported characters"), "got: {err}");
+}
+
+/// Regression: the destination was wrapped in `"`, which the spawner escapes as `\"` inside the
+/// `cmd /c` argument and cmd hands to `ssh.exe` verbatim, so OpenSSH saw a user name starting with a
+/// quote and exited 255 with "remote username contains invalid characters".
+#[test]
+fn ssh_command_line_carries_no_quotes_and_passes_the_user_with_l() {
+    let line = super::ssh_command_line("root", "ssh.example.test", 2222);
+    assert_eq!(
+        line,
+        "ssh.exe -o BatchMode=no -p 2222 -l root -- ssh.example.test"
+    );
+    assert!(!line.contains('"'));
+    assert_eq!(
+        super::ssh_command_line("", "10.0.0.1", 22),
+        "ssh.exe -o BatchMode=no -p 22 -- 10.0.0.1"
+    );
+    assert_eq!(
+        super::ssh_command_line("me@corp", "host", 22),
+        "ssh.exe -o BatchMode=no -p 22 -l me@corp -- host"
+    );
 }

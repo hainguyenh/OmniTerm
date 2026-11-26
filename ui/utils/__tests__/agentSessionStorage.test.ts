@@ -7,6 +7,7 @@ import {
   clearStoredSessions,
   findInterruptedSessionByTabId,
   findSessionByTabId,
+  isSessionBoundToOtherTab,
   loadStoredSessions,
   promoteStaleActiveSessions,
   removeStoredSession,
@@ -118,4 +119,13 @@ describe('agentSessionStorage', () => {
     clearStoredSessions()
     expect(loadStoredSessions()).toHaveLength(0)
   })
+
+  it('tells whether another open pane already runs a session', () => {
+    upsertSession(makeSession({ tabId: 'tab-a', state: 'active' }))
+
+    expect(isSessionBoundToOtherTab(`claude:${VALID_UUID}`, 'tab-b')).toBe(true)
+    expect(isSessionBoundToOtherTab(`claude:${VALID_UUID}`, 'tab-a')).toBe(false)
+    expect(isSessionBoundToOtherTab(`claude:${OTHER_UUID}`, 'tab-b')).toBe(false)
+  })
 })
+

@@ -75,3 +75,38 @@ fn clear_attachments_and_import_clipboard_files_lifecycle() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn move_attachments_merges_the_pane_folder_into_the_session_folder() {
+    let _guard = test_support::lock();
+    let app = test_support::mock_app();
+    let handle = app.handle().clone();
+    let pane = "pane-move-test";
+    let session = "session-move-test";
+    let saved = tauri::async_runtime::block_on(save_temp_image(
+        handle.clone(),
+        vec![1, 2, 3],
+        Some(pane.into()),
+    ))
+    .expect("save into the pane folder");
+
+    let moved = tauri::async_runtime::block_on(move_attachments(
+        handle.clone(),
+        pane.into(),
+        session.into(),
+    ))
+    .expect("move attachments");
+
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0].from, saved);
+    assert!(PathBuf::from(&moved[0].to).is_file());
+    assert!(PathBuf::from(&moved[0].to)
+        .starts_with(attachments_dir(&handle, Some(session)).expect("session dir")));
+    assert!(tauri::async_runtime::block_on(move_attachments(
+        handle.clone(),
+        "".into(),
+        session.into()
+    ))
+    .is_err());
+    let _ = fs::remove_dir_all(attachments_dir(&handle, Some(session)).expect("session dir"));
+}

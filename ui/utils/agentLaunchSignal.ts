@@ -3,7 +3,7 @@
  * shell line that runs an agent, and when session restore starts a pane with an agent's resume
  * command. The Agent Quota plugin listens and freezes the pane right away, so the user cannot type
  * into the agent's first screen while it answers the folder-trust dialog and reads `/usage`
- * (plugins/agent-quota/app/inlineUsageProbe.ts). Without it the freeze waited for the next
+ * (ui/features/agent-quota/inlineUsageProbe.ts). Without it the freeze waited for the next
  * process-tree scan, seconds after the agent was already on screen and taking input.
  *
  * The line is read back from the pane's screen at Enter time rather than rebuilt from keystrokes,
@@ -12,7 +12,7 @@
 
 import { lastUserInputAt } from './paneInputHold'
 
-export type LaunchedAgent = 'claude' | 'codex' | 'agy' | 'opencode' | 'aider' | 'gemini'
+export type LaunchedAgent = 'claude' | 'codex' | 'agy' | 'opencode' | 'aider'
 
 type Listener = (sessionId: string, agent: LaunchedAgent) => void
 
@@ -52,10 +52,10 @@ export function resetAgentLaunchSignalForTests(): void {
  * agent or one of its profile launchers (`claude-work`) as the first word — optionally behind
  * PowerShell's `&` or a path, with a Windows script extension.
  */
-const AGENT_LINE = /^\s*(?:PS [^>]*>|[A-Za-z]:\\[^>]*>|\S*[$#%]|[❯›➜λ])?\s*(?:&\s*)?(?:\S*[\\/])?(claude|codex|agy|opencode|aider|gemini)(?:-[A-Za-z0-9_.]{1,40})?(?:\.(?:cmd|bat|exe|ps1))?(?:\s+(.*))?$/i
+const AGENT_LINE = /^\s*(?:PS [^>]*>|[A-Za-z]:\\[^>]*>|\S*[$#%]|[❯›➜λ])?\s*(?:&\s*)?(?:\S*[\\/])?(claude|codex|agy|opencode|aider)(?:-[A-Za-z0-9_.]{1,40})?(?:\.(?:cmd|bat|exe|ps1))?(?:\s+(.*))?$/i
 
 /** Subcommands and flags that print and exit instead of opening the agent's interactive screen. */
-const ONE_SHOT = /^(?:-v|-h|-p|--version|--help|--print|update|doctor|mcp|config|install|login|logout|exec|e|apply|completion)(?:\s|$)/i
+const ONE_SHOT = /^(?:-v|-h|-p|--version|--help|--print|update|doctor|mcp|config|install|login|logout|auth|signin|sign-in|log-in|exec|e|apply|completion)(?:\s|$)/i
 
 /** Which agent a submitted shell line starts interactively, if any. */
 export function agentLaunchedBy(line: string): LaunchedAgent | null {

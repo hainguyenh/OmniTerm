@@ -1,10 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Scoped to what ui/tauriAPI.ts actually calls. Every plugin command granted here is reachable from any script running in the webview, so unused permissions are removed rather than left enabled. Notably absent: shell:allow-execute and shell:allow-open (nothing in the frontend uses the shell plugin — plugin help links go through the plugin host's HTTPS-only validation, and running a shell goes through the PTY commands, which validate the shell against a closed set). dialog:allow-save is absent because every save dialog is opened from Rust, so the chosen path is never round-tripped through the webview. core:webview:allow-create-webview-window is also absent: detached terminal windows are built in Rust (terminal_window.rs), so the webview still cannot spawn one — 'term-*' only grants the windows Rust creates the same command surface as 'main'.",
+  "description": "Scoped to what ui/tauriAPI.ts actually calls. Every plugin command granted here is reachable from any script running in the webview, so unused permissions are removed rather than left enabled. Notably absent: shell:allow-execute and shell:allow-open (nothing in the frontend uses the shell plugin — plugin help links go through the plugin host's HTTPS-only validation, and running a shell goes through the PTY commands, which validate the shell against a closed set). dialog:allow-save is absent because every save dialog is opened from Rust, so the chosen path is never round-tripped through the webview. core:webview:allow-create-webview-window is also absent: detached terminal windows are built in Rust (terminal_window.rs), so the webview still cannot spawn one — 'term-*' only grants the windows Rust creates the same command surface as 'main'. The omniterm workbench (ui/ide) additionally uses the window, webview, opener and dialog permissions upstream grants its own windows.",
   "windows": [
     "main",
-    "term-*"
+    "term-*",
+    "project-*",
+    "settings-*",
+    "comparison-*",
+    "deployment-*"
   ],
   "permissions": [
     "core:default",
@@ -16,6 +20,22 @@
     "os:allow-arch",
     "os:allow-os-type",
     "core:window:allow-start-dragging",
-    "updater:default"
+    "updater:default",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-set-title",
+    "core:window:allow-set-background-color",
+    "core:webview:allow-set-webview-zoom",
+    "core:webview:allow-set-webview-background-color",
+    "opener:default",
+    "opener:allow-reveal-item-in-dir",
+    "dialog:default",
+    "core:window:allow-destroy",
+    "core:window:allow-close",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-show"
   ]
 }

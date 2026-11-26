@@ -98,11 +98,6 @@ describe("matchesChromeShortcut", () => {
     expect(matchesChromeShortcut(key("N", { ctrlKey: true, shiftKey: true }), s, { inTerminal: true })).toBe(true);
   });
 
-  it("lets Ctrl+Alt+N reach the app instead of the terminal PTY", () => {
-    expect(matchesChromeShortcut(key("n", { ctrlKey: true, altKey: true }), s, { inTerminal: true })).toBe(true);
-    expect(matchesChromeShortcut(key("n", { ctrlKey: true, altKey: true, shiftKey: true }), s, { inTerminal: true })).toBe(false);
-  });
-
   it("matches nothing for an unrelated key", () => {
     expect(matchesChromeShortcut(key("q", { ctrlKey: true }), s, { inTerminal: false })).toBe(false);
   });

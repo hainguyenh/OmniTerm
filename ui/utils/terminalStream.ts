@@ -1,9 +1,12 @@
 import type { Terminal } from '@xterm/xterm'
 import type { SessionChannel } from './sessionChannel'
 import { chunkForWrite } from './writeChunks'
-import { OutputHighlighter } from '../highlighter'
+import { OutputHighlighter, type HighlightScope } from '../highlighter'
 import { MAX_SCROLLBACK_BYTES, loadScrollback, saveScrollback } from './scrollbackStore'
+import { OutputRate, ScrollbackBuffer } from './scrollbackBuffer'
 import type { SessionStatus } from '../components/MainLayout'
+import { OutputGate } from '../ide/features/terminal/outputGate'
+import { workflowSettings } from '../ide/platform/workflowSettings'
 
 /**
  * Everything that flows between a running session and one xterm instance: status, output, exit, and
@@ -31,6 +34,15 @@ export interface TerminalStreamOptions {
   onActivity: (busy: boolean) => void
   /** Whether client-side smart colouring is on, read at write time so the toggle affects live panes. */
   smartColors: () => boolean
+  /** Whether URLs and file paths are colored while smart colouring is off; read at write time. */
+  linkColors?: () => boolean
+  /** Whether programs' 24-bit and 256-color foregrounds take the scheme's ANSI colors; read at write time. */
+  themeColors?: () => boolean
+  /**
+   * Whether the pane is the one shown. Output of a hidden pane (another tab, a background window) is
+   * painted at most every 250 ms instead of on every chunk; read at write time.
+   */
+  visible?: () => boolean
   /** Re-fit after output that can change the pane's state (the connect banner, an attach replay). */
   refit: () => void
   /** True while this stream's terminal is still the mounted one — guards the async attach result. */
@@ -45,12 +57,24 @@ export interface TerminalStreamOptions {
 
 const UNAVAILABLE_SESSION_MESSAGE = 'session is no longer available'
 
+/**
+ * How often a pane with new output saves its scrollback. An agent's spinner keeps a pane dirty for
+ * hours, and every save rewrites up to 512 KB in IndexedDB: at 3 s, a few agent panes kept the disk
+ * and the webview busy for nothing. Unmount still saves at once.
+ */
+export const SCROLLBACK_SAVE_MS = 15_000
+
 export const isUnavailableSessionError = (error: string) =>
   error.trim().toLowerCase().includes(UNAVAILABLE_SESSION_MESSAGE)
 
-/** Feed `text` to xterm in pieces it can parse without blocking a frame. */
-const writeChunked = (term: Terminal, text: string) => {
-  for (const chunk of chunkForWrite(text)) term.write(chunk)
+/** Feed `text` to xterm in pieces it can parse without blocking a frame; `parsed` runs after the last. */
+const writeChunked = (term: Terminal, text: string, parsed: () => void) => {
+  const chunks = chunkForWrite(text)
+  if (chunks.length === 0) {
+    parsed()
+    return
+  }
+  chunks.forEach((chunk, i) => term.write(chunk, i === chunks.length - 1 ? parsed : undefined))
 }
 
 export interface TerminalStream {
@@ -61,12 +85,16 @@ export interface TerminalStream {
    * over the echo — see `OutputHighlighter.noteLocalEcho`.
    */
   noteLocalEcho: () => void
+  /** The pane was shown or hidden: output held while it was hidden is painted at once. */
+  visibilityChanged: () => void
+  /** Write to the pane in order with the session's output (which may be held while hidden). */
+  write: (text: string) => void
 }
 
 /** Subscribe to a session and start (or attach to) it. */
 export const attachTerminalStream = ({
   term, api, id, isLocal, host, mode,
-  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, refit, isCurrent, scrollbackKey,
+  onStatus, onUnavailable, onExit, onMetrics, onActivity, smartColors, linkColors, themeColors, visible, refit, isCurrent, scrollbackKey,
 }: TerminalStreamOptions): TerminalStream => {
   // LOCAL only: ConPTY spawns the child (e.g. wsl.exe) almost instantly, but the shell behind it can
   // take much longer to actually produce a prompt — a cold WSL VM boot in particular can take several
@@ -87,6 +115,32 @@ export const attachTerminalStream = ({
   // escape-sequence state stays in sync even while the toggle is off.
   const decoder = new TextDecoder('utf-8')
   const highlighter = new OutputHighlighter()
+  const outputRate = new OutputRate()
+  // Flow control: the backend stops reading the session while 8 MiB it sent is unacknowledged
+  // (src-tauri/src/pty_flow.rs). Bytes are acknowledged once xterm has parsed the paint that carried
+  // them, so a pane that cannot keep up slows the stream instead of queueing it in memory.
+  let receivedBytes = 0 // arrived since the last paint
+  let inFlightBytes = 0 // painted, not parsed yet
+  let disposed = false
+  const paint = (data: string) => {
+    const bytes = receivedBytes
+    receivedBytes = 0
+    inFlightBytes += bytes
+    writeChunked(term, data, () => {
+      inFlightBytes -= bytes
+      if (!disposed && bytes > 0) api.ack?.(bytes)
+    })
+  }
+  // Paints at the configured rate (Settings › Tools › Terminal › Maximum refresh rate), and at most
+  // every 250 ms while the pane or the window is hidden: an agent's spinner in a background tab kept
+  // xterm repainting for nothing. The shown pane with the default "Unlimited" writes every chunk at
+  // once, so typing and clicking an agent's options are never delayed.
+  const gate = new OutputGate({
+    maxFps: () => workflowSettings().terminal.maxFps,
+    hidden: () => (typeof document !== 'undefined' && document.hidden) || visible?.() === false,
+    write: paint,
+  })
+  const emit = (text: string) => gate.push(text)
 
   /**
    * True from just before `resume()` until it settles. The backend pushes a session's whole buffered
@@ -110,17 +164,13 @@ export const attachTerminalStream = ({
   // a debounce, so a restart can repaint what this pane had on screen. On a fresh connect the
   // saved text is loaded FIRST: until that read settles, incoming text is parked in `gated` so
   // restored history always lands above live output.
-  let scrollBuffer = ''
+  const scrollBuffer = new ScrollbackBuffer(MAX_SCROLLBACK_BYTES)
   let scrollDirty = false
   let scrollTimer: ReturnType<typeof setTimeout> | null = null
-  const SCROLLBACK_SAVE_MS = 3_000
 
   const appendScrollback = (text: string) => {
     if (!scrollbackKey) return
-    scrollBuffer += text
-    if (scrollBuffer.length > MAX_SCROLLBACK_BYTES) {
-      scrollBuffer = scrollBuffer.slice(-MAX_SCROLLBACK_BYTES)
-    }
+    scrollBuffer.append(text)
     scrollDirty = true
   }
 
@@ -130,7 +180,7 @@ export const attachTerminalStream = ({
       scrollTimer = null
       if (scrollDirty) {
         scrollDirty = false
-        void saveScrollback(scrollbackKey, scrollBuffer)
+        void saveScrollback(scrollbackKey, scrollBuffer.text())
       }
     }, SCROLLBACK_SAVE_MS)
   }
@@ -139,27 +189,31 @@ export const attachTerminalStream = ({
   const handleText = (text: string, replay: boolean) => {
     appendScrollback(text)
     scheduleScrollbackSave()
+    highlighter.setPaletteColors(themeColors?.() ?? false)
     if (replay) {
       // Scrollback that was already rendered once (an attach replay, or restored history). It is
       // fed to the highlighter with colouring OFF so its escape-sequence state still matches the
       // screen, and the ORIGINAL text is written: running an 8-alternation regex with a lookbehind
       // over a quarter of a megabyte, synchronously, was most of the freeze on attach/detach.
-      highlighter.transform(text, false)
-      writeChunked(term, text)
+      // Its colors are mapped like live output (a cheap pass over escape sequences only).
+      emit(highlighter.transform(text, false))
       return
     }
     // Chunked as well: one huge message (a `cat` of a big file, a build log dumping at once) blocks a
-    // frame no matter where it came from. Text at or below the chunk size passes through as-is.
-    writeChunked(term, highlighter.transform(text, smartColors()))
+    // frame no matter where it came from. Text at or below the chunk size passes through as-is. A
+    // flood skips smart colouring (its escape state still advances) so the regex never falls behind.
+    const wanted: HighlightScope = smartColors() ? 'all' : linkColors?.() ? 'links' : 'none'
+    const scope = wanted !== 'none' && outputRate.flooding(text.length, Date.now()) ? 'none' : wanted
+    emit(highlighter.transform(text, scope))
   }
 
   const releaseHistory = () => {
     if (gated === null || !historyDecisionKnown) return
     if (historyState === 'indexeddb' && !historyLoaded) return
     if (historyState === 'indexeddb' && savedHistory) {
-      scrollBuffer = savedHistory
-      highlighter.transform(savedHistory, false)
-      writeChunked(term, savedHistory)
+      scrollBuffer.replace(savedHistory)
+      highlighter.setPaletteColors(themeColors?.() ?? false)
+      emit(highlighter.transform(savedHistory, false))
     }
     const queued = gated
     const queuedReplay = gatedReplay
@@ -179,12 +233,13 @@ export const attachTerminalStream = ({
     }
     if (!isLocal) {
       onStatus('connected')
-      term.write('\r\n\x1b[32mConnected to ' + host + '\x1b[0m\r\n')
+      emit('\r\n\x1b[32mConnected to ' + host + '\x1b[0m\r\n')
     }
     refit()
   })
 
   const cleanupData = api.onData((data: Uint8Array) => {
+    receivedBytes += data.byteLength
     if (!sawFirstData) {
       sawFirstData = true
       onStatus('connected')
@@ -195,16 +250,18 @@ export const attachTerminalStream = ({
     if (gated !== null) {
       gated.push(text)
       gatedReplay.push(replay)
-      return
+    } else {
+      handleText(text, replay)
     }
-    handleText(text, replay)
+    // Acknowledged by `paint` once parsed, or by `dispose` if the pane goes first.
+    return api.ack ? 'ack-later' : undefined
   })
 
   const cleanupError = api.onError((err: string) => {
     setStreamActive(false)
     onStatus('error')
     if (isUnavailableSessionError(err)) onUnavailable()
-    term.write('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
+    emit('\r\n\x1b[31mError: ' + err + '\x1b[0m\r\n')
   })
 
   // The session is over: the shell is gone, so keystrokes have nowhere to go. Retire the pane's input
@@ -215,7 +272,7 @@ export const attachTerminalStream = ({
     setStreamActive(false)
     term.options.cursorBlink = false
     term.options.disableStdin = true
-    term.write(code === undefined
+    emit(code === undefined
       ? '\r\n\x1b[33mConnection closed\x1b[0m\r\n'
       : `\r\n\x1b[33mConnection closed (exit code ${code})\x1b[0m\r\n`)
   }
@@ -231,7 +288,7 @@ export const attachTerminalStream = ({
     ? () => {}
     : window.omnitermAPI.connect.onSessionMetrics(id, onMetrics)
 
-  // Busy/idle is the mirror image: local-only, since it is the host's process tree being watched.
+  // Busy/idle is the inverse: local-only, since it is the host's process tree being watched.
   // Output bytes no longer drive the dot — only the backend's process-tree probe does, so the dot
   // reflects a real running child (vim, ssh, a build tool, an agent CLI) and not the shell's own
   // echo of the user's typing.
@@ -271,7 +328,7 @@ export const attachTerminalStream = ({
         if (!snapshot) {
           onStatus('error')
           onUnavailable()
-          term.write('\r\n\x1b[31mError: session is no longer available\x1b[0m\r\n')
+          emit('\r\n\x1b[31mError: session is no longer available\x1b[0m\r\n')
           return
         }
         // Normally empty: the replay rides the data channel above, not this result (see
@@ -284,7 +341,7 @@ export const attachTerminalStream = ({
         if (snapshot.status === 'ready') onStatus('connected')
         else if (snapshot.status === 'error') {
           onStatus('error')
-          if (snapshot.error) term.write('\r\n\x1b[31mError: ' + snapshot.error + '\x1b[0m\r\n')
+          if (snapshot.error) emit('\r\n\x1b[31mError: ' + snapshot.error + '\x1b[0m\r\n')
         } else if (snapshot.status === 'closed') {
           onStatus('closed')
           markExited()
@@ -305,14 +362,23 @@ export const attachTerminalStream = ({
       cleanupMetrics()
       cleanupActivity()
       api.dispose?.()
+      gate.dispose()
+      // Whatever this pane still holds is released, so a pane remounted on the same stream does not
+      // start out owing the backend for output it will never paint.
+      disposed = true
+      const held = receivedBytes + inFlightBytes
+      if (held > 0) api.ack?.(held)
+      receivedBytes = 0
       // Final scrollback flush — unmount is the last moment the full buffer is owned here.
       if (scrollTimer) clearTimeout(scrollTimer)
       scrollTimer = null
       if (scrollbackKey && scrollDirty) {
         scrollDirty = false
-        void saveScrollback(scrollbackKey, scrollBuffer)
+        void saveScrollback(scrollbackKey, scrollBuffer.text())
       }
     },
     noteLocalEcho: () => highlighter.noteLocalEcho(),
+    visibilityChanged: () => gate.onVisibilityChange(),
+    write: emit,
   }
 }

@@ -1,0 +1,20 @@
+id = "markdown"
+name = "Markdown"
+formatter = { tool = "prettier", parser = "markdown", range = false }
+extensions = ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdx", "ronn", "workbook"]
+block-comment = ["<!--", "-->"]
+indent = { tab-size = 2, insert-spaces = true }
+ui-mode = "Markdown"
+tree-sitter = "markdown"
+
+[[language-servers]]
+name = "marksman"
+command = "marksman"
+args = ["server"]
+root-markers = [".marksman.toml"]
+# Marksman exits on a document that is not a file on disk (an unsaved `untitled:` tab).
+file-only = true
+# Marksman also exits on a change range that does not fit its copy of a document: send it the
+# whole text on every change instead of ranges.
+full-sync = true
+install-hint = "brew install marksman (https://github.com/artempyanykh/marksman/releases)"

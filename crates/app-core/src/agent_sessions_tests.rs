@@ -62,3 +62,40 @@ fn only_objects_are_saved() {
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     assert!(!path.exists());
 }
+
+#[test]
+fn a_directory_in_place_of_the_store_loads_as_nothing() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    assert_eq!(load_store(dir.path()), None);
+}
+
+#[test]
+fn saving_reports_a_parent_that_cannot_be_created() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let blocker = dir.path().join("blocker");
+    fs::write(&blocker, b"file").expect("write blocker");
+    let error =
+        save_store(&blocker.join("store.json"), &json!({ "a": 1 })).expect_err("parent is a file");
+    assert_ne!(error.kind(), io::ErrorKind::InvalidInput);
+}
+
+#[test]
+fn saving_reports_a_temp_file_that_cannot_be_created() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("store.json");
+    fs::create_dir(dir.path().join("store.json.tmp")).expect("block temp path");
+    assert!(save_store(&path, &json!({ "a": 1 })).is_err());
+    assert!(!path.exists());
+}
+
+#[test]
+fn a_failed_replace_removes_the_temp_file() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("store.json");
+    fs::create_dir(&path).expect("directory in place of the store");
+    fs::write(path.join("keep"), b"x").expect("make the directory non-empty");
+
+    assert!(save_store(&path, &json!({ "a": 1 })).is_err());
+    assert!(!dir.path().join("store.json.tmp").exists());
+    assert!(path.join("keep").exists());
+}

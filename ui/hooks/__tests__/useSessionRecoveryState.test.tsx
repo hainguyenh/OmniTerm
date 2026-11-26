@@ -1,12 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useState } from 'react'
-import type { Connection } from '@omniterm/contract'
+import { diag } from '../../diag'
+import type { Connection } from '../../domain'
 import type { LayoutMode } from '../../themes'
-import type { ViewGroup } from '../../viewGroups'
 import { SNAPSHOT_VERSION, type SessionSnapshot } from '../../utils/sessionStore'
 import { shouldAutoRestoreTab, useSessionRecoveryState } from '../useSessionRecoveryState'
 import { useSessionPersistence } from '../useSessionPersistence'
@@ -43,8 +43,6 @@ const snapshot: SessionSnapshot = {
 function useHarness() {
   const [activeTabs, setActiveTabs] = useState<{ id: string; connId: string; name: string }[]>([])
   const [ephemeralConns, setEphemeralConns] = useState<Connection[]>([])
-  const [viewGroups, setViewGroups] = useState<ViewGroup[]>([])
-  const [tabGroups, setTabGroups] = useState<Record<string, string>>({})
   const [panes, setPanes] = useState<(string | null)[]>(Array(8).fill(null))
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(1)
   const [, setFocusedPane] = useState(0)
@@ -53,16 +51,12 @@ function useHarness() {
     activeTabs,
     ephemeralConns,
     resolveConnection: id => ephemeralConns.find(conn => conn.id === id),
-    viewGroups,
-    tabGroups,
-    activeGroupId: 'ungrouped',
+    viewGroups: [],
     layoutMode,
     sessionCwds: {},
     setActiveTabs,
     setEphemeralConns,
-    setTabGroups,
     setResumeMode,
-    restoreGroups: groups => setViewGroups(groups),
     setPanes,
     setLayoutMode,
     setFocusedPane,
@@ -75,7 +69,13 @@ describe('useSessionRecoveryState', () => {
   const release = vi.fn()
   const localDisconnect = vi.fn()
 
+  let restoreLog: ReturnType<typeof vi.spyOn>
+  let restoreWarn: ReturnType<typeof vi.spyOn>
+
   beforeEach(() => {
+    // Every restore reports how many panes it recreated; the failing-shell test asserts its warning.
+    restoreLog = vi.spyOn(diag, 'log').mockImplementation(() => {})
+    restoreWarn = vi.spyOn(diag, 'warn').mockImplementation(() => {})
     clearStoredSessions()
     vi.mocked(useSessionPersistence).mockReturnValue({ initialSnapshot: snapshot })
     open.mockReset().mockImplementation((_shell, _workspace, _folder, cwd) => Promise.resolve({
@@ -99,29 +99,16 @@ describe('useSessionRecoveryState', () => {
     })
   })
 
-  afterEach(() => clearStoredSessions())
+  afterEach(() => {
+    clearStoredSessions()
+    vi.restoreAllMocks()
+  })
 
   it('does not auto-resume a plain PowerShell pane, while an agent-titled pane remains eligible', () => {
     expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'PowerShell' })).toBe(false)
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'project // PowerShell 7' })).toBe(false)
     expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[0], name: 'Claude Code - project' })).toBe(true)
-  })
-
-  it('does not associate a plain shell in folder X with another pane\'s agent session', () => {
-    upsertSession({
-      id: 'claude:33333333-3333-4333-8333-333333333333',
-      tabId: 'tab-a',
-      agent: 'claude',
-      profileName: 'work',
-      sessionId: '33333333-3333-4333-8333-333333333333',
-      cwd: 'F:/a',
-      state: 'interrupted',
-      updatedAt: Date.now(),
-    })
-    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'PowerShell', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
-    expect(shouldAutoRestoreTab({ ...snapshot.activeTabs[1], name: 'project X // PowerShell 7', recovery: { cwd: 'F:/a', cwdSource: 'reported' } })).toBe(false)
-    expect(shouldAutoRestoreTab(snapshot.activeTabs[0])).toBe(true)
   })
 
   it('auto-restores a pane with a persisted agent session after its title fell back to the shell', () => {
@@ -154,13 +141,14 @@ describe('useSessionRecoveryState', () => {
     })
 
     const { result } = renderHook(() => useHarness())
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.recovery.restoreOutcomes['tab-a']?.phase).toBe('recovering')
       expect(result.current.recovery.restoreOutcomes['tab-b']?.phase).toBe('failed')
     })
+    expect(restoreWarn).toHaveBeenCalledWith('[useSessionRestore] fresh shell registration failed', expect.objectContaining({ message: 'shell unavailable' }))
 
     const latestPersistenceInput = () => vi.mocked(useSessionPersistence).mock.calls.at(-1)?.[0]
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(latestPersistenceInput()?.pendingSnapshot?.activeTabs.map(tab => tab.id)).toEqual(['tab-a', 'tab-b'])
     })
 
@@ -170,13 +158,13 @@ describe('useSessionRecoveryState', () => {
     const aCallsBefore = open.mock.calls.filter(call => call[3] === 'F:/a').length
     const bCallsBefore = open.mock.calls.filter(call => call[3] === 'F:/b').length
     act(() => result.current.recovery.retryRestore('tab-a'))
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(open.mock.calls.filter(call => call[3] === 'F:/a')).toHaveLength(aCallsBefore + 1)
     })
     expect(open.mock.calls.filter(call => call[3] === 'F:/b')).toHaveLength(bCallsBefore)
 
     act(() => result.current.recovery.markRestoreReady('tab-a'))
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(latestPersistenceInput()?.pendingSnapshot?.activeTabs.map(tab => tab.id)).toEqual(['tab-b'])
     })
 
@@ -187,13 +175,14 @@ describe('useSessionRecoveryState', () => {
   it('recreates saved panes as fresh shells in their saved directories', async () => {
     const { result } = renderHook(() => useHarness())
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(result.current.activeTabs).toEqual([
         { id: 'tab-a', connId: 'fresh-a', name: 'A' },
         { id: 'tab-b', connId: 'fresh-b', name: 'B' },
       ])
     })
 
+    expect(restoreLog).toHaveBeenCalledWith('[useSessionRestore] recreated', 2, 'terminal pane(s)')
     expect(localDisconnect).toHaveBeenCalledWith('tab-a')
     expect(localDisconnect).toHaveBeenCalledWith('tab-b')
     expect(open).toHaveBeenCalledWith('powershell', null, undefined, 'F:/a', null)

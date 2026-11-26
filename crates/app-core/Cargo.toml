@@ -1,6 +1,6 @@
 [package]
 name = "omniterm-core"
-version = "0.1.15"
+version = "0.1.14"
 description = "Domain logic + IO services for OmniTerm (no Tauri dependency)."
 authors = ["OmniTerm Contributors"]
 license = "Apache-2.0"
@@ -25,6 +25,8 @@ tempfile = "3"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
+    # ICU's calendar (icu.dll, part of Windows 10+): IANA-zoned agent quota reset times.
+    "Win32_Globalization",
     "Win32_Security",
     "Win32_System_JobObjects",
     "Win32_System_Threading",

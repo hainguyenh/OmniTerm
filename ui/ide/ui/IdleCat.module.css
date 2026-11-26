@@ -1,0 +1,38 @@
+.cat {
+  flex: none;
+  width: 160px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.perched {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  z-index: 1;
+  /* The belly ends 44.4% down the artwork (row 158 of 356): it lies on the box's top border. */
+  transform: translate(-50%, -44.4%);
+}
+
+.cat img {
+  width: 100%;
+  height: auto;
+  opacity: 0.85;
+}
+
+/* One variant shows at a time; `.cat` keeps these above `.cat img` in specificity. */
+.cat .light {
+  display: none;
+}
+
+.cat .dark {
+  display: block;
+}
+
+:global(:root[data-theme="light"]) .cat .light {
+  display: block;
+}
+
+:global(:root[data-theme="light"]) .cat .dark {
+  display: none;
+}

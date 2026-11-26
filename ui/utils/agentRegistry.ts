@@ -10,7 +10,6 @@ export const AGENT_REGISTRY: Record<string, AgentResumeRecipe | null> = {
   'Antigravity CLI': { command: 'agy', resumeArgs: ['--continue'] },
   'Codex':           { command: 'codex', resumeArgs: ['resume', '--last'] },
   'Aider':           { command: 'aider', resumeArgs: ['--restore-chat-history'] },
-  'Gemini CLI':      { command: 'gemini', resumeArgs: ['--resume'] },
   'Goose':           null,
   'Copilot CLI':     { command: 'copilot', resumeArgs: ['--continue'] },
 }
@@ -23,8 +22,7 @@ export function getAgentResumeRecipe(agentName?: string | null): AgentResumeReci
     if (
       name.toLowerCase() === normalized ||
       recipe?.command.toLowerCase() === normalized ||
-      (recipe?.command === 'agy' && (normalized === 'antigravity' || normalized === 'antigravity cli' || normalized === 'agy')) ||
-      (recipe?.command === 'gemini' && (normalized === 'gemini' || normalized === 'gemini cli'))
+      (recipe?.command === 'agy' && (normalized === 'antigravity' || normalized === 'antigravity cli' || normalized === 'agy'))
     ) {
       return recipe
     }
@@ -52,9 +50,7 @@ export function resolveAgentLauncher(
       ? 'opencode'
       : norm.includes('antigravity') || norm === 'agy'
         ? 'agy'
-        : norm.includes('gemini')
-          ? 'gemini'
-          : 'claude'
+        : 'claude'
 
   const trimmedLauncher = launcher?.trim()
   if (trimmedLauncher) {
@@ -122,9 +118,6 @@ export function formatAgentResumeCommand(
     if (norm.includes('antigravity') || norm === 'agy' || baseCmd === 'agy' || baseCmd.startsWith('agy')) {
       return `${baseCmd} --conversation ${sid}`
     }
-    if (norm.includes('gemini') || baseCmd === 'gemini' || baseCmd.startsWith('gemini')) {
-      return `${baseCmd} --resume ${sid}`
-    }
     if (norm.includes('opencode') || norm.includes('open code') || baseCmd.startsWith('opencode')) {
       return `${baseCmd} --session ${sid}`
     }
@@ -159,7 +152,6 @@ const PATH_PASTE_AGENTS = [
   'Goose',
   'Devin',
   'SWE-Agent',
-  'Gemini CLI',
 ]
 
 export function imagePasteModeFor(agentName?: string | null): ImagePasteMode {

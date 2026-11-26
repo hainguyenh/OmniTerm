@@ -187,15 +187,7 @@ pub fn scrub_stored_secrets<R: Runtime>(app: &AppHandle<R>) {
 }
 
 #[tauri::command]
-pub async fn load_connections<R: Runtime>(
-    app: AppHandle<R>,
-    host: tauri::State<'_, crate::plugin_host::PluginHost>,
-) -> Result<ConnectionTree, String> {
-    if let Ok(Some(remote_data)) = host.load_connections().await {
-        if let Ok(tree) = serde_json::from_value(remote_data) {
-            return Ok(tree);
-        }
-    }
+pub async fn load_connections<R: Runtime>(app: AppHandle<R>) -> Result<ConnectionTree, String> {
     read_tree(&app)
 }
 
@@ -217,17 +209,8 @@ pub(crate) fn write_tree<R: Runtime>(
 #[tauri::command]
 pub async fn save_connections<R: Runtime>(
     app: AppHandle<R>,
-    host: tauri::State<'_, crate::plugin_host::PluginHost>,
     data: ConnectionTree,
 ) -> Result<(), String> {
-    if let Ok(true) = host
-        .save_connections(serde_json::to_value(&data).map_err(|e| e.to_string())?)
-        .await
-    {
-        // Handled by plugin host
-        return Ok(());
-    }
-
     write_tree(&app, &data)
 }
 

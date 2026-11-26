@@ -1,16 +1,13 @@
 import { Circle, Diamond, Hexagon, Leaf, Triangle, Flame, Cloud, Gem, type LucideIcon } from 'lucide-react'
 
 /**
- * Per-pane identity: a shape and a hue for each slot of the dock grid.
+ * The session identity palette: a shape and a hue per session (see workbench/sessions/sessionColors.ts,
+ * which hands them out). The shape carries the identity: colour alone fails for colour-blind users and
+ * against a themed background.
  *
- * With eight panes and a long tab strip, "which pane is this tab in" was carried only by a small grey
- * numeral. Giving each pane a fixed shape + colour lets the pane header, its docked tabs, the pane picker
- * and the footer all be matched by eye. The shape is what actually carries the identity — colour alone
- * fails for colour-blind users and against a themed background.
- *
- * Colours are literal hexes on purpose, following `ui/utils/fileKind.ts`: a pane's identity must not
+ * Colours are literal hexes on purpose, following `ui/utils/fileKind.ts`: a session's identity must not
  * shift when the user switches theme. Tailwind cannot compile classes from runtime values, so consumers
- * apply them through inline `style` (`color` / `borderColor` / `backgroundColor`).
+ * apply them through inline `style`.
  */
 export interface PaneIdentity {
   icon: LucideIcon
@@ -19,7 +16,7 @@ export interface PaneIdentity {
   label: string
 }
 
-/** Index = pane index. Length matches MAX_PLANES in MainLayout (the largest layout mode). */
+/** Eight entries: as many as the largest layout has panes. */
 export const PANE_IDENTITY: readonly PaneIdentity[] = [
   { icon: Circle, color: '#7aa2f7', label: 'blue circle' },
   { icon: Diamond, color: '#e0af68', label: 'amber diamond' },
@@ -30,43 +27,3 @@ export const PANE_IDENTITY: readonly PaneIdentity[] = [
   { icon: Cloud, color: '#73daca', label: 'teal cloud' },
   { icon: Gem, color: '#ff9e64', label: 'orange gem' },
 ]
-
-/**
- * Identity of a pane index. Wraps rather than throwing so a stale index from a shrinking layout can
- * never blank out a tab; callers should only ever pass a real pane index (0 … MAX_PLANES-1).
- */
-let differentPaneColorsEnabled = true
-
-export function setDifferentPaneColors(enabled: boolean): void {
-  differentPaneColorsEnabled = enabled
-}
-
-export function isDifferentPaneColors(): boolean {
-  return differentPaneColorsEnabled
-}
-
-export function paneIdentity(index: number): PaneIdentity {
-  const n = PANE_IDENTITY.length
-  const identity = PANE_IDENTITY[((Math.trunc(index) % n) + n) % n]
-  if (!differentPaneColorsEnabled) {
-    return {
-      ...identity,
-      color: 'var(--theme-accent)',
-    }
-  }
-  return identity
-}
-
-/** `hex` at `alpha` (0–1) as an 8-digit hex, for the softer stripe/border of an unfocused pane. */
-export function withAlpha(color: string, alpha: number): string {
-  if (color.startsWith('var(')) {
-    return `color-mix(in srgb, ${color} ${Math.round(alpha * 100)}%, transparent)`
-  }
-  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-  return `${color}${a.toString(16).padStart(2, '0')}`
-}
-
-/** Shared pane-title surface, reused by pane headers and their matching session tabs. */
-export function paneSurfaceColor(identity: PaneIdentity, focused: boolean): string {
-  return withAlpha(identity.color, focused ? 0.18 : 0.1)
-}

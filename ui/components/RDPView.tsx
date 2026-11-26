@@ -1,6 +1,8 @@
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback, useState } from 'react'
 import { Connection, SessionStatus } from './MainLayout'
 import { diag } from '../diag'
+
+import { rdpPlaceholderText, type RdpPhase } from './rdpPlaceholder'
 
 interface RDPViewProps {
   id: string
@@ -14,8 +16,9 @@ interface RDPViewProps {
   onLatency?: (ms: number | null) => void
 }
 
-const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive, onStatus, onLatency }) => {
+const RDPView: React.FC<RDPViewProps> = ({ id, connection, active, paneEpoch, overlayActive, onStatus, onLatency }) => {
   const containerRef = useRef<HTMLDivElement>(null)
+  const [phase, setPhase] = useState<RdpPhase>('starting')
 
   // Keep the latest callbacks / active / overlay without making them effect deps.
   const onStatusRef = useRef(onStatus)
@@ -27,21 +30,21 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
   const overlayRef = useRef(overlayActive)
   overlayRef.current = overlayActive
 
-  // Send the placeholder's current rect (physical px via dpr) to the main process.
-  // Skipped when the element has no size (hidden tab → 0×0 → would collapse mstsc).
-  const pushBounds = useCallback(() => {
+  // The placeholder's current rect in CSS px plus the dpr the host converts it with. `null` when
+  // the element has no size (hidden tab → 0×0 → would collapse mstsc).
+  const measure = useCallback(() => {
     const el = containerRef.current
-    if (!el) return
+    if (!el) return null
     const rect = el.getBoundingClientRect()
-    if (rect.width === 0 || rect.height === 0) return
-    window.omnitermAPI.connect.rdpSetBounds(id, {
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-      dpr: window.devicePixelRatio,
-    })
-  }, [id])
+    if (rect.width === 0 || rect.height === 0) return null
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height, dpr: window.devicePixelRatio }
+  }, [])
+
+  // Send the pane's rect to the host, which keeps the docked client window on it.
+  const pushBounds = useCallback(() => {
+    const bounds = measure()
+    if (bounds) window.omnitermAPI.connect.rdpSetBounds(id, bounds)
+  }, [id, measure])
 
   // Connection lifecycle
   useEffect(() => {
@@ -51,8 +54,13 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
 
     const cleanupClosed = window.omnitermAPI.connect.onRDPClosed(id, () => {
       if (!unmounted) {
+        setPhase('closed')
         onStatusRef.current?.('closed')
       }
+    })
+
+    const cleanupDocked = window.omnitermAPI.connect.onRDPDocked(id, () => {
+      if (!unmounted) setPhase('docked')
     })
 
     const cleanupLatency = window.omnitermAPI.connect.onRDPLatency(id, (ms) => {
@@ -61,21 +69,23 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
       }
     })
 
-    window.omnitermAPI.connect.rdp(id)
+    // The first size goes with the launch so the client opens as a window of the pane's size —
+    // a full-screen client cannot be docked.
+    window.omnitermAPI.connect.rdp(id, measure() ?? undefined)
       .then((res) => {
         if (unmounted) return
         if (!res || res.ok === false) {
           // Cancelling the connect prompt closes the session before it connects — show a
           // neutral "closed" status, not a red error. Everything else is a real error.
           const cancelled = res?.error?.includes('closed before')
+          setPhase(cancelled ? 'closed' : 'error')
           onStatusRef.current?.(cancelled ? 'closed' : 'error')
           return
         }
+        setPhase((current) => (current === 'starting' ? 'signing-in' : current))
         onStatusRef.current?.('connected')
-        // The native mstsc window now exists and is embedded. Re-assert bounds +
-        // visibility now that the session exists (the calls fired at mount were dropped
-        // because the main-process session did not exist yet). Push a few more times to
-        // override mstsc's own resize once the remote desktop finishes loading.
+        // Re-assert bounds + visibility now that the client is running, and a few more times to
+        // override the client's own resize once the remote desktop finishes loading.
         window.omnitermAPI.connect.rdpSetVisible(id, activeRef.current && !overlayRef.current)
         pushBounds()
         ;[300, 900, 1800].forEach(ms => setTimeout(() => { if (!unmounted) pushBounds() }, ms))
@@ -83,6 +93,7 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
       .catch((err) => {
         if (!unmounted) {
           diag.error('RDP connect error:', err)
+          setPhase('error')
           onStatusRef.current?.('error')
         }
       })
@@ -90,10 +101,11 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
     return () => {
       unmounted = true
       cleanupClosed()
+      cleanupDocked()
       cleanupLatency()
       window.omnitermAPI.connect.rdpDisconnect(id)
     }
-  }, [id, pushBounds])
+  }, [id, measure, pushBounds])
 
   // Bounds tracking — re-position on layout/window resize.
   useEffect(() => {
@@ -132,10 +144,14 @@ const RDPView: React.FC<RDPViewProps> = ({ id, active, paneEpoch, overlayActive,
     return () => cancelAnimationFrame(raf)
   }, [paneEpoch, pushBounds])
 
+  const message = rdpPlaceholderText(phase, connection.host || connection.name)
+
   return (
     <div className="h-full w-full bg-theme-bg">
-      {/* Empty placeholder — the native mstsc window is painted on top of this rect. */}
-      <div ref={containerRef} className="h-full w-full" />
+      {/* The native client window is docked over this rect once the session connects. */}
+      <div ref={containerRef} className="flex h-full w-full items-center justify-center p-6">
+        {message && <p className="max-w-md text-center text-sm text-theme-dim">{message}</p>}
+      </div>
     </div>
   )
 }

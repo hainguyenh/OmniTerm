@@ -22,7 +22,10 @@ export interface SessionChannel {
   dispose?: () => void
   /** Each `on*` returns a synchronous unsubscribe — see omnitermAPI.ts. */
   onReady: (cb: (label?: string, replay?: ReplayMetadata) => void) => () => void
-  onData: (cb: (data: Uint8Array) => void) => () => void
+  /** A callback returning `'ack-later'` reports the bytes through `ack` once they are written. */
+  onData: (cb: (data: Uint8Array) => 'ack-later' | void) => () => void
+  /** Bytes of output written to the terminal; lets the backend keep reading (sessionOutputAck.ts). */
+  ack?: (bytes: number) => void
   onError: (cb: (err: string) => void) => () => void
   onClosed: (cb: (code?: number) => void) => () => void
 }
@@ -64,9 +67,12 @@ export const createSessionChannel = (
       onReady: (cb) => window.omnitermAPI.connect.onSSHReady(id, () => cb()),
       onData: (cb) => window.omnitermAPI.connect.onSSHData(id, cb),
       onError: (cb) => window.omnitermAPI.connect.onSSHError(id, cb),
-      // SSH reports no status of its own, so a closed channel is reported as a clean exit.
-      onClosed: (cb) => window.omnitermAPI.connect.onSSHClosed(id, () => cb(0)),
+      // ssh.exe runs in a PTY like a local shell, so its real exit code is reported: reporting every
+      // close as a clean exit closed the tab of a failed connect at once, before its error could be read.
+      onClosed: (cb) => window.omnitermAPI.connect.onSSHClosed(id, cb),
     }
   channel.dispose = resizeQueue.cancel
+  // Local and SSH panes stream over the same session channels, so they acknowledge the same way.
+  channel.ack = (bytes) => window.omnitermAPI.connect.ackOutput(id, bytes)
   return channel
 }

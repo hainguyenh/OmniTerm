@@ -1,4 +1,4 @@
-import { AgentIcon } from '../../plugins/agent-quota/app/QuotaLine'
+import { AgentIcon } from '../features/agent-quota/QuotaLine'
 import { agentBrandFor, agentTooltip } from '../utils/agentIdentity'
 import { Tooltip, type TooltipPlacement } from './Tooltip'
 

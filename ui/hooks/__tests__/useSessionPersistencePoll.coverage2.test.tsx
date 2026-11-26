@@ -3,11 +3,11 @@
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Connection } from '@omniterm/contract'
+import type { Connection } from '../../domain'
 
 import { useSessionPersistence } from '../useSessionPersistence'
 import { detectPaneAgents, resolveClaudeSessionId, type DetectedPaneAgent } from '../../utils/agentSessionDetector'
-import { bindActiveSession, clearActiveForTab, findSessionByTabId } from '../../utils/agentSessionStorage'
+import { bindActiveSession, clearActiveForTab, findSessionByTabId, isSessionBoundToOtherTab } from '../../utils/agentSessionStorage'
 import { getPanePresence, isInRestoreGrace, setPanePresence, type PanePresence } from '../../utils/agentPresenceStore'
 
 vi.mock('../../utils/agentSessionDetector', () => ({
@@ -19,6 +19,7 @@ vi.mock('../../utils/agentSessionStorage', () => ({
   bindActiveSession: vi.fn(),
   clearActiveForTab: vi.fn(),
   findSessionByTabId: vi.fn(() => undefined),
+  isSessionBoundToOtherTab: vi.fn(() => false),
   promoteStaleActiveSessions: vi.fn(),
 }))
 
@@ -40,6 +41,7 @@ const resolveClaudeMock = vi.mocked(resolveClaudeSessionId)
 const bindMock = vi.mocked(bindActiveSession)
 const clearMock = vi.mocked(clearActiveForTab)
 const findMock = vi.mocked(findSessionByTabId)
+const boundElsewhereMock = vi.mocked(isSessionBoundToOtherTab)
 const presenceMock = vi.mocked(getPanePresence)
 const graceMock = vi.mocked(isInRestoreGrace)
 const setPresenceMock = vi.mocked(setPanePresence)
@@ -74,6 +76,7 @@ beforeEach(() => {
   detectMock.mockResolvedValue([])
   resolveClaudeMock.mockResolvedValue(null)
   findMock.mockReturnValue(undefined)
+  boundElsewhereMock.mockReturnValue(false)
   presenceMock.mockReturnValue(undefined)
   graceMock.mockReturnValue(false)
   setResolveModel()
@@ -152,8 +155,19 @@ describe('useSessionPersistence agent poll with a detected process', () => {
     })
     expect(lastPresence()?.t1).toEqual({
       agent: 'claude', profileName: 'work', launcher: 'claude-work', pid: 10, startTime: 100,
-      claudeSessionId: 'sid-1', agentSessionId: 'sid-1', modelInfo: { model: 'opus', display: 'Opus' },
+      claudeSessionId: 'sid-1', agentSessionId: 'sid-1', modelInfo: { model: 'opus', display: 'Opus' }, launchCwd: 'C:/repo',
     })
+  })
+
+  it('keeps its own Claude session when the newest file in the folder belongs to another pane', async () => {
+    setResolveModel(async () => null)
+    presenceMock.mockReturnValue({ agent: 'claude', profileName: 'work', pid: 10, startTime: 100, claudeSessionId: 'own', agentSessionId: 'own' })
+    detectMock.mockResolvedValue([agent({ agent: 'claude', profileName: 'work', profileDir: 'C:/p' })])
+    resolveClaudeMock.mockResolvedValue('theirs')
+    boundElsewhereMock.mockImplementation((id, tabId) => id === 'claude:theirs' && tabId === 't1')
+    renderPoll([{ id: 't1', connId: 'c', name: 'pwsh' }], [conn()], { t1: 'C:/repo' })
+    await waitFor(() => expect(bindMock).toHaveBeenCalled())
+    expect(bound()[0]).toMatchObject({ id: 'claude:own', sessionId: 'own' })
   })
 
   it('records presence but binds nothing while a Claude session file is not there yet', async () => {
@@ -250,5 +264,39 @@ describe('useSessionPersistence agent poll lifecycle', () => {
     act(() => { vi.advanceTimersByTime(5_000) })
     expect(detectMock).toHaveBeenCalledTimes(2)
     unmount()
+  })
+
+  it('publishes the agent of every pane even when the props change identity while it resolves', async () => {
+    const tabs: Tab[] = [{ id: 't1', connId: 'c', name: 'a' }, { id: 't2', connId: 'c', name: 'b' }]
+    detectMock.mockResolvedValue([
+      agent({ sessionId: 't1', agent: 'claude', pid: 1, profileName: 'claude-work', profileDir: 'C:/p1' }),
+      agent({ sessionId: 't2', agent: 'claude', pid: 2, profileName: 'claude-th', profileDir: 'C:/p2' }),
+    ])
+    // Each model lookup is followed by a render, like the app's layout updates while panes resolve.
+    let renders = 0
+    let rerenderNow: () => void = () => {}
+    setResolveModel(async () => {
+      if (renders++ < 6) act(() => rerenderNow())
+      return null
+    })
+    // A new `sessionCwds` object every render, as the app's layout model produces.
+    const { rerender } = renderHook(() => useSessionPersistence({ activeTabs: tabs, ephemeralConns: [conn()], sessionCwds: { t1: '/a', t2: '/b' } }))
+    rerenderNow = rerender
+    await waitFor(() => expect(Object.keys(lastPresence() ?? {}).sort()).toEqual(['t1', 't2']))
+  })
+
+  it('keeps the folder an agent started in after the shell moves to another project', async () => {
+    detectMock.mockResolvedValue([agent({ agent: 'claude', profileName: 'claude', profileDir: 'C:/p' })])
+    resolveClaudeMock.mockResolvedValue('sid-1')
+    const tabs = [{ id: 't1', connId: 'c', name: 'pwsh' }]
+    const first = renderHook(() => useSessionPersistence({ activeTabs: tabs, ephemeralConns: [conn()], sessionCwds: { t1: 'D:/work/a' } }))
+    await waitFor(() => expect(lastPresence()?.t1?.launchCwd).toBe('D:/work/a'))
+    // The previous poll's presence is what the store hands back on the next one.
+    presenceMock.mockReturnValue(lastPresence()?.t1)
+    first.unmount()
+    renderHook(() => useSessionPersistence({ activeTabs: tabs, ephemeralConns: [conn()], sessionCwds: { t1: 'D:/work/b' } }))
+    await waitFor(() => expect(setPresenceMock.mock.calls.length).toBeGreaterThan(1))
+    expect(lastPresence()?.t1?.launchCwd).toBe('D:/work/a')
+    expect(bound().at(-1)?.cwd).toBe('D:/work/a')
   })
 })

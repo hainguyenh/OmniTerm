@@ -1,60 +1,62 @@
-//! Plugin host IPC commands.
+//! Plugin list IPC commands for OmniTerm's built-in features (Agent Quota, Always Awake).
+//!
+//! The sandboxed WebAssembly plugins are served by the IDE backend (`idea_host.rs`), whose own
+//! `plugin_list` command is why these are prefixed `omni_`.
 
-use crate::plugin_host::PluginHost;
-use tauri::State;
+use tauri::Emitter;
 
+/// Broadcast to every window when a built-in feature is enabled or disabled, so a window that shows
+/// its surfaces (Agent Quota, Always Awake) follows it without polling.
+pub(crate) const PLUGINS_CHANGED_EVENT: &str = "omniterm://plugins-changed";
+
+pub(crate) fn notify_plugins_changed<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Err(error) = app.emit(PLUGINS_CHANGED_EVENT, ()) {
+        log::warn!("could not announce a plugin change: {error}");
+    }
+}
+
+/// The built-in features as plugin-list rows (`builtin_features.rs`).
 #[tauri::command]
-pub async fn plugin_available<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    host: State<'_, PluginHost>,
-) -> Result<bool, String> {
-    host.start(&app).await?;
-    Ok(host.is_available().await)
+pub fn omni_plugin_list<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Vec<serde_json::Value> {
+    crate::builtin_features::descriptors(&app)
 }
 
 #[tauri::command]
-pub async fn plugin_list<R: tauri::Runtime>(
+pub fn omni_plugin_set_enabled<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    host: State<'_, PluginHost>,
-) -> Result<Vec<serde_json::Value>, String> {
-    host.start(&app).await?;
-    host.list_plugins().await
-}
-
-#[tauri::command]
-pub async fn plugin_set_enabled(
-    host: State<'_, PluginHost>,
     id: String,
     enabled: bool,
 ) -> Result<serde_json::Value, String> {
-    host.set_enabled(id, enabled).await
+    let changed = crate::builtin_features::set_enabled(&app, &id, enabled)?
+        .ok_or_else(|| format!("Unknown built-in feature \"{id}\"."))?;
+    notify_plugins_changed(&app);
+    Ok(changed)
 }
 
-#[tauri::command]
-pub async fn plugin_select_connection_provider(
-    host: State<'_, PluginHost>,
-    id: Option<String>,
-) -> Result<Vec<serde_json::Value>, String> {
-    host.select_connection_provider(id).await
-}
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
-#[tauri::command]
-pub async fn connection_provider_capabilities(
-    host: State<'_, PluginHost>,
-) -> Result<Option<serde_json::Value>, String> {
-    host.connection_capabilities().await
-}
+    use tauri::Listener;
 
-#[tauri::command]
-pub async fn plugin_invoke(
-    host: State<'_, PluginHost>,
-    method: String,
-    args: Vec<serde_json::Value>,
-) -> Result<serde_json::Value, String> {
-    host.invoke(method, args).await
-}
+    #[test]
+    fn a_plugin_change_reaches_every_listener() {
+        let app = crate::test_support::mock_app();
+        let heard = Arc::new(AtomicUsize::new(0));
+        let counter = heard.clone();
+        app.listen(super::PLUGINS_CHANGED_EVENT, move |_| {
+            counter.fetch_add(1, Ordering::SeqCst);
+        });
+        super::notify_plugins_changed(app.handle());
+        assert_eq!(heard.load(Ordering::SeqCst), 1);
+    }
 
-#[tauri::command]
-pub async fn plugin_auth_gate(host: State<'_, PluginHost>) -> Result<bool, String> {
-    host.auth_gate().await
+    #[test]
+    fn only_built_in_features_can_be_switched() {
+        let app = crate::test_support::mock_app();
+        let error = super::omni_plugin_set_enabled(app.handle().clone(), "acme.blur".into(), false)
+            .expect_err("an unknown id is refused");
+        assert!(error.contains("acme.blur"), "{error}");
+    }
 }

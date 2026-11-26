@@ -4,10 +4,14 @@
 import type { ILinkProvider, Terminal } from '@xterm/xterm'
 import { describe, expect, it, vi } from 'vitest'
 import {
+  continuationSpan,
   findLinkOrPathAt,
   findLinkOrPathInTerminal,
   isTerminalLinkModifierClick,
-  registerPlainUrlLinks,
+  joinedPathCandidates,
+  linkSpansOnLine,
+  oscLinkTarget,
+  registerPlainTextLinks,
   safeHttpUrl,
 } from '../terminalLinks'
 
@@ -45,13 +49,13 @@ describe('terminalLinks', () => {
       }),
     } as unknown as Terminal
 
-    registerPlainUrlLinks(terminal)
+    registerPlainTextLinks(terminal)
     const callback = vi.fn()
     provider?.provideLinks(1, callback)
 
     expect(callback).toHaveBeenCalledWith([expect.objectContaining({
       text: 'https://example.test/docs',
-      range: { start: { x: 5, y: 1 }, end: { x: 30, y: 1 } },
+      range: { start: { x: 5, y: 1 }, end: { x: 29, y: 1 } },
     })])
   })
 })
@@ -97,6 +101,72 @@ describe('findLinkOrPathAt', () => {
     const match = findLinkOrPathAt(DRIVE_LINE, 19) // col 19 is inside "log.txt"
     expect(match?.kind).toBe('path')
     expect(match?.text).toBe('C:\\projects\\app\\log.txt')
+  })
+
+  it('reads the line and column printed after a path, keeping them out of the path text', () => {
+    expect(findLinkOrPathAt('see src/a.ts:12:5 now', 6)).toMatchObject({ text: 'src/a.ts', line: 12, col: 5 })
+    expect(findLinkOrPathAt('at src/a.ts(7,2)', 4)).toMatchObject({ text: 'src/a.ts', line: 7, col: 2 })
+    expect(findLinkOrPathAt('see src/a.ts:12.', 6)).toMatchObject({ text: 'src/a.ts', line: 12 })
+    const plain = findLinkOrPathAt('wrote .bizreq/outbox/56069-decision-task.md', 8)
+    expect(plain?.text).toBe('.bizreq/outbox/56069-decision-task.md')
+    expect(plain?.line).toBeUndefined()
+  })
+
+  it('keeps a folder name with spaces inside one path', () => {
+    const line = 'Report 56159: test/test-results/runs/Sprint 254/56159-migration-hours-overview/latest.html'
+    const whole = 'test/test-results/runs/Sprint 254/56159-migration-hours-overview/latest.html'
+    expect(findLinkOrPathAt(line, line.indexOf('Sprint'))?.text).toBe(whole)
+    expect(findLinkOrPathAt(line, line.indexOf('254/'))?.text).toBe(whole)
+    expect(findLinkOrPathAt(line, line.indexOf('latest'))?.text).toBe(whole)
+    expect(findLinkOrPathAt('open C:\\My Documents\\a.txt', 8)?.text).toBe('C:\\My Documents\\a.txt')
+    expect(findLinkOrPathAt('open ./My Files/a.txt', 8)?.text).toBe('./My Files/a.txt')
+  })
+
+  it('does not join two paths, or a path and a word, across a space', () => {
+    const line = 'edited src/a.ts and src/b.ts'
+    expect(linkSpansOnLine(line).map((span) => span.text)).toEqual(['src/a.ts', 'src/b.ts'])
+    expect(linkSpansOnLine('see Docs src/a.ts').map((span) => span.text)).toEqual(['src/a.ts'])
+    expect(linkSpansOnLine('runs/Sprint 254 done').map((span) => span.text)).toEqual(['runs/Sprint'])
+  })
+
+  it('joins a path only with the word across the line break it touches', () => {
+    const span = linkSpansOnLine('see src/a.ts:12')[0]!
+    expect(joinedPathCandidates(span, 'see src/a.ts:12', 'before', 'More text')).toEqual(['src/a.ts More', 'src/a.tsMore'])
+    const opening = linkSpansOnLine('  src/a.ts then')[0]!
+    expect(joinedPathCandidates(opening, '  src/a.ts then', 'see the', null)).toEqual(['the src/a.ts', 'thesrc/a.ts'])
+    const inside = linkSpansOnLine('see src/a.ts then')[0]!
+    expect(joinedPathCandidates(inside, 'see src/a.ts then', 'x', 'y')).toEqual([])
+  })
+
+  // Regression: `spdd/reviews/56070-202611221515-[Handoff]-x.md` stopped at the `[`.
+  it('keeps square brackets inside a file name, but not a bracket around the path', () => {
+    const path = 'spdd/reviews/56070-202611221515-[Handoff]-service-delivery-tc02-tc03.md'
+    expect(linkSpansOnLine(`Wrote ${path}.`).map((span) => span.text)).toEqual([path])
+    expect(linkSpansOnLine(`(${path})`).map((span) => span.text)).toEqual([path])
+    expect(linkSpansOnLine('[see src/a.ts]').map((span) => span.text)).toEqual(['src/a.ts'])
+    expect(linkSpansOnLine('[a](src/a.ts) and docs/[x].md]').map((span) => span.text)).toEqual(['src/a.ts', 'docs/[x].md'])
+  })
+
+  it('reads a file name opening a line as the end of the path the line before broke off', () => {
+    const before = 'Review: spdd/reviews/56070-202611221515-'
+    expect(continuationSpan('[Handoff]-service-delivery-tc02-tc03.md', before)).toMatchObject({
+      kind: 'path',
+      text: '[Handoff]-service-delivery-tc02-tc03.md',
+      start: 0,
+      candidates: [
+        'spdd/reviews/56070-202611221515-[Handoff]-service-delivery-tc02-tc03.md',
+        'spdd/reviews/56070-202611221515- [Handoff]-service-delivery-tc02-tc03.md',
+      ],
+    })
+    expect(continuationSpan('  latest.html done', 'see test/runs/Sprint')?.candidates).toEqual([
+      'test/runs/Sprint latest.html',
+      'test/runs/Sprintlatest.html',
+    ])
+    // Prose after a path, a path that does not close its line, or no path at all: no link.
+    expect(continuationSpan('and then more', 'edited src/a.ts')).toBeNull()
+    expect(continuationSpan('notes.md', 'edited src/a.ts today')).toBeNull()
+    expect(continuationSpan('notes.md', 'nothing here')).toBeNull()
+    expect(continuationSpan('src/b.ts', 'edited src/a.ts')).toBeNull()
   })
 
   it('does NOT match a bare filename with no path separator', () => {
@@ -202,5 +272,20 @@ describe('findLinkOrPathInTerminal', () => {
 
     expect(findLinkOrPathInTerminal(terminal, termEl, 50, 100)).toBeNull() // left of rect
     expect(findLinkOrPathInTerminal(terminal, termEl, 100, 50)).toBeNull() // above rect
+  })
+})
+
+describe('oscLinkTarget', () => {
+  it('reads local file URIs as paths, with a trailing line and column', () => {
+    expect(oscLinkTarget('file:///D:/work/a.ts')).toEqual({ kind: 'path', text: 'D:/work/a.ts' })
+    expect(oscLinkTarget('file://localhost/home/me/a.ts:3')).toEqual({ kind: 'path', text: '/home/me/a.ts', line: 3 })
+    expect(oscLinkTarget('file:///C:/My%20Docs/x.md:4:2')).toEqual({ kind: 'path', text: 'C:/My Docs/x.md', line: 4, col: 2 })
+  })
+
+  it('keeps HTTP(S) links and drops every other target', () => {
+    expect(oscLinkTarget('https://example.test/a?b=1')).toEqual({ kind: 'url', text: 'https://example.test/a?b=1' })
+    for (const uri of ['javascript:alert(1)', 'file://evil.host/share/a', 'not a uri', 'https://u:p@example.test/', 'file:///a%0Ab', 'file:///%E0%A4%A']) {
+      expect(oscLinkTarget(uri), uri).toBeNull()
+    }
   })
 })

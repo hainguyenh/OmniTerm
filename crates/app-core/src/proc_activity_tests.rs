@@ -23,13 +23,17 @@ fn a_shell_with_no_children_is_idle() {
 #[test]
 fn another_processs_children_are_not_attributed_to_the_shell() {
     let table = idle_shell();
-    assert!(table.has_descendant(200), "explorer really does have a child");
+    assert!(
+        table.has_descendant(200),
+        "explorer really does have a child"
+    );
     assert!(!table.has_descendant(100));
 }
 
 #[test]
 fn a_direct_child_makes_the_shell_busy() {
-    let table = ProcTable::from_rows([(100u32, 1u32, 10u64, "cmd.exe"), (101, 100, 20, "ping.exe")]);
+    let table =
+        ProcTable::from_rows([(100u32, 1u32, 10u64, "cmd.exe"), (101, 100, 20, "ping.exe")]);
     assert!(table.has_descendant(100));
     assert_eq!(table.descendants(100), vec![101]);
 }
@@ -85,10 +89,16 @@ fn a_root_is_not_a_child_of_pid_zero() {
 /// was recycled. Equality must still count: a child spawned in the same second is genuine.
 #[test]
 fn a_child_older_than_its_parent_is_rejected_but_a_same_instant_child_is_kept() {
-    let stale = ProcTable::from_rows([(100u32, 1u32, 500u64, "pwsh.exe"), (101, 100, 499, "old.exe")]);
+    let stale = ProcTable::from_rows([
+        (100u32, 1u32, 500u64, "pwsh.exe"),
+        (101, 100, 499, "old.exe"),
+    ]);
     assert!(!stale.has_descendant(100), "start_time predates the parent");
 
-    let same = ProcTable::from_rows([(100u32, 1u32, 500u64, "pwsh.exe"), (101, 100, 500, "new.exe")]);
+    let same = ProcTable::from_rows([
+        (100u32, 1u32, 500u64, "pwsh.exe"),
+        (101, 100, 500, "new.exe"),
+    ]);
     assert!(same.has_descendant(100));
 }
 
@@ -97,7 +107,8 @@ fn a_child_older_than_its_parent_is_rejected_but_a_same_instant_child_is_kept() 
 #[test]
 fn the_console_host_never_counts_as_work() {
     for image in ["conhost.exe", "OpenConsole.exe", "CONHOST.EXE"] {
-        let table = ProcTable::from_rows([(100u32, 1u32, 10u64, "pwsh.exe"), (101, 100, 20, image)]);
+        let table =
+            ProcTable::from_rows([(100u32, 1u32, 10u64, "pwsh.exe"), (101, 100, 20, image)]);
         assert!(!table.has_descendant(100), "{image} must not read as busy");
     }
     // The filter is an exact image match, not a substring one.

@@ -1,5 +1,6 @@
 import type { AppTheme, TerminalTheme, UITheme } from '../themes'
 
+
 /**
  * The one place that turns an `AppTheme` into the CSS custom properties the app paints with.
  *
@@ -47,13 +48,13 @@ export const isColorLight = (hex: string): boolean => {
 const legacyAccent = (theme: AppTheme, terminal: TerminalTheme): string => {
   if (theme.id === 'tokyo-night') return '#7aa2f7'
   if (theme.id === 'mac-homebrew') return '#28FE14'
-
+  if (theme.id === 'mac-novel') return '#A05A00'
   return terminal.blue || terminal.green || terminal.cyan
 }
 
 const legacyVars = (theme: AppTheme, terminal: TerminalTheme): Record<string, string> => {
   const isLight =
-    Boolean(terminal.background.startsWith('#') && isColorLight(terminal.background))
+    theme.id.includes('novel') || (terminal.background.startsWith('#') && isColorLight(terminal.background))
   return {
     '--theme-accent': legacyAccent(theme, terminal),
     '--theme-accent-fg': 'var(--theme-bg)',
@@ -132,8 +133,6 @@ export const themeCssVars = (theme: AppTheme, mode: ThemeMode): Record<string, s
   const ui: UITheme | undefined = isDark ? theme.ui?.dark : theme.ui?.light
 
   return {
-    colorScheme: isDark ? 'dark' : 'light',
-    '--theme-color-scheme': isDark ? 'dark' : 'light',
     '--theme-bg': terminal.background,
     '--theme-fg': terminal.foreground,
     '--theme-border': ui?.border || terminal.brightBlack || terminal.selectionBackground,
@@ -155,14 +154,7 @@ export const themeCssVars = (theme: AppTheme, mode: ThemeMode): Record<string, s
 
 /** Apply a variable record to an element — `document.documentElement` in the app, a wrapper in previews. */
 export const applyThemeVars = (element: HTMLElement, vars: Record<string, string>): void => {
-  for (const [name, value] of Object.entries(vars)) {
-    if (name === 'colorScheme' || name === 'color-scheme') {
-      element.style.colorScheme = value
-      element.style.setProperty('color-scheme', value)
-    } else {
-      element.style.setProperty(name, value)
-    }
-  }
+  for (const [name, value] of Object.entries(vars)) element.style.setProperty(name, value)
 }
 
 /**

@@ -80,7 +80,6 @@ const AGENTS: ReadonlyArray<{ displayName: string; aliases: string[] }> = [
   { displayName: 'Goose', aliases: ['goose'] },
   { displayName: 'Devin', aliases: ['devin'] },
   { displayName: 'SWE-Agent', aliases: ['swe-agent', 'sweagent'] },
-  { displayName: 'Gemini CLI', aliases: ['gemini cli', 'gemini'] },
 ]
 
 /** True when `text` opens with a known agent's name, e.g. "Claude Code - app" or "codex". */
@@ -116,8 +115,6 @@ const AGENT_TOKENS = new Set([
   'goose',
   'devin',
   'swe-agent',
-  'gemini',
-  'gemini cli',
   'cli',
 ])
 

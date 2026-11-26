@@ -41,11 +41,19 @@ fn pages_the_entry_list_in_chunks() {
     assert!(!second.has_more);
 
     // The pages partition the whole scan: nothing is lost or repeated.
-    let all: Vec<_> = first.entries.iter().chain(&second.entries).map(|e| e.id.as_str()).collect();
+    let all: Vec<_> = first
+        .entries
+        .iter()
+        .chain(&second.entries)
+        .map(|e| e.id.as_str())
+        .collect();
     assert_eq!(all.len(), DEFAULT_PAGE_SIZE + 25);
     // And the same offset names the same entries on every call — the walk is sorted, so a rescan
     // returns the identical page. Without that, "Show more" would chase a moving list.
-    assert_eq!(scan_entries_page_excluding(&root, &[], 0, DEFAULT_PAGE_SIZE), first);
+    assert_eq!(
+        scan_entries_page_excluding(&root, &[], 0, DEFAULT_PAGE_SIZE),
+        first
+    );
 }
 
 #[test]
@@ -85,7 +93,9 @@ fn scripts_serialize_with_the_field_names_the_renderer_reads() {
         viewable: Some(true),
     };
     let value = serde_json::to_value(&script).unwrap();
-    for key in ["id", "name", "path", "kind", "shell", "editable", "viewable"] {
+    for key in [
+        "id", "name", "path", "kind", "shell", "editable", "viewable",
+    ] {
         assert!(value.get(key).is_some(), "{key} must be serialized");
     }
 }
@@ -120,7 +130,14 @@ fn entries_flag_which_files_the_viewer_will_open() {
         .tempdir()
         .expect("temp dir");
     let root = dir.path();
-    for name in ["notes.txt", "deploy.bat", "host.rdp", "payload.exe", "id.pem", "Dockerfile"] {
+    for name in [
+        "notes.txt",
+        "deploy.bat",
+        "host.rdp",
+        "payload.exe",
+        "id.pem",
+        "Dockerfile",
+    ] {
         std::fs::File::create(root.join(name)).unwrap();
     }
     std::fs::create_dir(root.join("sub")).unwrap();
@@ -132,11 +149,19 @@ fn entries_flag_which_files_the_viewer_will_open() {
 
     // Text of any kind opens, including the extensionless and the non-editable.
     for name in ["notes.txt", "deploy.bat", "host.rdp", "Dockerfile"] {
-        assert_eq!(by_name[name].viewable, Some(true), "{name} should be viewable");
+        assert_eq!(
+            by_name[name].viewable,
+            Some(true),
+            "{name} should be viewable"
+        );
     }
     // An executable and key material do not.
     for name in ["payload.exe", "id.pem"] {
-        assert_eq!(by_name[name].viewable, Some(false), "{name} must not be viewable");
+        assert_eq!(
+            by_name[name].viewable,
+            Some(false),
+            "{name} must not be viewable"
+        );
     }
     // A directory has no contents to view — absent, not `false`.
     assert_eq!(by_name["sub"].viewable, None);
@@ -155,5 +180,114 @@ fn scan_entries_excluding_marks_user_excluded_extensions_unviewable() {
     let by_name: std::collections::HashMap<_, _> =
         entries.into_iter().map(|e| (e.name.clone(), e)).collect();
     assert_eq!(by_name["notes.txt"].viewable, Some(false));
-    assert_eq!(by_name["deploy.bat"].viewable, Some(true), "unaffected extensions stay viewable");
+    assert_eq!(
+        by_name["deploy.bat"].viewable,
+        Some(true),
+        "unaffected extensions stay viewable"
+    );
+}
+
+// ── Entry conversion and classification fallbacks ───────────────────────────
+
+#[test]
+fn as_script_converts_script_entries_only() {
+    fn make_entry(is_dir: bool, kind: &str) -> WorkspaceEntry {
+        WorkspaceEntry {
+            id: "s".into(),
+            name: "s".into(),
+            path: "s".into(),
+            is_dir,
+            kind: kind.into(),
+            shell: None,
+            editable: None,
+            viewable: None,
+            deferred: None,
+        }
+    }
+    assert!(make_entry(true, "bat").as_script().is_none());
+    for kind in ["txt", "json", "rs"] {
+        assert!(make_entry(false, kind).as_script().is_none());
+    }
+    for kind in ["bat", "ps1", "sh", "rdp"] {
+        let script = make_entry(false, kind).as_script().unwrap();
+        assert_eq!(script.kind, kind);
+    }
+}
+
+#[test]
+fn scan_dir_excluding_filters_specified_extensions() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    fs::write(tmp.path().join("build.bat"), "echo hi").unwrap();
+    fs::write(tmp.path().join("setup.ps1"), "Write-Host hi").unwrap();
+    let all = scan_dir_excluding(tmp.path(), &[]);
+    assert!(all.iter().any(|s| s.kind == "bat"));
+    let with_excluded = scan_dir_excluding(tmp.path(), &["ps1".to_string()]);
+    for s in &with_excluded {
+        if s.kind == "ps1" {
+            assert_eq!(s.viewable, Some(false));
+        }
+    }
+}
+
+#[test]
+fn extensionless_files_are_classified_as_kind_file() {
+    let (_d, root) = tree();
+    touch(&root.join("Makefile"));
+    touch(&root.join("deploy.bat"));
+    let entries = scan_entries_excluding(&root, &[]);
+    let makefile = entries
+        .iter()
+        .find(|e| e.id == "Makefile")
+        .expect("Makefile must appear");
+    assert_eq!(makefile.kind, "file");
+    assert!(makefile.shell.is_none() && makefile.editable.is_none());
+    assert_eq!(makefile.viewable, Some(true));
+    let scripts = scan_dir(&root);
+    assert!(scripts.iter().all(|s| s.id != "Makefile"));
+    assert!(scripts.iter().any(|s| s.id == "deploy.bat"));
+}
+
+#[test]
+fn files_with_unknown_extensions_use_lowercase_extension_as_kind() {
+    let (_d, root) = tree();
+    touch(&root.join("doc.TXT"));
+    touch(&root.join("config.YAML"));
+    let entries = scan_entries_excluding(&root, &[]);
+    assert_eq!(
+        entries.iter().find(|e| e.name == "doc.TXT").unwrap().kind,
+        "txt"
+    );
+    assert_eq!(
+        entries
+            .iter()
+            .find(|e| e.name == "config.YAML")
+            .unwrap()
+            .kind,
+        "yaml"
+    );
+}
+
+#[test]
+fn scan_entries_on_a_nonexistent_root_returns_empty_list() {
+    let ghost = std::path::Path::new(if cfg!(windows) {
+        r"C:\this\does\not\exist\omniterm-test"
+    } else {
+        "/this/does/not/exist/omniterm-test"
+    });
+    assert!(scan_entries_excluding(ghost, &[]).is_empty());
+    assert!(scan_folders(ghost).is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn the_entry_walk_skips_symlinks() {
+    let (_d, root) = tree();
+    touch(&root.join("real.txt"));
+    std::os::unix::fs::symlink(root.join("real.txt"), root.join("link.txt")).expect("file link");
+    std::os::unix::fs::symlink(root.join("missing"), root.join("dangling")).expect("dangling link");
+    let ids: Vec<_> = scan_entries_excluding(&root, &[])
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect();
+    assert_eq!(ids, vec!["real.txt".to_string()]);
 }

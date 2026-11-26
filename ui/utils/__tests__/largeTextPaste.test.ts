@@ -64,6 +64,7 @@ describe('saveTextAsAttachment', () => {
         list: vi.fn(),
         clear: vi.fn(),
         importClipboardFiles: vi.fn(),
+        move: vi.fn(),
       },
     }
   })
@@ -100,6 +101,7 @@ describe('handleLargeTextPaste', () => {
         list: vi.fn(),
         clear: vi.fn(),
         importClipboardFiles: vi.fn(),
+        move: vi.fn(),
       },
     }
   })
@@ -201,6 +203,7 @@ describe('handleLargeTextPaste', () => {
     const noteLocalEcho = vi.fn()
     const onFilesSaved = vi.fn()
     const promptDecision = vi.fn().mockResolvedValue('paste')
+    const onPastedInline = vi.fn()
 
     const mediumText = 'e'.repeat(1500)
     const handled = await handleLargeTextPaste({
@@ -209,6 +212,7 @@ describe('handleLargeTextPaste', () => {
       sessionId: 's1',
       noteLocalEcho,
       onFilesSaved,
+      onPastedInline,
       promptDecision,
     })
 
@@ -217,6 +221,8 @@ describe('handleLargeTextPaste', () => {
     expect(target.paste).toHaveBeenCalledWith(mediumText)
     expect(noteLocalEcho).toHaveBeenCalledOnce()
     expect(onFilesSaved).not.toHaveBeenCalled()
+    // The text went in as typed, so the pane keeps its copy for review.
+    expect(onPastedInline).toHaveBeenCalledWith(mediumText)
   })
 
   it('aborts paste when user cancels the prompt', async () => {

@@ -41,8 +41,9 @@ describe('agentRegistry', () => {
     expect(getAgentResumeRecipe('antigravity')?.command).toBe('agy')
     expect(getAgentResumeRecipe('antigravity cli')?.command).toBe('agy')
     expect(getAgentResumeRecipe('agy')?.command).toBe('agy')
-    expect(getAgentResumeRecipe('gemini')?.command).toBe('gemini')
-    expect(getAgentResumeRecipe('gemini cli')?.command).toBe('gemini')
+    // Gemini CLI is no longer a supported agent.
+    expect(getAgentResumeRecipe('gemini')).toBeNull()
+    expect(getAgentResumeRecipe('gemini cli')).toBeNull()
 
     const unknown = getAgentResumeRecipe('unknown-agent')
     expect(unknown).toBeNull()
@@ -63,7 +64,7 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('Aider')).toBe('aider --restore-chat-history')
     expect(formatAgentResumeCommand('Antigravity CLI')).toBe('agy --continue')
     expect(formatAgentResumeCommand('Codex')).toBe('codex resume --last')
-    expect(formatAgentResumeCommand('Gemini CLI')).toBe('gemini --resume')
+    expect(formatAgentResumeCommand('Gemini CLI')).toBeNull()
     expect(formatAgentResumeCommand('Copilot CLI')).toBe('copilot --continue')
     expect(formatAgentResumeCommand('Unknown')).toBeNull()
   })
@@ -92,9 +93,6 @@ describe('agentRegistry', () => {
     expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, 'agy-gemini')).toBe(`agy --conversation ${VALID_UUID}`)
     expect(formatAgentResumeCommand('antigravity')).toBe('agy --continue')
     expect(formatAgentResumeCommand('antigravity', VALID_UUID)).toBe(`agy --conversation ${VALID_UUID}`)
-    expect(formatAgentResumeCommand('gemini')).toBe('gemini --resume')
-    expect(formatAgentResumeCommand('gemini', VALID_UUID)).toBe(`gemini --resume ${VALID_UUID}`)
-    expect(formatAgentResumeCommand('Gemini CLI', VALID_UUID)).toBe(`gemini --resume ${VALID_UUID}`)
     expect(formatAgentResumeCommand('Antigravity CLI', undefined, undefined, 'agy-gemini')).toBe('agy --continue')
     expect(formatAgentResumeCommand('Antigravity CLI', VALID_UUID, undefined, 'agy-gemini')).toBe(`agy --conversation ${VALID_UUID}`)
   })
@@ -109,8 +107,6 @@ describe('agentRegistry', () => {
     expect(formatAgentProfileCommand('Antigravity CLI', undefined, 'gemini')).toBe('agy')
     expect(formatAgentProfileCommand('Antigravity CLI', 'agy-gemini')).toBe('agy')
     expect(formatAgentProfileCommand('antigravity')).toBe('agy')
-    expect(formatAgentProfileCommand('gemini')).toBe('gemini')
-    expect(formatAgentProfileCommand('Gemini CLI', undefined, 'gemini')).toBe('gemini')
   })
 
   it('rejects a launcher that is not shaped like a real profile launcher', () => {
@@ -123,7 +119,6 @@ describe('agentRegistry', () => {
   it('inserts pasted-image paths for agents verified to attach by path', () => {
     expect(imagePasteModeFor('OpenCode')).toBe('insert-path')
     expect(imagePasteModeFor('Claude Code')).toBe('insert-path')
-    expect(imagePasteModeFor('Gemini CLI')).toBe('insert-path')
     expect(imagePasteModeFor('Antigravity CLI')).toBe('insert-path')
     expect(imagePasteModeFor('agy')).toBe('insert-path')
     expect(imagePasteModeFor('Codex')).toBe('insert-path')
