@@ -26,6 +26,21 @@ fn safe_ssh_value(value: &str) -> bool {
         })
 }
 
+/// The `cmd /c` line that starts `ssh.exe` for a validated profile.
+///
+/// No quotes: the spawner quotes this whole line as one argv entry and escapes an inner `"` as
+/// `\"`, which cmd does not unescape — `ssh.exe` then received `"root@host"` with the quotes, and
+/// OpenSSH refused the user name (`remote username contains invalid characters`). Every value is
+/// limited by `safe_ssh_value` to characters cmd and the C runtime pass through unchanged. The user
+/// goes through `-l` so a name that itself contains `@` (`me@corp`) is never split at the wrong `@`.
+fn ssh_command_line(user: &str, host: &str, port: u16) -> String {
+    if user.is_empty() {
+        format!("ssh.exe -o BatchMode=no -p {port} -- {host}")
+    } else {
+        format!("ssh.exe -o BatchMode=no -p {port} -l {user} -- {host}")
+    }
+}
+
 #[cfg(target_os = "windows")]
 pub(crate) fn require_windows_client(executable: &str, install_hint: &str) -> Result<(), String> {
     let available = std::process::Command::new("where.exe")
@@ -81,12 +96,7 @@ pub async fn prepare_ssh_session<R: Runtime>(
         "ssh.exe",
         "Enable the Windows OpenSSH Client optional feature, then try again.",
     )?;
-    let destination = if conn.user.is_empty() {
-        conn.host
-    } else {
-        format!("{}@{}", conn.user, conn.host)
-    };
-    let command = format!("ssh.exe -o BatchMode=no -p {port} -- \"{destination}\"");
+    let command = ssh_command_line(&conn.user, &conn.host, port);
     app.state::<crate::adhoc::AdhocRegistry>().insert_named(
         conn_id,
         OpenShellRequest {

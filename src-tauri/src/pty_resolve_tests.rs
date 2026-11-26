@@ -336,7 +336,7 @@ fn prepare_ssh_session_defaults_user_and_port() {
         assert!(adhoc
             .command
             .unwrap()
-            .contains("ssh.exe -o BatchMode=no -p 22 -- \"ssh.example.test\""));
+            .contains("ssh.exe -o BatchMode=no -p 22 -- ssh.example.test"));
     }
 }
 
@@ -359,4 +359,25 @@ fn prepare_ssh_session_reads_the_saved_profile_on_a_reconnect() {
     // The saved SSH profile is checked (its unsafe host is refused), not the LOCAL ad-hoc entry.
     let err = block_on(prepare_ssh_session(app, "ssh-reconnect".to_string())).unwrap_err();
     assert!(err.contains("unsupported characters"), "got: {err}");
+}
+
+/// Regression: the destination was wrapped in `"`, which the spawner escapes as `\"` inside the
+/// `cmd /c` argument and cmd hands to `ssh.exe` verbatim, so OpenSSH saw a user name starting with a
+/// quote and exited 255 with "remote username contains invalid characters".
+#[test]
+fn ssh_command_line_carries_no_quotes_and_passes_the_user_with_l() {
+    let line = super::ssh_command_line("root", "ssh.example.test", 2222);
+    assert_eq!(
+        line,
+        "ssh.exe -o BatchMode=no -p 2222 -l root -- ssh.example.test"
+    );
+    assert!(!line.contains('"'));
+    assert_eq!(
+        super::ssh_command_line("", "10.0.0.1", 22),
+        "ssh.exe -o BatchMode=no -p 22 -- 10.0.0.1"
+    );
+    assert_eq!(
+        super::ssh_command_line("me@corp", "host", 22),
+        "ssh.exe -o BatchMode=no -p 22 -l me@corp -- host"
+    );
 }
