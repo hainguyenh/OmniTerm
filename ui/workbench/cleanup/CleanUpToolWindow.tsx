@@ -4,6 +4,7 @@ import { useTempCleanup } from '../tempCleanup/tempCleanupStore'
 
 import { useCleanUpView, type CleanUpTab } from './cleanUpViewStore'
 import { RustCleanupPanel } from './RustCleanupPanel'
+import { TestDataCleanupPanel } from './TestDataCleanupPanel'
 import { WorktreeCleanupPanel } from './WorktreeCleanupPanel'
 
 const TABS: TabItem[] = [
@@ -11,6 +12,7 @@ const TABS: TabItem[] = [
   { id: 'temp', label: 'Temp' },
   { id: 'rust', label: 'Rust' },
   { id: 'worktrees', label: 'Worktrees' },
+  { id: 'test-data', label: 'Test Data' },
 ]
 
 const isTab = (id: string): id is CleanUpTab => TABS.some((tab) => tab.id === id)
@@ -68,7 +70,8 @@ function TempTab() {
 
 /**
  * The Clean Up tool window: one tab per kind of clean-up. Sessions and Temp open their dialogs;
- * Rust (Cargo build folders) and Worktrees (git worktrees) work right in the tab.
+ * Rust (Cargo build folders), Worktrees (git worktrees) and Test Data (folders OmniTerm's test runs
+ * left in the app-data folders) work right in the tab.
  */
 export function CleanUpToolWindow() {
   const tab = useCleanUpView((s) => s.tab)
@@ -88,6 +91,7 @@ export function CleanUpToolWindow() {
         {tab === 'temp' && <TempTab />}
         {tab === 'rust' && <RustCleanupPanel />}
         {tab === 'worktrees' && <WorktreeCleanupPanel />}
+        {tab === 'test-data' && <TestDataCleanupPanel />}
       </div>
     </div>
   )

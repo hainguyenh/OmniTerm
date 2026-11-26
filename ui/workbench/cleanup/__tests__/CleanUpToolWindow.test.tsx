@@ -142,6 +142,41 @@ describe('the Clean Up tool window', () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ title: 'Worktrees removed' }))
   })
 
+  it('lists the folders ended test runs left and deletes them after confirmation', async () => {
+    const roaming = 'C:/Users/u/AppData/Roaming/com.omniterm.tests.11'
+    const local = 'C:/Users/u/AppData/Local/com.omniterm.tests.11'
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === 'test_data_cleanup_scan') {
+        return [
+          { path: roaming, pid: 11, files: 1, bytes: 2048 },
+          { path: local, pid: 11, files: 0, bytes: 0 },
+        ]
+      }
+      if (command === 'test_data_cleanup_run') {
+        return [
+          { path: roaming, freedBytes: 2048, error: null },
+          { path: local, freedBytes: 0, error: 'Access is denied.' },
+        ]
+      }
+      return undefined
+    })
+    render(<CleanUpToolWindow />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Test Data' }))
+    expect(screen.getByTestId('test-data-cleanup-remove')).toBeDisabled()
+    fireEvent.click(screen.getByTestId('test-data-cleanup-scan'))
+    await waitFor(() => expect(screen.getAllByTestId('test-data-cleanup-row')).toHaveLength(2))
+
+    fireEvent.click(screen.getByTestId('test-data-cleanup-remove'))
+    expect(screen.getByTestId('cleanup-confirm').textContent).toContain('Delete 2 folders (2.0 KB)')
+    await act(async () => fireEvent.click(screen.getByTestId('cleanup-confirm-ok')))
+
+    expect(invokeMock).toHaveBeenCalledWith('test_data_cleanup_run', { paths: [roaming, local] })
+    await waitFor(() => expect(screen.getAllByTestId('test-data-cleanup-row')).toHaveLength(1))
+    expect(screen.getByTestId('test-data-cleanup-status').textContent).toBe(
+      'Removed 1 folder, freed 2.0 KB; 1 folder could not be removed.',
+    )
+  })
+
   it('removes a clean worktree without forcing', async () => {
     useCleanUpView.setState({ tab: 'worktrees' })
     invokeMock.mockImplementation(async (command: string) =>

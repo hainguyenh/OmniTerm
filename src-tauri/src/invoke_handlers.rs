@@ -172,6 +172,8 @@ pub(crate) fn local_invoke_handler<R: tauri::Runtime>(
         worktree_cleanup_ipc::worktree_cleanup_scan,
         worktree_cleanup_ipc::worktree_cleanup_remove,
         worktree_cleanup_ipc::worktree_cleanup_cancel,
+        test_data_cleanup_ipc::test_data_cleanup_scan,
+        test_data_cleanup_ipc::test_data_cleanup_run,
         attachments::save_temp_image,
         attachments::save_attachment,
         attachments::import_clipboard_files,

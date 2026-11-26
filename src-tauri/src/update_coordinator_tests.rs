@@ -46,7 +46,7 @@ fn serve(bodies: Vec<&'static str>) -> String {
 /// A mock app whose updater plugin is registered and points only at `endpoint`.
 fn updater_app(endpoint: &str) -> tauri::App<MockRuntime> {
     let mut context = tauri::test::mock_context(tauri::test::noop_assets());
-    context.config_mut().identifier = format!("com.omniterm.tests.{}", std::process::id());
+    context.config_mut().identifier = crate::test_support::test_identifier();
     context.config_mut().plugins.0.insert(
         "updater".into(),
         serde_json::json!({
@@ -55,12 +55,14 @@ fn updater_app(endpoint: &str) -> tauri::App<MockRuntime> {
             "dangerousInsecureTransportProtocol": true,
         }),
     );
-    tauri::test::mock_builder()
+    let app = tauri::test::mock_builder()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(UpdaterRegistered(true))
         .manage(UpdatesCoordinator::default())
         .build(context)
-        .expect("build a mock app with the updater plugin")
+        .expect("build a mock app with the updater plugin");
+    crate::test_support::sweep_ended_runs(app.handle());
+    app
 }
 
 fn ide_events(app: &tauri::App<MockRuntime>) -> Receiver<String> {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { readStoredRoots } from '../cleanupRootsStore'
 import { applyCleanResults, freeable, idleDays, idleTargets, parseCleanResults, parseRustTarget, type RustTarget } from '../rustCleanupModel'
+import { applyTestDataRemovals, parseTestDataFolder, parseTestDataRemovals } from '../testDataCleanupModel'
 import { parseRemoveReport, parseWorktreeEntry, sortWorktrees, suggest, type WorktreeEntry } from '../worktreeCleanupModel'
 
 const NOW = Date.UTC(2026, 10, 26)
@@ -133,5 +134,35 @@ describe('the added search folders', () => {
     expect(readStoredRoots('not json')).toEqual([])
     expect(readStoredRoots('{"a":1}')).toEqual([])
     expect(readStoredRoots('["D:/code", 4, ""]')).toEqual(['D:/code'])
+  })
+})
+
+describe('test data clean-up', () => {
+  it('accepts only well-formed folders and removals from the backend', () => {
+    expect(parseTestDataFolder({ path: 'C:/r/com.omniterm.tests.1', pid: 1, files: 2, bytes: 3 })).toEqual({
+      path: 'C:/r/com.omniterm.tests.1',
+      pid: 1,
+      files: 2,
+      bytes: 3,
+    })
+    expect(parseTestDataFolder({ path: '', pid: 1, files: 0, bytes: 0 })).toBeNull()
+    expect(parseTestDataFolder({ path: 'x', pid: -1, files: 0, bytes: 0 })).toBeNull()
+    expect(parseTestDataFolder(null)).toBeNull()
+    expect(parseTestDataRemovals([{ path: 'x', freedBytes: 1, error: null }, { path: 'y' }, 3])).toEqual([
+      { path: 'x', freedBytes: 1, error: null },
+    ])
+    expect(parseTestDataRemovals('nope')).toEqual([])
+  })
+
+  it('keeps the folders a clean-up could not remove', () => {
+    const folders = [
+      { path: 'a', pid: 1, files: 1, bytes: 10 },
+      { path: 'b', pid: 1, files: 1, bytes: 20 },
+    ]
+    const result = applyTestDataRemovals(folders, [
+      { path: 'a', freedBytes: 10, error: null },
+      { path: 'b', freedBytes: 5, error: 'locked' },
+    ])
+    expect(result).toEqual({ left: [folders[1]], removed: 1, failed: 1, freedBytes: 15 })
   })
 })

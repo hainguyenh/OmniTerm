@@ -5,7 +5,7 @@ import { focusToolWindow, isToolWindowVisible } from '../../ide/workbench/toolwi
 /** Id of the Clean Up tool window. */
 export const CLEANUP_TOOL_WINDOW = 'omniterm.cleanup'
 
-export type CleanUpTab = 'sessions' | 'temp' | 'rust' | 'worktrees'
+export type CleanUpTab = 'sessions' | 'temp' | 'rust' | 'worktrees' | 'test-data'
 
 interface CleanUpViewState {
   tab: CleanUpTab

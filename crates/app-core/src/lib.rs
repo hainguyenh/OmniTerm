@@ -23,6 +23,7 @@ pub mod safepath;
 pub mod ssh_target;
 pub mod temp_cleanup;
 pub mod temp_notes;
+pub mod test_data_cleanup;
 pub mod tree_validate;
 #[cfg(windows)]
 pub mod win_job;

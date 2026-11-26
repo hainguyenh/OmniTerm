@@ -43,11 +43,37 @@ pub(crate) fn lock() -> MutexGuard<'static, ()> {
 /// binary's log directory between its `remove_dir_all` and `write` calls.
 pub(crate) fn mock_app() -> tauri::App<MockRuntime> {
     let mut context = tauri::test::mock_context(tauri::test::noop_assets());
-    context.config_mut().identifier = format!("com.omniterm.tests.{}", std::process::id());
-    tauri::test::mock_builder()
+    context.config_mut().identifier = test_identifier();
+    let app = tauri::test::mock_builder()
         .manage(crate::os_actions::ExternalLauncherState::test())
         .build(context)
-        .expect("build a mock app")
+        .expect("build a mock app");
+    sweep_ended_runs(app.handle());
+    app
+}
+
+/// The bundle identifier of this test process's mock apps.
+pub(crate) fn test_identifier() -> String {
+    format!(
+        "{}{}",
+        app_core::test_data_cleanup::TEST_DATA_PREFIX,
+        std::process::id()
+    )
+}
+
+/// Removes, once per test process, the folders earlier test processes left in the per-user data
+/// folders. A process cannot remove its own when it ends, so each run clears its predecessors'.
+pub(crate) fn sweep_ended_runs<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    static SWEPT: std::sync::Once = std::sync::Once::new();
+    SWEPT.call_once(|| {
+        use app_core::test_data_cleanup::{creator_running, find_leftovers, remove_leftovers};
+        let parents = crate::test_data_cleanup_ipc::data_parents(app);
+        let leftovers: Vec<std::path::PathBuf> = find_leftovers(&parents, &creator_running)
+            .into_iter()
+            .map(|d| d.path.into())
+            .collect();
+        remove_leftovers(&leftovers, &creator_running);
+    });
 }
 
 #[cfg(test)]

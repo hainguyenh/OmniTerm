@@ -9,6 +9,7 @@ mod cleanup_progress;
 mod cleanup_roots;
 mod rust_cleanup_ipc;
 mod temp_cleanup;
+mod test_data_cleanup_ipc;
 mod worktree_cleanup;
 mod worktree_cleanup_ipc;
 pub use app_utils::handle_second_instance;
